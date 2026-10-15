@@ -1,13 +1,13 @@
 import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-const hasCommand = (entries: any[], command: string): boolean =>
-  entries.some((e) => Array.isArray(e?.hooks) && e.hooks.some((h: any) => h?.command === command));
+/** Claude Code's default SessionEnd hook timeout is 1.5 s; our hook can need ~6 s. */
+const HOOK_TIMEOUT_S = 10;
 
 /**
- * Returns a copy of Claude Code `settings` with `{ hooks: [{ type: "command", command }] }`
- * appended to `hooks.SessionEnd`. Unchanged if the command is already registered;
- * other hooks and fields are left as they are. The input is not mutated.
+ * Returns a copy of Claude Code `settings` with `{ hooks: [{ type: "command", command, timeout: 10 }] }`
+ * appended to `hooks.SessionEnd`. If the command is already registered, only a missing or too
+ * small timeout is raised to 10; other hooks and fields are left as they are. The input is not mutated.
  */
 export function mergeSessionEndHook(settings: any, command: string): any {
   const s = structuredClone(settings ?? {});
@@ -15,8 +15,17 @@ export function mergeSessionEndHook(settings: any, command: string): any {
     throw new Error("settings.json: hooks.SessionEnd bir dizi değil; elle düzeltin");
   }
   const end: any[] = s.hooks?.SessionEnd ?? [];
-  if (hasCommand(end, command)) return s;
-  s.hooks = { ...(s.hooks ?? {}), SessionEnd: [...end, { hooks: [{ type: "command", command }] }] };
+  let found = false;
+  for (const e of end) {
+    if (!Array.isArray(e?.hooks)) continue;
+    for (const h of e.hooks) {
+      if (h?.command !== command) continue;
+      found = true;
+      if (typeof h.timeout !== "number" || h.timeout < HOOK_TIMEOUT_S) h.timeout = HOOK_TIMEOUT_S;
+    }
+  }
+  if (found) return s;
+  s.hooks = { ...(s.hooks ?? {}), SessionEnd: [...end, { hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT_S }] }] };
   return s;
 }
 

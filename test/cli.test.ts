@@ -67,7 +67,37 @@ describe("vlad cli", () => {
     mkTask();
     const r = vlad(["status", "--summary"]);
     expect(r.code).toBe(0);
-    expect(r.out.trim()).toBe("İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor)");
+    expect(r.out.trim()).toBe("İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)");
+  });
+  it("status --summary counts failed tasks and --json carries the failed list", () => {
+    const a = mkTask();
+    const b = mkTask();
+    const f = (id: string) => join(home, "kb", "tasks", readdirSync(join(home, "kb", "tasks")).find((n) => n.startsWith(id))!);
+    writeFileSync(f(a), readFileSync(f(a), "utf8").replace(/^state: queued\r?$/m, "state: failed"));
+    writeFileSync(f(b), readFileSync(f(b), "utf8").replace(/^error: .*\r?$/m, "error: kırıldı"));
+    const r = vlad(["status", "--summary"]);
+    expect(r.out.trim()).toBe("İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 2 hatalı)");
+    const j = JSON.parse(vlad(["status", "--summary", "--json"]).out);
+    expect(j.failed.map((t: { id: string }) => t.id).sort()).toEqual([a, b].sort());
+  });
+  it("task session sets session_id without changing state", () => {
+    const id = mkTask();
+    const r = vlad(["task", "session", id, "sess-123", "--json"]);
+    expect(r.code, r.err).toBe(0);
+    expect(JSON.parse(r.out)).toEqual({ id, session_id: "sess-123" });
+    const l = JSON.parse(vlad(["task", "list", "--json"]).out);
+    expect(l.tasks[0]).toMatchObject({ id, state: "queued", session_id: "sess-123" });
+    expect(vlad(["task", "session", "T00000000-99", "x", "--json"]).code).toBe(1);
+  });
+  it("project list --json and inbox list --json carry warnings", () => {
+    writeFileSync(join(home, "kb", "projects", "bad.md"), "---\nslug: [oops\n---\n");
+    writeFileSync(join(home, "kb", "inbox", "20261015T120000-bad.json"), "{bozuk");
+    const p = JSON.parse(vlad(["project", "list", "--json"]).out);
+    expect(p.projects).toEqual([]);
+    expect(p.warnings).toHaveLength(1);
+    const i = JSON.parse(vlad(["inbox", "list", "--json"]).out);
+    expect(i.items).toEqual([]);
+    expect(i.warnings).toHaveLength(1);
   });
   it("inbox count --json", () => {
     const r = vlad(["inbox", "count", "--json"]);

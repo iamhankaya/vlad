@@ -49,7 +49,7 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 
 ## 6. Kapanış raporu
 
-Bitince raporu Markdown olarak geçici bir dosyaya yaz:
+Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
 ### Yapılanlar
 ### Test sonuçları

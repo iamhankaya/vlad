@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, kbPaths } from "../../src/kb/index.js";
-import { scanRoots, slugify } from "../../src/scan/scan.js";
+import { scanRoots, scanRootsWithWarnings, slugify } from "../../src/scan/scan.js";
 import { makeHome } from "../helpers.js";
 
 const git = (cwd: string, ...args: string[]) =>
@@ -50,5 +50,17 @@ describe("scan", () => {
     writeFileSync(join(kbPaths().projects, "alpha.md"), "---\nslug: alpha\n---\n");
     const repos = scanRoots({ ...defaultConfig(), roots: [root] });
     expect(repos[0].hasCard).toBe(true);
+  });
+
+  it("skips a repo whose files cannot be read and reports it", () => {
+    // README.md as a directory makes readFileSync throw EISDIR
+    const gamma = join(root, "gamma");
+    mkdirSync(gamma);
+    git(gamma, "init", "-q");
+    mkdirSync(join(gamma, "README.md"));
+    const r = scanRootsWithWarnings({ ...defaultConfig(), roots: [root] });
+    expect(r.repos.map((x) => x.slug)).toEqual(["alpha"]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("gamma");
   });
 });

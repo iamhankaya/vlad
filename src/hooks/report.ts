@@ -55,7 +55,7 @@ function collectGit(cwd: string, deps: ReportDeps): Git {
   };
   const first = (s: string | null) => (s ? s.trim().split(/\r?\n/)[0] || null : null);
   const since = new Date(deps.now.getTime() - 24 * 3600 * 1000).toISOString();
-  const log = run(["log", `--since=${since}`, `--max-count=${MAX_COMMITS}`, "--format=%h%x09%s%x09%aI"]);
+  const log = run(["-c", "core.quotepath=false", "log", `--since=${since}`, `--max-count=${MAX_COMMITS}`, "--format=%h%x09%s%x09%aI"]);
   const recent_commits = (log ?? "")
     .split(/\r?\n/)
     .filter(Boolean)
@@ -65,7 +65,7 @@ function collectGit(cwd: string, deps: ReportDeps): Git {
     })
     .filter((c) => c.sha && c.date)
     .slice(0, MAX_COMMITS);
-  const status = run(["status", "--porcelain"]);
+  const status = run(["-c", "core.quotepath=false", "status", "--porcelain"]);
   const changed_files = (status ?? "")
     .split(/\r?\n/)
     .filter((l) => l.length > 3)
@@ -99,7 +99,7 @@ function gitRunner(cwd: string, args: string[], timeoutMs: number): string | nul
   return runGitRaw(cwd, args, timeoutMs);
 }
 
-function loadProjects(dir: string): { slug: string; path: string }[] {
+export function loadProjects(dir: string): { slug: string; path: string }[] {
   const out: { slug: string; path: string }[] = [];
   let names: string[] = [];
   try {
@@ -110,7 +110,7 @@ function loadProjects(dir: string): { slug: string; path: string }[] {
   for (const n of names) {
     try {
       const { data } = readDoc<{ slug?: string; path?: string }>(join(dir, n));
-      if (typeof data.slug === "string" && typeof data.path === "string") out.push({ slug: data.slug, path: data.path });
+      if (data && typeof data.slug === "string" && typeof data.path === "string") out.push({ slug: data.slug, path: data.path });
     } catch {
       /* skip */
     }

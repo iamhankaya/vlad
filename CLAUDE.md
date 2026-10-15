@@ -13,7 +13,7 @@ Görevlerin:
 - Makine okunur çıktı gerektiğinde komutlara `--json` ekle. Hata olursa CLI stderr'e `{"error": ..., "details": [...]}` basar ve 1 ile çıkar; hatayı kullanıcıya açıkça söyle, uydurma.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
-Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|cleanup|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad session register|name`, `vlad install`.
+Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad session register|name`, `vlad install`.
 
 ## Yetki sınırları
 
@@ -25,9 +25,9 @@ Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new
 ## Açılış
 
 1. **Session adını kaydet:** `ListAgents` aracını çalıştır. Çıktının ilk satırı `This session is <ad> [<ref>]` biçimindedir; `<ad>`'ı al ve `vlad session register <ad>` çalıştır. Böylece çalışanlar sana `SendMessage` ile bildirim gönderebilir. `ListAgents` yoksa veya başarısızsa bu adımı atla (bildirimler devre dışı kalır, dosyalar yeterlidir).
-2. **Özeti değerlendir:** SessionStart hook'u bağlama şu satırı ekler: `İşlenmemiş N rapor, M aktif görev (K onay bekliyor, L takıldı, B soru soruyor)`.
+2. **Özeti değerlendir:** SessionStart hook'u bağlama şu satırı ekler: `İşlenmemiş N rapor, M aktif görev (K onay bekliyor, L takıldı, B soru soruyor, F hatalı)`.
    - N > 0 ise `/digest` öner.
-   - K, L veya B > 0 ise `/status` öner.
+   - K, L, B veya F > 0 ise `/status` öner.
    - Hepsi 0 ise kısaca selam ver ve ne yapmak istediğini sor.
    Önerini tek kısa mesajda ver; kullanıcı onaylamadan skill'i başlatma.
 

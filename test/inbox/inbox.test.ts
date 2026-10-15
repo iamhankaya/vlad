@@ -1,7 +1,7 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { countInbox, listInbox, markDone } from "../../src/inbox/inbox.js";
+import { countInbox, listInbox, listInboxWithWarnings, markDone } from "../../src/inbox/inbox.js";
 import { makeHome } from "../helpers.js";
 
 let home: string;
@@ -23,6 +23,14 @@ describe("inbox", () => {
     markDone([a]);
     expect(countInbox()).toBe(1);
     expect(existsSync(join(home, "kb", "inbox", "processed", a))).toBe(true);
+  });
+  it("listInboxWithWarnings reports broken files", () => {
+    writeFileSync(join(home, "kb", "inbox", "20261015T100000-a.json"), JSON.stringify(rec("a")));
+    writeFileSync(join(home, "kb", "inbox", "20261015T120000-bad.json"), "{bozuk");
+    const r = listInboxWithWarnings();
+    expect(r.items.map((x) => x.file)).toEqual(["20261015T100000-a.json"]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.warnings[0]).toContain("20261015T120000-bad.json");
   });
   it("markDone throws for missing file", () => {
     expect(() => markDone(["nope.json"])).toThrow();
