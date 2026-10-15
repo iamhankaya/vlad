@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,16 +29,22 @@ export function buildCommand(
 ): { file: string; args: string[] } {
   if (method === "wt") {
     return {
-      file: "wt",
+      file: "wt.exe",
       args: ["-w", "0", "nt", "--title", req.title.replace(/;/g, "\\;"), "-d", req.cwd, "powershell", "-NoExit",
         "-ExecutionPolicy", "Bypass", "-File", scriptPath],
     };
   }
-  return {
-    file: "powershell",
-    args: ["-NoProfile", "-Command",
-      `Start-Process powershell -WorkingDirectory ${q(req.cwd)} -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File',${q(`"${scriptPath}"`)}`],
+  return { file: "powershell.exe", args: ["-NoExit", "-ExecutionPolicy", "Bypass", "-File", scriptPath] };
+}
+
+/** Joins file + args into one Windows command line (CommandLineToArgvW quoting rules). */
+export function toCommandLine(file: string, args: string[]): string {
+  const quote = (a: string) => {
+    if (a !== "" && !/[\s"]/.test(a)) return a;
+    // Backslashes are literal unless they precede a quote; double those, and the run before the closing quote.
+    return `"${a.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, "$1$1")}"`;
   };
+  return [file, ...args].map(quote).join(" ");
 }
 
 function defaultHasWt(): boolean {
@@ -50,14 +56,30 @@ function defaultHasWt(): boolean {
   }
 }
 
-export function defaultExec(file: string, args: string[]): Promise<void> {
+// Claude Code runs shell commands in a Windows job object that kills every child process when the
+// command returns, so the terminal is created through WMI (Win32_Process.Create), which starts it
+// outside the job. Command line and cwd travel in env vars to avoid nested quoting.
+const WMI_CREATE =
+  "$a = @{ CommandLine = $env:VLAD_LAUNCH_CMD }; " +
+  "if ($env:VLAD_LAUNCH_CWD) { $a.CurrentDirectory = $env:VLAD_LAUNCH_CWD }; " +
+  "$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments $a; " +
+  "exit [int]$r.ReturnValue";
+
+export function defaultExec(file: string, args: string[], cwd?: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(file, args, { detached: true, stdio: "ignore" });
-    child.once("error", reject);
-    child.once("spawn", () => {
-      child.unref();
-      resolve();
-    });
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", WMI_CREATE],
+      { windowsHide: true, timeout: 20000, env: { ...process.env, VLAD_LAUNCH_CMD: toCommandLine(file, args), VLAD_LAUNCH_CWD: cwd ?? "" } },
+      (err) => {
+        if (!err) return resolve();
+        const code = (err as { code?: unknown }).code;
+        reject(new Error(typeof code === "number"
+          ? `Win32_Process.Create başarısız (kod ${code}). Kod 8 genellikle komut Claude Code'un Bash aracından ` +
+            `çalıştırıldığında olur; vlad task launch'u PowerShell aracıyla tekrar çalıştır.`
+          : err.message));
+      },
+    );
   });
 }
 
@@ -66,7 +88,7 @@ export class TerminalLauncher implements Launcher {
     mode: "auto" | "wt" | "powershell";
     dryRun?: boolean;
     hasWt?: () => boolean;
-    exec?: (file: string, args: string[]) => void | Promise<void>;
+    exec?: (file: string, args: string[], cwd?: string) => void | Promise<void>;
     scriptDir?: string;
   }) {}
 
@@ -80,7 +102,7 @@ export class TerminalLauncher implements Launcher {
     try {
       mkdirSync(dir, { recursive: true });
       writeFileSync(scriptPath, "﻿" + buildScript(req), "utf8");
-      await (this.o.exec ?? defaultExec)(cmd.file, cmd.args);
+      await (this.o.exec ?? defaultExec)(cmd.file, cmd.args, req.cwd);
       return { ok: true, method, detail: JSON.stringify(cmd) };
     } catch (e) {
       return { ok: false, method, detail: (e as Error).message };

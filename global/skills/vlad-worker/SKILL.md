@@ -67,9 +67,12 @@ Görev `awaiting_approval` olur. Ardından **bildirim gönder** (adım 7).
 ## 7. VLAD'a bildirim
 
 Durum değiştiğinde (soru sordun, rapor yazdın):
-1. `vlad session name` çalıştır. Başarısızsa bildirimi **sessizce atla**.
-2. `ListAgents` çalıştır. Dönen ad listede yoksa bildirimi **sessizce atla**.
-3. Varsa:
+1. `vlad session name` çalıştır ve `ListAgents` çalıştır.
+2. Hedef adı seç:
+   - `vlad session name`'in döndürdüğü ad `ListAgents` listesinde varsa onu kullan.
+   - Yoksa (komut başarısız veya ad listede değil): `ListAgents`'ta adı `vlad-` ile başlayan session'lara bak (VLAD `C:\dev\vlad`'da çalışır). Tam olarak bir tane varsa onu kullan.
+   - Hiçbiri yoksa veya birden fazla `vlad-` session'ı varsa bildirimi **sessizce atla**.
+3. Hedef varsa:
    `SendMessage({to: "<ad>", message: "VLAD görev <id>: <state> — görev dosyasına bak"})`
    (`<state>`: `blocked`, `awaiting_approval` veya `failed`).
 
