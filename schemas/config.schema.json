@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["roots", "ignore", "defaultAutonomy", "staleAfterHours", "launcher", "worktreeDir", "projects"],
+  "properties": {
+    "roots": { "type": "array", "items": { "type": "string" } },
+    "ignore": { "type": "array", "items": { "type": "string" } },
+    "defaultAutonomy": { "enum": ["plan", "commit", "pr"] },
+    "staleAfterHours": { "type": "number", "exclusiveMinimum": 0 },
+    "launcher": { "enum": ["auto", "wt", "powershell"] },
+    "worktreeDir": { "type": "string" },
+    "projects": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "autonomy": { "enum": ["plan", "commit", "pr"] } }
+      }
+    }
+  }
+}
