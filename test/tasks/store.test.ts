@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
@@ -12,9 +12,8 @@ import {
 const D = new Date(2026, 9, 15, 10, 0, 0);
 const mk = (title = "t") => createTask({ project: "p", title, kind: "dev", body: "## Tanım\nx\n" }, D);
 
-let home: string;
 beforeEach(() => {
-  home = makeHome();
+  makeHome();
 });
 
 describe("task store", () => {
@@ -22,13 +21,17 @@ describe("task store", () => {
     expect(mk().data.id).toBe("T20261015-01");
     expect(mk().data.id).toBe("T20261015-02");
   });
-  it("createTask survives an existing file (EEXIST retry)", () => {
+  it("createTask retries on EEXIST and leaves the existing file untouched", () => {
     const dir = kbPaths().tasks;
     writeFileSync(join(dir, "T20261015-01.md"), "junk", "utf8");
-    // nextTaskId sees it too, but createTask must never overwrite regardless
-    expect(nextTaskId(dir, D)).toBe("T20261015-02");
-    expect(mk().data.id).toBe("T20261015-02");
-    expect(readFileOk(join(dir, "T20261015-01.md"))).toBe("junk");
+    // stale id source: claims -01 is free even though the file exists
+    const t = createTask({ project: "p", title: "t", kind: "dev", body: "" }, D, () => "T20261015-01");
+    expect(t.data.id).toBe("T20261015-02");
+    expect(readFileSync(join(dir, "T20261015-01.md"), "utf8")).toBe("junk");
+  });
+  it("createTask creates a missing tasks dir", () => {
+    rmSync(kbPaths().tasks, { recursive: true, force: true });
+    expect(mk().data.id).toBe("T20261015-01");
   });
   it("creates a valid file with 6 headings and defaults", () => {
     const t = mk();
@@ -100,11 +103,7 @@ describe("task store", () => {
     expect(listTasks({ project: "zzz" })).toEqual([]);
   });
   it("tasks dir missing yields empty list", () => {
-    expect(existsSync(home)).toBe(true);
+    rmSync(kbPaths().tasks, { recursive: true, force: true });
     expect(listTasks()).toEqual([]);
   });
 });
-
-function readFileOk(f: string) {
-  return readFileSync(f, "utf8");
-}

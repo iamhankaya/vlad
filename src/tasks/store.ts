@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   appendToSection, autonomyFor, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
@@ -49,12 +49,15 @@ function fillBody(body: string): string {
 export function createTask(
   o: { project: string; title: string; kind: TaskKind; body: string },
   now: Date = new Date(),
+  /** Test seam: supplies the first candidate id (defaults to nextTaskId). */
+  idSource: (tasksDir: string, date: Date) => string = nextTaskId,
 ): Task {
   const paths = kbPaths();
+  mkdirSync(paths.tasks, { recursive: true });
   const autonomy = autonomyFor(loadConfig(), o.project);
   const body = fillBody(o.body);
   const prefix = dayPrefix(now);
-  let n = Number(nextTaskId(paths.tasks, now).slice(prefix.length));
+  let n = Number(idSource(paths.tasks, now).slice(prefix.length));
   for (;;) {
     const id = `${prefix}${pad2(n)}`;
     const ts = nowIso(now);
