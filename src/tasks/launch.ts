@@ -6,7 +6,8 @@ import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countInbox } from "../inbox/inbox.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
-import { getTask, listTasks, markStale, saveTask, setState } from "./store.js";
+import type { Role } from "../roles/store.js";
+import { getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
 const ALL_STATES: TaskState[] = [
@@ -27,10 +28,14 @@ function recordError(id: string, msg: string): void {
   saveTask(t);
 }
 
-export function buildPrompt(taskFile: string, autonomy: string): string {
-  return (
+export function buildPrompt(taskFile: string, autonomy: string, role?: { title: string; file: string }): string {
+  const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
-    `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`
+    `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
+  if (!role) return base;
+  return (
+    `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${role.file}\` dosyasını oku ` +
+    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`
   );
 }
 
@@ -46,7 +51,9 @@ export async function launchTask(
   const branch = `vlad/${id}`;
   let repo: string;
   let wt: string;
+  let role: Role | undefined;
   try {
+    if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
     wt = worktreePath(o.cfg, repo, id);
     addWorktree(repo, wt, branch);
@@ -74,7 +81,7 @@ export async function launchTask(
     const res = await o.launcher.launch({
       taskId: id,
       cwd: wt,
-      prompt: buildPrompt(task.file, task.data.autonomy),
+      prompt: buildPrompt(task.file, task.data.autonomy, role),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
     });

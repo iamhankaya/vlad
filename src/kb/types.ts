@@ -40,6 +40,16 @@ export interface TaskData {
   error?: string | null;
   /** When /digest processed the closing report of a done task. */
   digested?: string | null;
+  /** roles/<slug>.md the task is done in (roles spec §5). */
+  role?: string | null;
+}
+
+/** roles/<slug>.md frontmatter (roles spec §4) */
+export interface RoleData {
+  slug: string;
+  title: string;
+  kind: "advisory" | "executor";
+  summary: string;
 }
 
 /** kb/inbox/<ts>-<session_id>.json (spec 5.3) */
