@@ -10,16 +10,40 @@ function git(cwd: string, args: string[]): string {
   }
 }
 
+export interface KbCommitResult {
+  committed: boolean;
+  sha?: string;
+  pushed?: boolean;
+  warning?: string;
+}
+
 /**
  * Commits the changes under kb/ in the VLAD home repo as `kb: <message>`. Only the kb/ pathspec is
  * committed, so code changes (even staged ones) stay out; .gitignore keeps inbox/logs out.
  * No changes under kb/ → nothing is committed.
+ *
+ * With `push`, the branch is pushed to its upstream, but only if every unpushed commit touches kb/
+ * alone: the user pre-approved pushing memory, not code.
  */
-export function commitKb(message: string): { committed: boolean; sha?: string } {
+export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitResult {
   if (!message.trim()) throw new Error("commit mesajı boş olamaz");
   const home = kbPaths().home;
   git(home, ["add", "--", "kb"]);
-  if (!git(home, ["diff", "--cached", "--name-only", "--", "kb"]).trim()) return { committed: false };
-  git(home, ["commit", "-q", "-m", `kb: ${message.trim()}`, "--", "kb"]);
-  return { committed: true, sha: git(home, ["rev-parse", "--short", "HEAD"]).trim() };
+  const r: KbCommitResult = { committed: false };
+  if (git(home, ["diff", "--cached", "--name-only", "--", "kb"]).trim()) {
+    git(home, ["commit", "-q", "-m", `kb: ${message.trim()}`, "--", "kb"]);
+    r.committed = true;
+    r.sha = git(home, ["rev-parse", "--short", "HEAD"]).trim();
+  }
+  if (!o.push) return r;
+  const outside = git(home, ["log", "--name-only", "--format=", "@{u}..HEAD"])
+    .split(/\r?\n/).filter((f) => f && !f.startsWith("kb/"));
+  if (outside.length) {
+    r.pushed = false;
+    r.warning = `push edilmedi: push edilmemiş commit'lerde kb dışı dosyalar var (${[...new Set(outside)].join(", ")}); bunlar onayla push edilir`;
+    return r;
+  }
+  git(home, ["push", "-q"]);
+  r.pushed = true;
+  return r;
 }

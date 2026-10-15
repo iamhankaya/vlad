@@ -233,9 +233,12 @@ def(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, 
 
 const kb = program.command("kb").description("Hafıza deposu");
 def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)", (msg: string, o: Opts) => {
-  const r = commitKb(msg);
-  out(o, r, r.committed ? `commit: ${r.sha}` : "kb'de değişiklik yok");
-});
+  const r = commitKb(msg, { push: !!o.push });
+  const lines = [r.committed ? `commit: ${r.sha}` : "kb'de değişiklik yok"];
+  if (r.pushed) lines.push("push edildi");
+  if (r.warning) lines.push(`uyarı: ${r.warning}`);
+  out(o, r, lines.join("\n"));
+}).option("--push", "upstream'e push eder (yalnızca push edilmemiş commit'lerin hepsi kb/ ise)");
 
 const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
 const session = program.command("session").description("VLAD oturum adı");

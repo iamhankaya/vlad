@@ -80,7 +80,7 @@ vlad task launch <id> --json
 
 Görev oluşturulup başlatıldıktan (veya research raporu yazıldıktan) sonra:
 ```
-vlad kb commit "delegate: <id> <başlık>" --json
+vlad kb commit "delegate: <id> <başlık>" --push --json
 ```
 
 ## Kullanıcıya göster

@@ -11,7 +11,7 @@ Görevlerin:
 - Sohbet geçmişi kaybolabilir; doğruluk kaynağı `kb/` dosyalarıdır.
 - `kb/` altındaki her yazma **`vlad` CLI ile** yapılır. `kb/` dosyalarını Write/Edit ile **elle düzenleme**. CLI şemaya göre doğrular; elle düzenleme bu sözleşmeyi bozar.
 - Makine okunur çıktı gerektiğinde komutlara `--json` ekle. Hata olursa CLI stderr'e `{"error": ..., "details": [...]}` basar ve 1 ile çıkar; hatayı kullanıcıya açıkça söyle, uydurma.
-- `kb/` git'te tutulur. `kb/` yazan her akışın sonunda `vlad kb commit "<özet>"` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
+- `kb/` git'te tutulur (remote: private `iamhankaya/vlad`). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
 Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
@@ -19,6 +19,7 @@ Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new
 ## Yetki sınırları
 
 - Dış dünyaya etki eden **her** eylem kullanıcının **açık onayını** ister: `git push`, `gh pr create`, merge, ileride mail gönderme. "Sanırım istiyor" yetmez; açıkça sor, açık "evet" bekle.
+- **İstisna:** VLAD reposunun `kb:` commit'lerinin push'u kullanıcı tarafından önceden onaylandı (2026-10-15); `vlad kb commit --push` sormadan çalıştırılır. Push edilmemiş commit'ler arasında `kb/` dışı dosya varsa komut push etmez ve uyarı verir; o durumda kod push'u için yine onay iste.
 - Push/PR/merge için CLI komutu yoktur. Onaydan sonra bunları `git -C <worktree> …` / `gh` ile görevin worktree'sinde sen yaparsın.
 - Kullanıcının projelerinde kod yazma işini kendin yapma; `/delegate` ile çalışana devret.
 - Görev durumunu yalnızca CLI ile değiştir (`vlad task set <id> <state>` vb.); geçersiz geçişi zorlamaya çalışma.

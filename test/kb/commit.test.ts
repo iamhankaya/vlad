@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { commitKb } from "../../src/kb/commit.js";
@@ -39,6 +40,43 @@ describe("commitKb", () => {
     const head = git("rev-parse", "HEAD");
     expect(commitKb("boş")).toEqual({ committed: false });
     expect(git("rev-parse", "HEAD")).toBe(head);
+  });
+
+  it("with push: pushes the kb commit to the upstream", () => {
+    const remote = mkdtempSync(join(tmpdir(), "vlad-remote-"));
+    execFileSync("git", ["init", "--bare", "-b", "main"], { cwd: remote, stdio: "pipe" });
+    git("remote", "add", "origin", remote);
+    git("push", "-u", "origin", "main");
+    writeFileSync(join(home, "kb", "tasks", "T1.md"), "x");
+    const r = commitKb("push testi", { push: true });
+    expect(r).toMatchObject({ committed: true, pushed: true });
+    expect(execFileSync("git", ["log", "-1", "--format=%s", "main"], { cwd: remote, encoding: "utf8" }).trim()).toBe("kb: push testi");
+  });
+
+  it("with push and nothing to commit: still pushes earlier unpushed kb commits", () => {
+    const remote = mkdtempSync(join(tmpdir(), "vlad-remote-"));
+    execFileSync("git", ["init", "--bare", "-b", "main"], { cwd: remote, stdio: "pipe" });
+    git("remote", "add", "origin", remote);
+    git("push", "-u", "origin", "main");
+    writeFileSync(join(home, "kb", "tasks", "T1.md"), "x");
+    commitKb("önce");
+    expect(commitKb("sonra", { push: true })).toEqual({ committed: false, pushed: true });
+    expect(execFileSync("git", ["log", "-1", "--format=%s", "main"], { cwd: remote, encoding: "utf8" }).trim()).toBe("kb: önce");
+  });
+
+  it("with push: does not push when unpushed commits touch files outside kb/", () => {
+    const remote = mkdtempSync(join(tmpdir(), "vlad-remote-"));
+    execFileSync("git", ["init", "--bare", "-b", "main"], { cwd: remote, stdio: "pipe" });
+    git("remote", "add", "origin", remote);
+    git("push", "-u", "origin", "main");
+    writeFileSync(join(home, "code.ts"), "2");
+    git("commit", "-q", "-am", "kod");
+    writeFileSync(join(home, "kb", "tasks", "T1.md"), "x");
+    const r = commitKb("kb", { push: true });
+    expect(r.committed).toBe(true);
+    expect(r.pushed).toBe(false);
+    expect(r.warning).toMatch(/kb dışı/);
+    expect(execFileSync("git", ["log", "-1", "--format=%s", "main"], { cwd: remote, encoding: "utf8" }).trim()).toBe("init");
   });
 
   it("rejects an empty message", () => {

@@ -70,7 +70,7 @@ Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
 
 Bu akışta görev durumu değiştiyse (done, cancelled, cevap, değişiklik isteği) sonunda:
 ```
-vlad kb commit "status: <id> <yeni durum>" --json
+vlad kb commit "status: <id> <yeni durum>" --push --json
 ```
 
 ## Kullanıcıya göster

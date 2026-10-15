@@ -48,7 +48,7 @@ Amaç: Her repo için doğru ve güncel bir proje kartı (`kb/projects/<slug>.md
    ```
    Şema hatası gelirse `details`'teki alanı düzeltip tekrar dene; iki denemede olmazsa kullanıcıya hatayı göster.
 5. Kart dosyalarını asla doğrudan Write/Edit ile değiştirme.
-6. **Hafızayı commit'le:** `vlad kb commit "scan: <yeni/güncellenen slug'lar>" --json`. Hata verirse kullanıcıya söyle; kartlar yine de yazılmıştır.
+6. **Hafızayı commit'le:** `vlad kb commit "scan: <yeni/güncellenen slug'lar>" --push --json`. Hata verirse kullanıcıya söyle; kartlar yine de yazılmıştır.
 
 ## Kullanıcıya göster
 
