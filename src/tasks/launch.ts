@@ -6,8 +6,8 @@ import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countInbox } from "../inbox/inbox.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
-import { getRole, type Role } from "../roles/store.js";
-import { getTask, listTasks, markStale, saveTask, setState } from "./store.js";
+import type { Role } from "../roles/store.js";
+import { getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
 const ALL_STATES: TaskState[] = [
@@ -53,7 +53,7 @@ export async function launchTask(
   let wt: string;
   let role: Role | undefined;
   try {
-    if (task.data.role) role = getRole(task.data.role);
+    if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
     wt = worktreePath(o.cfg, repo, id);
     addWorktree(repo, wt, branch);

@@ -14,7 +14,7 @@ vlad status --json
 ```
 Çıktı: `counts` (duruma göre sayılar), `active` (aktif görevler), `newlyStalled` (bu çağrıda `stalled` yapılanlar), `failed` (hatalı görevler: `failed` durumundakiler ve `error` alanı dolu `queued` olanlar), `inbox` (işlenmemiş rapor sayısı).
 
-Kullanıcıya önce kısa bir tablo göster: ID, proje, başlık, rol (`role` doluysa slug, boşsa "—"), durum, son güncelleme. `newlyStalled` varsa ayrıca belirt. `inbox > 0` ise sonda `/digest` öner.
+Kullanıcıya önce kısa bir tablo göster: ID, proje, başlık, rol (`role` doluysa `vlad role list --json`'daki `title`, boşsa "—"), durum, son güncelleme. `newlyStalled` varsa ayrıca belirt. `inbox > 0` ise sonda `/digest` öner.
 
 ## 2. `awaiting_approval` görevler
 
@@ -25,6 +25,8 @@ Her biri için `kb/tasks/<id>.md`'yi oku ve göster:
   git -C <worktree> log --oneline main..HEAD
   git -C <worktree> diff --stat main...HEAD
   ```
+**`role: tester` ise:** Tester hatayı kanıtlamak için kasıtlı başarısız testler commit'leyebilir. Raporun `### Kırmızı bırakılan testler` bölümünü seçeneklerden önce göster. Liste boş değilse merge ana branch'in test suite'ini kırmızıya çevirir; varsayılan öneri merge değil, `### Önerilen düzeltmeler`'den bir Developer görevi açmaktır (`/delegate`, `--role developer`, kabul kriteri: o testlerin yeşile dönmesi). Merge yine seçenek olarak kalır ama bu riski açıkça söyle.
+
 Sonra seçenekleri sun:
 1. **Merge et** (yerelde): önce `git -C <proje-yolu> branch --show-current` çalıştır, çıkan branch'i kullanıcıya göster ve merge'ün hedefinin bu branch olduğunu **açıkça onaylat**. Onaydan sonra (`git -C <proje-yolu> status` temiz olmalı)
    `git -C <proje-yolu> merge --no-ff vlad/<id>`
