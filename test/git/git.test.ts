@@ -48,6 +48,14 @@ describe("git helpers", () => {
     expect(changedFiles(r).sort()).toEqual(["b.txt", "c.txt"]);
   });
 
+  it("changedFiles keeps non-ASCII filenames", () => {
+    const r = makeRepo();
+    writeFileSync(join(r, "ğüş.txt"), "x");
+    expect(changedFiles(r)).toContain("ğüş.txt");
+    git(r, "add", "."); git(r, "commit", "-m", "tr");
+    expect(changedFiles(r)).toEqual(["ğüş.txt"]);
+  });
+
   it("addWorktree creates dir and branch, refuses overwrite, remove works", () => {
     const r = makeRepo();
     const dir = join(mkdtempSync(join(tmpdir(), "vlad-wt-")), "T20261015-01");

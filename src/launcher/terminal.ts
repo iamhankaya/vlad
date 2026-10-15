@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
-const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
+// PowerShell treats typographic single quotes as quote characters too; double each one.
+const SQ = /['‘’‚‛]/g;
+const q = (s: string) => `'${s.replace(SQ, (m) => m + m)}'`;
 
 export function buildScript(req: LaunchRequest): string {
   const lines: string[] = [];
@@ -15,7 +17,7 @@ export function buildScript(req: LaunchRequest): string {
   const prompt = req.prompt
     .replace(/\r\n?/g, "\n")
     .split("\n")
-    .map((l) => (l.startsWith("'@") ? " " + l : l))
+    .map((l) => (/^['‘’‚‛]@/.test(l) ? " " + l : l))
     .join("\n");
   lines.push("$p = @'", prompt, "'@");
   lines.push("claude $p");
@@ -28,14 +30,14 @@ export function buildCommand(
   if (method === "wt") {
     return {
       file: "wt",
-      args: ["-w", "0", "nt", "--title", req.title, "-d", req.cwd, "powershell", "-NoExit",
+      args: ["-w", "0", "nt", "--title", req.title.replace(/;/g, "\\;"), "-d", req.cwd, "powershell", "-NoExit",
         "-ExecutionPolicy", "Bypass", "-File", scriptPath],
     };
   }
   return {
     file: "powershell",
     args: ["-NoProfile", "-Command",
-      `Start-Process powershell -WorkingDirectory ${q(req.cwd)} -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File',${q(scriptPath)}`],
+      `Start-Process powershell -WorkingDirectory ${q(req.cwd)} -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File',${q(`"${scriptPath}"`)}`],
   };
 }
 
@@ -48,8 +50,15 @@ function defaultHasWt(): boolean {
   }
 }
 
-function defaultExec(file: string, args: string[]): void {
-  spawn(file, args, { detached: true, stdio: "ignore" }).unref();
+export function defaultExec(file: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(file, args, { detached: true, stdio: "ignore" });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
 }
 
 export class TerminalLauncher implements Launcher {
@@ -57,7 +66,7 @@ export class TerminalLauncher implements Launcher {
     mode: "auto" | "wt" | "powershell";
     dryRun?: boolean;
     hasWt?: () => boolean;
-    exec?: (file: string, args: string[]) => void;
+    exec?: (file: string, args: string[]) => void | Promise<void>;
     scriptDir?: string;
   }) {}
 
@@ -71,7 +80,7 @@ export class TerminalLauncher implements Launcher {
     try {
       mkdirSync(dir, { recursive: true });
       writeFileSync(scriptPath, "﻿" + buildScript(req), "utf8");
-      (this.o.exec ?? defaultExec)(cmd.file, cmd.args);
+      await (this.o.exec ?? defaultExec)(cmd.file, cmd.args);
       return { ok: true, method, detail: JSON.stringify(cmd) };
     } catch (e) {
       return { ok: false, method, detail: (e as Error).message };
