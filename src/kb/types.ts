@@ -38,6 +38,8 @@ export interface TaskData {
   created: string;
   updated: string;
   error?: string | null;
+  /** When /digest processed the closing report of a done task. */
+  digested?: string | null;
 }
 
 /** kb/inbox/<ts>-<session_id>.json (spec 5.3) */

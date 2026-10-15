@@ -90,6 +90,22 @@ describe("vlad cli", () => {
     const j = JSON.parse(vlad(["status", "--summary", "--json"]).out);
     expect(j.failed.map((t: { id: string }) => t.id).sort()).toEqual([a, b].sort());
   });
+  it("done tasks count as unprocessed until digested; task list --undigested and task digested", () => {
+    const id = mkTask();
+    const f = join(home, "kb", "tasks", readdirSync(join(home, "kb", "tasks")).find((n) => n.startsWith(id))!);
+    writeFileSync(f, readFileSync(f, "utf8").replace(/^state: queued\r?$/m, "state: done"));
+    expect(vlad(["status", "--summary"]).out.trim()).toBe(
+      "İşlenmemiş 1 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)",
+    );
+    expect(JSON.parse(vlad(["status", "--json"]).out).undigested).toBe(1);
+    const l = JSON.parse(vlad(["task", "list", "--undigested", "--json"]).out);
+    expect(l.tasks.map((t: { id: string }) => t.id)).toEqual([id]);
+    const r = vlad(["task", "digested", id, "--json"]);
+    expect(r.code, r.err).toBe(0);
+    expect(JSON.parse(r.out)).toEqual({ ids: [id] });
+    expect(JSON.parse(vlad(["task", "list", "--undigested", "--json"]).out).tasks).toEqual([]);
+    expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 0 rapor");
+  });
   it("task session sets session_id without changing state", () => {
     const id = mkTask();
     const r = vlad(["task", "session", id, "sess-123", "--json"]);
