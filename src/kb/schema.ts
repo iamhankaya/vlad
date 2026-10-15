@@ -17,8 +17,8 @@ export class ValidationError extends Error {
 
 const cache = new Map<string, ValidateFunction>();
 
-function compiled(kind: SchemaKind): ValidateFunction {
-  const file = join(kbPaths().schemas, `${kind}.schema.json`);
+function compiled(kind: SchemaKind, home?: string): ValidateFunction {
+  const file = join(kbPaths(home).schemas, `${kind}.schema.json`);
   let fn = cache.get(file);
   if (!fn) {
     const ajv = addFormats(new Ajv({ allErrors: true, strict: false }));
@@ -28,8 +28,9 @@ function compiled(kind: SchemaKind): ValidateFunction {
   return fn;
 }
 
-export function validate(kind: SchemaKind, data: unknown): void {
-  const fn = compiled(kind);
+/** `home` (optional) selects the VLAD home whose schemas/ is used; default follows getVladHome(). */
+export function validate(kind: SchemaKind, data: unknown, home?: string): void {
+  const fn = compiled(kind, home);
   if (!fn(data)) {
     throw new ValidationError(
       (fn.errors ?? []).map((e) => `${e.instancePath} ${e.message ?? ""}`.trim()),

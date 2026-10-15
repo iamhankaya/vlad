@@ -1,5 +1,7 @@
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ValidationError, autonomyFor, loadConfig } from "../../src/kb/index.js";
 import { makeHome } from "../helpers.js";
@@ -25,6 +27,23 @@ describe("config", () => {
     const cfg = loadConfig(home);
     expect(autonomyFor(cfg, "watchparty")).toBe("pr");
     expect(autonomyFor(cfg, "other")).toBe("plan");
+  });
+  it("loads the committed vlad.config.json", () => {
+    const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+    const cfg = loadConfig(repo);
+    expect(cfg).toEqual({
+      roots: ["C:\\dev"], ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
+      staleAfterHours: 6, launcher: "auto", worktreeDir: "{repo}-wt",
+      projects: { watchparty: { autonomy: "commit" } },
+    });
+  });
+  it("uses schemas of the given home, not VLAD_HOME", () => {
+    process.env.VLAD_HOME = mkdtempSync(join(tmpdir(), "vlad-empty-"));
+    expect(loadConfig(home).launcher).toBe("auto");
+  });
+  it("malformed JSON error mentions the path", () => {
+    writeFileSync(join(home, "vlad.config.json"), "{bad");
+    expect(() => loadConfig(home)).toThrow(join(home, "vlad.config.json"));
   });
   it("rejects invalid launcher", () => {
     writeFileSync(join(home, "vlad.config.json"), '{"launcher":"x"}');
