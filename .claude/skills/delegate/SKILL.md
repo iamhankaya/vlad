@@ -53,6 +53,10 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> --body
 
 ## 4a. dev → çalışanı başlat
 
+Önce bildirim kanalını hazırla: `ListAgents` çalıştır, ilk satırdaki `This session is <ad>` adını al ve `vlad session register <ad>` çalıştır (açılışta yapıldıysa da tekrar etmek zararsızdır). Böylece çalışan bitince sana `SendMessage` atabilir.
+
+Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bash aracıyla değil. Pencere WMI (`Win32_Process.Create`) ile açılır ve bu çağrı Bash aracından çalıştırılınca başarısız olur (kod 8):
+
 ```
 vlad task launch <id> --json
 ```

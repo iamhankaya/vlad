@@ -3,7 +3,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { TerminalLauncher, buildCommand, buildScript, defaultExec } from "../../src/launcher/terminal.js";
+import { TerminalLauncher, buildCommand, buildScript, defaultExec, toCommandLine } from "../../src/launcher/terminal.js";
 import type { LaunchRequest } from "../../src/launcher/types.js";
 
 const req = (o: Partial<LaunchRequest> = {}): LaunchRequest => ({
@@ -33,14 +33,15 @@ describe("buildScript", () => {
 describe("buildCommand", () => {
   it("wt", () => {
     expect(buildCommand(req(), "wt", "C:\\t\\s.ps1")).toEqual({
-      file: "wt",
+      file: "wt.exe",
       args: ["-w","0","nt","--title","Oda ğüş","-d","C:\\dev\\my proj","powershell","-NoExit","-ExecutionPolicy","Bypass","-File","C:\\t\\s.ps1"],
     });
   });
   it("powershell", () => {
-    const c = buildCommand(req(), "powershell", "C:\\t\\s.ps1");
-    expect(c.file).toBe("powershell");
-    expect(c.args[2]).toBe("Start-Process powershell -WorkingDirectory 'C:\\dev\\my proj' -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','\"C:\\t\\s.ps1\"'");
+    expect(buildCommand(req(), "powershell", "C:\\t\\s.ps1")).toEqual({
+      file: "powershell.exe",
+      args: ["-NoExit", "-ExecutionPolicy", "Bypass", "-File", "C:\\t\\s.ps1"],
+    });
   });
 });
 
@@ -58,7 +59,7 @@ describe("TerminalLauncher", () => {
     const r = await new TerminalLauncher({ mode: "wt", dryRun: true, exec, scriptDir: sd() }).launch(req());
     expect(exec).not.toHaveBeenCalled();
     expect(r.ok).toBe(true);
-    expect(JSON.parse(r.detail!).file).toBe("wt");
+    expect(JSON.parse(r.detail!).file).toBe("wt.exe");
   });
   it("exec failure gives ok false", async () => {
     const exec = vi.fn(() => { throw new Error("boom"); });
@@ -79,7 +80,7 @@ describe("quoting fixes", () => {
   it("powershell method double-quotes a scriptPath with spaces and Turkish chars", () => {
     const p = "C:\\Users\\Metin Ay\\ğ\\s.ps1";
     const c = buildCommand(req(), "powershell", p);
-    expect(c.args[2]).toContain(`'-File','"${p}"'`);
+    expect(toCommandLine(c.file, c.args)).toBe(`powershell.exe -NoExit -ExecutionPolicy Bypass -File "${p}"`);
   });
   it("doubles typographic single quotes and guards them before @", () => {
     expect(buildScript(req({ env: { K: "a\u2019b" } }))).toContain("$env:K = 'a\u2019\u2019b'");
@@ -87,6 +88,18 @@ describe("quoting fixes", () => {
   });
   it("escapes ; in wt title", () => {
     expect(buildCommand(req({ title: "a;b" }), "wt", "s").args[4]).toBe("a\\;b");
+  });
+  it("toCommandLine quotes per Windows argv rules", () => {
+    expect(toCommandLine("wt.exe", ["--title", "Oda ğüş", "-d", String.raw`C:\dev\my proj`, "x"]))
+      .toBe(String.raw`wt.exe --title "Oda ğüş" -d "C:\dev\my proj" x`);
+    expect(toCommandLine("a", ['a"b'])).toBe(String.raw`a "a\"b"`);
+    expect(toCommandLine("a", ["C:\\a b\\"])).toBe('a "C:\\a b\\\\"');
+    expect(toCommandLine("a", [""])).toBe('a ""');
+  });
+  it("passes the task cwd to exec", async () => {
+    const exec = vi.fn();
+    await new TerminalLauncher({ mode: "powershell", exec, scriptDir: sd() }).launch(req());
+    expect(exec.mock.calls[0][2]).toBe("C:\\dev\\my proj");
   });
   it("defaultExec rejects for a nonexistent executable", async () => {
     await expect(defaultExec("vlad-no-such-exe-xyz", [])).rejects.toThrow();
