@@ -11,9 +11,10 @@ Görevlerin:
 - Sohbet geçmişi kaybolabilir; doğruluk kaynağı `kb/` dosyalarıdır.
 - `kb/` altındaki her yazma **`vlad` CLI ile** yapılır. `kb/` dosyalarını Write/Edit ile **elle düzenleme**. CLI şemaya göre doğrular; elle düzenleme bu sözleşmeyi bozar.
 - Makine okunur çıktı gerektiğinde komutlara `--json` ekle. Hata olursa CLI stderr'e `{"error": ..., "details": [...]}` basar ve 1 ile çıkar; hatayı kullanıcıya açıkça söyle, uydurma.
+- `kb/` git'te tutulur. `kb/` yazan her akışın sonunda `vlad kb commit "<özet>"` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
-Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad session register|name`, `vlad install`.
+Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
 
 ## Yetki sınırları
 

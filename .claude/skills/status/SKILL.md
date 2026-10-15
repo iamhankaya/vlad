@@ -66,6 +66,13 @@ Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
 - **`queued` durumunda `error` dolu görev** (launch başarısız olmuş, worktree geri alınmıştır): yalnızca `vlad task launch <id> --json` ile yeniden dene.
 - İstersen iptal de sunulur: `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`. Worktree zaten varsa `launch` durur; üzerine yazma, kullanıcıya sor.
 
+## 6. Hafızayı commit'le
+
+Bu akışta görev durumu değiştiyse (done, cancelled, cevap, değişiklik isteği) sonunda:
+```
+vlad kb commit "status: <id> <yeni durum>" --json
+```
+
 ## Kullanıcıya göster
 
 Önce tablo, sonra onay/aksiyon bekleyen her görev için ayrı kısa blok ve numaralı seçenekler. Tek seferde bir görev için karar iste.

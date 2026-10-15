@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
+import { commitKb } from "./kb/commit.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher } from "./launcher/index.js";
@@ -229,6 +230,12 @@ def(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, 
   appendJournal(date, readInput(o.file as string));
   out(o, { date }, `günlüğe eklendi: ${date}`);
 }).requiredOption("--file <md>", "içerik (- = stdin)");
+
+const kb = program.command("kb").description("Hafıza deposu");
+def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)", (msg: string, o: Opts) => {
+  const r = commitKb(msg);
+  out(o, r, r.committed ? `commit: ${r.sha}` : "kb'de değişiklik yok");
+});
 
 const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
 const session = program.command("session").description("VLAD oturum adı");
