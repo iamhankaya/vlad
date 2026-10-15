@@ -1,0 +1,150 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { beforeEach, describe, expect, it } from "vitest";
+import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
+import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
+import { writeProject } from "../../src/projects/store.js";
+import { cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
+import { createTask, getTask, setState } from "../../src/tasks/index.js";
+import { worktreePath } from "../../src/git/git.js";
+import { makeHome } from "../helpers.js";
+
+function git(cwd: string, ...args: string[]) {
+  return execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
+}
+
+let repo: string;
+let cfg: VladConfig;
+
+beforeEach(() => {
+  makeHome();
+  const base = mkdtempSync(join(tmpdir(), "vlad-launch-"));
+  repo = join(base, "alpha");
+  mkdirSync(repo);
+  git(repo, "init", "-b", "main");
+  writeFileSync(join(repo, "a.txt"), "1");
+  git(repo, "add", ".");
+  git(repo, "commit", "-m", "first");
+  cfg = defaultConfig();
+  cfg.worktreeDir = join(base, "wt");
+  writeProject("alpha", `---
+slug: alpha
+name: Alpha
+path: ${JSON.stringify(repo)}
+stack: [ts]
+status: active
+autonomy: commit
+last_activity: null
+last_scanned: null
+---
+
+## Özet
+x
+`);
+});
+
+function fakeLauncher(ok = true): Launcher & { reqs: LaunchRequest[] } {
+  const reqs: LaunchRequest[] = [];
+  return { reqs, async launch(r) { reqs.push(r); return ok ? { ok: true, method: "fake" } : { ok: false, method: "fake", detail: "boom" }; } };
+}
+const mk = (kind: "dev" | "research" = "dev") => createTask({ project: "alpha", title: "İlk görev", kind, body: "## Tanım\nx\n" });
+
+describe("launchTask", () => {
+  it("creates worktree, runs launcher and sets running", async () => {
+    const t = mk();
+    const l = fakeLauncher();
+    const r = await launchTask(t.data.id, { launcher: l, cfg });
+    const wt = worktreePath(cfg, repo, t.data.id);
+    expect(r.data.state).toBe("running");
+    expect(r.data.branch).toBe(`vlad/${t.data.id}`);
+    expect(r.data.worktree).toBe(wt);
+    expect(existsSync(wt)).toBe(true);
+    expect(getTask(t.data.id).data.state).toBe("running");
+    expect(l.reqs).toHaveLength(1);
+    expect(l.reqs[0].cwd).toBe(wt);
+    expect(l.reqs[0].env.VLAD_TASK_ID).toBe(t.data.id);
+    expect(l.reqs[0].env.VLAD_HOME).toBe(process.env.VLAD_HOME);
+    expect(l.reqs[0].prompt).toContain(t.file);
+    expect(l.reqs[0].prompt).toContain("commit");
+    expect(l.reqs[0].title).toBe(`VLAD ${t.data.id} — İlk görev`);
+  });
+
+  it("launcher failure keeps queued, records error and removes worktree", async () => {
+    const t = mk();
+    await expect(launchTask(t.data.id, { launcher: fakeLauncher(false), cfg })).rejects.toThrow(/boom/);
+    const after = getTask(t.data.id);
+    expect(after.data.state).toBe("queued");
+    expect(after.data.error).toContain("boom");
+    expect(existsSync(worktreePath(cfg, repo, t.data.id))).toBe(false);
+  });
+
+  it("can be retried after a launcher failure", async () => {
+    const t = mk();
+    await expect(launchTask(t.data.id, { launcher: fakeLauncher(false), cfg })).rejects.toThrow();
+    const r = await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    expect(r.data.state).toBe("running");
+    expect(r.data.error).toBeNull();
+  });
+
+  it("existing worktree dir: error, state unchanged, dir untouched", async () => {
+    const t = mk();
+    const wt = worktreePath(cfg, repo, t.data.id);
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, "keep.txt"), "mine");
+    const l = fakeLauncher();
+    await expect(launchTask(t.data.id, { launcher: l, cfg })).rejects.toThrow(/zaten var/);
+    const after = getTask(t.data.id);
+    expect(after.data.state).toBe("queued");
+    expect(after.data.error).toMatch(/zaten var/);
+    expect(readdirSync(wt)).toEqual(["keep.txt"]);
+    expect(readFileSync(join(wt, "keep.txt"), "utf8")).toBe("mine");
+    expect(l.reqs).toHaveLength(0);
+  });
+
+  it("rejects non-queued and non-dev tasks", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    await expect(launchTask(t.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/queued/);
+    const r = mk("research");
+    await expect(launchTask(r.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/dev/);
+  });
+});
+
+describe("cleanupTask", () => {
+  it("refuses a running task", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    expect(() => cleanupTask(t.data.id)).toThrow();
+  });
+  it("removes the worktree of a done task but keeps the branch", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    setState(t.data.id, "awaiting_approval");
+    setState(t.data.id, "done");
+    const wt = getTask(t.data.id).data.worktree!;
+    cleanupTask(t.data.id);
+    expect(existsSync(wt)).toBe(false);
+    expect(getTask(t.data.id).data.worktree).toBeNull();
+    expect(git(repo, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
+  });
+});
+
+describe("statusSummary", () => {
+  it("counts states, lists active, marks stale and counts inbox", async () => {
+    const a = mk();
+    const b = mk();
+    mk();
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    await launchTask(b.data.id, { launcher: fakeLauncher(), cfg });
+    const future = new Date(Date.now() + 7 * 3600_000);
+    const s = statusSummary(cfg, future);
+    expect(s.newlyStalled.sort()).toEqual([a.data.id, b.data.id].sort());
+    expect(s.counts.stalled).toBe(2);
+    expect(s.counts.queued).toBe(1);
+    expect(s.counts.running).toBe(0);
+    expect(s.active.map((t) => t.data.id).sort()).toEqual([a.data.id, b.data.id].sort());
+    expect(s.inbox).toBe(0);
+  });
+});

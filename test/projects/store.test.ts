@@ -32,3 +32,12 @@ describe("projects store", () => {
     ]);
   });
 });
+
+describe("slug validation", () => {
+  it("rejects slugs with path characters or uppercase", () => {
+    makeHome();
+    for (const bad of ["..\\x","a/b", "A", "a b", ""]) {
+      expect(() => writeProject(bad, card(bad))).toThrow(/slug/);
+    }
+  });
+});

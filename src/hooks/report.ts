@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { runGitRaw } from "../git/git.js";
 import { kbPaths, nowIso, readDoc, validate, type InboxRecord } from "../kb/index.js";
 import { inferProject } from "./project.js";
 import { parseTranscript } from "./transcript.js";
@@ -21,7 +21,7 @@ export interface ReportInput {
 
 export interface ReportDeps {
   readFile: (p: string) => string;
-  git: (cwd: string, args: string[]) => string | null;
+  git: (cwd: string, args: string[], timeoutMs: number) => string | null;
   projects: { slug: string; path: string }[];
   vladHome: string;
   env: Record<string, string | undefined>;
@@ -37,14 +37,15 @@ function collectGit(cwd: string, deps: ReportDeps): Git {
   const start = clock();
   let dead = false;
   const run = (args: string[]) => {
-    if (dead || clock() - start >= GIT_DEADLINE_MS) {
+    const remaining = GIT_DEADLINE_MS - (clock() - start);
+    if (dead || remaining <= 0) {
       dead = true;
       return null;
     }
     const t0 = clock();
     let out: string | null = null;
     try {
-      out = deps.git(cwd, args);
+      out = deps.git(cwd, args, Math.min(GIT_CALL_MS, remaining));
     } catch {
       out = null;
     }
@@ -94,12 +95,8 @@ export function buildReport(input: ReportInput, deps: ReportDeps): InboxRecord |
   };
 }
 
-function gitRunner(cwd: string, args: string[]): string | null {
-  try {
-    return execFileSync("git", args, { cwd, timeout: GIT_CALL_MS, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-  } catch {
-    return null;
-  }
+function gitRunner(cwd: string, args: string[], timeoutMs: number): string | null {
+  return runGitRaw(cwd, args, timeoutMs);
 }
 
 function loadProjects(dir: string): { slug: string; path: string }[] {

@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { recentCommits } from "../git/git.js";
 import { kbPaths, type VladConfig } from "../kb/index.js";
 
 export type RepoInfo = {
@@ -50,22 +50,7 @@ function readManifest(dir: string): Record<string, unknown> | null {
 }
 
 function readCommits(dir: string): RepoInfo["commits"] {
-  try {
-    const out = execFileSync("git", ["-C", dir, "log", "-20", "--format=%H%x1f%s%x1f%aI"], {
-      encoding: "utf8",
-      timeout: 3000,
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return out
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => {
-        const [sha, subject, date] = l.split("\x1f");
-        return { sha, subject, date };
-      });
-  } catch {
-    return [];
-  }
+  return recentCommits(dir, null, 20);
 }
 
 export function scanRoots(cfg: VladConfig): RepoInfo[] {
