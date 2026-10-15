@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
@@ -104,6 +104,40 @@ describe("task store", () => {
   });
   it("tasks dir missing yields empty list", () => {
     rmSync(kbPaths().tasks, { recursive: true, force: true });
+    expect(listTasks()).toEqual([]);
+  });
+});
+
+describe("task role", () => {
+  const writeRole = (slug: string, kind: string) => {
+    mkdirSync(kbPaths().roles, { recursive: true });
+    writeFileSync(join(kbPaths().roles, `${slug}.md`), `---\nslug: ${slug}\ntitle: T\nkind: ${kind}\nsummary: s\n---\n`);
+  };
+  const mkRole = (role: string | undefined, kind: "dev" | "research" = "dev") =>
+    createTask({ project: "p", title: "t", kind, body: "", role }, D);
+
+  it("stores a valid role, and null without one", () => {
+    writeRole("tester", "executor");
+    expect(mkRole("tester").data.role).toBe("tester");
+    expect(getTask(mkRole("tester").data.id).data.role).toBe("tester");
+    expect(mk().data.role).toBeNull();
+  });
+  it("an empty role is stored as null", () => {
+    expect(mkRole("").data.role).toBeNull();
+  });
+  it("an invalid kind is reported as such even with a role", () => {
+    writeRole("tester", "executor");
+    expect(() => createTask({ project: "p", title: "t", kind: "foo" as "dev", body: "", role: "tester" }, D))
+      .toThrow(/geçersiz görev türü: foo/);
+  });
+  it("rejects an unknown role", () => {
+    expect(() => mkRole("yok")).toThrow(/rol bulunamadı: yok/);
+  });
+  it("rejects an advisory role on a dev task and an executor role on a research task", () => {
+    writeRole("finans", "advisory");
+    writeRole("tester", "executor");
+    expect(() => mkRole("finans", "dev")).toThrow(/rol finans \(advisory\) dev görevinde kullanılamaz/);
+    expect(() => mkRole("tester", "research")).toThrow(/rol tester \(executor\) research görevinde kullanılamaz/);
     expect(listTasks()).toEqual([]);
   });
 });

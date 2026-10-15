@@ -11,6 +11,7 @@ import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher } from "./launcher/index.js";
 import type { LaunchResult, Launcher } from "./launcher/index.js";
 import { listProjectsWithWarnings, writeProject } from "./projects/store.js";
+import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
@@ -92,12 +93,25 @@ def(project, "list", "Kartları listeler", (o: Opts) => {
   );
 });
 
+const role = program.command("role").description("Uzman roller");
+def(role, "list", "roles/ altındaki rolleri listeler", (o: Opts) => {
+  const { roles, warnings } = listRolesWithWarnings();
+  out(
+    o,
+    { roles, warnings },
+    [...roles.map((r) => `${r.slug}  ${r.kind}  ${r.title}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+  );
+});
+
 const task = program.command("task").description("Görevler");
 def(task, "new", "queued görev oluşturur", (o: Opts) => {
   const body = o.bodyFile ? readInput(o.bodyFile as string) : "";
-  const t = createTask({ project: o.project as string, title: o.title as string, kind: o.kind as TaskKind, body });
+  const t = createTask({
+    project: o.project as string, title: o.title as string, kind: o.kind as TaskKind, body, role: o.role as string | undefined,
+  });
   out(o, { id: t.data.id }, t.data.id);
 })
+  .option("--role <slug>", "roles/<slug>.md uzman rolü (advisory → research, executor → dev)")
   .requiredOption("--project <slug>", "proje slug'ı")
   .requiredOption("--title <başlık>", "görev başlığı")
   .option("--kind <kind>", "dev | research", "dev")

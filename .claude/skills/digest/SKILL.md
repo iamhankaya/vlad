@@ -23,7 +23,8 @@ Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an)
 
 - `record.project`'e göre grupla; `null` olanları `cwd`'ye bakarak bilinen bir projeye bağlamaya çalış (`vlad project list --json`), olmuyorsa "Diğer" grubuna koy.
 - Her session için 1–3 cümlelik özet çıkar: ne yapıldı, ne karar verildi, ne açık kaldı. Dayanak: `excerpt`, `git.recent_commits`, `git.changed_files`. Excerpt yetersizse ve gerçekten gerekiyorsa `transcript_path`'i oku.
-- Biten görevler `project` alanına göre gruplanır. Özetin dayanağı kapanış raporudur (yapılanlar, testler, açık noktalar). Açık noktalar kartın `## Açık konular` bölümüne aday olur.
+- Görevin `role` alanı doluysa günlük maddesi rol başlığıyla başlar (ör. "Senior Tester: …"; başlık `vlad role list --json`'dan).
+- Biten görevler `project` alanına göre gruplanır. Özetin dayanağı kapanış raporudur (yapılanlar, testler, açık noktalar). Açık noktalar (danışman rol raporlarında eşdeğerleri: `### Varsayımlar`, `### Açık sorular ve varsayımlar`) kartın `## Açık konular` bölümüne aday olur.
 - `task_id` doluysa özeti o görevle ilişkilendir ve görev dosyasına session'ı yaz (görev varsa; yoksa atla):
   ```
   vlad task session <task_id> <session_id> --json

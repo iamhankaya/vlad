@@ -106,6 +106,27 @@ describe("vlad cli", () => {
     expect(JSON.parse(vlad(["task", "list", "--undigested", "--json"]).out).tasks).toEqual([]);
     expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 0 rapor");
   });
+  it("role list --json lists roles and warnings; text lists slug kind title", () => {
+    mkdirSync(join(home, "roles"));
+    writeFileSync(join(home, "roles", "tester.md"), "---\nslug: tester\ntitle: Senior Tester\nkind: executor\nsummary: s\n---\n");
+    writeFileSync(join(home, "roles", "bad.md"), "---\nslug: bad\n---\n");
+    const j = JSON.parse(vlad(["role", "list", "--json"]).out);
+    expect(j.roles.map((r: { slug: string }) => r.slug)).toEqual(["tester"]);
+    expect(j.warnings).toHaveLength(1);
+    expect(vlad(["role", "list"]).out).toContain("tester  executor  Senior Tester");
+  });
+  it("task new --role writes the role; a kind mismatch exits 1 with a JSON error", () => {
+    mkdirSync(join(home, "roles"));
+    writeFileSync(join(home, "roles", "tester.md"), "---\nslug: tester\ntitle: Senior Tester\nkind: executor\nsummary: s\n---\n");
+    writeFileSync(join(home, "roles", "finans.md"), "---\nslug: finans\ntitle: Finans\nkind: advisory\nsummary: s\n---\n");
+    const ok = vlad(["task", "new", "--project", "alpha", "--title", "T", "--role", "tester", "--json"]);
+    expect(ok.code, ok.err).toBe(0);
+    const l = JSON.parse(vlad(["task", "list", "--json"]).out);
+    expect(l.tasks[0]).toMatchObject({ id: JSON.parse(ok.out).id, role: "tester" });
+    const bad = vlad(["task", "new", "--project", "alpha", "--title", "T", "--role", "finans", "--json"]);
+    expect(bad.code).toBe(1);
+    expect(JSON.parse(bad.err).error).toMatch(/rol finans \(advisory\) dev görevinde kullanılamaz/);
+  });
   it("task session sets session_id without changing state", () => {
     const id = mkTask();
     const r = vlad(["task", "session", id, "sess-123", "--json"]);
