@@ -29,7 +29,7 @@ VLAD, proje ve repo bağımsız, kalıcı bir "ana akıl" session'ıdır. Kullan
 
 ### Kapsam dışı (bu tur)
 
-Mail modülü, uzman roller (Finans, Pazarlama, Tester, Analyst, Developer persona'ları), orkestratör uygulaması, dashboard, MCP sunucusu. Şema ve `Launcher` arayüzü bunlara hazır tasarlanır.
+Mail modülü, uzman roller (Finans, Pazarlama, Tester, Analyst, Developer persona'ları — sonradan `2026-10-15-vlad-roles-design.md` ile eklendi), orkestratör uygulaması, dashboard, MCP sunucusu. Şema ve `Launcher` arayüzü bunlara hazır tasarlanır.
 
 ## 2. Mimari ilkeler
 

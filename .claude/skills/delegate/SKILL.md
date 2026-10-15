@@ -20,6 +20,11 @@ vlad project list --json
   vlad task list --project <slug> --json
   ```
   Varsa kullanıcıya söyle (çakışma/tekrar riski).
+- Uzman rolleri al:
+  ```
+  vlad role list --json
+  ```
+  `{"roles":[{ "slug", "title", "kind", "summary", "file" }], ...}`. `advisory` roller (finans, pazarlama, analyst) yalnızca `research`, `executor` roller (developer, tester) yalnızca `dev` görevinde kullanılır.
 
 ## 2. Taslağı hazırla ve göster
 
@@ -30,6 +35,7 @@ Türü belirle:
 Kullanıcıya şunu göster:
 ```markdown
 **Proje:** <slug>   **Tür:** dev|research   **Yetki:** <autonomy, karttan>
+**Rol:** <title> (`<slug>`) — <neden bu rol, tek cümle> | rol yok
 **Başlık:** <kısa başlık>
 
 ## Tanım
@@ -41,15 +47,17 @@ Kullanıcıya şunu göster:
 ## Bağlam
 <ilgili kararlar, dosyalar, kısıtlar; kaynak ID'leriyle>
 ```
+Rol önerisi: işin doğasına en uygun rolü seç (ör. test yazma/hata avı → `tester`, maliyet/fiyat → `finans`, gereksinim/kod inceleme → `analyst`); türüyle uyumlu olmalı. Uygun rol yoksa "rol yok" yaz; rolsüz görev bugünkü gibi çalışır.
+
 Sonunda sor: "Bu görevi oluşturup başlatayım mı?"
 
 ## 3. Onaydan sonra oluştur
 
 Gövdeyi (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`) geçici bir dosyaya yaz:
 ```
-vlad task new --project <slug> --title "<başlık>" --kind <dev|research> --body-file <geçici.md> --json
+vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--role <slug>] --body-file <geçici.md> --json
 ```
-Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle.
+Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle. Rol bulunamazsa veya türle uyumsuzsa CLI hata verir ve görev oluşmaz; hatayı göster, taslağı düzelt.
 
 ## 4a. dev → çalışanı başlat
 
@@ -67,7 +75,7 @@ vlad task launch <id> --json
 ## 4b. research → arka plan agent'ı
 
 1. `vlad task set <id> running --json`
-2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet.
+2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Agent sonucu Markdown olarak döndürür; dosya yazmaz.
 3. Önemli ara adımlarda: `vlad task log <id> "<adım>"`
 4. Sonucu Markdown olarak geçici dosyaya yaz ve:
    ```

@@ -14,7 +14,7 @@ Görevlerin:
 - `kb/` git'te tutulur (remote: private `iamhankaya/vlad`). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
-Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
+Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
 
 ## Yetki sınırları
 
@@ -48,6 +48,10 @@ Kullanılabilir komutlar: `vlad scan`, `vlad project write|list`, `vlad task new
 | `/delegate` | "X projesinde Y'yi yap" — görev tanımla, onay al, çalışanı başlat |
 | `/status` | Aktif görevler, onay bekleyenler, takılanlar; push/PR/merge onayı |
 | `/digest` | İşlenmemiş session raporlarını günlüğe, kartlara ve karar günlüğüne işlemek |
+
+## Uzman roller
+
+`roles/<slug>.md` dosyaları uzman rolleri tanımlar: danışmanlar (`finans`, `pazarlama`, `analyst`) research görevlerinde arka plan agent'ı olarak, uygulayıcılar (`developer`, `tester`) dev görevlerinde çalışan persona'sı olarak çalışır. `/delegate` uygun rolü önerir ve `vlad task new --role <slug>` ile göreve yazar. Yeni rol eklemek için `roles/` altına aynı biçimde bir dosya eklemek yeter. Tasarım: `docs/superpowers/specs/2026-10-15-vlad-roles-design.md`.
 
 ## Kısa işler (research)
 

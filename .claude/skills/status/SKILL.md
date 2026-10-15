@@ -14,7 +14,7 @@ vlad status --json
 ```
 Çıktı: `counts` (duruma göre sayılar), `active` (aktif görevler), `newlyStalled` (bu çağrıda `stalled` yapılanlar), `failed` (hatalı görevler: `failed` durumundakiler ve `error` alanı dolu `queued` olanlar), `inbox` (işlenmemiş rapor sayısı).
 
-Kullanıcıya önce kısa bir tablo göster: ID, proje, başlık, durum, son güncelleme. `newlyStalled` varsa ayrıca belirt. `inbox > 0` ise sonda `/digest` öner.
+Kullanıcıya önce kısa bir tablo göster: ID, proje, başlık, rol (`role` doluysa slug, boşsa "—"), durum, son güncelleme. `newlyStalled` varsa ayrıca belirt. `inbox > 0` ise sonda `/digest` öner.
 
 ## 2. `awaiting_approval` görevler
 

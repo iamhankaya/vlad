@@ -17,6 +17,7 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 
 - Görev dosyası: `## Tanım`, `## Kabul kriterleri`, `## Bağlam`, frontmatter'daki `project`, `autonomy`, `branch`.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`.
+- Rol: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku (başlangıç prompt'u da bu dosyayı söyler). Rolün sorumluluk, yetki ve çıktı kuralları bu protokolle birlikte geçerlidir; rol kuralı ile `autonomy` kuralı çelişirse **daha kısıtlayıcı** olan uygulanır. Kapanış raporunu rolün `## Çıktı` bölümündeki başlıklarla yaz (adım 6'daki başlıklar her durumda bulunur).
 - Bu dosyaları **elle düzenleme**; yalnızca okursun.
 - Çalıştığın klasör görevin worktree'sidir ve `vlad/<id>` branch'indesin (`git branch --show-current` ile doğrula).
 
