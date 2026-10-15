@@ -53,10 +53,11 @@ function readCommits(dir: string): RepoInfo["commits"] {
   return recentCommits(dir, null, 20);
 }
 
-export function scanRoots(cfg: VladConfig): RepoInfo[] {
+export function scanRootsWithWarnings(cfg: VladConfig): { repos: RepoInfo[]; warnings: string[] } {
   const ignores = cfg.ignore.map(globToRegex);
   const projectsDir = kbPaths().projects;
   const repos: RepoInfo[] = [];
+  const warnings: string[] = [];
   for (const root of cfg.roots) {
     if (!existsSync(root)) continue;
     for (const name of readdirSync(root)) {
@@ -64,19 +65,23 @@ export function scanRoots(cfg: VladConfig): RepoInfo[] {
       const path = join(root, name);
       try {
         if (!statSync(path).isDirectory() || !existsSync(join(path, ".git"))) continue;
-      } catch {
-        continue;
+        const slug = slugify(name);
+        repos.push({
+          slug,
+          path,
+          readme: readReadme(path),
+          manifest: readManifest(path),
+          commits: readCommits(path),
+          hasCard: existsSync(join(projectsDir, `${slug}.md`)),
+        });
+      } catch (e) {
+        warnings.push(`${path}: ${(e as Error).message}`);
       }
-      const slug = slugify(name);
-      repos.push({
-        slug,
-        path,
-        readme: readReadme(path),
-        manifest: readManifest(path),
-        commits: readCommits(path),
-        hasCard: existsSync(join(projectsDir, `${slug}.md`)),
-      });
     }
   }
-  return repos;
+  return { repos, warnings };
+}
+
+export function scanRoots(cfg: VladConfig): RepoInfo[] {
+  return scanRootsWithWarnings(cfg).repos;
 }

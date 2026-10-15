@@ -11,17 +11,22 @@ function jsonFiles(): string[] {
     .sort();
 }
 
-/** Inbox records in name (= time) order; unreadable/broken files are skipped. */
-export function listInbox(): { file: string; record: InboxRecord }[] {
-  const out: { file: string; record: InboxRecord }[] = [];
+/** Inbox records in name (= time) order; unreadable/broken files are skipped and reported as warnings. */
+export function listInboxWithWarnings(): { items: { file: string; record: InboxRecord }[]; warnings: string[] } {
+  const items: { file: string; record: InboxRecord }[] = [];
+  const warnings: string[] = [];
   for (const file of jsonFiles()) {
     try {
-      out.push({ file, record: JSON.parse(readFileSync(join(kbPaths().inbox, file), "utf8")) as InboxRecord });
-    } catch {
-      /* skip broken */
+      items.push({ file, record: JSON.parse(readFileSync(join(kbPaths().inbox, file), "utf8")) as InboxRecord });
+    } catch (e) {
+      warnings.push(`${file}: ${(e as Error).message}`);
     }
   }
-  return out;
+  return { items, warnings };
+}
+
+export function listInbox(): { file: string; record: InboxRecord }[] {
+  return listInboxWithWarnings().items;
 }
 
 export function countInbox(): number {

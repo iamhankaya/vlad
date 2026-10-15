@@ -7,7 +7,7 @@ import { PassThrough } from "node:stream";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { afterAll, beforeAll } from "vitest";
-import { buildReport, main, readStdin } from "../../src/hooks/report.js";
+import { buildReport, loadProjects, main, readStdin } from "../../src/hooks/report.js";
 import { makeHome } from "../helpers.js";
 
 let home: string;
@@ -56,8 +56,17 @@ describe("buildReport", () => {
     expect(r.git).toEqual({ branch: null, head: null, recent_commits: [], changed_files: [] });
     expect(() => validate("inbox", r)).not.toThrow();
   });
+  it("passes core.quotepath=false to log and status", () => {
+    const seen: string[][] = [];
+    run(two, { git: (_c: string, a: string[]) => (seen.push(a), null) });
+    for (const cmd of ["log", "status"]) {
+      const call = seen.find((a) => a.includes(cmd))!;
+      expect(call.slice(0, 2)).toEqual(["-c", "core.quotepath=false"]);
+    }
+  });
   it("parses git output", () => {
-    const git = (_c: string, a: string[]) => {
+    const git = (_c: string, args: string[]) => {
+      const a = args[0] === "-c" ? args.slice(2) : args;
       if (a[0] === "rev-parse" && a.includes("--abbrev-ref")) return "main\n";
       if (a[0] === "rev-parse") return "abc1234\n";
       if (a[0] === "log") return "abc1234\tfeat: x\t2026-10-15T20:00:00+03:00\n";
@@ -152,5 +161,16 @@ describe("entry process", () => {
     });
     expect(r.status).toBe(0);
     expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);
+  });
+});
+
+describe("loadProjects", () => {
+  it("skips unreadable, empty and invalid cards", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vlad-cards-"));
+    writeFileSync(join(dir, "ok.md"), "---\nslug: ok\npath: C:\dev\ok\n---\n");
+    writeFileSync(join(dir, "bad.md"), "---\nslug: [oops\n---\n");
+    writeFileSync(join(dir, "empty.md"), "");
+    writeFileSync(join(dir, "nopath.md"), "---\nslug: nopath\n---\n");
+    expect(loadProjects(dir).map((p) => p.slug)).toEqual(["ok"]);
   });
 });

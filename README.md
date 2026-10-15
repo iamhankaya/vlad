@@ -21,7 +21,7 @@ vlad install
 ```
 
 `vlad install` şunları yapar:
-- `~/.claude/settings.json`'u `settings.json.bak-<YYYYMMDDTHHmmss>` olarak yedekler (dosya varsa ve değişiklik gerekiyorsa) ve `hooks.SessionEnd`'e `node "C:/dev/vlad/dist/hooks/session-report.js"` kaydını ekler. Diğer ayarlara dokunmaz; tekrar çalıştırmak güvenlidir.
+- `~/.claude/settings.json`'u `settings.json.bak-<YYYYMMDDTHHmmss>` olarak yedekler (dosya varsa ve değişiklik gerekiyorsa) ve `hooks.SessionEnd`'e `node "C:/dev/vlad/dist/hooks/session-report.js"` kaydını ekler. Hook `timeout: 10` ile kaydedilir (Claude Code'un SessionEnd varsayılanı 1,5 sn; hook'un git çağrıları ~6 sn sürebilir); zaman aşımı olmadan kayıtlı eski bir girdi yerinde yükseltilir. Diğer ayarlara dokunmaz; tekrar çalıştırmak güvenlidir.
 - `global/skills/vlad-worker/` klasörünü `~/.claude/skills/vlad-worker/`'a kopyalar (çalışan protokolü her repoda kullanılabilir olur). Her çalıştırmada hedefteki `vlad-worker` klasörünün üzerine yazılır; orada yaptığınız elle değişiklikler kaybolur.
 - `VLAD_CLAUDE_DIR` ortam değişkeni `~/.claude` yerine başka bir klasörü hedefler (test ve deneme için).
 
@@ -34,7 +34,7 @@ cd C:\dev\vlad
 claude
 ```
 
-Açılışta SessionStart hook'u `İşlenmemiş N rapor, M aktif görev (…)` özetini bağlama ekler; VLAD buna göre `/digest` veya `/status` önerir.
+Açılışta SessionStart hook'u `İşlenmemiş N rapor, M aktif görev (…, F hatalı)` özetini bağlama ekler; VLAD buna göre `/digest` veya `/status` önerir.
 
 | Skill | Ne yapar |
 |---|---|

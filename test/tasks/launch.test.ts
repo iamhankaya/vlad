@@ -7,7 +7,7 @@ import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
-import { createTask, getTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { makeHome } from "../helpers.js";
 
@@ -177,5 +177,18 @@ describe("statusSummary", () => {
     expect(s.counts.running).toBe(0);
     expect(s.active.map((t) => t.data.id).sort()).toEqual([a.data.id, b.data.id].sort());
     expect(s.inbox).toBe(0);
+  });
+  it("lists failed tasks and queued tasks with an error in `failed`", () => {
+    const a = mk(); // failed
+    const b = mk(); // queued with error
+    const c = mk(); // plain queued
+    setState(a.data.id, "running");
+    setState(a.data.id, "failed");
+    const tb = getTask(b.data.id);
+    tb.data.error = "launcher başarısız";
+    saveTask(tb);
+    const s = statusSummary(cfg, new Date());
+    expect(s.failed.map((t) => t.data.id).sort()).toEqual([a.data.id, b.data.id].sort());
+    expect(s.failed.map((t) => t.data.id)).not.toContain(c.data.id);
   });
 });

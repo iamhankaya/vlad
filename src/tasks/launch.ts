@@ -112,7 +112,7 @@ export function cleanupTask(id: string): void {
 export function statusSummary(
   cfg: VladConfig,
   now: Date,
-): { counts: Record<TaskState, number>; active: Task[]; newlyStalled: string[]; inbox: number } {
+): { counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number } {
   const newlyStalled = markStale(now, cfg.staleAfterHours).map((t) => t.data.id);
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
@@ -120,6 +120,7 @@ export function statusSummary(
   return {
     counts,
     active: tasks.filter((t) => ACTIVE.includes(t.data.state)),
+    failed: tasks.filter((t) => t.data.state === "failed" || (t.data.state === "queued" && !!t.data.error)),
     newlyStalled,
     inbox: countInbox(),
   };

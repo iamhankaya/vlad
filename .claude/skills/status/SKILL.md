@@ -12,7 +12,7 @@ description: Aktif görevlerin durumunu gösterir; onay bekleyen görevler için
 ```
 vlad status --json
 ```
-Çıktı: `counts` (duruma göre sayılar), `active` (aktif görevler), `newlyStalled` (bu çağrıda `stalled` yapılanlar), `inbox` (işlenmemiş rapor sayısı).
+Çıktı: `counts` (duruma göre sayılar), `active` (aktif görevler), `newlyStalled` (bu çağrıda `stalled` yapılanlar), `failed` (hatalı görevler: `failed` durumundakiler ve `error` alanı dolu `queued` olanlar), `inbox` (işlenmemiş rapor sayısı).
 
 Kullanıcıya önce kısa bir tablo göster: ID, proje, başlık, durum, son güncelleme. `newlyStalled` varsa ayrıca belirt. `inbox > 0` ise sonda `/digest` öner.
 
@@ -26,13 +26,13 @@ Her biri için `kb/tasks/<id>.md`'yi oku ve göster:
   git -C <worktree> diff --stat main...HEAD
   ```
 Sonra seçenekleri sun:
-1. **Merge et** (yerelde ana branch'e): onaydan sonra proje yolunda (`git -C <proje-yolu> status` temiz olmalı)
+1. **Merge et** (yerelde): önce `git -C <proje-yolu> branch --show-current` çalıştır, çıkan branch'i kullanıcıya göster ve merge'ün hedefinin bu branch olduğunu **açıkça onaylat**. Onaydan sonra (`git -C <proje-yolu> status` temiz olmalı)
    `git -C <proje-yolu> merge --no-ff vlad/<id>`
 2. **Push + PR aç:** onaydan sonra
    `git -C <worktree> push -u origin vlad/<id>` ve `gh pr create --head vlad/<id> --fill` (worktree'de). PR linkini göster.
 3. **Değişiklik iste:** istenen değişikliği al →
    `vlad task log <id> "Değişiklik isteği: <özet>"` ve `vlad task set <id> running --json`.
-   Çalışanın session'ı açıksa (`ListAgents`) ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder; kapalıysa kullanıcıya worktree'de `claude --resume <session_id>` çalıştırmasını öner.
+   Çalışanın session'ı açıksa (`ListAgents`) ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder; kapalıysa kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa `claude --continue`.
 4. **Olduğu gibi kabul et** (dışa eylem yok).
 5. **İptal et:** `vlad task set <id> cancelled --json`, ardından `vlad task cleanup <id> --json`.
 
@@ -54,12 +54,15 @@ vlad task answer <id> "<cevap>" --json
 ## 4. `stalled` görevler
 
 Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
-- **Devam:** `vlad task set <id> running --json`; kullanıcıya worktree'de `claude --resume <session_id>` çalıştırmasını öner.
+- **Devam:** `vlad task set <id> running --json`; kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa `claude --continue`.
 - **İptal:** `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`.
 
-## 5. `failed` / `queued` (hatalı) görevler
+## 5. Hatalı görevler (`failed` listesi)
 
-`error` alanını göster. Seçenekler: yeniden kuyruğa al (`vlad task set <id> queued --json`, ardından `vlad task launch <id> --json`) veya iptal (`vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`). Worktree zaten varsa `launch` durur; üzerine yazma, kullanıcıya sor.
+`vlad status --json` çıktısındaki `failed` listesini kullan; her biri için `error` alanını göster.
+- **`failed` durumundaki dev görevi** (birincil öneri): `vlad task set <id> cancelled --json` → `vlad task cleanup <id> --json` → kullanıcıya yeni bir görev oluşturmayı (`/delegate`) öner.
+- **`queued` durumunda `error` dolu görev** (launch başarısız olmuş, worktree geri alınmıştır): yalnızca `vlad task launch <id> --json` ile yeniden dene.
+- İstersen iptal de sunulur: `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`. Worktree zaten varsa `launch` durur; üzerine yazma, kullanıcıya sor.
 
 ## Kullanıcıya göster
 

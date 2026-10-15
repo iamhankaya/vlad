@@ -12,7 +12,7 @@ const cmd = 'node "C:/dev/vlad/dist/hooks/session-report.js"';
 describe("mergeSessionEndHook", () => {
   it("adds the hook to an empty settings object", () => {
     const s = mergeSessionEndHook({}, cmd);
-    expect(s.hooks.SessionEnd[0].hooks[0]).toEqual({ type: "command", command: cmd });
+    expect(s.hooks.SessionEnd[0].hooks[0]).toEqual({ type: "command", command: cmd, timeout: 10 });
   });
   it("is idempotent: applying twice keeps a single entry", () => {
     const s = mergeSessionEndHook(mergeSessionEndHook({}, cmd), cmd);
@@ -35,8 +35,21 @@ describe("mergeSessionEndHook", () => {
     mergeSessionEndHook(input, cmd);
     expect(input).toEqual({ hooks: { SessionStart: [] } });
   });
+  it("upgrades an existing entry without a timeout in place, then is a no-op", () => {
+    const input = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: cmd }] }] } };
+    const s = mergeSessionEndHook(input, cmd);
+    expect(s.hooks.SessionEnd).toHaveLength(1);
+    expect(s.hooks.SessionEnd[0].hooks[0]).toEqual({ type: "command", command: cmd, timeout: 10 });
+    expect(mergeSessionEndHook(s, cmd)).toEqual(s);
+  });
+  it("raises a too-small timeout but keeps a larger one", () => {
+    const small = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: cmd, timeout: 2 }] }] } };
+    expect(mergeSessionEndHook(small, cmd).hooks.SessionEnd[0].hooks[0].timeout).toBe(10);
+    const big = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: cmd, timeout: 30 }] }] } };
+    expect(mergeSessionEndHook(big, cmd)).toEqual(big);
+  });
   it("detects the command inside a multi-hook entry", () => {
-    const input = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: "x" }, { type: "command", command: cmd }] }] } };
+    const input = { hooks: { SessionEnd: [{ hooks: [{ type: "command", command: "x" }, { type: "command", command: cmd, timeout: 10 }] }] } };
     expect(mergeSessionEndHook(input, cmd)).toEqual(input);
   });
 });
@@ -113,6 +126,22 @@ describe("installGlobal", () => {
     expect(readdirSync(claudeDir).filter((f) => f.includes(".bak-"))).toEqual([]);
   });
 
+  it("writes timeout 10, upgrades an old no-timeout entry once with a backup, then no-ops", () => {
+    installGlobal({ home, claudeDir, dryRun: false, now });
+    expect(readSettings().hooks.SessionEnd[0].hooks[0].timeout).toBe(10);
+    writeFileSync(
+      join(claudeDir, "settings.json"),
+      JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: hookCmd() }] }] } }),
+      "utf8",
+    );
+    installGlobal({ home, claudeDir, dryRun: false, now });
+    expect(readSettings().hooks.SessionEnd).toHaveLength(1);
+    expect(readSettings().hooks.SessionEnd[0].hooks[0].timeout).toBe(10);
+    expect(readdirSync(claudeDir).filter((f) => f.includes(".bak-"))).toHaveLength(1);
+    installGlobal({ home, claudeDir, dryRun: false, now: new Date(2026, 9, 15, 23, 0, 0) });
+    expect(readdirSync(claudeDir).filter((f) => f.includes(".bak-"))).toHaveLength(1);
+  });
+
   it("dryRun returns actions without touching disk", () => {
     writeFileSync(join(claudeDir, "settings.json"), "{}", "utf8");
     const r = installGlobal({ home, claudeDir, dryRun: true, now });
@@ -149,6 +178,6 @@ describe("content files", () => {
 
   it(".claude/settings.json registers the SessionStart summary hook", () => {
     const s = JSON.parse(readFileSync(join(repo, ".claude", "settings.json"), "utf8"));
-    expect(s.hooks.SessionStart[0].hooks[0]).toEqual({ type: "command", command: "node dist/cli.js status --summary" });
+    expect(s.hooks.SessionStart[0].hooks[0]).toEqual({ type: "command", command: "node \"${CLAUDE_PROJECT_DIR}/dist/cli.js\" status --summary" });
   });
 });

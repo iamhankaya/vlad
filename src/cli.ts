@@ -3,17 +3,17 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
-import { listInbox, markDone } from "./inbox/inbox.js";
+import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher } from "./launcher/index.js";
 import type { LaunchResult, Launcher } from "./launcher/index.js";
-import { listProjects, writeProject } from "./projects/store.js";
-import { scanRoots } from "./scan/scan.js";
+import { listProjectsWithWarnings, writeProject } from "./projects/store.js";
+import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  logTask, reportTask, setState, statusSummary,
+  getTask, logTask, reportTask, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -69,8 +69,12 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
 }
 
 def(program, "scan", "Kök klasörleri tara (kart yazmaz)", (o: Opts) => {
-  const repos = scanRoots(loadConfig());
-  out(o, { repos }, repos.map((r) => `${r.slug}  ${r.path}${r.hasCard ? "" : "  (kart yok)"}`).join("\n"));
+  const { repos, warnings } = scanRootsWithWarnings(loadConfig());
+  out(
+    o,
+    { repos, warnings },
+    [...repos.map((r) => `${r.slug}  ${r.path}${r.hasCard ? "" : "  (kart yok)"}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+  );
 });
 
 const project = program.command("project").description("Proje kartları");
@@ -79,8 +83,12 @@ def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts
   out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
 }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
 def(project, "list", "Kartları listeler", (o: Opts) => {
-  const projects = listProjects();
-  out(o, { projects }, projects.map((p) => `${p.slug}  ${p.status}  ${p.path}`).join("\n"));
+  const { projects, warnings } = listProjectsWithWarnings();
+  out(
+    o,
+    { projects, warnings },
+    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+  );
 });
 
 const task = program.command("task").description("Görevler");
@@ -132,6 +140,13 @@ def(task, "cleanup <id>", "done/cancelled görevin worktree'sini kaldırır", (i
   cleanupTask(id);
   out(o, { id }, `${id} worktree kaldırıldı`);
 });
+def(task, "session <id> <session_id>", "Görevin session_id alanını yazar (durum değişmez)", (id: string, sessionId: string, o: Opts) => {
+  if (!sessionId.trim()) throw new Error("session_id boş olamaz");
+  const t = getTask(id);
+  t.data.session_id = sessionId.trim();
+  saveTask(t);
+  out(o, { id, session_id: t.data.session_id }, `${id} session_id: ${t.data.session_id}`);
+});
 def(task, "list", "Görevleri listeler", (o: Opts) => {
   const states = o.state ? String(o.state).split(",") as TaskState[] : undefined;
   const { tasks, warnings } = listTasksWithWarnings({ state: states, project: o.project as string | undefined });
@@ -149,22 +164,27 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
   if (o.summary) {
     const line =
       `İşlenmemiş ${s.inbox} rapor, ${s.active.length} aktif görev ` +
-      `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor)`;
-    out(o, { ...s, active: s.active.map((t) => t.data), summary: line }, line);
+      `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)`;
+    out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
     return;
   }
   const lines = [...s.active.map(taskLine), `inbox: ${s.inbox}`];
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
-  out(o, { ...s, active: s.active.map((t) => t.data) }, lines.join("\n"));
+  if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
+  out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
 }).option("--summary", "tek satır özet");
 
 const inbox = program.command("inbox").description("Oturum raporları");
 def(inbox, "list", "İşlenmemiş raporlar", (o: Opts) => {
-  const items = listInbox();
-  out(o, { items }, items.map((i) => `${i.file}  ${i.record.project ?? "-"}  ${i.record.reason}`).join("\n"));
+  const { items, warnings } = listInboxWithWarnings();
+  out(
+    o,
+    { items, warnings },
+    [...items.map((i) => `${i.file}  ${i.record.project ?? "-"}  ${i.record.reason}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+  );
 });
 def(inbox, "count", "İşlenmemiş rapor sayısı", (o: Opts) => {
-  const count = listInbox().length;
+  const count = listInboxWithWarnings().items.length;
   out(o, { count }, String(count));
 });
 def(inbox, "done <dosyalar...>", "Raporları processed/'a taşır", (files: string[], o: Opts) => {

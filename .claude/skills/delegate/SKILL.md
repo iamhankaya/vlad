@@ -58,7 +58,7 @@ vlad task launch <id> --json
 ```
 - Başarılı: görev `running`; yeni terminal sekmesi/penceresinde çalışan açılır. Kullanıcıya branch (`vlad/<id>`) ve worktree yolunu göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.
-- Emin değilsen önce `vlad task launch <id> --dry-run` ile çalıştırılacak komutu göster.
+- `--dry-run` önizleme değildir: worktree + branch oluşturur ve görevi terminal açmadan `running` yapar (yalnızca test içindir). Bu yüzden "önce dry-run ile göster" diye kullanma.
 
 ## 4b. research → arka plan agent'ı
 
