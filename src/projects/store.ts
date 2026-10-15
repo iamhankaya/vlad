@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { kbPaths, parseDoc, readDoc, validate, writeDoc, type ProjectCard } from "../kb/index.js";
 
 export function writeProject(slug: string, md: string): ProjectCard {
+  if (!/^[a-z0-9-]+$/.test(slug)) {
+    throw new Error(`geçersiz slug: "${slug}" (yalnızca a-z, 0-9 ve '-')`);
+  }
   const { data, body } = parseDoc<ProjectCard>(md);
   if (data.slug !== slug) {
     throw new Error(`slug uyuşmuyor: dosya "${slug}", kart "${data.slug}"`);

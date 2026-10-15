@@ -2,15 +2,20 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import type { VladConfig } from "../kb/index.js";
 
-/** Runs git; returns trimmed stdout, or null on error/timeout. */
-export function runGit(cwd: string, args: string[], timeoutMs = 3000): string | null {
+/** Runs git; returns untrimmed stdout, or null on error/timeout. */
+export function runGitRaw(cwd: string, args: string[], timeoutMs = 3000): string | null {
   try {
     return execFileSync("git", args, {
       cwd, timeout: timeoutMs, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    }).trim();
+    });
   } catch {
     return null;
   }
+}
+
+/** Runs git; returns trimmed stdout, or null on error/timeout. */
+export function runGit(cwd: string, args: string[], timeoutMs = 3000): string | null {
+  return runGitRaw(cwd, args, timeoutMs)?.trim() ?? null;
 }
 
 export function isRepo(cwd: string): boolean {
