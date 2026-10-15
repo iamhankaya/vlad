@@ -103,6 +103,37 @@ describe("launchTask", () => {
     expect(l.reqs).toHaveLength(0);
   });
 
+  it("rollback uses branch -d: an unmerged branch survives and the failure is appended to the error", async () => {
+    const t = mk();
+    const wt = worktreePath(cfg, repo, t.data.id);
+    const launcher: Launcher = {
+      async launch() {
+        writeFileSync(join(wt, "w.txt"), "work");
+        git(wt, "add", ".");
+        git(wt, "commit", "-m", "work");
+        return { ok: false, method: "fake", detail: "boom" };
+      },
+    };
+    await expect(launchTask(t.data.id, { launcher, cfg })).rejects.toThrow(/boom.*temizlik başarısız.*branch silinemedi/s);
+    expect(getTask(t.data.id).data.error).toMatch(/boom.*branch silinemedi: vlad\//s);
+    expect(git(repo, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
+  });
+
+  it("setState failure after a successful launch is recorded and rethrown", async () => {
+    const t = mk();
+    const launcher: Launcher = {
+      async launch() {
+        setState(t.data.id, "cancelled"); // makes queued->running invalid
+        return { ok: true, method: "fake" };
+      },
+    };
+    const wt = worktreePath(cfg, repo, t.data.id);
+    await expect(launchTask(t.data.id, { launcher, cfg })).rejects.toThrow(/terminal açıldı ama durum güncellenemedi/);
+    const err = getTask(t.data.id).data.error!;
+    expect(err).toContain("terminal açıldı ama durum güncellenemedi");
+    expect(err).toContain(`worktree: ${wt}`);
+  });
+
   it("rejects non-queued and non-dev tasks", async () => {
     const t = mk();
     await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });

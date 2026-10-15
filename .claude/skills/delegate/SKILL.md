@@ -47,7 +47,7 @@ Sonunda sor: "Bu görevi oluşturup başlatayım mı?"
 
 Gövdeyi (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`) geçici bir dosyaya yaz:
 ```
-vlad task new --project <slug> --title "<başlık>" --kind dev --body-file <geçici.md> --json
+vlad task new --project <slug> --title "<başlık>" --kind <dev|research> --body-file <geçici.md> --json
 ```
 Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle.
 

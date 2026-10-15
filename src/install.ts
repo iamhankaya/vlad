@@ -11,7 +11,10 @@ const hasCommand = (entries: any[], command: string): boolean =>
  */
 export function mergeSessionEndHook(settings: any, command: string): any {
   const s = structuredClone(settings ?? {});
-  const end: any[] = Array.isArray(s.hooks?.SessionEnd) ? s.hooks.SessionEnd : [];
+  if (s.hooks?.SessionEnd !== undefined && !Array.isArray(s.hooks.SessionEnd)) {
+    throw new Error("settings.json: hooks.SessionEnd bir dizi değil; elle düzeltin");
+  }
+  const end: any[] = s.hooks?.SessionEnd ?? [];
   if (hasCommand(end, command)) return s;
   s.hooks = { ...(s.hooks ?? {}), SessionEnd: [...end, { hooks: [{ type: "command", command }] }] };
   return s;
