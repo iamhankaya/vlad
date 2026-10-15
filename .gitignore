@@ -1,0 +1,7 @@
+node_modules/
+dist/
+kb/inbox/
+kb/logs/
+.superpowers/
+.remember/
+kb/vlad-session.txt

@@ -1,0 +1,12 @@
+{"type":"mode","mode":"normal"}
+{"type":"user","message":{"role":"user","content":"Oda senkronizasyonunu başlatalım"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"thinking","thinking":"düşünüyorum"},{"type":"tool_use","id":"t1","name":"Read","input":{"file_path":"a.ts"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"dosya içeriği"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"WebSocket kullanacağım."},{"type":"tool_use","id":"t2","name":"Edit","input":{}}]}}
+{"type":"attachment","attachment":{"type":"x"}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Tamam, devam et"}]}}
+{"type":"user","message":{"role":"user","content":"<command-name>/clear</command-name>"}}
+{"type":"user","isMeta":true,"message":{"role":"user","content":"meta mesaj"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Bitti."}]}}
+{"type":"user","message":{"role":"user","content":"Teşekkürler"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"   "}]}}
