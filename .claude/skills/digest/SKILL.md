@@ -78,6 +78,13 @@ vlad task digested <id1> <id2> ... --json
 ```
 Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak ve kullanıcıya söyle.
 
+## 7. Hafızayı commit'le
+
+```
+vlad kb commit "digest <YYYY-MM-DD>" --json
+```
+Yalnızca `kb/` commit'lenir (inbox ve loglar `.gitignore`'da). Hata verirse kullanıcıya söyle.
+
 ## Kullanıcıya göster
 
 Proje başına 1–3 satırlık özet, eklenen kararlar, açık konulardaki değişiklikler ve işlenen rapor sayısı. `task_id` taşıyan ve görevi hâlâ `running` görünen raporlar varsa `/status` öner.

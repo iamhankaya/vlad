@@ -76,6 +76,13 @@ vlad task launch <id> --json
    (görev `awaiting_approval` olur).
 5. Kullanıcıya özetle; kabul ederse `vlad task set <id> done --json`.
 
+## 5. Hafızayı commit'le
+
+Görev oluşturulup başlatıldıktan (veya research raporu yazıldıktan) sonra:
+```
+vlad kb commit "delegate: <id> <başlık>" --json
+```
+
 ## Kullanıcıya göster
 
 - Taslak (onaydan önce), oluşan ID, başlatma sonucu, hata varsa tam mesajı.
