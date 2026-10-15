@@ -6,7 +6,7 @@ import { getSection, kbPaths, nowIso, readDoc, validate, writeDoc } from "../../
 import type { TaskData } from "../../src/kb/index.js";
 import {
   TransitionError, answerTask, askTask, createTask, getTask, listTasks, listTasksWithWarnings,
-  logTask, markStale, nextTaskId, reportTask, setState,
+  logTask, markDigested, markStale, nextTaskId, reportTask, setState, undigestedTasks,
 } from "../../src/tasks/index.js";
 
 const D = new Date(2026, 9, 15, 10, 0, 0);
@@ -105,5 +105,30 @@ describe("task store", () => {
   it("tasks dir missing yields empty list", () => {
     rmSync(kbPaths().tasks, { recursive: true, force: true });
     expect(listTasks()).toEqual([]);
+  });
+});
+
+describe("digested", () => {
+  const finish = (id: string) => { setState(id, "running"); setState(id, "awaiting_approval"); setState(id, "done"); };
+
+  it("lists done tasks whose closing report has not been digested yet", () => {
+    const a = mk("a");
+    const b = mk("b");
+    mk("c"); // queued
+    finish(a.data.id);
+    finish(b.data.id);
+    expect(undigestedTasks().map((t) => t.data.id)).toEqual([a.data.id, b.data.id]);
+    markDigested([a.data.id]);
+    expect(getTask(a.data.id).data.digested).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(getTask(a.data.id).data.state).toBe("done");
+    expect(undigestedTasks().map((t) => t.data.id)).toEqual([b.data.id]);
+  });
+
+  it("refuses to mark a task that is not done, and marks nothing then", () => {
+    const a = mk("a");
+    const b = mk("b");
+    finish(a.data.id);
+    expect(() => markDigested([a.data.id, b.data.id])).toThrow(/done değil/);
+    expect(getTask(a.data.id).data.digested ?? null).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -160,6 +160,69 @@ describe("cleanupTask", () => {
     expect(getTask(t.data.id).data.worktree).toBeNull();
     expect(git(repo, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
   });
+
+  async function doneTask(): Promise<{ id: string; wt: string }> {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    setState(t.data.id, "awaiting_approval");
+    setState(t.data.id, "done");
+    return { id: t.data.id, wt: getTask(t.data.id).data.worktree! };
+  }
+
+  it("removes a leftover folder that git no longer tracks as a worktree", async () => {
+    const { id, wt } = await doneTask();
+    // git unregistered the worktree but the folder stayed (e.g. an earlier remove failed half way)
+    rmSync(join(repo, ".git", "worktrees", id), { recursive: true, force: true });
+    cleanupTask(id);
+    expect(existsSync(wt)).toBe(false);
+    expect(getTask(id).data.worktree).toBeNull();
+  });
+
+  // a process whose cwd is the worktree locks the folder on Windows, like the worker's terminal
+  async function holdFolder(wt: string) {
+    const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)"], { cwd: wt, stdio: "ignore" });
+    await new Promise((r) => setTimeout(r, 300));
+    const exited = new Promise((r) => holder.once("exit", r));
+    return { kill: async () => { holder.kill(); await exited; } };
+  }
+
+  it("closes the worker window before removing the worktree", async () => {
+    const { id } = await doneTask();
+    const closed: string[] = [];
+    cleanupTask(id, { closeWorker: (taskId) => { closed.push(taskId); } });
+    expect(closed).toEqual([id]);
+  });
+
+  it.runIf(process.platform === "win32")("a worker window closed by cleanup no longer blocks removal", async () => {
+    const { id, wt } = await doneTask();
+    const holder = await holdFolder(wt);
+    let killed: Promise<void> | undefined;
+    try {
+      // the default closeWorker returns after taskkill; the lock may linger briefly, so don't wait here
+      cleanupTask(id, { closeWorker: () => { killed = holder.kill(); } });
+      expect(existsSync(wt)).toBe(false);
+      expect(getTask(id).data.worktree).toBeNull();
+    } finally {
+      await (killed ?? holder.kill());
+    }
+  });
+
+  it.runIf(process.platform === "win32")(
+    "folder locked by a window cleanup could not close: clear error, task keeps worktree, retry succeeds",
+    async () => {
+      const { id, wt } = await doneTask();
+      const holder = await holdFolder(wt);
+      try {
+        expect(() => cleanupTask(id, { closeWorker: () => {} })).toThrow(/çalışan penceresi.*vlad task cleanup/s);
+        expect(getTask(id).data.worktree).toBe(wt);
+      } finally {
+        await holder.kill();
+      }
+      cleanupTask(id, { closeWorker: () => {} });
+      expect(existsSync(wt)).toBe(false);
+      expect(getTask(id).data.worktree).toBeNull();
+    },
+  );
 });
 
 describe("statusSummary", () => {

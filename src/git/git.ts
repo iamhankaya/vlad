@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { VladConfig } from "../kb/index.js";
 
 /** Runs git; returns untrimmed stdout, or null on error/timeout. */
@@ -86,4 +87,18 @@ export function addWorktree(repo: string, dir: string, branch: string): void {
 
 export function removeWorktree(repo: string, dir: string): void {
   mustGit(repo, ["worktree", "remove", "--force", dir]);
+}
+
+const samePath = (a: string, b: string): boolean => {
+  const norm = (p: string) => {
+    const s = resolve(p).replace(/\\/g, "/");
+    return process.platform === "win32" ? s.toLowerCase() : s;
+  };
+  return norm(a) === norm(b);
+};
+
+/** True if git still lists `dir` as a worktree of `repo`. */
+export function isWorktree(repo: string, dir: string): boolean {
+  const out = runGit(repo, ["worktree", "list", "--porcelain"]) ?? "";
+  return out.split("\n").some((l) => l.startsWith("worktree ") && samePath(l.slice(9), dir));
 }

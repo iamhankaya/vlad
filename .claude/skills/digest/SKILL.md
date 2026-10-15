@@ -1,23 +1,29 @@
 ---
 name: digest
-description: İşlenmemiş session raporlarını (kb/inbox) okuyup projelere göre gruplar; günlüğü, proje kartlarının Son aktivite ve Açık konular bölümlerini ve karar günlüğünü günceller, raporları işlenmiş olarak işaretler. Açılış özetinde işlenmemiş rapor varsa ya da kullanıcı "neler oldu", "günlüğü işle" dediğinde kullan.
+description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin kapanış raporlarını okuyup projelere göre gruplar; günlüğü, proje kartlarının Son aktivite ve Açık konular bölümlerini ve karar günlüğünü günceller, raporları işlenmiş olarak işaretler. Açılış özetinde işlenmemiş rapor varsa ya da kullanıcı "neler oldu", "günlüğü işle" dediğinde kullan.
 ---
 
 # /digest — session raporlarını hafızaya işle
 
-Kaynak: global SessionEnd hook'unun yazdığı ham raporlar. Her rapor: `session_id`, `cwd`, `project` (null olabilir), `task_id`, `ended`, `git` (branch, son commit'ler, değişen dosyalar), `excerpt` (son mesajlar), `user_message_count`.
+İki kaynak var:
+- **Session raporları:** global SessionEnd hook'unun yazdığı ham raporlar. Her rapor: `session_id`, `cwd`, `project` (null olabilir), `task_id`, `ended`, `git` (branch, son commit'ler, değişen dosyalar), `excerpt` (son mesajlar), `user_message_count`.
+- **Biten görevler:** kapanış raporu henüz işlenmemiş `done` görevler. Çalışan pencereleri `vlad task cleanup` ile zorla kapatıldığı için çoğu çalışan session'ının inbox raporu olmaz; o işin kaydı görev dosyasındaki `## Kapanış raporu`'dur.
 
 ## 1. Raporları al
 
 ```
 vlad inbox list --json
+vlad task list --undigested --json
 ```
-Çıktı: `{"items":[{ "file": "...", "record": {...} }, ...]}`. Boşsa "işlenecek rapor yok" de ve bitir.
+İlki: `{"items":[{ "file": "...", "record": {...} }, ...]}`. İkincisi: `{"tasks":[{ "id", "project", "title", "updated", ... }]}`; her görev için `kb/tasks/<id>.md`'yi oku (`## Tanım` ve `## Kapanış raporu`). İkisi de boşsa "işlenecek rapor yok" de ve bitir.
+
+Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an). Aynı görevin hem inbox raporu (`task_id` eşleşir) hem kapanış raporu varsa bunları **tek** günlük maddesinde birleştir.
 
 ## 2. Grupla ve anla
 
 - `record.project`'e göre grupla; `null` olanları `cwd`'ye bakarak bilinen bir projeye bağlamaya çalış (`vlad project list --json`), olmuyorsa "Diğer" grubuna koy.
 - Her session için 1–3 cümlelik özet çıkar: ne yapıldı, ne karar verildi, ne açık kaldı. Dayanak: `excerpt`, `git.recent_commits`, `git.changed_files`. Excerpt yetersizse ve gerçekten gerekiyorsa `transcript_path`'i oku.
+- Biten görevler `project` alanına göre gruplanır. Özetin dayanağı kapanış raporudur (yapılanlar, testler, açık noktalar). Açık noktalar kartın `## Açık konular` bölümüne aday olur.
 - `task_id` doluysa özeti o görevle ilişkilendir ve görev dosyasına session'ı yaz (görev varsa; yoksa atla):
   ```
   vlad task session <task_id> <session_id> --json
@@ -68,8 +74,9 @@ Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?
 Yalnızca başarıyla işlenen raporları:
 ```
 vlad inbox done <dosya1> <dosya2> ... --json
+vlad task digested <id1> <id2> ... --json
 ```
-Bir adım hata verdiyse o raporları inbox'ta bırak ve kullanıcıya söyle.
+Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak ve kullanıcıya söyle.
 
 ## Kullanıcıya göster
 

@@ -1,9 +1,10 @@
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { addWorktree, removeWorktree, runGit, worktreePath } from "../git/git.js";
+import { addWorktree, isWorktree, removeWorktree, runGit, worktreePath } from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countInbox } from "../inbox/inbox.js";
+import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
 import { getTask, listTasks, markStale, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
@@ -96,23 +97,63 @@ export async function launchTask(
   }
 }
 
-/** Removes the worktree of a done/cancelled task. The branch is left alone. */
-export function cleanupTask(id: string): void {
+/**
+ * Closes the worker's window, then removes the worktree of a done/cancelled task.
+ * The branch is left alone.
+ */
+export function cleanupTask(
+  id: string,
+  o: { closeWorker?: (taskId: string) => void } = {},
+): void {
   const t = getTask(id);
   if (t.data.state !== "done" && t.data.state !== "cancelled") {
     throw new Error(`cleanup yalnızca done/cancelled görevde yapılır (${t.data.state}): ${id}`);
   }
   const wt = t.data.worktree;
   if (!wt) return;
-  if (existsSync(wt)) removeWorktree(projectPath(t.data.project), wt);
+  if (existsSync(wt)) {
+    try {
+      (o.closeWorker ?? closeWorkerWindow)(id);
+    } catch {
+      /* a window that could not be closed is reported by the removal below */
+    }
+    removeTaskWorktree(projectPath(t.data.project), wt, id);
+  }
   t.data.worktree = null;
   saveTask(t);
+}
+
+/**
+ * On Windows an open terminal whose cwd is the worktree locks the folder: `git worktree remove`
+ * then unregisters the worktree but fails to delete it. A leftover, unregistered folder is
+ * deleted directly (retrying while a just-killed window releases it) so that a retry succeeds.
+ */
+function removeTaskWorktree(repo: string, wt: string, id: string): void {
+  try {
+    if (isWorktree(repo, wt)) removeWorktree(repo, wt);
+    else rmSync(wt, { recursive: true, force: true });
+  } catch (e) {
+    try {
+      rmSync(wt, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+    } catch {
+      /* reported below */
+    }
+    runGit(repo, ["worktree", "prune"]);
+    if (!existsSync(wt)) return;
+    throw new Error(
+      `worktree klasörü silinemedi, çalışan penceresi hâlâ açık olabilir: ${wt}. ` +
+        `Pencereyi kapatıp \`vlad task cleanup ${id}\` komutunu tekrar çalıştır. (${(e as Error).message})`,
+    );
+  }
 }
 
 export function statusSummary(
   cfg: VladConfig,
   now: Date,
-): { counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number } {
+): {
+  counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
+  undigested: number;
+} {
   const newlyStalled = markStale(now, cfg.staleAfterHours).map((t) => t.data.id);
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
@@ -123,5 +164,6 @@ export function statusSummary(
     failed: tasks.filter((t) => t.data.state === "failed" || (t.data.state === "queued" && !!t.data.error)),
     newlyStalled,
     inbox: countInbox(),
+    undigested: tasks.filter((t) => t.data.state === "done" && !t.data.digested).length,
   };
 }
