@@ -19,9 +19,16 @@ export function defaultConfig(): VladConfig {
 /** Defaults overlaid with <home>/vlad.config.json (shallow), then validated. */
 export function loadConfig(home: string = getVladHome()): VladConfig {
   const file = join(home, "vlad.config.json");
-  const user = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  let user: object = {};
+  if (existsSync(file)) {
+    try {
+      user = JSON.parse(readFileSync(file, "utf8"));
+    } catch (e) {
+      throw new Error(`config okunamadı (${file}): ${(e as Error).message}`);
+    }
+  }
   const cfg = { ...defaultConfig(), ...user } as VladConfig;
-  validate("config", cfg);
+  validate("config", cfg, home);
   return cfg;
 }
 

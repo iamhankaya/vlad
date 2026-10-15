@@ -1,5 +1,5 @@
 {
-  "roots": ["C:\dev"],
+  "roots": ["C:\\dev"],
   "ignore": ["*-wt", "node_modules", "vlad"],
   "defaultAutonomy": "commit",
   "staleAfterHours": 6,
