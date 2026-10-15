@@ -1,8 +1,13 @@
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { validate } from "../../src/kb/index.js";
-import { buildReport, main } from "../../src/hooks/session-report.js";
+import { PassThrough } from "node:stream";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { afterAll, beforeAll } from "vitest";
+import { buildReport, main, readStdin } from "../../src/hooks/report.js";
 import { makeHome } from "../helpers.js";
 
 let home: string;
@@ -88,5 +93,64 @@ describe("main", () => {
     expect(files[0]).toMatch(/^\d{8}T\d{6}-sess9\.json$/);
     const rec = JSON.parse(readFileSync(join(home, "kb", "inbox", files[0]), "utf8"));
     expect(rec.project).toBe("vlad");
+  });
+});
+
+describe("git deadline", () => {
+  it("skips remaining git calls after the first timeout", () => {
+    let t = 0;
+    const calls: string[][] = [];
+    const git = (_c: string, a: string[]) => { calls.push(a); t += 3500; return null; };
+    const r = run(two, { git, clock: () => t })!;
+    expect(calls).toHaveLength(1);
+    expect(r.git).toEqual({ branch: null, head: null, recent_commits: [], changed_files: [] });
+  });
+  it("skips calls once the shared deadline has passed", () => {
+    let t = 0;
+    const calls: string[][] = [];
+    const git = (_c: string, a: string[]) => { calls.push(a); t += 2500; return "x"; };
+    run(two, { git, clock: () => t });
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe("stdin", () => {
+  it("times out on a stream that never ends", async () => {
+    const s = new PassThrough();
+    await expect(readStdin(s, 50)).rejects.toThrow(/zaman aşımı/);
+  });
+  it("main logs a stdin timeout and exits 0", async () => {
+    process.exitCode = undefined;
+    const s = new PassThrough();
+    await main(undefined, s);
+    expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);
+    expect(process.exitCode).toBe(0);
+  }, 10000);
+});
+
+describe("entry process", () => {
+  const out = resolve(import.meta.dirname, "..", "..", "dist");
+  beforeAll(() => {
+    const r = spawnSync("npx", ["tsc"], { cwd: resolve(out, ".."), shell: true, encoding: "utf8" });
+    expect(r.status, r.stdout + r.stderr).toBe(0);
+  }, 120000);
+  afterAll(() => {});
+  it("exits 0 on invalid stdin and logs", () => {
+    const r = spawnSync("node", [join(out, "hooks", "session-report.js")], {
+      input: "not json", encoding: "utf8", env: { ...process.env, VLAD_HOME: home },
+    });
+    expect(r.status).toBe(0);
+    expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);
+  });
+  it("exits 0 even when the implementation module fails to load", () => {
+    const d = mkdtempSync(join(tmpdir(), "vlad-entry-"));
+    copyFileSync(join(out, "hooks", "session-report.js"), join(d, "session-report.js"));
+    writeFileSync(join(d, "report.js"), "import \"./does-not-exist.js\";");
+    writeFileSync(join(d, "package.json"), '{"type":"module"}');
+    const r = spawnSync("node", [join(d, "session-report.js")], {
+      input: "x", encoding: "utf8", env: { ...process.env, VLAD_HOME: home },
+    });
+    expect(r.status).toBe(0);
+    expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);
   });
 });
