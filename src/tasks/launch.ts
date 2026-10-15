@@ -55,10 +55,17 @@ export async function launchTask(
     throw new Error(msg);
   }
 
-  const undo = () => {
-    try { removeWorktree(repo, wt); } catch { /* best effort */ }
+  /** Rolls back worktree + branch; returns a description of what failed to clean up, or "". */
+  const undo = (): string => {
+    const problems: string[] = [];
+    try {
+      removeWorktree(repo, wt);
+    } catch (e) {
+      problems.push(`worktree kaldırılamadı (${wt}): ${(e as Error).message}`);
+    }
     // the branch was created by addWorktree just now and has no commits; drop it so a retry can reuse the name
-    runGit(repo, ["branch", "-D", branch]);
+    if (runGit(repo, ["branch", "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
+    return problems.join("; ");
   };
 
   let failure: string | null = null;
@@ -75,11 +82,18 @@ export async function launchTask(
     failure = `launcher başarısız: ${(e as Error).message}`;
   }
   if (failure) {
-    undo();
+    const cleanup = undo();
+    if (cleanup) failure += `; temizlik başarısız: ${cleanup}`;
     recordError(id, failure);
     throw new Error(failure);
   }
-  return setState(id, "running", { branch, worktree: wt, error: null });
+  try {
+    return setState(id, "running", { branch, worktree: wt, error: null });
+  } catch (e) {
+    const msg = `terminal açıldı ama durum güncellenemedi: ${(e as Error).message}; worktree: ${wt}`;
+    try { recordError(id, msg); } catch { /* best effort */ }
+    throw new Error(msg);
+  }
 }
 
 /** Removes the worktree of a done/cancelled task. The branch is left alone. */

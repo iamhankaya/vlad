@@ -12,7 +12,7 @@ Kaynak: global SessionEnd hook'unun yazdığı ham raporlar. Her rapor: `session
 ```
 vlad inbox list --json
 ```
-Çıktı: `[{ "file": "...", "record": {...} }, ...]`. Boşsa "işlenecek rapor yok" de ve bitir.
+Çıktı: `{"items":[{ "file": "...", "record": {...} }, ...]}`. Boşsa "işlenecek rapor yok" de ve bitir.
 
 ## 2. Grupla ve anla
 

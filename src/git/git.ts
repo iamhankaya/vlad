@@ -48,13 +48,8 @@ export function recentCommits(
 /** Working-tree changes (status --porcelain) union files of the last commit. */
 export function changedFiles(cwd: string): string[] {
   const set = new Set<string>();
-  // runGit trims, which would eat the leading status column; call git directly.
-  let status = "";
-  try {
-    status = execFileSync("git", ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"], {
-      cwd, timeout: 3000, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
-    });
-  } catch { /* not a repo */ }
+  // runGit trims, which would eat the leading status column; use the raw variant.
+  const status = runGitRaw(cwd, ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"]) ?? "";
   for (const line of status.split("\n")) {
     if (line.length < 4) continue;
     let p = line.slice(3);

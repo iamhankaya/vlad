@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { listInbox, markDone } from "./inbox/inbox.js";
-import { addDecision, appendJournal, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
+import { installGlobal } from "./install.js";
+import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher } from "./launcher/index.js";
 import type { LaunchResult, Launcher } from "./launcher/index.js";
@@ -43,12 +45,15 @@ function out(o: Opts, data: unknown, text: string): void {
 
 const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}`;
 
+// commander writes the help of a bare group ("vlad", "vlad task") to writeErr before throwing
+// commander.help; keep it so the catch below can show it instead of a bare "(outputHelp)" error.
+let pendingHelp = "";
 const program = new Command();
 program
   .name("vlad")
   .description("VLAD: Claude Code orkestratörü")
   .exitOverride()
-  .configureOutput({ writeErr: () => {} });
+  .configureOutput({ writeErr: (str) => { pendingHelp += str; } });
 
 /** Registers a command with --json and a uniform error path. */
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
@@ -191,6 +196,7 @@ def(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, 
 const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
 const session = program.command("session").description("VLAD oturum adı");
 def(session, "register <ad>", "Oturum adını kb/vlad-session.txt'ye yazar", (name: string, o: Opts) => {
+  if (!name.trim()) throw new Error("oturum adı boş olamaz");
   const file = sessionFile();
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, name.trim() + "\n", "utf8");
@@ -203,11 +209,21 @@ def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {
   out(o, { name }, name);
 });
 
+def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", (o: Opts) => {
+  const claudeDir = process.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");
+  const { actions } = installGlobal({ home: getVladHome(), claudeDir, dryRun: !!o.dryRun });
+  out(o, { actions }, actions.join("\n"));
+}).option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster");
+
 try {
   await program.parseAsync(process.argv);
 } catch (e) {
   if (e instanceof CommanderError) {
     if (e.exitCode === 0) process.exit(0); // --help / --version
+    if (e.code === "commander.help" || e.code === "commander.helpDisplayed") {
+      process.stderr.write(pendingHelp); // bare group without subcommand
+      process.exit(1);
+    }
     fail(new Error(e.message.replace(/^error: /, "")));
   }
   fail(e);

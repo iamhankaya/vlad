@@ -1,5 +1,6 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "./helpers.js";
@@ -14,9 +15,9 @@ beforeAll(() => {
 }, 120000);
 beforeEach(() => { home = makeHome(); });
 
-function vlad(args: string[], input?: string) {
+function vlad(args: string[], input?: string, extraEnv: Record<string, string> = {}) {
   const r = spawnSync("node", [cli, ...args], {
-    encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home },
+    encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home, ...extraEnv },
   });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
@@ -25,6 +26,25 @@ const mkTask = () => {
   writeFileSync(body, "## Tanım\nx\n");
   return JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", body, "--json"]).out).id as string;
 };
+
+function writeCard(repo: string) {
+  const f = join(home, "card.md");
+  writeFileSync(f, `---
+slug: alpha
+name: Alpha
+path: ${JSON.stringify(repo)}
+stack: [ts]
+status: active
+autonomy: commit
+last_activity: null
+last_scanned: null
+---
+
+## Özet
+x
+`);
+  expect(vlad(["project", "write", "alpha", "--file", f, "--json"]).code).toBe(0);
+}
 
 describe("vlad cli", () => {
   it("has a shebang", () => {
@@ -55,9 +75,84 @@ describe("vlad cli", () => {
   });
   it("task ask/answer/log round trip and list", () => {
     const id = mkTask();
+    // queued -> running normally needs a launch; flip the state in the file for this round trip
+    const f = join(home, "kb", "tasks", readdirSync(join(home, "kb", "tasks")).find((n) => n.startsWith(id))!);
+    writeFileSync(f, readFileSync(f, "utf8").replace(/^state: queued\r?$/m, "state: running"));
+    expect(vlad(["task", "log", id, "adım bir", "--json"]).code).toBe(0);
+    expect(JSON.parse(vlad(["task", "ask", id, "hangi yol?", "--json"]).out)).toEqual({ id, state: "blocked" });
+    expect(JSON.parse(vlad(["task", "answer", id, "şu yol", "--json"]).out)).toEqual({ id, state: "running" });
+    const body = readFileSync(f, "utf8");
+    expect(body).toContain("adım bir");
+    expect(body).toContain("hangi yol?");
+    expect(body).toContain("şu yol");
     expect(vlad(["task", "set", id, "cancelled", "--json"]).code).toBe(0);
     const l = JSON.parse(vlad(["task", "list", "--state", "cancelled", "--json"]).out);
     expect(l.tasks.map((t: { id: string }) => t.id)).toEqual([id]);
+  });
+  it("integration: launch --dry-run, report, set done, cleanup", () => {
+    const base = mkdtempSync(join(tmpdir(), "vlad-cli-repo-"));
+    const repo = join(base, "alpha");
+    mkdirSync(repo);
+    const g = (...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd: repo, stdio: "pipe" });
+    g("init", "-b", "main");
+    writeFileSync(join(repo, "a.txt"), "1");
+    g("add", ".");
+    g("commit", "-m", "first");
+    writeCard(repo);
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt") }));
+    const id = mkTask();
+
+    const l = vlad(["task", "launch", id, "--dry-run", "--json"]);
+    expect(l.code, l.err).toBe(0);
+    const j = JSON.parse(l.out);
+    expect(j.state).toBe("running");
+    expect(j.branch).toBe(`vlad/${id}`);
+    expect(existsSync(j.worktree)).toBe(true);
+
+    const rep = join(home, "rapor.md");
+    writeFileSync(rep, "## Özet\nbitti\n");
+    expect(JSON.parse(vlad(["task", "report", id, "--file", rep, "--json"]).out).state).toBe("awaiting_approval");
+    expect(JSON.parse(vlad(["task", "set", id, "done", "--json"]).out).state).toBe("done");
+    expect(vlad(["task", "cleanup", id, "--json"]).code).toBe(0);
+    expect(existsSync(j.worktree)).toBe(false);
+  });
+  it("bare `vlad` and a group without subcommand print help", () => {
+    for (const args of [[], ["task"]]) {
+      const r = vlad(args);
+      expect(r.code).toBe(1);
+      expect(r.err).toContain("Usage:");
+      expect(r.err).not.toContain("outputHelp");
+    }
+    const h = vlad(["--help"]);
+    expect(h.code).toBe(0);
+    expect(h.out).toContain("install");
+  });
+  it("session register rejects a blank name", () => {
+    const r = vlad(["session", "register", "   ", "--json"]);
+    expect(r.code).toBe(1);
+    expect(JSON.parse(r.err).error).toMatch(/boş/);
+    expect(existsSync(join(home, "kb", "vlad-session.txt"))).toBe(false);
+  });
+  describe("install", () => {
+    let claude: string;
+    beforeEach(() => {
+      cpSync(join(root, "global"), join(home, "global"), { recursive: true });
+      claude = join(mkdtempSync(join(tmpdir(), "vlad-claude-")), ".claude");
+    });
+    it("--dry-run lists actions and leaves the disk untouched", () => {
+      const r = vlad(["install", "--dry-run", "--json"], undefined, { VLAD_CLAUDE_DIR: claude });
+      expect(r.code, r.err).toBe(0);
+      expect(JSON.parse(r.out).actions.length).toBeGreaterThan(0);
+      expect(existsSync(claude)).toBe(false);
+    });
+    it("writes the SessionEnd hook and the worker skill", () => {
+      const r = vlad(["install"], undefined, { VLAD_CLAUDE_DIR: claude });
+      expect(r.code, r.err).toBe(0);
+      expect(r.out).toContain("SessionEnd");
+      const s = JSON.parse(readFileSync(join(claude, "settings.json"), "utf8"));
+      expect(s.hooks.SessionEnd[0].hooks[0].command).toContain("session-report.js");
+      expect(existsSync(join(claude, "skills", "vlad-worker", "SKILL.md"))).toBe(true);
+    });
   });
   it("session register/name round trip and missing file", () => {
     const miss = vlad(["session", "name", "--json"]);

@@ -41,7 +41,27 @@ describe("mergeSessionEndHook", () => {
   });
 });
 
+describe("non-array SessionEnd", () => {
+  it("mergeSessionEndHook throws", () => {
+    expect(() => mergeSessionEndHook({ hooks: { SessionEnd: {} } }, cmd)).toThrow(/dizi/);
+  });
+});
+
 describe("installGlobal", () => {
+  it("throws without writing when hooks.SessionEnd is not an array", () => {
+    const root = mkdtempSync(join(tmpdir(), "vlad-install-bad-"));
+    const h = join(root, "home");
+    const cd = join(root, ".claude");
+    mkdirSync(join(h, "global", "skills", "vlad-worker"), { recursive: true });
+    writeFileSync(join(h, "global", "skills", "vlad-worker", "SKILL.md"), "# w\n", "utf8");
+    mkdirSync(cd, { recursive: true });
+    const raw = JSON.stringify({ hooks: { SessionEnd: "x" } });
+    writeFileSync(join(cd, "settings.json"), raw, "utf8");
+    expect(() => installGlobal({ home: h, claudeDir: cd, dryRun: false })).toThrow(/dizi/);
+    expect(readFileSync(join(cd, "settings.json"), "utf8")).toBe(raw);
+    expect(readdirSync(cd)).toEqual(["settings.json"]);
+  });
+
   let home: string;
   let claudeDir: string;
   const now = new Date(2026, 9, 15, 21, 5, 9);
