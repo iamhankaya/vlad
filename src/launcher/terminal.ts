@@ -83,6 +83,25 @@ export function defaultExec(file: string, args: string[], cwd?: string): Promise
   });
 }
 
+// Finds the worker by the `\vlad\<id>.ps1` script on its command line (the same in wt and powershell
+// mode) and kills it with its children (claude). The pattern travels in an env var so that this
+// query's own command line does not match.
+const KILL_WORKER =
+  "$pat = $env:VLAD_WORKER_SCRIPT; " +
+  "Get-CimInstance Win32_Process | " +
+  "Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($pat) } | " +
+  "ForEach-Object { taskkill.exe /PID $_.ProcessId /T /F | Out-Null; $_.ProcessId }";
+
+/** Closes the terminal of a task's worker (Windows only). Returns the killed process IDs. */
+export function closeWorkerWindow(taskId: string): number[] {
+  if (process.platform !== "win32") return [];
+  const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", KILL_WORKER], {
+    encoding: "utf8", windowsHide: true, timeout: 20000, stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, VLAD_WORKER_SCRIPT: `\\vlad\\${taskId}.ps1`.toLowerCase() },
+  });
+  return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map(Number);
+}
+
 export class TerminalLauncher implements Launcher {
   constructor(private o: {
     mode: "auto" | "wt" | "powershell";

@@ -41,7 +41,9 @@ Seçenek 1, 2 veya 4 tamamlandıktan sonra:
 vlad task set <id> done --json
 vlad task cleanup <id> --json
 ```
-`cleanup` worktree'yi kaldırır, branch'i silmez. Merge/push hatası olursa görevi `done` yapma; hatayı göster.
+`cleanup` önce çalışanın penceresini (claude dahil) kapatır, sonra worktree'yi kaldırır; branch'i silmez. Bu yüzden `cleanup`'ı yalnızca görev `done`/`cancelled` olduktan sonra çalıştır; "değişiklik iste" akışında çalışma. Merge/push hatası olursa görevi `done` yapma; hatayı göster.
+`cleanup` "worktree klasörü silinemedi, çalışan penceresi hâlâ açık olabilir" hatası verirse kullanıcıdan çalışanın penceresini kapatmasını iste, sonra aynı `cleanup` komutunu tekrar çalıştır. Klasörü elle silme.
+Kapanan görevin kapanış raporu `/digest` ile günlüğe işlenir; açılış özetindeki "işlenmemiş rapor" sayısına dahildir.
 
 ## 3. `blocked` görevler
 

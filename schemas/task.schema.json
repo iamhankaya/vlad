@@ -15,6 +15,7 @@
     "session_id": { "type": ["string", "null"] },
     "created": { "type": "string", "format": "date-time" },
     "updated": { "type": "string", "format": "date-time" },
-    "error": { "type": ["string", "null"] }
+    "error": { "type": ["string", "null"] },
+    "digested": { "type": ["string", "null"], "format": "date-time" }
   }
 }

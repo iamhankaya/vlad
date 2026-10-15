@@ -221,8 +221,9 @@ Tüm komutlar `--json` ile makine okunur çıktı verir (skill'ler ve gelecektek
 | `vlad task answer <id> "<cevap>"` | Cevabı ekler, `running` yapar |
 | `vlad task report <id> --file <md>` | `## Kapanış raporu`'nu yazar, `awaiting_approval` yapar |
 | `vlad task set <id> <state>` | Durum makinesine uygun genel geçiş (approve/cancel/retry/fail) |
-| `vlad task cleanup <id>` | `done`/`cancelled` görevin worktree'sini kaldırır (branch silinmez) |
-| `vlad task list [--state …] [--project …]` | Listeleme |
+| `vlad task cleanup <id>` | `done`/`cancelled` görevin çalışan penceresini kapatır, worktree'sini kaldırır (branch silinmez) |
+| `vlad task digested <id…>` | `done` görevlerin kapanış raporunu `/digest`'te işlenmiş olarak işaretler (`digested` alanı) |
+| `vlad task list [--state …] [--project …] [--undigested]` | Listeleme; `--undigested`: kapanış raporu işlenmemiş `done` görevler |
 | `vlad status` | Tüm aktif görevler; `running` olup `updated` + `staleAfterHours` geçmişse `stalled` yapar |
 | `vlad inbox list` / `vlad inbox count` | İşlenmemiş raporlar |
 | `vlad inbox done <dosya…>` | Raporları `processed/`'a taşır |

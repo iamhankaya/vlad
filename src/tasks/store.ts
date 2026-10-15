@@ -158,6 +158,23 @@ export function reportTask(id: string, md: string): Task {
   return transitionWith(id, "awaiting_approval", (b) => setSection(b, "## Kapanış raporu", md));
 }
 
+/** Done tasks whose closing report /digest has not processed yet. */
+export function undigestedTasks(f: { project?: string } = {}): Task[] {
+  return listTasks({ state: ["done"], project: f.project }).filter((t) => !t.data.digested);
+}
+
+/** Marks done tasks as digested; checks all of them before writing any. */
+export function markDigested(ids: string[], now: Date = new Date()): Task[] {
+  const tasks = ids.map(getTask);
+  const bad = tasks.filter((t) => t.data.state !== "done").map((t) => `${t.data.id} (${t.data.state})`);
+  if (bad.length) throw new Error(`görev done değil: ${bad.join(", ")}`);
+  for (const t of tasks) {
+    t.data.digested = nowIso(now);
+    saveTask(t);
+  }
+  return tasks;
+}
+
 export function markStale(now: Date, hours: number): Task[] {
   const out: Task[] = [];
   for (const t of listTasks({ state: ["running"] })) {

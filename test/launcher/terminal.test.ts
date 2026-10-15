@@ -1,9 +1,10 @@
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { TerminalLauncher, buildCommand, buildScript, defaultExec, toCommandLine } from "../../src/launcher/terminal.js";
+import { TerminalLauncher, buildCommand, buildScript, closeWorkerWindow, defaultExec, toCommandLine } from "../../src/launcher/terminal.js";
 import type { LaunchRequest } from "../../src/launcher/types.js";
 
 const req = (o: Partial<LaunchRequest> = {}): LaunchRequest => ({
@@ -108,5 +109,24 @@ describe("quoting fixes", () => {
     const exec = async () => { throw new Error("ENOENT"); };
     const r = await new TerminalLauncher({ mode: "wt", exec, scriptDir: sd() }).launch(req());
     expect(r).toMatchObject({ ok: false, detail: "ENOENT" });
+  });
+});
+
+describe("closeWorkerWindow", () => {
+  it.runIf(process.platform === "win32")("kills the process whose command line runs the task's worker script", async () => {
+    const id = "T29990101-99";
+    // stands in for `powershell -File %TEMP%\vlad\<id>.ps1`
+    const worker = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", join(tmpdir(), "vlad", `${id}.ps1`)], { stdio: "ignore" });
+    const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", join(tmpdir(), "vlad", "T29990101-98.ps1")], { stdio: "ignore" });
+    const exited = new Promise((r) => worker.once("exit", r));
+    try {
+      await new Promise((r) => setTimeout(r, 300));
+      expect(closeWorkerWindow(id)).toEqual([worker.pid]);
+      await exited;
+      expect(other.exitCode).toBeNull();
+    } finally {
+      worker.kill();
+      other.kill();
+    }
   });
 });

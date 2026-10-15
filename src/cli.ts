@@ -13,7 +13,7 @@ import { listProjectsWithWarnings, writeProject } from "./projects/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  getTask, logTask, reportTask, saveTask, setState, statusSummary,
+  getTask, logTask, markDigested, reportTask, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -136,9 +136,13 @@ def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, sta
   const t = setState(id, state as TaskState);
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
 });
-def(task, "cleanup <id>", "done/cancelled görevin worktree'sini kaldırır", (id: string, o: Opts) => {
+def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
   cleanupTask(id);
   out(o, { id }, `${id} worktree kaldırıldı`);
+});
+def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {
+  markDigested(ids);
+  out(o, { ids }, `${ids.length} görev işlendi olarak işaretlendi`);
 });
 def(task, "session <id> <session_id>", "Görevin session_id alanını yazar (durum değişmez)", (id: string, sessionId: string, o: Opts) => {
   if (!sessionId.trim()) throw new Error("session_id boş olamaz");
@@ -148,8 +152,10 @@ def(task, "session <id> <session_id>", "Görevin session_id alanını yazar (dur
   out(o, { id, session_id: t.data.session_id }, `${id} session_id: ${t.data.session_id}`);
 });
 def(task, "list", "Görevleri listeler", (o: Opts) => {
-  const states = o.state ? String(o.state).split(",") as TaskState[] : undefined;
-  const { tasks, warnings } = listTasksWithWarnings({ state: states, project: o.project as string | undefined });
+  const states = o.undigested ? ["done" as TaskState] : o.state ? String(o.state).split(",") as TaskState[] : undefined;
+  const listed = listTasksWithWarnings({ state: states, project: o.project as string | undefined });
+  const tasks = o.undigested ? listed.tasks.filter((t) => !t.data.digested) : listed.tasks;
+  const { warnings } = listed;
   out(
     o,
     { tasks: tasks.map((t) => t.data), warnings },
@@ -157,13 +163,15 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
   );
 })
   .option("--state <states>", "virgülle ayrılmış durumlar")
-  .option("--project <slug>", "proje slug'ı");
+  .option("--project <slug>", "proje slug'ı")
+  .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler");
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
   const s = statusSummary(loadConfig(), new Date());
   if (o.summary) {
+    // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
     const line =
-      `İşlenmemiş ${s.inbox} rapor, ${s.active.length} aktif görev ` +
+      `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
       `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)`;
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
