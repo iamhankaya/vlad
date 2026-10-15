@@ -42,6 +42,14 @@ export interface TaskData {
   digested?: string | null;
 }
 
+/** roles/<slug>.md frontmatter (roles spec §4) */
+export interface RoleData {
+  slug: string;
+  title: string;
+  kind: "advisory" | "executor";
+  summary: string;
+}
+
 /** kb/inbox/<ts>-<session_id>.json (spec 5.3) */
 export interface InboxRecord {
   session_id: string;

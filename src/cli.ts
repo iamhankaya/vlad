@@ -11,6 +11,7 @@ import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher } from "./launcher/index.js";
 import type { LaunchResult, Launcher } from "./launcher/index.js";
 import { listProjectsWithWarnings, writeProject } from "./projects/store.js";
+import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
@@ -89,6 +90,16 @@ def(project, "list", "Kartları listeler", (o: Opts) => {
     o,
     { projects, warnings },
     [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+  );
+});
+
+const role = program.command("role").description("Uzman roller");
+def(role, "list", "roles/ altındaki rolleri listeler", (o: Opts) => {
+  const { roles, warnings } = listRolesWithWarnings();
+  out(
+    o,
+    { roles, warnings },
+    [...roles.map((r) => `${r.slug}  ${r.kind}  ${r.title}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
   );
 });
 

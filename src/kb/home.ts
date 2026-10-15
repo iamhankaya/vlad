@@ -19,6 +19,7 @@ export interface KbPaths {
   journal: string;
   decisions: string;
   schemas: string;
+  roles: string;
 }
 
 export function kbPaths(home: string = getVladHome()): KbPaths {
@@ -35,5 +36,6 @@ export function kbPaths(home: string = getVladHome()): KbPaths {
     journal: join(kb, "journal"),
     decisions: join(kb, "decisions.md"),
     schemas: join(home, "schemas"),
+    roles: join(home, "roles"),
   };
 }

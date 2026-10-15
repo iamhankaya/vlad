@@ -106,6 +106,15 @@ describe("vlad cli", () => {
     expect(JSON.parse(vlad(["task", "list", "--undigested", "--json"]).out).tasks).toEqual([]);
     expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 0 rapor");
   });
+  it("role list --json lists roles and warnings; text lists slug kind title", () => {
+    mkdirSync(join(home, "roles"));
+    writeFileSync(join(home, "roles", "tester.md"), "---\nslug: tester\ntitle: Senior Tester\nkind: executor\nsummary: s\n---\n");
+    writeFileSync(join(home, "roles", "bad.md"), "---\nslug: bad\n---\n");
+    const j = JSON.parse(vlad(["role", "list", "--json"]).out);
+    expect(j.roles.map((r: { slug: string }) => r.slug)).toEqual(["tester"]);
+    expect(j.warnings).toHaveLength(1);
+    expect(vlad(["role", "list"]).out).toContain("tester  executor  Senior Tester");
+  });
   it("task session sets session_id without changing state", () => {
     const id = mkTask();
     const r = vlad(["task", "session", id, "sess-123", "--json"]);
