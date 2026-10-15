@@ -178,6 +178,6 @@ describe("content files", () => {
 
   it(".claude/settings.json registers the SessionStart summary hook", () => {
     const s = JSON.parse(readFileSync(join(repo, ".claude", "settings.json"), "utf8"));
-    expect(s.hooks.SessionStart[0].hooks[0]).toEqual({ type: "command", command: "node \"${CLAUDE_PROJECT_DIR}/dist/cli.js\" status --summary" });
+    expect(s.hooks.SessionStart[0].hooks[0]).toEqual({ type: "command", command: "node \"${CLAUDE_PROJECT_DIR}/dist/cli.js\" status --summary --hook" });
   });
 });

@@ -165,6 +165,14 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
     const line =
       `İşlenmemiş ${s.inbox} rapor, ${s.active.length} aktif görev ` +
       `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)`;
+    if (o.hook) {
+      // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
+      process.stdout.write(JSON.stringify({
+        systemMessage: `VLAD: ${line}`,
+        hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: line },
+      }) + "\n");
+      return;
+    }
     out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
     return;
   }
@@ -172,7 +180,8 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
   out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
-}).option("--summary", "tek satır özet");
+}).option("--summary", "tek satır özet")
+  .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");
 
 const inbox = program.command("inbox").description("Oturum raporları");
 def(inbox, "list", "İşlenmemiş raporlar", (o: Opts) => {

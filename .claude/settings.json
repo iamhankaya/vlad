@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/dist/cli.js\" status --summary"
+            "command": "node \"${CLAUDE_PROJECT_DIR}/dist/cli.js\" status --summary --hook"
           }
         ]
       }

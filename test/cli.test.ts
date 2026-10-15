@@ -69,6 +69,16 @@ describe("vlad cli", () => {
     expect(r.code).toBe(0);
     expect(r.out.trim()).toBe("İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)");
   });
+  it("status --summary --hook prints SessionStart hook JSON shown to user and model", () => {
+    mkTask();
+    const r = vlad(["status", "--summary", "--hook"]);
+    expect(r.code).toBe(0);
+    const line = "İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)";
+    expect(JSON.parse(r.out)).toEqual({
+      systemMessage: `VLAD: ${line}`,
+      hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: line },
+    });
+  });
   it("status --summary counts failed tasks and --json carries the failed list", () => {
     const a = mkTask();
     const b = mkTask();
