@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
-import { cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
+import { buildPrompt, cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { makeHome } from "../helpers.js";
@@ -132,6 +132,33 @@ describe("launchTask", () => {
     const err = getTask(t.data.id).data.error!;
     expect(err).toContain("terminal açıldı ama durum güncellenemedi");
     expect(err).toContain(`worktree: ${wt}`);
+  });
+
+  const writeRole = (slug: string) => {
+    mkdirSync(join(process.env.VLAD_HOME!, "roles"), { recursive: true });
+    const file = join(process.env.VLAD_HOME!, "roles", `${slug}.md`);
+    writeFileSync(file, `---\nslug: ${slug}\ntitle: "Senior Tester'ın Rolü"\nkind: executor\nsummary: s\n---\n`);
+    return file;
+  };
+
+  it("prompt names the role and its file", async () => {
+    const file = writeRole("tester");
+    const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });
+    const l = fakeLauncher();
+    await launchTask(t.data.id, { launcher: l, cfg });
+    expect(l.reqs[0].prompt).toContain(`Rolün: Senior Tester'ın Rolü. Göreve başlamadan önce \`${file}\` dosyasını oku`);
+    expect(buildPrompt("f.md", "commit")).not.toContain("Rolün");
+  });
+
+  it("launch with a deleted role file keeps queued, records error, opens no worktree", async () => {
+    const file = writeRole("tester");
+    const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });
+    rmSync(file);
+    const l = fakeLauncher();
+    await expect(launchTask(t.data.id, { launcher: l, cfg })).rejects.toThrow(/rol bulunamadı: tester/);
+    expect(getTask(t.data.id).data).toMatchObject({ state: "queued", error: expect.stringMatching(/rol bulunamadı/) });
+    expect(existsSync(worktreePath(cfg, repo, t.data.id))).toBe(false);
+    expect(l.reqs).toHaveLength(0);
   });
 
   it("rejects non-queued and non-dev tasks", async () => {

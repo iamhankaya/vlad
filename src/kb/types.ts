@@ -40,6 +40,8 @@ export interface TaskData {
   error?: string | null;
   /** When /digest processed the closing report of a done task. */
   digested?: string | null;
+  /** roles/<slug>.md the task is done in (roles spec §5). */
+  role?: string | null;
 }
 
 /** roles/<slug>.md frontmatter (roles spec §4) */

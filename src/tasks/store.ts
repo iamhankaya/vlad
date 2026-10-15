@@ -5,7 +5,11 @@ import {
   setSection, validate, writeDoc,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskState } from "../kb/index.js";
+import { getRole } from "../roles/store.js";
 import { assertTransition } from "./state.js";
+
+/** Advisory roles work in research tasks, executor roles in dev tasks (roles spec §4). */
+const ROLE_KIND_FOR: Record<TaskKind, "advisory" | "executor"> = { research: "advisory", dev: "executor" };
 
 export type Task = { data: TaskData; body: string; file: string };
 
@@ -47,11 +51,17 @@ function fillBody(body: string): string {
 }
 
 export function createTask(
-  o: { project: string; title: string; kind: TaskKind; body: string },
+  o: { project: string; title: string; kind: TaskKind; body: string; role?: string | null },
   now: Date = new Date(),
   /** Test seam: supplies the first candidate id (defaults to nextTaskId). */
   idSource: (tasksDir: string, date: Date) => string = nextTaskId,
 ): Task {
+  if (o.role) {
+    const r = getRole(o.role);
+    if (r.kind !== ROLE_KIND_FOR[o.kind]) {
+      throw new Error(`rol ${r.slug} (${r.kind}) ${o.kind} görevinde kullanılamaz`);
+    }
+  }
   const paths = kbPaths();
   mkdirSync(paths.tasks, { recursive: true });
   const autonomy = autonomyFor(loadConfig(), o.project);
@@ -63,7 +73,7 @@ export function createTask(
     const ts = nowIso(now);
     const data: TaskData = {
       id, project: o.project, title: o.title, kind: o.kind, state: "queued", autonomy,
-      branch: null, worktree: null, session_id: null, created: ts, updated: ts, error: null,
+      branch: null, worktree: null, session_id: null, created: ts, updated: ts, error: null, role: o.role ?? null,
     };
     validate("task", data);
     const file = taskFile(id);
