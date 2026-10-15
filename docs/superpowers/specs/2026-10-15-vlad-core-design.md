@@ -317,3 +317,10 @@ Başlangıç prompt'u (şablon):
 - `SdkLauncher`, Agent SDK ile session başlatarak `Launcher` arayüzünü uygular; mesajlaşma SDK akışına taşınır.
 - Skill'ler, `CLAUDE.md` ve agent tanımları SDK'nın ayar kaynakları üzerinden aynen yüklenir.
 - `kb/` dosyaları olduğu gibi kullanılabilir veya şemalar üzerinden bir veritabanına aktarılır.
+
+### Spike sonucu (2026-10-15)
+
+- `notify: "sendmessage"` — çalışıyor. Ayrı bir session'dan (`claude -p`, cwd `C:\dev\vlad`) `SendMessage({to: "dev-15"})` ile gönderilen mesaj hedef session'a `<cross-session-message>` olarak ulaştı.
+- Session adları otomatik ve sabit değil: `<cwd klasör adı>-<2 hex>` (ör. `vlad-72`, `watchparty-b1`). `ListAgents` çıktısının ilk satırı session'ın kendi adını verir: `This session is <ad> [<ref>]`.
+- Bu yüzden VLAD açılışta kendi adını `ListAgents` ile öğrenip `vlad session register <ad>` ile `kb/vlad-session.txt`'ye yazar; çalışanlar `vlad session name` ile okuyup `SendMessage` gönderir. Dosya yoksa veya ad `ListAgents`'ta görünmüyorsa bildirim atlanır (dosya tabanlı durum yeterli).
+- Not: Farklı izin modundaki session'lar gelen mesajı kullanıcı onayına bekletebilir; bildirimler yalnızca "görev dosyasına bak" içerdiği için bu kabul edilebilir.

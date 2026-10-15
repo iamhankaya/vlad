@@ -1,0 +1,99 @@
+import { readFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
+import { TerminalLauncher, buildCommand, buildScript, defaultExec } from "../../src/launcher/terminal.js";
+import type { LaunchRequest } from "../../src/launcher/types.js";
+
+const req = (o: Partial<LaunchRequest> = {}): LaunchRequest => ({
+  taskId: "T20261015-01", cwd: "C:\\dev\\my proj", prompt: "merhaba",
+  env: { VLAD_TASK_ID: "T20261015-01" }, title: "Oda ğüş", ...o,
+});
+const sd = () => mkdtempSync(join(tmpdir(), "vlad-launch-"));
+
+describe("buildScript", () => {
+  it("escapes env single quotes", () => {
+    expect(buildScript(req({ env: { K: "it's" } }))).toContain("$env:K = 'it''s'");
+  });
+  it("handles spaced cwd and Turkish title", () => {
+    const s = buildScript(req());
+    expect(s).toContain("Set-Location -LiteralPath 'C:\\dev\\my proj'");
+    expect(s).toContain("$host.UI.RawUI.WindowTitle = 'Oda ğüş'");
+    expect(s).toContain("claude $p");
+  });
+  it("protects lines starting with '@", () => {
+    const s = buildScript(req({ prompt: "a\n'@ evil\nb" }));
+    const lines = s.split("\n");
+    expect(lines.filter((l) => l.startsWith("'@"))).toHaveLength(1);
+    expect(s).toContain("\n '@ evil\n");
+  });
+});
+
+describe("buildCommand", () => {
+  it("wt", () => {
+    expect(buildCommand(req(), "wt", "C:\\t\\s.ps1")).toEqual({
+      file: "wt",
+      args: ["-w","0","nt","--title","Oda ğüş","-d","C:\\dev\\my proj","powershell","-NoExit","-ExecutionPolicy","Bypass","-File","C:\\t\\s.ps1"],
+    });
+  });
+  it("powershell", () => {
+    const c = buildCommand(req(), "powershell", "C:\\t\\s.ps1");
+    expect(c.file).toBe("powershell");
+    expect(c.args[2]).toBe("Start-Process powershell -WorkingDirectory 'C:\\dev\\my proj' -ArgumentList '-NoExit','-ExecutionPolicy','Bypass','-File','\"C:\\t\\s.ps1\"'");
+  });
+});
+
+describe("TerminalLauncher", () => {
+  it("auto picks by hasWt", async () => {
+    const exec = vi.fn();
+    const a = await new TerminalLauncher({ mode: "auto", hasWt: () => false, exec, scriptDir: sd() }).launch(req());
+    expect(a.method).toBe("powershell");
+    const b = await new TerminalLauncher({ mode: "auto", hasWt: () => true, exec, scriptDir: sd() }).launch(req());
+    expect(b.method).toBe("wt");
+    expect(exec).toHaveBeenCalledTimes(2);
+  });
+  it("dryRun does not exec", async () => {
+    const exec = vi.fn();
+    const r = await new TerminalLauncher({ mode: "wt", dryRun: true, exec, scriptDir: sd() }).launch(req());
+    expect(exec).not.toHaveBeenCalled();
+    expect(r.ok).toBe(true);
+    expect(JSON.parse(r.detail!).file).toBe("wt");
+  });
+  it("exec failure gives ok false", async () => {
+    const exec = vi.fn(() => { throw new Error("boom"); });
+    const r = await new TerminalLauncher({ mode: "powershell", exec, scriptDir: sd() }).launch(req());
+    expect(r).toMatchObject({ ok: false, method: "powershell", detail: "boom" });
+  });
+  it("script file starts with BOM", async () => {
+    const dir = sd();
+    const exec = vi.fn();
+    await new TerminalLauncher({ mode: "wt", exec, scriptDir: dir }).launch(req());
+    const path = (exec.mock.calls[0] as [string, string[]])[1].at(-1)!;
+    const buf = readFileSync(path);
+    expect([...buf.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  });
+});
+
+describe("quoting fixes", () => {
+  it("powershell method double-quotes a scriptPath with spaces and Turkish chars", () => {
+    const p = "C:\\Users\\Metin Ay\\ğ\\s.ps1";
+    const c = buildCommand(req(), "powershell", p);
+    expect(c.args[2]).toContain(`'-File','"${p}"'`);
+  });
+  it("doubles typographic single quotes and guards them before @", () => {
+    expect(buildScript(req({ env: { K: "a\u2019b" } }))).toContain("$env:K = 'a\u2019\u2019b'");
+    expect(buildScript(req({ prompt: "x\n\u2019@ y" }))).toContain("\n \u2019@ y\n");
+  });
+  it("escapes ; in wt title", () => {
+    expect(buildCommand(req({ title: "a;b" }), "wt", "s").args[4]).toBe("a\\;b");
+  });
+  it("defaultExec rejects for a nonexistent executable", async () => {
+    await expect(defaultExec("vlad-no-such-exe-xyz", [])).rejects.toThrow();
+  });
+  it("launch returns ok:false when async exec rejects", async () => {
+    const exec = async () => { throw new Error("ENOENT"); };
+    const r = await new TerminalLauncher({ mode: "wt", exec, scriptDir: sd() }).launch(req());
+    expect(r).toMatchObject({ ok: false, detail: "ENOENT" });
+  });
+});

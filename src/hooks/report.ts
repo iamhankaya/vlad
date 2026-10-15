@@ -1,0 +1,188 @@
+import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { runGitRaw } from "../git/git.js";
+import { kbPaths, nowIso, readDoc, validate, type InboxRecord } from "../kb/index.js";
+import { inferProject } from "./project.js";
+import { parseTranscript } from "./transcript.js";
+
+const MAX_EXCERPT = 6;
+const MAX_TEXT = 1000;
+const MAX_COMMITS = 20;
+const GIT_CALL_MS = 3000;
+const GIT_DEADLINE_MS = 4000;
+const STDIN_TIMEOUT_MS = 2000;
+
+export interface ReportInput {
+  session_id: string;
+  transcript_path: string;
+  cwd: string;
+  reason?: string;
+}
+
+export interface ReportDeps {
+  readFile: (p: string) => string;
+  git: (cwd: string, args: string[], timeoutMs: number) => string | null;
+  projects: { slug: string; path: string }[];
+  vladHome: string;
+  env: Record<string, string | undefined>;
+  now: Date;
+  /** ms clock for the git deadline; defaults to Date.now. */
+  clock?: () => number;
+}
+
+type Git = NonNullable<InboxRecord["git"]>;
+
+function collectGit(cwd: string, deps: ReportDeps): Git {
+  const clock = deps.clock ?? Date.now;
+  const start = clock();
+  let dead = false;
+  const run = (args: string[]) => {
+    const remaining = GIT_DEADLINE_MS - (clock() - start);
+    if (dead || remaining <= 0) {
+      dead = true;
+      return null;
+    }
+    const t0 = clock();
+    let out: string | null = null;
+    try {
+      out = deps.git(cwd, args, Math.min(GIT_CALL_MS, remaining));
+    } catch {
+      out = null;
+    }
+    // a failed call that used up the per-call timeout means git is hung: skip the rest
+    if (out === null && clock() - t0 >= GIT_CALL_MS) dead = true;
+    return out;
+  };
+  const first = (s: string | null) => (s ? s.trim().split(/\r?\n/)[0] || null : null);
+  const since = new Date(deps.now.getTime() - 24 * 3600 * 1000).toISOString();
+  const log = run(["-c", "core.quotepath=false", "log", `--since=${since}`, `--max-count=${MAX_COMMITS}`, "--format=%h%x09%s%x09%aI"]);
+  const recent_commits = (log ?? "")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((l) => {
+      const [sha, subject, date] = l.split("\t");
+      return { sha, subject: subject ?? "", date: date ?? "" };
+    })
+    .filter((c) => c.sha && c.date)
+    .slice(0, MAX_COMMITS);
+  const status = run(["-c", "core.quotepath=false", "status", "--porcelain"]);
+  const changed_files = (status ?? "")
+    .split(/\r?\n/)
+    .filter((l) => l.length > 3)
+    .map((l) => l.slice(3).replace(/^.* -> /, "").replace(/^"(.*)"$/, "$1"));
+  return {
+    branch: first(run(["rev-parse", "--abbrev-ref", "HEAD"])),
+    head: first(run(["rev-parse", "--short", "HEAD"])),
+    recent_commits,
+    changed_files,
+  };
+}
+
+export function buildReport(input: ReportInput, deps: ReportDeps): InboxRecord | null {
+  const { messages, userCount } = parseTranscript(deps.readFile(input.transcript_path));
+  if (userCount < 2) return null;
+  return {
+    session_id: input.session_id,
+    cwd: input.cwd,
+    project: inferProject(input.cwd, deps.projects, deps.vladHome),
+    task_id: deps.env.VLAD_TASK_ID ?? null,
+    transcript_path: input.transcript_path,
+    reason: input.reason ?? "unknown",
+    ended: nowIso(deps.now),
+    git: collectGit(input.cwd, deps),
+    excerpt: messages.slice(-MAX_EXCERPT).map((m) => ({ role: m.role, text: m.text.slice(0, MAX_TEXT) })),
+    user_message_count: userCount,
+  };
+}
+
+function gitRunner(cwd: string, args: string[], timeoutMs: number): string | null {
+  return runGitRaw(cwd, args, timeoutMs);
+}
+
+export function loadProjects(dir: string): { slug: string; path: string }[] {
+  const out: { slug: string; path: string }[] = [];
+  let names: string[] = [];
+  try {
+    names = readdirSync(dir).filter((n) => n.endsWith(".md"));
+  } catch {
+    return out;
+  }
+  for (const n of names) {
+    try {
+      const { data } = readDoc<{ slug?: string; path?: string }>(join(dir, n));
+      if (data && typeof data.slug === "string" && typeof data.path === "string") out.push({ slug: data.slug, path: data.path });
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
+}
+
+/** Reads a stream to the end; rejects after timeoutMs and releases the stream so the process can exit. */
+export function readStdin(stream: NodeJS.ReadableStream = process.stdin, timeoutMs = STDIN_TIMEOUT_MS): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let s = "";
+    const done = (fn: () => void) => {
+      clearTimeout(timer);
+      stream.removeAllListeners("data");
+      try {
+        stream.pause();
+        (stream as { destroy?: () => void }).destroy?.();
+      } catch {
+        /* ignore */
+      }
+      fn();
+    };
+    const timer = setTimeout(() => done(() => reject(new Error(`stdin zaman aşımı (${timeoutMs} ms)`))), timeoutMs);
+    stream.setEncoding?.("utf8");
+    stream.on("data", (c) => (s += c));
+    stream.on("end", () => done(() => resolve(s)));
+    stream.on("error", (e) => done(() => reject(e)));
+  });
+}
+
+export function logError(err: unknown): void {
+  try {
+    const p = kbPaths();
+    mkdirSync(p.logs, { recursive: true });
+    const iso = nowIso();
+    const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+    appendFileSync(join(p.logs, `hook-${iso.slice(0, 10)}.log`), `${iso} ${msg.replace(/\r?\n/g, " | ")}\n`, "utf8");
+  } catch {
+    /* nothing left to do */
+  }
+}
+
+/** SessionEnd hook entry. Never throws; always exit code 0. `stdinText` is for tests. */
+export async function main(stdinText?: string, stdin?: NodeJS.ReadableStream): Promise<void> {
+  try {
+    const raw = stdinText ?? (await readStdin(stdin));
+    const input = JSON.parse(raw) as ReportInput;
+    if (!input || typeof input.session_id !== "string" || typeof input.transcript_path !== "string") {
+      throw new Error("hook girdisi geçersiz: session_id/transcript_path eksik");
+    }
+    const p = kbPaths();
+    const record = buildReport(
+      { ...input, cwd: input.cwd ?? process.cwd() },
+      {
+        readFile: (f) => readFileSync(f, "utf8"),
+        git: gitRunner,
+        projects: loadProjects(p.projects),
+        vladHome: p.home,
+        env: process.env,
+        now: new Date(),
+      },
+    );
+    if (record) {
+      validate("inbox", record);
+      mkdirSync(p.inbox, { recursive: true });
+      const ts = nowIso().slice(0, 19).replace(/[-:]/g, "");
+      const safeId = record.session_id.replace(/[^A-Za-z0-9_-]/g, "_");
+      writeFileSync(join(p.inbox, `${ts}-${safeId}.json`), JSON.stringify(record, null, 2), "utf8");
+    }
+  } catch (err) {
+    logError(err);
+  } finally {
+    process.exitCode = 0;
+  }
+}
