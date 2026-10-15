@@ -46,7 +46,7 @@ export function changedFiles(cwd: string): string[] {
   // runGit trims, which would eat the leading status column; call git directly.
   let status = "";
   try {
-    status = execFileSync("git", ["status", "--porcelain", "-uall"], {
+    status = execFileSync("git", ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"], {
       cwd, timeout: 3000, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true,
     });
   } catch { /* not a repo */ }
@@ -57,7 +57,7 @@ export function changedFiles(cwd: string): string[] {
     if (arrow >= 0) p = p.slice(arrow + 4);
     set.add(p.replace(/^"|"$/g, ""));
   }
-  const last = runGit(cwd, ["show", "--name-only", "--format=", "HEAD"]);
+  const last = runGit(cwd, ["-c", "core.quotepath=false", "show", "--name-only", "--format=", "HEAD"]);
   for (const f of last?.split("\n") ?? []) if (f) set.add(f);
   return [...set];
 }
