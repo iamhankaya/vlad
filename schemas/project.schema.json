@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slug", "name", "path", "stack", "status", "autonomy", "last_activity", "last_scanned"],
+  "properties": {
+    "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "name": { "type": "string" },
+    "path": { "type": "string" },
+    "stack": { "type": "array", "items": { "type": "string" } },
+    "status": { "enum": ["active", "paused", "archived"] },
+    "autonomy": { "enum": ["plan", "commit", "pr"] },
+    "last_activity": { "type": ["string", "null"], "format": "date-time" },
+    "last_scanned": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

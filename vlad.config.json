@@ -1,0 +1,11 @@
+{
+  "roots": ["C:\dev"],
+  "ignore": ["*-wt", "node_modules", "vlad"],
+  "defaultAutonomy": "commit",
+  "staleAfterHours": 6,
+  "launcher": "auto",
+  "worktreeDir": "{repo}-wt",
+  "projects": {
+    "watchparty": { "autonomy": "commit" }
+  }
+}

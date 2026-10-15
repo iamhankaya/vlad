@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["session_id", "cwd", "project", "task_id", "transcript_path", "reason", "ended", "git", "excerpt", "user_message_count"],
+  "properties": {
+    "session_id": { "type": "string" },
+    "cwd": { "type": "string" },
+    "project": { "type": ["string", "null"] },
+    "task_id": { "type": ["string", "null"] },
+    "transcript_path": { "type": ["string", "null"] },
+    "reason": { "type": "string" },
+    "ended": { "type": "string", "format": "date-time" },
+    "git": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["branch", "head", "recent_commits", "changed_files"],
+      "properties": {
+        "branch": { "type": ["string", "null"] },
+        "head": { "type": ["string", "null"] },
+        "recent_commits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sha", "subject", "date"],
+            "properties": {
+              "sha": { "type": "string" },
+              "subject": { "type": "string" },
+              "date": { "type": "string" }
+            }
+          }
+        },
+        "changed_files": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "excerpt": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "text"],
+        "properties": {
+          "role": { "enum": ["user", "assistant"] },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "user_message_count": { "type": "integer", "minimum": 0 }
+  }
+}
