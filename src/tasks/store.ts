@@ -5,11 +5,19 @@ import {
   setSection, validate, writeDoc,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskState } from "../kb/index.js";
-import { getRole } from "../roles/store.js";
+import { getRole, type Role } from "../roles/store.js";
 import { assertTransition } from "./state.js";
 
 /** Advisory roles work in research tasks, executor roles in dev tasks (roles spec §4). */
 const ROLE_KIND_FOR: Record<TaskKind, "advisory" | "executor"> = { research: "advisory", dev: "executor" };
+
+/** Resolves a role and checks it fits the task kind; shared by createTask and launchTask. */
+export function roleFor(slug: string, kind: TaskKind): Role {
+  if (!Object.hasOwn(ROLE_KIND_FOR, kind)) throw new Error(`geçersiz görev türü: ${kind} (dev | research)`);
+  const r = getRole(slug);
+  if (r.kind !== ROLE_KIND_FOR[kind]) throw new Error(`rol ${r.slug} (${r.kind}) ${kind} görevinde kullanılamaz`);
+  return r;
+}
 
 export type Task = { data: TaskData; body: string; file: string };
 
@@ -56,12 +64,7 @@ export function createTask(
   /** Test seam: supplies the first candidate id (defaults to nextTaskId). */
   idSource: (tasksDir: string, date: Date) => string = nextTaskId,
 ): Task {
-  if (o.role) {
-    const r = getRole(o.role);
-    if (r.kind !== ROLE_KIND_FOR[o.kind]) {
-      throw new Error(`rol ${r.slug} (${r.kind}) ${o.kind} görevinde kullanılamaz`);
-    }
-  }
+  if (o.role) roleFor(o.role, o.kind);
   const paths = kbPaths();
   mkdirSync(paths.tasks, { recursive: true });
   const autonomy = autonomyFor(loadConfig(), o.project);
@@ -73,7 +76,7 @@ export function createTask(
     const ts = nowIso(now);
     const data: TaskData = {
       id, project: o.project, title: o.title, kind: o.kind, state: "queued", autonomy,
-      branch: null, worktree: null, session_id: null, created: ts, updated: ts, error: null, role: o.role ?? null,
+      branch: null, worktree: null, session_id: null, created: ts, updated: ts, error: null, role: o.role || null,
     };
     validate("task", data);
     const file = taskFile(id);

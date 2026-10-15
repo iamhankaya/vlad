@@ -35,6 +35,13 @@ describe("roles store", () => {
     expect(warnings.join("\n")).toMatch(/b\.md: .*slug/);
   });
 
+  it("a title with a double quote is rejected (it would split the launcher's claude argument)", () => {
+    writeFileSync(join(dir, "qa.md"), `---\nslug: qa\ntitle: 'Senior "QA"'\nkind: executor\nsummary: s\n---\n`);
+    const { roles, warnings } = listRolesWithWarnings();
+    expect(roles).toEqual([]);
+    expect(warnings[0]).toMatch(/qa\.md: .*title/);
+  });
+
   it("reads CRLF files", () => {
     writeFileSync(join(dir, "tester.md"), role("tester").replace(/\n/g, "\r\n"));
     expect(listRolesWithWarnings().roles.map((r) => r.slug)).toEqual(["tester"]);

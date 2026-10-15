@@ -122,6 +122,14 @@ describe("task role", () => {
     expect(getTask(mkRole("tester").data.id).data.role).toBe("tester");
     expect(mk().data.role).toBeNull();
   });
+  it("an empty role is stored as null", () => {
+    expect(mkRole("").data.role).toBeNull();
+  });
+  it("an invalid kind is reported as such even with a role", () => {
+    writeRole("tester", "executor");
+    expect(() => createTask({ project: "p", title: "t", kind: "foo" as "dev", body: "", role: "tester" }, D))
+      .toThrow(/geçersiz görev türü: foo/);
+  });
   it("rejects an unknown role", () => {
     expect(() => mkRole("yok")).toThrow(/rol bulunamadı: yok/);
   });

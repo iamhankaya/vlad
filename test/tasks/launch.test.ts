@@ -161,6 +161,14 @@ describe("launchTask", () => {
     expect(l.reqs).toHaveLength(0);
   });
 
+  it("launch rechecks that the role still fits the task kind", async () => {
+    const file = writeRole("tester");
+    const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });
+    writeFileSync(file, readFileSync(file, "utf8").replace("kind: executor", "kind: advisory"));
+    await expect(launchTask(t.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/dev görevinde kullanılamaz/);
+    expect(existsSync(worktreePath(cfg, repo, t.data.id))).toBe(false);
+  });
+
   it("rejects non-queued and non-dev tasks", async () => {
     const t = mk();
     await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
