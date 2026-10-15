@@ -81,7 +81,7 @@ Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak 
 ## 7. Hafızayı commit'le
 
 ```
-vlad kb commit "digest <YYYY-MM-DD>" --json
+vlad kb commit "digest <YYYY-MM-DD>" --push --json
 ```
 Yalnızca `kb/` commit'lenir (inbox ve loglar `.gitignore`'da). Hata verirse kullanıcıya söyle.
 
