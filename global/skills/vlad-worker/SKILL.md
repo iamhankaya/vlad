@@ -18,8 +18,9 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 - Görev dosyası: `## Tanım`, `## Kabul kriterleri`, `## Bağlam`, frontmatter'daki `project`, `autonomy`, `branch`.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`.
 - Rol: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku (başlangıç prompt'u da bu dosyayı söyler). Rolün sorumluluk, yetki ve çıktı kuralları bu protokolle birlikte geçerlidir; rol kuralı ile `autonomy` kuralı çelişirse **daha kısıtlayıcı** olan uygulanır. Kapanış raporunu rolün `## Çıktı` bölümündeki başlıklarla yaz (adım 6'daki başlıklar her durumda bulunur).
+- Pipeline fazı: frontmatter'da `parent` doluysa bir pipeline'ın `phase` fazısın. `vlad task list --parent <parent> --json` ile kardeş fazları gör; `depends_on`'daki her görevin `<VLAD_HOME>/kb/tasks/<dep-id>.md` dosyasındaki `## Kapanış raporu`'nu oku — fazın girdisi (spec, plan, test matrisi…) budur. Danışma fazlarının (`phase: danışma`) raporları da bağlamdır.
 - Bu dosyaları **elle düzenleme**; yalnızca okursun.
-- Çalıştığın klasör görevin worktree'sidir ve `vlad/<id>` branch'indesin (`git branch --show-current` ile doğrula).
+- Çalıştığın klasör görevin worktree'sidir ve `vlad/<id>` branch'indesin (`git branch --show-current` ile doğrula). Pipeline fazındaysan branch'in ana branch'ten değil entegrasyon branch'i `vlad/<parent>`'tan açıldı; diff ve log tabanın odur (`git log --oneline vlad/<parent>..HEAD`).
 
 ## 2. Çalış (yetki seviyene göre)
 
@@ -47,6 +48,7 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 - Yalnızca `vlad/<id>` branch'inde commit'le.
 - `autonomy: pr` ise: `git push -u origin vlad/<id>` ve `gh pr create`.
 - **Asla merge etme. Asla başka bir branch'e push etme.** `autonomy: commit` veya `plan` ise hiç push etme.
+- Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e asla merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et.
 
 ## 6. Kapanış raporu
 
