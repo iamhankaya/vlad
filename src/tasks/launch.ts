@@ -30,14 +30,20 @@ function recordError(id: string, msg: string): void {
   saveTask(t);
 }
 
-export function buildPrompt(taskFile: string, autonomy: string, role?: { title: string; file: string }): string {
+export function buildPrompt(
+  taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
+): string {
   const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
   if (!role) return base;
-  return (
+  const withRole =
     `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${role.file}\` dosyasını oku ` +
-    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`
+    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
+  if (!role.skills?.length) return withRole;
+  return (
+    `${withRole} İşe başlamadan şu skill'leri yükle: ${role.skills.map((s) => `\`${s}\``).join(", ")}. ` +
+    `Yüklenemeyen olursa kapanış raporunda belirt.`
   );
 }
 
