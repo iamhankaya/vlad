@@ -150,6 +150,13 @@ describe("launchTask", () => {
     expect(buildPrompt("f.md", "commit")).not.toContain("Rolün");
   });
 
+  it("prompt lists the role's skills, and has no skill sentence for an empty list", () => {
+    const r = { title: "T", file: "r.md" };
+    expect(buildPrompt("f.md", "commit", { ...r, skills: ["a:b", "c"] }))
+      .toContain("İşe başlamadan şu skill'leri yükle: `a:b`, `c`. Yüklenemeyen olursa kapanış raporunda belirt.");
+    expect(buildPrompt("f.md", "commit", { ...r, skills: [] })).not.toContain("skill'leri yükle");
+  });
+
   it("launch with a deleted role file keeps queued, records error, opens no worktree", async () => {
     const file = writeRole("tester");
     const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });

@@ -56,6 +56,8 @@ export interface RoleData {
   title: string;
   kind: "advisory" | "executor";
   summary: string;
+  /** Skills the role loads before starting (pipeline spec §8). */
+  skills?: string[];
 }
 
 /** kb/inbox/<ts>-<session_id>.json (spec 5.3) */
