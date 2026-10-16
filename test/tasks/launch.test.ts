@@ -178,6 +178,75 @@ describe("launchTask", () => {
   });
 });
 
+describe("pipeline launch", () => {
+  const pipe = () => createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" });
+  const child = (parent: string, dependsOn: string[] = []) =>
+    createTask({ project: "alpha", title: "faz", kind: "dev", body: "", parent, dependsOn, phase: "uygulama" });
+
+  it("first phase launch creates the integration branch and worktree and runs the pipeline", async () => {
+    const p = pipe();
+    const c = child(p.data.id);
+    await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
+    const pd = getTask(p.data.id).data;
+    expect(pd).toMatchObject({ state: "running", branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, repo, p.data.id) });
+    expect(existsSync(pd.worktree!)).toBe(true);
+    expect(git(pd.worktree!, "branch", "--show-current").trim()).toBe(`vlad/${p.data.id}`);
+  });
+
+  it("a child branches from the integration branch", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    const b = child(p.data.id);
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    const iwt = getTask(p.data.id).data.worktree!;
+    writeFileSync(join(iwt, "merged.txt"), "x");
+    git(iwt, "add", ".");
+    git(iwt, "commit", "-m", "entegrasyon");
+    await launchTask(b.data.id, { launcher: fakeLauncher(), cfg });
+    expect(existsSync(join(getTask(b.data.id).data.worktree!, "merged.txt"))).toBe(true);
+    expect(existsSync(join(getTask(a.data.id).data.worktree!, "merged.txt"))).toBe(false);
+  });
+
+  it("an integration worktree removed by hand is re-attached from the existing branch", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    const b = child(p.data.id);
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    const iwt = getTask(p.data.id).data.worktree!;
+    git(repo, "worktree", "remove", "--force", iwt);
+    await launchTask(b.data.id, { launcher: fakeLauncher(), cfg });
+    expect(existsSync(iwt)).toBe(true);
+    expect(git(iwt, "branch", "--show-current").trim()).toBe(`vlad/${p.data.id}`);
+  });
+
+  it("a launcher failure rolls back only the child", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    await expect(launchTask(a.data.id, { launcher: fakeLauncher(false), cfg })).rejects.toThrow(/boom/);
+    const iwt = getTask(p.data.id).data.worktree!;
+    expect(existsSync(iwt)).toBe(true);
+    expect(git(repo, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
+    expect(existsSync(worktreePath(cfg, repo, a.data.id))).toBe(false);
+  });
+
+  it("a pipeline task itself cannot be launched", async () => {
+    const p = pipe();
+    await expect(launchTask(p.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/yalnızca dev/);
+  });
+
+  it("cleanup removes the integration worktree of a done pipeline and keeps the branch", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    const iwt = getTask(p.data.id).data.worktree!;
+    setState(p.data.id, "awaiting_approval");
+    setState(p.data.id, "done");
+    cleanupTask(p.data.id, { closeWorker: () => {} });
+    expect(existsSync(iwt)).toBe(false);
+    expect(git(repo, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
+  });
+});
+
 describe("cleanupTask", () => {
   it("refuses a running task", async () => {
     const t = mk();

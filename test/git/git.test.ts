@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
-  addWorktree, changedFiles, currentBranch, headSha, isRepo,
+  addWorktree, attachWorktree, branchExists, changedFiles, currentBranch, headSha, isRepo,
   recentCommits, removeWorktree, runGit, worktreePath,
 } from "../../src/git/git.js";
 import type { VladConfig } from "../../src/kb/index.js";
@@ -21,6 +21,22 @@ function makeRepo(): string {
   git(dir, "add", "."); git(dir, "commit", "-m", "second");
   return dir;
 }
+
+describe("worktree from a base", () => {
+  it("addWorktree with base branches from that commit; attachWorktree reuses a branch", () => {
+    const repo = makeRepo();
+    git(repo, "branch", "side", "HEAD~1");
+    const wt = join(mkdtempSync(join(tmpdir(), "vlad-wt-")), "w");
+    addWorktree(repo, wt, "child", "side");
+    expect(existsSync(join(wt, "a.txt"))).toBe(true);
+    expect(existsSync(join(wt, "b.txt"))).toBe(false);
+    const wt2 = join(mkdtempSync(join(tmpdir(), "vlad-wt-")), "w");
+    attachWorktree(repo, wt2, "side");
+    expect(currentBranch(wt2)).toBe("side");
+    expect(branchExists(repo, "side")).toBe(true);
+    expect(branchExists(repo, "yok")).toBe(false);
+  });
+});
 
 describe("git helpers", () => {
   it("runGit returns null outside a repo", () => {

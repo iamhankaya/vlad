@@ -1,6 +1,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { addWorktree, isWorktree, removeWorktree, runGit, worktreePath } from "../git/git.js";
+import {
+  addWorktree, attachWorktree, branchExists, isWorktree, removeWorktree, runGit, worktreePath,
+} from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countInbox } from "../inbox/inbox.js";
@@ -39,6 +41,26 @@ export function buildPrompt(taskFile: string, autonomy: string, role?: { title: 
   );
 }
 
+/**
+ * Pipeline spec §6: makes sure the integration branch `vlad/<parent>` (from the repo's HEAD) and
+ * its worktree exist, records them on the pipeline task and moves a queued pipeline to `running`.
+ */
+export function ensureIntegration(parentId: string, cfg: VladConfig): { repo: string; branch: string; worktree: string } {
+  const p = getTask(parentId);
+  const repo = projectPath(p.data.project);
+  const branch = `vlad/${parentId}`;
+  const worktree = worktreePath(cfg, repo, parentId);
+  if (!branchExists(repo, branch)) addWorktree(repo, worktree, branch);
+  else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
+  const patch = { branch, worktree };
+  if (p.data.state === "queued") setState(parentId, "running", patch);
+  else if (p.data.branch !== branch || p.data.worktree !== worktree) {
+    Object.assign(p.data, patch);
+    saveTask(p);
+  }
+  return { repo, branch, worktree };
+}
+
 /** Opens worktree + branch, starts the launcher and moves the task to `running`. */
 export async function launchTask(
   id: string,
@@ -56,7 +78,9 @@ export async function launchTask(
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
     wt = worktreePath(o.cfg, repo, id);
-    addWorktree(repo, wt, branch);
+    // a pipeline phase branches from the pipeline's integration branch; the rollback below leaves it alone
+    const base = task.data.parent ? ensureIntegration(task.data.parent, o.cfg).branch : undefined;
+    addWorktree(repo, wt, branch, base);
   } catch (e) {
     const msg = (e as Error).message;
     recordError(id, msg);
