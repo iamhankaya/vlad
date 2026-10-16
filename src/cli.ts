@@ -15,7 +15,7 @@ import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  getTask, logTask, markDigested, reportTask, saveTask, setState, statusSummary,
+  getTask, logTask, markDigested, readyTasks, reportTask, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -106,15 +106,20 @@ def(role, "list", "roles/ altındaki rolleri listeler", (o: Opts) => {
 const task = program.command("task").description("Görevler");
 def(task, "new", "queued görev oluşturur", (o: Opts) => {
   const body = o.bodyFile ? readInput(o.bodyFile as string) : "";
+  const dependsOn = o.dependsOn ? String(o.dependsOn).split(",").map((s) => s.trim()).filter(Boolean) : undefined;
   const t = createTask({
     project: o.project as string, title: o.title as string, kind: o.kind as TaskKind, body, role: o.role as string | undefined,
+    parent: o.parent as string | undefined, dependsOn, phase: o.phase as string | undefined,
   });
   out(o, { id: t.data.id }, t.data.id);
 })
   .option("--role <slug>", "roles/<slug>.md uzman rolü (advisory → research, executor → dev)")
+  .option("--parent <id>", "çatı (pipeline) görevi")
+  .option("--depends-on <ids>", "virgülle ayrılmış, aynı pipeline'daki bağımlılıklar")
+  .option("--phase <ad>", "faz adı (spec, plan, kabul, uygulama, doğrulama, …)")
   .requiredOption("--project <slug>", "proje slug'ı")
   .requiredOption("--title <başlık>", "görev başlığı")
-  .option("--kind <kind>", "dev | research", "dev")
+  .option("--kind <kind>", "dev | research | pipeline", "dev")
   .option("--body-file <md>", "görev gövdesi (- = stdin)");
 
 def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {
@@ -168,7 +173,7 @@ def(task, "session <id> <session_id>", "Görevin session_id alanını yazar (dur
 });
 def(task, "list", "Görevleri listeler", (o: Opts) => {
   const states = o.undigested ? ["done" as TaskState] : o.state ? String(o.state).split(",") as TaskState[] : undefined;
-  const listed = listTasksWithWarnings({ state: states, project: o.project as string | undefined });
+  const listed = listTasksWithWarnings({ state: states, project: o.project as string | undefined, parent: o.parent as string | undefined });
   const tasks = o.undigested ? listed.tasks.filter((t) => !t.data.digested) : listed.tasks;
   const { warnings } = listed;
   out(
@@ -179,7 +184,12 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
 })
   .option("--state <states>", "virgülle ayrılmış durumlar")
   .option("--project <slug>", "proje slug'ı")
-  .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler");
+  .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
+  .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
+def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
+  const tasks = readyTasks({ parent: o.parent as string | undefined });
+  out(o, { tasks: tasks.map((t) => t.data) }, tasks.map(taskLine).join("\n"));
+}).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
   const s = statusSummary(loadConfig(), new Date());

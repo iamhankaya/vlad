@@ -6,7 +6,7 @@ import { getSection, kbPaths, nowIso, readDoc, validate, writeDoc } from "../../
 import type { TaskData } from "../../src/kb/index.js";
 import {
   TransitionError, answerTask, askTask, createTask, getTask, listTasks, listTasksWithWarnings,
-  logTask, markDigested, markStale, nextTaskId, reportTask, setState, undigestedTasks,
+  logTask, markDigested, markStale, nextTaskId, readyTasks, reportTask, setState, undigestedTasks,
 } from "../../src/tasks/index.js";
 
 const D = new Date(2026, 9, 15, 10, 0, 0);
@@ -139,6 +139,72 @@ describe("task role", () => {
     expect(() => mkRole("finans", "dev")).toThrow(/rol finans \(advisory\) dev görevinde kullanılamaz/);
     expect(() => mkRole("tester", "research")).toThrow(/rol tester \(executor\) research görevinde kullanılamaz/);
     expect(listTasks()).toEqual([]);
+  });
+});
+
+describe("pipeline", () => {
+  const pipe = () => createTask({ project: "p", title: "çatı", kind: "pipeline", body: "" }, D);
+  const phase = (parent: string, dependsOn: string[] = [], ph = "spec") =>
+    createTask({ project: "p", title: ph, kind: "research", body: "", parent, dependsOn, phase: ph }, D);
+  const finish = (id: string) => { setState(id, "running"); setState(id, "awaiting_approval"); setState(id, "done"); };
+
+  it("creates a pipeline and phases with parent/depends_on/phase", () => {
+    const p = pipe();
+    const a = phase(p.data.id);
+    const b = phase(p.data.id, [a.data.id], "plan");
+    expect(p.data).toMatchObject({ kind: "pipeline", parent: null, depends_on: [], phase: null });
+    expect(getTask(b.data.id).data).toMatchObject({ parent: p.data.id, depends_on: [a.data.id], phase: "plan" });
+    expect(listTasks({ parent: p.data.id }).map((t) => t.data.id)).toEqual([a.data.id, b.data.id]);
+  });
+
+  it("readyTasks returns queued phases whose dependencies are done", () => {
+    const p = pipe();
+    const a = phase(p.data.id);
+    const b = phase(p.data.id, [a.data.id]);
+    const c = phase(p.data.id, [b.data.id]);
+    expect(readyTasks({ parent: p.data.id }).map((t) => t.data.id)).toEqual([a.data.id]);
+    finish(a.data.id);
+    expect(readyTasks().map((t) => t.data.id)).toEqual([b.data.id]);
+    expect(readyTasks().map((t) => t.data.id)).not.toContain(c.data.id);
+    expect(readyTasks().map((t) => t.data.id)).not.toContain(p.data.id);
+  });
+
+  it("rejects a dependency outside the pipeline", () => {
+    const p = pipe();
+    const q = pipe();
+    const a = phase(q.data.id);
+    expect(() => phase(p.data.id, [a.data.id])).toThrow(/bağımlılık .* aynı pipeline'da değil/);
+    expect(() => phase(p.data.id, ["T20000101-01"])).toThrow(/görev bulunamadı/);
+  });
+
+  it("rejects depends_on without parent and a parent that is not a pipeline", () => {
+    const a = mk();
+    expect(() => createTask({ project: "p", title: "x", kind: "dev", body: "", dependsOn: [a.data.id] }, D))
+      .toThrow(/bağımlılık için --parent gerekli/);
+    expect(() => phase(a.data.id)).toThrow(/pipeline görevi değil/);
+  });
+
+  it("rejects a role, parent or dependency on a pipeline task", () => {
+    const p = pipe();
+    expect(() => createTask({ project: "p", title: "x", kind: "pipeline", body: "", parent: p.data.id }, D))
+      .toThrow(/pipeline görevi rol\/parent\/bağımlılık alamaz/);
+    expect(() => createTask({ project: "p", title: "x", kind: "pipeline", body: "", role: "tester" }, D))
+      .toThrow(/pipeline görevi rol\/parent\/bağımlılık alamaz/);
+  });
+
+  it("rejects a new phase under a cancelled pipeline", () => {
+    const p = pipe();
+    setState(p.data.id, "cancelled");
+    expect(() => phase(p.data.id)).toThrow(/çatı görev .* cancelled; yeni faz eklenemez/);
+  });
+
+  it("old task files without the new fields still read and are never ready by dependency", () => {
+    const t = mk();
+    const raw = readFileSync(t.file, "utf8").replace(/^(parent|depends_on|phase):.*\r?\n/gm, "");
+    writeFileSync(t.file, raw);
+    expect(getTask(t.data.id).data.parent ?? null).toBeNull();
+    expect(listTasks().map((x) => x.data.id)).toEqual([t.data.id]);
+    expect(readyTasks().map((x) => x.data.id)).toEqual([t.data.id]);
   });
 });
 

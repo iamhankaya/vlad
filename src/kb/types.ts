@@ -1,5 +1,5 @@
 export type Autonomy = "plan" | "commit" | "pr";
-export type TaskKind = "dev" | "research";
+export type TaskKind = "dev" | "research" | "pipeline";
 export type TaskState =
   | "queued"
   | "running"
@@ -42,6 +42,12 @@ export interface TaskData {
   digested?: string | null;
   /** roles/<slug>.md the task is done in (roles spec §5). */
   role?: string | null;
+  /** Pipeline (çatı) task this phase belongs to (pipeline spec §5). */
+  parent?: string | null;
+  /** Tasks under the same parent that must be done before this one starts. */
+  depends_on?: string[];
+  /** Human-readable phase name (spec, plan, kabul, uygulama, doğrulama, …). */
+  phase?: string | null;
 }
 
 /** roles/<slug>.md frontmatter (roles spec §4) */
