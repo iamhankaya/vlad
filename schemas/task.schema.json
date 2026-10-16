@@ -7,7 +7,7 @@
     "id": { "type": "string", "pattern": "^T\\d{8}-\\d{2}$" },
     "project": { "type": "string" },
     "title": { "type": "string" },
-    "kind": { "enum": ["dev", "research"] },
+    "kind": { "enum": ["dev", "research", "pipeline"] },
     "state": { "enum": ["queued", "running", "blocked", "stalled", "awaiting_approval", "done", "failed", "cancelled"] },
     "autonomy": { "enum": ["plan", "commit", "pr"] },
     "branch": { "type": ["string", "null"] },
@@ -17,6 +17,9 @@
     "updated": { "type": "string", "format": "date-time" },
     "error": { "type": ["string", "null"] },
     "digested": { "type": ["string", "null"], "format": "date-time" },
-    "role": { "type": ["string", "null"] }
+    "role": { "type": ["string", "null"] },
+    "parent": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2}$" },
+    "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{8}-\\d{2}$" } },
+    "phase": { "type": ["string", "null"] }
   }
 }
