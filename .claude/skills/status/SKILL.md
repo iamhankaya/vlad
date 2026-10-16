@@ -49,7 +49,7 @@ Sonra seçenekleri sun:
 3. **Değişiklik iste:** istenen değişikliği al →
    `vlad task log <id> "Değişiklik isteği: <özet>"` ve `vlad task set <id> running --json`.
    Çalışanın session'ı açıksa (`ListAgents`) ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder; kapalıysa kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa `claude --continue`. Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır (`/delegate` 5b).
-4. **Olduğu gibi kabul et** (dışa eylem yok).
+4. **Olduğu gibi kabul et** (dışa eylem yok). Pipeline **dev** fazında sunma: merge'süz `done`, bağımlı fazların bu değişikliği görmeden başlaması demektir (spec §2, §6). Kullanıcı yine de isterse bu sonucu açıkça söyle ve bağımlı fazları başlatmadan önce ayrıca onay al.
 5. **İptal et:** `vlad task set <id> cancelled --json`, ardından `vlad task cleanup <id> --json`.
 
 Seçenek 1, 2 veya 4 tamamlandıktan sonra:

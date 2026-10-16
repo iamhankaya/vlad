@@ -236,6 +236,47 @@ describe("pipeline launch", () => {
     expect(existsSync(worktreePath(cfg, repo, a.data.id))).toBe(false);
   });
 
+  it("after a launcher failure on a moved integration branch, the phase can be retried", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    const b = child(p.data.id);
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    const iwt = getTask(p.data.id).data.worktree!;
+    writeFileSync(join(iwt, "m.txt"), "x");
+    git(iwt, "add", ".");
+    git(iwt, "commit", "-m", "entegrasyon");
+    await expect(launchTask(b.data.id, { launcher: fakeLauncher(false), cfg })).rejects.toThrow(/boom/);
+    expect(getTask(b.data.id).data.error).not.toMatch(/branch silinemedi/);
+    const r = await launchTask(b.data.id, { launcher: fakeLauncher(), cfg });
+    expect(r.data.state).toBe("running");
+  });
+
+  it("a failed first launch leaves the pipeline queued", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    await expect(launchTask(a.data.id, { launcher: fakeLauncher(false), cfg })).rejects.toThrow();
+    expect(getTask(p.data.id).data.state).toBe("queued");
+  });
+
+  it("an unregistered folder at the integration worktree path is a clear error", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    const b = child(p.data.id);
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    const iwt = getTask(p.data.id).data.worktree!;
+    git(repo, "worktree", "remove", "--force", iwt);
+    mkdirSync(iwt);
+    await expect(launchTask(b.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/git worktree'si değil/);
+  });
+
+  it("a phase under a closed pipeline cannot be launched", async () => {
+    const p = pipe();
+    const a = child(p.data.id);
+    setState(p.data.id, "cancelled");
+    await expect(launchTask(a.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/çatı görev .* cancelled/);
+    expect(existsSync(worktreePath(cfg, repo, p.data.id))).toBe(false);
+  });
+
   it("a pipeline task itself cannot be launched", async () => {
     const p = pipe();
     await expect(launchTask(p.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/yalnızca dev/);

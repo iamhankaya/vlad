@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import type { VladConfig } from "../kb/index.js";
 
@@ -101,7 +101,10 @@ export function removeWorktree(repo: string, dir: string): void {
 
 const samePath = (a: string, b: string): boolean => {
   const norm = (p: string) => {
-    const s = resolve(p).replace(/\\/g, "/");
+    // realpath expands Windows 8.3 short names (METOHA~1) that git never prints
+    let full = resolve(p);
+    try { full = realpathSync.native(full); } catch { /* missing path: compare as given */ }
+    const s = full.replace(/\\/g, "/");
     return process.platform === "win32" ? s.toLowerCase() : s;
   };
   return norm(a) === norm(b);

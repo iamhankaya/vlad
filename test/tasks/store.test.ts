@@ -180,6 +180,14 @@ describe("pipeline", () => {
     expect(getTask(p.data.id).data.state).toBe("awaiting_approval");
   });
 
+  it("markStale never stalls a pipeline task", () => {
+    const p = pipe();
+    setState(p.data.id, "running");
+    const stalled = markStale(new Date(Date.now() + 100 * 3600_000), 6).map((t) => t.data.id);
+    expect(stalled).not.toContain(p.data.id);
+    expect(getTask(p.data.id).data.state).toBe("running");
+  });
+
   it("rejects a dependency outside the pipeline", () => {
     const p = pipe();
     const q = pipe();

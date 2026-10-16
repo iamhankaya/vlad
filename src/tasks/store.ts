@@ -236,6 +236,8 @@ export function markDigested(ids: string[], now: Date = new Date()): Task[] {
 export function markStale(now: Date, hours: number): Task[] {
   const out: Task[] = [];
   for (const t of listTasks({ state: ["running"] })) {
+    // no worker updates a pipeline; it waits on its phases and on the user's gates
+    if (t.data.kind === "pipeline") continue;
     const updated = Date.parse(t.data.updated);
     if (Number.isNaN(updated) || updated + hours * 3600_000 >= now.getTime()) continue;
     out.push(setState(t.data.id, "stalled"));

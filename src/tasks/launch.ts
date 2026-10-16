@@ -47,21 +47,27 @@ export function buildPrompt(
   );
 }
 
+const CLOSED: TaskState[] = ["done", "cancelled", "failed"];
+
 /**
  * Pipeline spec §6: makes sure the integration branch `vlad/<parent>` (from the repo's HEAD) and
- * its worktree exist, records them on the pipeline task and moves a queued pipeline to `running`.
+ * its worktree exist and records them on the pipeline task. The pipeline itself moves to `running`
+ * only when its phase does (setState), so a failed launch leaves it queued.
  */
 export function ensureIntegration(parentId: string, cfg: VladConfig): { repo: string; branch: string; worktree: string } {
   const p = getTask(parentId);
+  if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parentId} ${p.data.state}; fazı başlatılamaz`);
   const repo = projectPath(p.data.project);
   const branch = `vlad/${parentId}`;
   const worktree = worktreePath(cfg, repo, parentId);
   if (!branchExists(repo, branch)) addWorktree(repo, worktree, branch);
   else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
-  const patch = { branch, worktree };
-  if (p.data.state === "queued") setState(parentId, "running", patch);
-  else if (p.data.branch !== branch || p.data.worktree !== worktree) {
-    Object.assign(p.data, patch);
+  else if (!isWorktree(repo, worktree)) {
+    // a merge into it at the gate would fail or, inside the repo, hit the wrong branch
+    throw new Error(`entegrasyon klasörü bir git worktree'si değil: ${worktree}; klasörü kaldırıp tekrar dene`);
+  }
+  if (p.data.branch !== branch || p.data.worktree !== worktree) {
+    Object.assign(p.data, { branch, worktree });
     saveTask(p);
   }
   return { repo, branch, worktree };
@@ -80,6 +86,7 @@ export async function launchTask(
   let repo: string;
   let wt: string;
   let role: Role | undefined;
+  let created: string | null = null;
   try {
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
@@ -87,6 +94,7 @@ export async function launchTask(
     // a pipeline phase branches from the pipeline's integration branch; the rollback below leaves it alone
     const base = task.data.parent ? ensureIntegration(task.data.parent, o.cfg).branch : undefined;
     addWorktree(repo, wt, branch, base);
+    created = runGit(repo, ["rev-parse", branch]);
   } catch (e) {
     const msg = (e as Error).message;
     recordError(id, msg);
@@ -101,8 +109,11 @@ export async function launchTask(
     } catch (e) {
       problems.push(`worktree kaldırılamadı (${wt}): ${(e as Error).message}`);
     }
-    // the branch was created by addWorktree just now and has no commits; drop it so a retry can reuse the name
-    if (runGit(repo, ["branch", "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
+    // the branch was created by addWorktree just now; drop it so a retry can reuse the name. Still at
+    // its starting commit → nothing to lose, force it (-d refuses when the base is ahead of HEAD, as an
+    // integration branch is); new commits on it → -d, which keeps unmerged work.
+    const untouched = created !== null && runGit(repo, ["rev-parse", branch]) === created;
+    if (runGit(repo, ["branch", untouched ? "-D" : "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
     return problems.join("; ");
   };
 
