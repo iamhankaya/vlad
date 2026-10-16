@@ -1,0 +1,126 @@
+# VLAD yazılım departmanı (rol tabanlı pipeline) — tasarım
+
+- **Tarih:** 2026-10-16
+- **Durum:** Taslak. Kullanıcıyla konuşulan kararlar (karar günlüğü: "Yazılım departmanı: rol tabanlı pipeline, döngü boyutunu VLAD seçer") işlendi. T20261016-01 (ilk Tester denemesi) bitince §12 güncellenecek, sonra kullanıcı onayına sunulacak.
+- **Önceki spec:** `2026-10-15-vlad-roles-design.md` (roller). Bu spec rolleri bir iş akışında sıraya koyar.
+
+## 1. Amaç
+
+Bir işi tek çalışana vermek yerine, işin boyutuna göre bir **yazılım departmanı** çalıştırmak: analist talimatı spec'e ve senaryolara çevirir, mimar uygulamayı planlar, developer uygular, tester bağımsız kabul testleri yazar ve sonucu doğrular; gerekirse finans/pazarlama danışılır.
+
+**Başarı ölçütü:**
+- `/delegate` işin boyutuna göre bir döngü seçer (emin değilse sorar) ve taslakta fazları, rolleri ve onay kapılarını gösterir.
+- Fazlar `kb/` görev dosyaları olarak oluşur; her faz bir sonrakinin girdisi olan bir dosya üretir.
+- Bağımlılığı biten faz otomatik başlatılmaya hazır görünür; kullanıcı kapıyı geçince VLAD başlatır.
+- Paralel fazlar (tester ∥ developer) ayrı worktree'lerde çalışır ve çakışmaz.
+- Tek görevlik bugünkü akış aynen çalışır.
+
+## 2. İlkeler
+
+1. **Ajan sohbeti hafıza değildir.** Fazlar birbiriyle konuşmaz; her faz görev dosyasına bir kapanış raporu (spec, plan, test matrisi…) yazar, sonraki faz yalnızca bağımlı olduğu görevlerin raporlarını okur.
+2. **Kapılar kullanıcıda.** Bir fazın `awaiting_approval → done` geçişi kapıdır; bağımlı fazlar ancak bundan sonra başlar. Pipeline'ın sonunda ana branch'e merge ayrıca onaylanır.
+3. **Döngü işin boyutuna göre.** Küçük işe tam departman çalıştırılmaz.
+4. **Rol = ne ve sınır, skill = nasıl.** Yöntem rol dosyasına kopyalanmaz; rol mevcut skill'leri bağlar.
+
+## 3. Döngüler (şablonlar)
+
+| Döngü | Ne zaman | Fazlar (→ sıra, ∥ paralel) |
+|---|---|---|
+| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
+| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
+| `kısa` | Tek modülde değişiklik, net gereksinim, görünür davranış değişiyor | developer:uygulama → tester:doğrulama |
+| `tek` | Küçük düzeltme, belge, bakım | tek görev (bugünkü akış, rol opsiyonel) |
+
+Danışmanlar (finans, pazarlama) herhangi bir fazdan **yan görev** olarak açılabilir (research, `depends_on` yok, `parent` aynı); sonucu ilgili fazın Bağlam'ına eklenir.
+
+**Seçim (VLAD):** işaretler — sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış. İşaretler aynı döngüyü gösteriyorsa VLAD seçer ve taslakta tek cümlelik gerekçe yazar. Çelişiyorsa veya gereksinim belirsizse iki döngüyü artı/eksiyle gösterip **kullanıcıya sorar**.
+
+## 4. Test sahipliği
+
+| | Developer | Tester |
+|---|---|---|
+| Ne | Unit testler (TDD) | Kabul testleri (spec senaryolarından integration/E2E), mevcut kod için karakterizasyon testleri, doğrulama fazında tarayıcı/E2E ve keşif testi |
+| Girdi | Kendi tasarımı + plan | Yalnızca spec, plan ve arayüzler (uygulamanın içine bakmaz) |
+| Ne zaman | Uygulama boyunca | Kabul: spec/plan onayından sonra developer'la paralel (kırmızı başlar, developer'ın hedefidir). Doğrulama: uygulama birleştikten sonra |
+| Dosyalar | Kodun yanındaki unit test dosyaları | Projenin kabul/E2E/integration/karakterizasyon dizinleri (proje kuralına göre; yoksa `tests/acceptance`, `tests/e2e`, `tests/characterization`) |
+
+Dosya sahipliği rol dosyalarına yazılır; iki rol aynı dosyaya yazmaz.
+
+## 5. Görev modeli
+
+Görev şemasına eklenenler:
+- `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
+- `parent: string | null` — çatı görevin ID'si.
+- `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
+- `phase: string | null` — insan okunur faz adı (`spec`, `plan`, `kabul`, `uygulama`, `doğrulama`, `danışma`).
+
+Kurallar (CLI doğrular):
+- `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.
+- `pipeline` görevi `launch` edilmez; durumu VLAD tarafından yönetilir: `queued` → `running` (ilk faz başlayınca) → `awaiting_approval` (tüm fazlar `done`; ana branch'e merge kapısı) → `done`.
+
+## 6. Branch ve worktree
+
+- Çatı görev için **entegrasyon branch'i** `vlad/<parent-id>`, ilk faz başlatılırken ana branch'in HEAD'inden açılır; worktree'si `<worktreeDir>/<parent-id>`.
+- Çocuk dev görevleri worktree'lerini `vlad/<parent-id>`'den açar (`addWorktree(repo, dir, branch, base)`), branch'leri `vlad/<child-id>`.
+- Kapı (`/status` "Merge et") pipeline çocuğu için hedefi ana branch değil entegrasyon branch'idir: `git -C <parent-worktree> merge --no-ff vlad/<child-id>`.
+- Paralel tester ∥ developer ayrı branch'lerde çalışır; dosya sahipliği (§4) çakışmayı önler. İkisi de entegrasyon branch'ine alındıktan sonra doğrulama fazı oradan açılır ve ikisinin birleşimini görür.
+- Tester'ın kırmızı kabul testleri yalnızca entegrasyon branch'ini etkiler; ana branch'e merge, doğrulama fazı yeşil bitmeden önerilmez.
+- Son kapı: kullanıcı onayıyla `vlad/<parent-id>` ana branch'e merge (veya push + PR); sonra çatı görev `done`, tüm worktree'ler `cleanup`.
+
+## 7. Faz çıktıları
+
+Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar. Sonraki faz `depends_on` görevlerinin `## Kapanış raporu`'nu okur.
+
+| Faz | Rol | Tür | Çıktı |
+|---|---|---|---|
+| spec | analyst | research | Amaç, kapsam, senaryolar (her biri Verilen/Olduğunda/O zaman), fazlar, kabul kriterleri, açık sorular |
+| plan | architect | research | Bileşenler, arayüzler, dosya yapısı, görev listesi (developer için), test stratejisi (tester için), riskler |
+| kabul / karakterizasyon | tester | dev | Testler (branch'te) + test matrisi (senaryo → test → beklenen) |
+| uygulama | developer | dev | Kod + unit testler; kabul testlerini yeşile çevirme hedefi |
+| doğrulama | tester | dev | Tüm suite sonucu, tarayıcı/E2E bulguları, kanıtlı hata listesi |
+
+**Plan fazında birlikte çalışma:** "Birlikte oturma" sırayla yaz–eleştir olarak yürür, tek bir research görevi içinde: VLAD architect agent'ına taslak yazdırır → developer ve tester rol dosyalarıyla iki eleştiri agent'ı çalıştırır → architect eleştirileri işleyip son planı yazar. Ara ürünler `vlad task log` ile kaydedilir; rapora yalnızca son plan + "eleştiriler ve nasıl ele alındı" bölümü girer.
+
+## 8. Roller ve skill'ler
+
+- Yeni rol: `roles/architect.md` (`kind: advisory`) — mimari, arayüzler, plan; kod yazmaz.
+- Rol şemasına opsiyonel `skills: string[]`. Launcher prompt'u ve research agent prompt'u: "İşe başlamadan şu skill'leri yükle: …".
+- Başlangıç bağlamaları: analyst → `superpowers:brainstorming`, `superpowers:writing-plans`; architect → `superpowers:writing-plans`, `superpowers:brainstorming`; developer → `superpowers:test-driven-development`, `superpowers:requesting-code-review`, `superpowers:verification-before-completion` (büyük planda `superpowers:subagent-driven-development`); tester → `superpowers:test-driven-development`, `superpowers:systematic-debugging`, doğrulama fazında bir tarayıcı skill'i (Playwright); finans/pazarlama → `anthropic-skills:deep-research`.
+- Skill adları kullanıcının kurulu skill listesine göre doğrulanmaz (Claude Code'un listesi CLI'dan görünmez); bulunamayan skill'i çalışan raporda "yüklenemedi" diye belirtir.
+- Rol dosyalarındaki dosya sahipliği §4'e göre güncellenir.
+
+## 9. CLI
+
+- `vlad task new … --parent <id> --depends-on <id,id> --phase <ad>` ve `--kind pipeline`.
+- `vlad task ready [--parent <id>] --json` → `queued` olup tüm `depends_on`'ları `done` olan görevler (çatı görevler hariç).
+- `vlad task list --parent <id>`.
+- `launch`: `parent` doluysa entegrasyon branch'ini/worktree'sini gerekirse açar ve çocuğu ondan açar; çatı görevi `queued` ise `running` yapar.
+- `status --json`: aktif listede çatı görev de görünür; her görev `parent/depends_on/phase` taşır.
+- `cleanup` çatı görev için entegrasyon worktree'sini de kaldırır (branch kalır).
+
+## 10. Akışlar
+
+**/delegate:** döngü seç (§3) → taslakta döngü + gerekçe, faz tablosu (faz, rol, tür, bağımlılık), kapılar → onay → çatı görev + faz görevleri sırayla `task new` → `task ready` → hazır olanları başlat (dev: `launch`, research: arka plan agent'ı).
+**/status:** pipeline'ları ağaç olarak göster (çatı → fazlar, durum, bekleyen kapı). Kapı geçince (`done` + entegrasyon merge'ü) `vlad task ready --parent <id>` → yeni hazır fazları kullanıcıya söyleyip başlat. Kullanıcı ilk taslakta pipeline'ı onayladığı için fazların başlatılması ayrıca sorulmaz; merge kapıları sorulur.
+**/digest:** pipeline'lar tek günlük maddesi altında fazlarıyla özetlenir.
+
+## 11. Hata durumları
+
+| Durum | Davranış |
+|---|---|
+| Bir faz `failed`/`cancelled` | Bağımlı fazlar `queued` kalır; /status kullanıcıya: fazı yeniden oluştur, pipeline'ı iptal et veya bağımlılığı kaldırarak devam et |
+| Bağımlılık başka bir pipeline'da | CLI hata |
+| Entegrasyon merge çakışması | Merge yapılmaz, hata gösterilir; developer'a "rebase/çöz" değişiklik isteği önerilir |
+| Paralel fazlar aynı dosyaya yazdı | Entegrasyon merge'ünde çakışma (yukarıdaki satır); rol dosyalarındaki sahiplik ihlali raporda belirtilir |
+| Kullanıcı döngüyü ortada küçültmek/büyütmek ister | Çatı altına faz eklenir/iptal edilir; mevcut fazlar korunur |
+
+## 12. Tester denemesinden öğrenilecekler (T20261016-01 sonrası güncellenecek)
+
+- Rol dosyası tek başına yeterli mi, yoksa rol özel bir skill gerekiyor mu?
+- Rolün `## Çıktı` başlıkları raporda tutuldu mu; /status ve /digest bunları işleyebildi mi?
+- `cleanup` çalışan penceresini otomatik kapattı mı?
+- Görev süresi ve token maliyeti (döngü seçimindeki eşiklere girdi).
+
+## 13. Kapsam dışı
+
+Fazlar arası otomatik merge (kapılar her zaman kullanıcıda), birden çok repoya yayılan pipeline, rol başına model seçimi, ajanların birbirine doğrudan mesaj atması, maliyet bütçesi/limitler.
