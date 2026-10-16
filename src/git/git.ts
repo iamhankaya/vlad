@@ -77,12 +77,22 @@ function mustGit(cwd: string, args: string[]): void {
   }
 }
 
-export function addWorktree(repo: string, dir: string, branch: string): void {
+export function branchExists(repo: string, branch: string): boolean {
+  return runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]) !== null;
+}
+
+/** New branch + worktree at `dir`, from `base` (default: HEAD). */
+export function addWorktree(repo: string, dir: string, branch: string, base?: string): void {
   if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
-  if (runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]) !== null) {
-    throw new Error(`zaten var: ${branch}`);
-  }
-  mustGit(repo, ["worktree", "add", "-b", branch, dir]);
+  if (branchExists(repo, branch)) throw new Error(`zaten var: ${branch}`);
+  mustGit(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
+}
+
+/** Worktree at `dir` for an existing branch. */
+export function attachWorktree(repo: string, dir: string, branch: string): void {
+  if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
+  runGit(repo, ["worktree", "prune"]);
+  mustGit(repo, ["worktree", "add", dir, branch]);
 }
 
 export function removeWorktree(repo: string, dir: string): void {
