@@ -177,6 +177,11 @@ export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {
   assertTransition(t.data.state, to);
   t.data = { ...t.data, ...patch, state: to };
   saveTask(t);
+  // the first phase to start also starts its pipeline, whether it is a dev or a research phase
+  if (to === "running" && t.data.parent) {
+    const p = getTask(t.data.parent);
+    if (p.data.state === "queued") setState(p.data.id, "running");
+  }
   return t;
 }
 
