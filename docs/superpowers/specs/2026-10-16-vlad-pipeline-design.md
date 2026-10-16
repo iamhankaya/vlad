@@ -114,12 +114,13 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 | Paralel fazlar aynı dosyaya yazdı | Entegrasyon merge'ünde çakışma (yukarıdaki satır); rol dosyalarındaki sahiplik ihlali raporda belirtilir |
 | Kullanıcı döngüyü ortada küçültmek/büyütmek ister | Çatı altına faz eklenir/iptal edilir; mevcut fazlar korunur |
 
-## 12. Tester denemesinden öğrenilecekler (T20261016-01 sonrası güncellenecek)
+## 12. Tester denemesinden öğrenilenler (T20261016-01, 2026-10-16)
 
-- Rol dosyası tek başına yeterli mi, yoksa rol özel bir skill gerekiyor mu?
-- Rolün `## Çıktı` başlıkları raporda tutuldu mu; /status ve /digest bunları işleyebildi mi?
-- `cleanup` çalışan penceresini otomatik kapattı mı?
-- Görev süresi ve token maliyeti (döngü seçimindeki eşiklere girdi).
+- **Rol dosyası yeterli oldu.** Rol özel skill gerekmedi: Tester önce kırmızı testle kanıtladı (`373dee3`), sonra düzeltti; üretim koduna ve canlı ortama dokunmadı; projenin mevcut test kalıbını (`node --test`) seçti, yeni çerçeve eklemedi. §8'deki "önce mevcut skill'ler" kararı geçerli.
+- **Çıktı başlıkları tutuldu.** Rapor rolün tüm başlıklarını (Kapsam tablosu, Bulunan hatalar, Kırmızı bırakılan testler, Önerilen düzeltmeler, Açık noktalar) ve vlad-worker'ın zorunlu başlıklarını taşıdı; /status bunlardan "kırmızı test yok → merge güvenli" kararını doğrudan okuyabildi. Faz çıktısının girdi olarak kullanılması (§7) için bu yapı yeterli.
+- **`cleanup` pencereyi otomatik kapattı:** öncesinde 1 çalışan süreci, sonrasında 0; worktree hatasız silindi.
+- **Süre:** görev oluşturmadan rapora ~6 dakika (19:18 → 19:24). Küçük bir test görevi için tek faz bu sürede bitiyor; `kısa` döngü (developer → tester) birkaç küçük iş için makul, `tam` döngü yalnızca §3'teki işaretlerde.
+- **Açık nokta (pipeline'a girdi):** Tester'ın "CI'a ekle" gibi kapsam dışı önerileri raporda kalıyor. Pipeline'da bunlar çatı görevin açık noktalarına toplanmalı ve son kapıda kullanıcıya gösterilmeli (§10 /status).
 
 ## 13. Kapsam dışı
 
