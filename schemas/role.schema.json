@@ -7,6 +7,7 @@
     "slug": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "title": { "type": "string", "pattern": "^[^\"]+$" },
     "kind": { "enum": ["advisory", "executor"] },
-    "summary": { "type": "string", "minLength": 1 }
+    "summary": { "type": "string", "minLength": 1 },
+    "skills": { "type": "array", "items": { "type": "string", "pattern": "^[^\"`]+$" } }
   }
 }

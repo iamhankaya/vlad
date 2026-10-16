@@ -24,9 +24,27 @@ vlad project list --json
   ```
   vlad role list --json
   ```
-  `{"roles":[{ "slug", "title", "kind", "summary", "file" }], ...}`. `advisory` roller (finans, pazarlama, analyst) yalnızca `research`, `executor` roller (developer, tester) yalnızca `dev` görevinde kullanılır.
+  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (finans, pazarlama, analyst, architect) yalnızca `research`, `executor` roller (developer, tester) yalnızca `dev` görevinde kullanılır.
 
-## 2. Taslağı hazırla ve göster
+## 2. Döngüyü seç
+
+İşin boyutuna göre bir döngü seç (tasarım: `docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md` §3). `→` sıra, `∥` paralel:
+
+| Döngü | Ne zaman | Fazlar |
+|---|---|---|
+| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
+| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
+| `kısa` | Tek modülde değişiklik, net gereksinim, görünür davranış değişiyor | developer:uygulama → tester:doğrulama |
+| `tek` | Küçük düzeltme, belge, bakım | tek görev (bugünkü akış, rol opsiyonel) |
+
+İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
+- İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.
+- İşaretler çelişiyorsa veya gereksinim belirsizse taslaktan önce **kullanıcıya sor**: iki aday döngüyü artı/eksiyle göster (ör. "`özellik`: + spec ile kapsam netleşir, − bir faz ve bir kapı fazla; `kısa`: + hızlı, − gereksinim belirsizliği uygulamaya kalır") ve seçimini bekle.
+- Küçük işe tam departman çalıştırma; şüphede küçük döngüyü öner.
+
+`tek` → adım 3a. Diğerleri (pipeline) → adım 3b.
+
+## 3a. Taslak (`tek`)
 
 Türü belirle:
 - `dev`: repoda kod değişikliği → ayrı, görünür çalışan session'ı (worktree + `vlad/<id>` branch'i).
@@ -35,6 +53,7 @@ Türü belirle:
 Kullanıcıya şunu göster:
 ```markdown
 **Proje:** <slug>   **Tür:** dev|research   **Yetki:** <autonomy, karttan>
+**Döngü:** tek — <gerekçe, tek cümle>
 **Rol:** <title> (`<slug>`) — <neden bu rol, tek cümle> | rol yok
 **Başlık:** <kısa başlık>
 
@@ -51,15 +70,66 @@ Rol önerisi: işin doğasına en uygun rolü seç (ör. test yazma/hata avı �
 
 Sonunda sor: "Bu görevi oluşturup başlatayım mı?"
 
-## 3. Onaydan sonra oluştur
+## 3b. Taslak (pipeline: `tam`, `özellik`, `kısa`)
 
-Gövdeyi (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`) geçici bir dosyaya yaz:
+Kullanıcıya şunu göster:
+```markdown
+**Proje:** <slug>   **Yetki:** <autonomy, karttan>
+**Döngü:** <tam|özellik|kısa> — <gerekçe, tek cümle>
+**Başlık:** <kısa başlık>
+
+## Tanım
+<ne yapılacak, neden>
+
+## Kabul kriterleri
+- [ ] <test edilebilir kriter>
+
+## Bağlam
+<ilgili kararlar, dosyalar, kısıtlar; kaynak ID'leriyle>
+
+### Fazlar
+| # | Faz | Rol | Tür | Bağımlılık |
+|---|---|---|---|---|
+| 1 | spec | Senior Analyst (`analyst`) | research | — |
+| 2 | kabul | Senior Tester (`tester`) | dev | 1 |
+| 3 | uygulama | Senior Developer (`developer`) | dev | 1 |
+| 4 | doğrulama | Senior Tester (`tester`) | dev | 2, 3 |
+
+### Kapılar
+- Her fazın sonunda onay (`/status`): research fazı raporu kabul edilir, dev fazı entegrasyon branch'ine (`vlad/<çatı-id>`) merge edilir. Bağımlı fazlar ancak bundan sonra başlar.
+- Son kapı: tüm fazlar bitince `vlad/<çatı-id>` ana branch'e merge (veya push + PR) — ayrıca onaylanır.
+```
+Örnek tablo `özellik` döngüsüdür (karakterizasyon ve kabul tek tester fazında). Faz adları: `spec`, `plan`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `danışma`. Rol başlıklarını `vlad role list --json`'dan al. Faz tablosu döngü şablonundan gelir; işe göre faz ekleyip çıkarabilirsin (gerekçesiyle).
+
+Sonunda sor: "Bu pipeline'ı oluşturup ilk fazları başlatayım mı?" Bu onay fazların başlatılmasını da kapsar; merge kapıları yine ayrı ayrı sorulur.
+
+## 4. Onaydan sonra oluştur
+
+**`tek`:** Gövdeyi (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`) geçici bir dosyaya yaz:
 ```
 vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--role <slug>] --body-file <geçici.md> --json
 ```
-Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle. Rol bulunamazsa veya türle uyumsuzsa CLI hata verir ve görev oluşmaz; hatayı göster, taslağı düzelt.
+Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle. Rol bulunamazsa veya türle uyumsuzsa CLI hata verir ve görev oluşmaz; hatayı göster, taslağı düzelt. Sonra adım 5a (dev) veya 5b (research).
 
-## 4a. dev → çalışanı başlat
+**Pipeline:**
+1. Çatı görev — taslağın gövdesi (faz tablosu ve kapılar `## Bağlam` altında `###` başlıklarıyla):
+   ```
+   vlad task new --project <slug> --title "<başlık>" --kind pipeline --body-file <çatı.md> --json
+   ```
+   Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`).
+2. Fazlar, tablodaki **sırayla**. Her faz için gövde: `## Tanım` (fazın payı), `## Kabul kriterleri` (rolün `## Çıktı`'sı ve işin kriterlerinden bu faza düşenler), `## Bağlam` (çatı ID'si; "girdi: bağımlı olduğun görevlerin `## Kapanış raporu`"). Bağımlılık yalnızca **daha önce oluşturulmuş** fazlara verilir; tablodaki numaraları oluşan ID'lere çevir:
+   ```
+   vlad task new --project <slug> --title "<başlık> — <faz>" --kind <dev|research> --role <slug> --parent <çatı-id> [--depends-on <id1,id2>] --phase <faz> --body-file <faz.md> --json
+   ```
+   Bir faz hata verirse dur, hatayı göster; oluşanları kullanıcıya söyle (gerekirse `cancelled` yapılır).
+3. Başlatılabilir fazları al:
+   ```
+   vlad task ready --parent <çatı-id> --json
+   ```
+   `{"tasks":[...]}` — `queued` olup tüm bağımlılıkları `done` olanlar. Her birini başlat: dev → 5a, research → 5b, plan fazı → 6.
+4. Kullanıcıya ağacı göster: çatı ID'si, her faz (ID, faz, rol, bağımlılık), hangilerinin başlatıldığı.
+
+## 5a. dev → çalışanı başlat
 
 Önce bildirim kanalını hazırla: `ListAgents` çalıştır, ilk satırdaki `This session is <ad>` adını al ve `vlad session register <ad>` çalıştır (açılışta yapıldıysa da tekrar etmek zararsızdır). Böylece çalışan bitince sana `SendMessage` atabilir.
 
@@ -69,29 +139,48 @@ Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bas
 vlad task launch <id> --json
 ```
 - Başarılı: görev `running`; yeni terminal sekmesi/penceresinde çalışan açılır. Kullanıcıya branch (`vlad/<id>`) ve worktree yolunu göster.
+- Pipeline fazı (`parent` dolu): ilk fazda entegrasyon branch'i `vlad/<çatı-id>` ve worktree'si (`<worktreeDir>/<çatı-id>`) açılır, çatı `running` olur; fazın branch'i entegrasyon branch'inden açılır. Kullanıcıya ikisini de göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.
 - `--dry-run` önizleme değildir: worktree + branch oluşturur ve görevi terminal açmadan `running` yapar (yalnızca test içindir). Bu yüzden "önce dry-run ile göster" diye kullanma.
 
-## 4b. research → arka plan agent'ı
+## 5b. research → arka plan agent'ı
 
 1. `vlad task set <id> running --json`
-2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Agent sonucu Markdown olarak döndürür; dosya yazmaz.
+2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Rolün `skills` listesi doluysa ardından: "İşe başlamadan şu skill'leri yükle: `<a>`, `<b>`. Yüklenemeyen olursa raporda belirt." Pipeline fazıysa ekle: "Önce bağımlı olduğun görevlerin `## Kapanış raporu` bölümünü oku: `kb/tasks/<dep-id>.md` …" (görevin `depends_on`'u). Agent sonucu Markdown olarak döndürür; dosya yazmaz.
 3. Önemli ara adımlarda: `vlad task log <id> "<adım>"`
 4. Sonucu Markdown olarak geçici dosyaya yaz ve:
    ```
    vlad task report <id> --file <rapor.md> --json
    ```
    (görev `awaiting_approval` olur).
-5. Kullanıcıya özetle; kabul ederse `vlad task set <id> done --json`.
+5. Kullanıcıya özetle; kabul ederse `vlad task set <id> done --json`. Pipeline fazıysa bu bir kapıdır: kabulden sonra `/status`'taki pipeline ilerletme adımını uygula (hazır fazları başlat).
 
-## 5. Hafızayı commit'le
+## 6. Plan fazı: yaz–eleştir
+
+`plan` fazı (architect, research) tek görev içinde sırayla yürür; "birlikte oturma" budur (spec §7):
+1. `vlad task set <id> running --json`
+2. **Taslak:** architect rolüyle arka plan agent'ı (5b'deki rol, skill ve `depends_on` cümleleriyle; girdi spec fazının raporu). Rolün `## Çıktı` başlıklarıyla taslak plan döndürür. Taslağı geçici dosyada tut; `vlad task log <id> "Plan taslağı hazır"`.
+3. **Eleştiri:** iki arka plan agent'ı paralel — biri `roles/developer.md`, biri `roles/tester.md` rol dosyasıyla. Prompt: spec raporu + taslak plan; "Rol dosyasından yalnızca rolün bakış açısını al; Yetki, iş akışı ve commit kuralları bu görevde geçerli değil. Kendi rolünün gözüyle eleştir: uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde. Kod yazma, dosya değiştirme, skill yükleme." Her biri için `vlad task log <id> "<Developer|Tester> eleştirisi: <kısa özet>"`.
+4. **Son plan:** architect agent'ına taslak + iki eleştiriyi ver; son planı ve `### Eleştiriler ve nasıl ele alındı` bölümünü yazdır.
+5. Rapora yalnızca son plan girer (ara ürünler log'da kalır): `vlad task report <id> --file <plan.md> --json`, sonra 5b adım 5.
+
+## 7. Danışman yan görevleri
+
+Finans veya pazarlama herhangi bir fazdan (taslakta ya da fazlar sürerken) danışılabilir. Kullanıcıya yan görevi kısa bir taslakla göster, onay al:
+```
+vlad task new --project <slug> --title "<başlık> — danışma: <konu>" --kind research --role <finans|pazarlama> --parent <çatı-id> --phase danışma --body-file <danışma.md> --json
+```
+Bağımlılık verilmez; hemen 5b ile yürüt. Sonucu ilgili fazın bağlamına ekle: faz henüz oluşturulmadıysa özetini o fazın `## Bağlam`'ına yaz; oluşturulduysa `vlad task log <faz-id> "Danışma <yan-id>: <özet> — raporuna bak"`. Çalışanlar kardeş görevleri de okur.
+
+## 8. Hafızayı commit'le
 
 Görev oluşturulup başlatıldıktan (veya research raporu yazıldıktan) sonra:
 ```
 vlad kb commit "delegate: <id> <başlık>" --push --json
 ```
+Pipeline'da `<id>` çatı ID'sidir.
 
 ## Kullanıcıya göster
 
-- Taslak (onaydan önce), oluşan ID, başlatma sonucu, hata varsa tam mesajı.
+- Taslak (onaydan önce), oluşan ID'ler (pipeline'da ağaç), başlatma sonucu, hata varsa tam mesajı.
 - Takip için: "Durumu `/status` ile görebilirsin; çalışan bitirince sana haber verecek."

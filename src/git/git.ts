@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import type { VladConfig } from "../kb/index.js";
 
@@ -77,12 +77,22 @@ function mustGit(cwd: string, args: string[]): void {
   }
 }
 
-export function addWorktree(repo: string, dir: string, branch: string): void {
+export function branchExists(repo: string, branch: string): boolean {
+  return runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]) !== null;
+}
+
+/** New branch + worktree at `dir`, from `base` (default: HEAD). */
+export function addWorktree(repo: string, dir: string, branch: string, base?: string): void {
   if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
-  if (runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]) !== null) {
-    throw new Error(`zaten var: ${branch}`);
-  }
-  mustGit(repo, ["worktree", "add", "-b", branch, dir]);
+  if (branchExists(repo, branch)) throw new Error(`zaten var: ${branch}`);
+  mustGit(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
+}
+
+/** Worktree at `dir` for an existing branch. */
+export function attachWorktree(repo: string, dir: string, branch: string): void {
+  if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
+  runGit(repo, ["worktree", "prune"]);
+  mustGit(repo, ["worktree", "add", dir, branch]);
 }
 
 export function removeWorktree(repo: string, dir: string): void {
@@ -91,7 +101,10 @@ export function removeWorktree(repo: string, dir: string): void {
 
 const samePath = (a: string, b: string): boolean => {
   const norm = (p: string) => {
-    const s = resolve(p).replace(/\\/g, "/");
+    // realpath expands Windows 8.3 short names (METOHA~1) that git never prints
+    let full = resolve(p);
+    try { full = realpathSync.native(full); } catch { /* missing path: compare as given */ }
+    const s = full.replace(/\\/g, "/");
     return process.platform === "win32" ? s.toLowerCase() : s;
   };
   return norm(a) === norm(b);

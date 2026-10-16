@@ -14,7 +14,7 @@ Görevlerin:
 - `kb/` git'te tutulur (remote: private `iamhankaya/vlad`). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
-Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|list`, `vlad task new|launch|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
+Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|list`, `vlad task new|launch|ready|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
 
 ## Yetki sınırları
 
@@ -45,13 +45,15 @@ Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|lis
 | Skill | Ne zaman |
 |---|---|
 | `/scan` | Projeleri keşfetmek, proje kartlarını oluşturmak/güncellemek |
-| `/delegate` | "X projesinde Y'yi yap" — görev tanımla, onay al, çalışanı başlat |
-| `/status` | Aktif görevler, onay bekleyenler, takılanlar; push/PR/merge onayı |
+| `/delegate` | "X projesinde Y'yi yap" — döngü seç, görev (veya pipeline ve fazları) tanımla, onay al, çalışanı başlat |
+| `/status` | Aktif görevler (pipeline'lar ağaç olarak), onay bekleyenler, takılanlar; push/PR/merge onayı, faz kapıları |
 | `/digest` | İşlenmemiş session raporlarını günlüğe, kartlara ve karar günlüğüne işlemek |
 
 ## Uzman roller
 
-`roles/<slug>.md` dosyaları uzman rolleri tanımlar: danışmanlar (`finans`, `pazarlama`, `analyst`) research görevlerinde arka plan agent'ı olarak, uygulayıcılar (`developer`, `tester`) dev görevlerinde çalışan persona'sı olarak çalışır. `/delegate` uygun rolü önerir ve `vlad task new --role <slug>` ile göreve yazar. Yeni rol eklemek için `roles/` altına aynı biçimde bir dosya eklemek yeter. Tasarım: `docs/superpowers/specs/2026-10-15-vlad-roles-design.md`.
+`roles/<slug>.md` dosyaları uzman rolleri tanımlar: danışmanlar (`finans`, `pazarlama`, `analyst`, `architect`) research görevlerinde arka plan agent'ı olarak, uygulayıcılar (`developer`, `tester`) dev görevlerinde çalışan persona'sı olarak çalışır. `/delegate` uygun rolü önerir ve `vlad task new --role <slug>` ile göreve yazar. Yeni rol eklemek için `roles/` altına aynı biçimde bir dosya eklemek yeter. Tasarım: `docs/superpowers/specs/2026-10-15-vlad-roles-design.md`.
+
+**Pipeline (yazılım departmanı):** `/delegate` işin boyutuna göre bir döngü seçer (`tam`, `özellik`, `kısa`, `tek`; emin değilse sorar). `tek` dışındakilerde bir çatı görev (`--kind pipeline`) ve altında fazlar (`--parent`, `--depends-on`, `--phase`, `--role`) oluşur; her faz bir sonrakine kapanış raporuyla girdi verir. Dev fazları entegrasyon branch'i `vlad/<çatı-id>`'den açılır ve kapıda oraya merge edilir; `vlad task ready --parent <id>` başlatılabilir fazları verir. Fazları başlatmak için taslak onayı yeter; her merge kapısı ve son kapı (ana branch'e merge/PR) ayrıca onaylanır. Tasarım: `docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md`.
 
 ## Kısa işler (research)
 

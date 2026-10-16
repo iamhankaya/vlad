@@ -25,6 +25,7 @@ Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an)
 - Her session için 1–3 cümlelik özet çıkar: ne yapıldı, ne karar verildi, ne açık kaldı. Dayanak: `excerpt`, `git.recent_commits`, `git.changed_files`. Excerpt yetersizse ve gerçekten gerekiyorsa `transcript_path`'i oku.
 - Görevin `role` alanı doluysa günlük maddesi rol başlığıyla başlar (ör. "Senior Tester: …"; başlık `vlad role list --json`'dan).
 - Biten görevler `project` alanına göre gruplanır. Özetin dayanağı kapanış raporudur (yapılanlar, testler, açık noktalar). Açık noktalar (danışman rol raporlarında eşdeğerleri: `### Varsayımlar`, `### Açık sorular ve varsayımlar`) kartın `## Açık konular` bölümüne aday olur.
+- **Pipeline:** `parent`'ı dolu görevleri (fazlar) çatı görev altında topla; ayrı madde yazma. Tek günlük maddesi çatının başlığı ve ID'siyle başlar, fazlar alt madde olur (faz, rol başlığı, bir cümle, görev ID'si). Çatının durumunu `kb/tasks/<parent>.md`'den oku: henüz `done` değilse maddeye "(devam ediyor)" ekle; `done` ise (çatının kapanış raporu yoktur) son kapının sonucunu ve fazların açık noktalarını yaz. Adım 6'da işlenen fazları, çatı listedeyse onu da kapat.
 - `task_id` doluysa özeti o görevle ilişkilendir ve görev dosyasına session'ı yaz (görev varsa; yoksa atla):
   ```
   vlad task session <task_id> <session_id> --json
@@ -38,6 +39,9 @@ Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an)
 ```markdown
 ## watchparty
 - Oda senkronizasyonu WebSocket'e taşındı; 3 commit. (session abc123, görev T20261015-01)
+- Oda sohbeti pipeline'ı (devam ediyor). (görev T20261016-03)
+  - spec — Senior Analyst: 5 senaryo, 2 açık soru. (T20261016-04)
+  - uygulama — Senior Developer: sohbet modülü + unit testler. (T20261016-06)
 ## Diğer
 - ...
 ```
