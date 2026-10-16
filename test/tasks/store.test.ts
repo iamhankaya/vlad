@@ -169,6 +169,17 @@ describe("pipeline", () => {
     expect(readyTasks().map((t) => t.data.id)).not.toContain(p.data.id);
   });
 
+  it("a phase going to running also starts a queued pipeline (research-only start)", () => {
+    const p = pipe();
+    const a = phase(p.data.id);
+    setState(a.data.id, "running");
+    expect(getTask(p.data.id).data.state).toBe("running");
+    setState(a.data.id, "awaiting_approval");
+    setState(a.data.id, "done");
+    setState(p.data.id, "awaiting_approval");
+    expect(getTask(p.data.id).data.state).toBe("awaiting_approval");
+  });
+
   it("rejects a dependency outside the pipeline", () => {
     const p = pipe();
     const q = pipe();
