@@ -9,13 +9,15 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the five starting roles pass the schema with the spec's kinds and all four sections", () => {
+  it("the six roles pass the schema with the spec's kinds, skills and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
-      analyst: "advisory", developer: "executor", finans: "advisory", pazarlama: "advisory", tester: "executor",
+      analyst: "advisory", architect: "advisory", developer: "executor", finans: "advisory", pazarlama: "advisory", tester: "executor",
     });
     for (const r of roles) {
+      expect(Array.isArray(r.skills), `${r.slug} skills`).toBe(true);
+      expect(r.skills.length, `${r.slug} skills`).toBeGreaterThan(0);
       const body = readFileSync(r.file, "utf8");
       for (const h of ["## Sorumluluk", "## Yetki", "## Kaynaklar", "## Çıktı"]) expect(body, `${r.slug} ${h}`).toContain(h);
     }

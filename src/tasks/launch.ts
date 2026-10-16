@@ -1,6 +1,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { addWorktree, isWorktree, removeWorktree, runGit, worktreePath } from "../git/git.js";
+import {
+  addWorktree, attachWorktree, branchExists, isWorktree, removeWorktree, runGit, worktreePath,
+} from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countInbox } from "../inbox/inbox.js";
@@ -28,15 +30,47 @@ function recordError(id: string, msg: string): void {
   saveTask(t);
 }
 
-export function buildPrompt(taskFile: string, autonomy: string, role?: { title: string; file: string }): string {
+export function buildPrompt(
+  taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
+): string {
   const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
   if (!role) return base;
-  return (
+  const withRole =
     `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${role.file}\` dosyasını oku ` +
-    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`
+    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
+  if (!role.skills?.length) return withRole;
+  return (
+    `${withRole} İşe başlamadan şu skill'leri yükle: ${role.skills.map((s) => `\`${s}\``).join(", ")}. ` +
+    `Yüklenemeyen olursa kapanış raporunda belirt.`
   );
+}
+
+const CLOSED: TaskState[] = ["done", "cancelled", "failed"];
+
+/**
+ * Pipeline spec §6: makes sure the integration branch `vlad/<parent>` (from the repo's HEAD) and
+ * its worktree exist and records them on the pipeline task. The pipeline itself moves to `running`
+ * only when its phase does (setState), so a failed launch leaves it queued.
+ */
+export function ensureIntegration(parentId: string, cfg: VladConfig): { repo: string; branch: string; worktree: string } {
+  const p = getTask(parentId);
+  if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parentId} ${p.data.state}; fazı başlatılamaz`);
+  const repo = projectPath(p.data.project);
+  const branch = `vlad/${parentId}`;
+  const worktree = worktreePath(cfg, repo, parentId);
+  if (!branchExists(repo, branch)) addWorktree(repo, worktree, branch);
+  else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
+  else if (!isWorktree(repo, worktree)) {
+    // a merge into it at the gate would fail or, inside the repo, hit the wrong branch
+    throw new Error(`entegrasyon klasörü bir git worktree'si değil: ${worktree}; klasörü kaldırıp tekrar dene`);
+  }
+  if (p.data.branch !== branch || p.data.worktree !== worktree) {
+    Object.assign(p.data, { branch, worktree });
+    saveTask(p);
+  }
+  return { repo, branch, worktree };
 }
 
 /** Opens worktree + branch, starts the launcher and moves the task to `running`. */
@@ -52,11 +86,15 @@ export async function launchTask(
   let repo: string;
   let wt: string;
   let role: Role | undefined;
+  let created: string | null = null;
   try {
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
     wt = worktreePath(o.cfg, repo, id);
-    addWorktree(repo, wt, branch);
+    // a pipeline phase branches from the pipeline's integration branch; the rollback below leaves it alone
+    const base = task.data.parent ? ensureIntegration(task.data.parent, o.cfg).branch : undefined;
+    addWorktree(repo, wt, branch, base);
+    created = runGit(repo, ["rev-parse", branch]);
   } catch (e) {
     const msg = (e as Error).message;
     recordError(id, msg);
@@ -71,8 +109,11 @@ export async function launchTask(
     } catch (e) {
       problems.push(`worktree kaldırılamadı (${wt}): ${(e as Error).message}`);
     }
-    // the branch was created by addWorktree just now and has no commits; drop it so a retry can reuse the name
-    if (runGit(repo, ["branch", "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
+    // the branch was created by addWorktree just now; drop it so a retry can reuse the name. Still at
+    // its starting commit → nothing to lose, force it (-d refuses when the base is ahead of HEAD, as an
+    // integration branch is); new commits on it → -d, which keeps unmerged work.
+    const untouched = created !== null && runGit(repo, ["rev-parse", branch]) === created;
+    if (runGit(repo, ["branch", untouched ? "-D" : "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
     return problems.join("; ");
   };
 

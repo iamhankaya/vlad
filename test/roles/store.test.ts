@@ -42,6 +42,13 @@ describe("roles store", () => {
     expect(warnings[0]).toMatch(/qa\.md: .*title/);
   });
 
+  it("reads skills, defaulting to []", () => {
+    writeFileSync(join(dir, "tester.md"), role("tester").replace("summary: özet\n", "summary: özet\nskills:\n  - a:b\n  - c\n"));
+    writeFileSync(join(dir, "analyst.md"), role("analyst", "advisory"));
+    const byslug = Object.fromEntries(listRolesWithWarnings().roles.map((r) => [r.slug, r.skills]));
+    expect(byslug).toEqual({ analyst: [], tester: ["a:b", "c"] });
+  });
+
   it("reads CRLF files", () => {
     writeFileSync(join(dir, "tester.md"), role("tester").replace(/\n/g, "\r\n"));
     expect(listRolesWithWarnings().roles.map((r) => r.slug)).toEqual(["tester"]);

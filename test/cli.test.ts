@@ -127,6 +127,20 @@ describe("vlad cli", () => {
     expect(bad.code).toBe(1);
     expect(JSON.parse(bad.err).error).toMatch(/rol finans \(advisory\) dev görevinde kullanılamaz/);
   });
+  it("pipeline via CLI: --kind pipeline, --parent/--depends-on/--phase, task ready and list --parent", () => {
+    const newTask = (...a: string[]) => {
+      const r = vlad(["task", "new", "--project", "alpha", "--title", "T", ...a, "--json"]);
+      expect(r.code, r.err).toBe(0);
+      return JSON.parse(r.out).id as string;
+    };
+    const p = newTask("--kind", "pipeline");
+    const a = newTask("--kind", "research", "--parent", p, "--phase", "spec");
+    const b = newTask("--kind", "research", "--parent", p, "--depends-on", `${a}, ,`, "--phase", "plan");
+    const ready = JSON.parse(vlad(["task", "ready", "--parent", p, "--json"]).out);
+    expect(ready.tasks.map((t: { id: string }) => t.id)).toEqual([a]);
+    const l = JSON.parse(vlad(["task", "list", "--parent", p, "--json"]).out);
+    expect(l.tasks.map((t: { id: string; depends_on: string[] }) => [t.id, t.depends_on])).toEqual([[a, []], [b, [a]]]);
+  });
   it("task session sets session_id without changing state", () => {
     const id = mkTask();
     const r = vlad(["task", "session", id, "sess-123", "--json"]);
