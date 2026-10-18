@@ -31,6 +31,11 @@ Bir işi tek çalışana vermek yerine, işin boyutuna göre bir **yazılım dep
 | `kısa` | Tek modülde değişiklik, net gereksinim, görünür davranış değişiyor | developer:uygulama → tester:doğrulama |
 | `tek` | Küçük düzeltme, belge, bakım | tek görev (bugünkü akış, rol opsiyonel) |
 
+**UI fazları (designer).** İş kullanıcıya görünen bir arayüz içeriyorsa döngüye designer fazları eklenir; arayüz yoksa eklenmez:
+- `tam`: analyst:spec → **designer:tasarım** → architect:plan → (tester:kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**). Tasarım plandan önce gelir; architect bileşen yapısını tasarıma göre planlar.
+- `özellik`: analyst:spec → **designer:tasarım** → (tester:karakterizasyon+kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**).
+- `kısa`: developer:uygulama → (tester:doğrulama ∥ **designer:denetim**). Tasarım fazı yoktur.
+
 Danışmanlar (finans, pazarlama) herhangi bir fazdan **yan görev** olarak açılabilir (research, `depends_on` yok, `parent` aynı); sonucu ilgili fazın Bağlam'ına eklenir.
 
 **Seçim (VLAD):** işaretler — sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış. İşaretler aynı döngüyü gösteriyorsa VLAD seçer ve taslakta tek cümlelik gerekçe yazar. Çelişiyorsa veya gereksinim belirsizse iki döngüyü artı/eksiyle gösterip **kullanıcıya sorar**.
@@ -44,6 +49,8 @@ Danışmanlar (finans, pazarlama) herhangi bir fazdan **yan görev** olarak aç�
 | Ne zaman | Uygulama boyunca | Kabul: spec/plan onayından sonra developer'la paralel (kırmızı başlar, developer'ın hedefidir). Doğrulama: uygulama birleştikten sonra |
 | Dosyalar | Kodun yanındaki unit test dosyaları | Projenin kabul/E2E/integration/karakterizasyon dizinleri (proje kuralına göre; yoksa `tests/acceptance`, `tests/e2e`, `tests/characterization`) |
 
+Designer yalnızca `docs/design/` altına yazar (DESIGN.md, mockup'lar, token tablosu, denetim ekran görüntüleri). Stil/tema/token dosyaları dahil üretim kodu developer'ındır; token'ları koda developer taşır.
+
 Dosya sahipliği rol dosyalarına yazılır; iki rol aynı dosyaya yazmaz.
 
 ## 5. Görev modeli
@@ -52,7 +59,7 @@ Görev şemasına eklenenler:
 - `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
 - `parent: string | null` — çatı görevin ID'si.
 - `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
-- `phase: string | null` — insan okunur faz adı (`spec`, `plan`, `kabul`, `uygulama`, `doğrulama`, `danışma`).
+- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `uygulama`, `doğrulama`, `denetim`, `danışma`).
 
 Kurallar (CLI doğrular):
 - `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.
@@ -74,10 +81,14 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 | Faz | Rol | Tür | Çıktı |
 |---|---|---|---|
 | spec | analyst | research | Amaç, kapsam, senaryolar (her biri Verilen/Olduğunda/O zaman), fazlar, kabul kriterleri, açık sorular |
+| tasarım | designer | dev | `docs/design/` (DESIGN.md, mockup'lar) + rapor: ekranlar/durumlar, bileşen envanteri, token tablosu, erişilebilirlik kararları |
 | plan | architect | research | Bileşenler, arayüzler, dosya yapısı, görev listesi (developer için), test stratejisi (tester için), riskler |
 | kabul / karakterizasyon | tester | dev | Testler (branch'te) + test matrisi (senaryo → test → beklenen) |
 | uygulama | developer | dev | Kod + unit testler; kabul testlerini yeşile çevirme hedefi |
 | doğrulama | tester | dev | Tüm suite sonucu, tarayıcı/E2E bulguları, kanıtlı hata listesi |
+| denetim | designer | dev | Tasarıma uyum, erişilebilirlik, responsive bulguları (önem + kanıt), developer için önerilen düzeltmeler; kod değişmez |
+
+`tasarım` fazı dev türündedir (dosyaları branch'e yazar, entegrasyon branch'ine merge edilir); research olan `plan` fazı tasarımı kapanış raporundan ve entegrasyon branch'indeki `docs/design/`'dan okur. `denetim`'de kritik/yüksek bulgu varsa kapı kuralı doğrulamadaki kırmızı test kuralıyla aynıdır: yeni `uygulama` fazı ve ona bağlı yeni `doğrulama` + `denetim` fazları.
 
 **Plan fazında birlikte çalışma:** "Birlikte oturma" sırayla yaz–eleştir olarak yürür, tek bir research görevi içinde: VLAD architect agent'ına taslak yazdırır → developer ve tester rol dosyalarıyla iki eleştiri agent'ı çalıştırır → architect eleştirileri işleyip son planı yazar. Ara ürünler `vlad task log` ile kaydedilir; rapora yalnızca son plan + "eleştiriler ve nasıl ele alındı" bölümü girer.
 
@@ -85,7 +96,7 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 
 - Yeni rol: `roles/architect.md` (`kind: advisory`) — mimari, arayüzler, plan; kod yazmaz.
 - Rol şemasına opsiyonel `skills: string[]`. Launcher prompt'u ve research agent prompt'u: "İşe başlamadan şu skill'leri yükle: …".
-- Başlangıç bağlamaları: analyst → `superpowers:brainstorming`, `superpowers:writing-plans`; architect → `superpowers:writing-plans`, `superpowers:brainstorming`; developer → `superpowers:test-driven-development`, `superpowers:requesting-code-review`, `superpowers:verification-before-completion` (büyük planda `superpowers:subagent-driven-development`); tester → `superpowers:test-driven-development`, `superpowers:systematic-debugging`, doğrulama fazında bir tarayıcı skill'i (Playwright); finans/pazarlama → `anthropic-skills:deep-research`.
+- Başlangıç bağlamaları: analyst → `superpowers:brainstorming`, `superpowers:writing-plans`; architect → `superpowers:writing-plans`, `superpowers:brainstorming`; developer → `superpowers:test-driven-development`, `superpowers:requesting-code-review`, `superpowers:verification-before-completion` (büyük planda `superpowers:subagent-driven-development`); tester → `superpowers:test-driven-development`, `superpowers:systematic-debugging`, doğrulama fazında bir tarayıcı skill'i (Playwright); finans/pazarlama → `anthropic-skills:deep-research`; designer (`executor`, 2026-10-18) → `ui-ux-pro-max`, `impeccable` (denetimde yalnızca `audit`/`critique`), `design-taste-frontend` (taste-skill; yalnızca halka açık web sayfaları).
 - Skill adları kullanıcının kurulu skill listesine göre doğrulanmaz (Claude Code'un listesi CLI'dan görünmez); bulunamayan skill'i çalışan raporda "yüklenemedi" diye belirtir.
 - Rol dosyalarındaki dosya sahipliği §4'e göre güncellenir.
 
