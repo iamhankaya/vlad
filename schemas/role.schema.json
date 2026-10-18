@@ -8,6 +8,7 @@
     "title": { "type": "string", "pattern": "^[^\"]+$" },
     "kind": { "enum": ["advisory", "executor"] },
     "summary": { "type": "string", "minLength": 1 },
-    "skills": { "type": "array", "items": { "type": "string", "pattern": "^[^\"`]+$" } }
+    "skills": { "type": "array", "items": { "type": "string", "pattern": "^[^\"`]+$" } },
+    "model": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._\\[\\]-]*$" }
   }
 }

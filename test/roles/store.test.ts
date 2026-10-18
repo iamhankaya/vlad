@@ -49,6 +49,17 @@ describe("roles store", () => {
     expect(byslug).toEqual({ analyst: [], tester: ["a:b", "c"] });
   });
 
+  it("reads model, defaulting to null; an empty or unsafe model is a warning", () => {
+    writeFileSync(join(dir, "tester.md"), role("tester").replace("summary: özet\n", "summary: özet\nmodel: sonnet\n"));
+    writeFileSync(join(dir, "analyst.md"), role("analyst", "advisory"));
+    writeFileSync(join(dir, "bad.md"), role("bad").replace("summary: özet\n", "summary: özet\nmodel: ''\n"));
+    writeFileSync(join(dir, "evil.md"), role("evil").replace("summary: özet\n", "summary: özet\nmodel: \"x'; rm -r y\"\n"));
+    const { roles, warnings } = listRolesWithWarnings();
+    expect(Object.fromEntries(roles.map((r) => [r.slug, r.model]))).toEqual({ analyst: null, tester: "sonnet" });
+    expect(warnings.join("\n")).toMatch(/bad\.md: .*model/);
+    expect(warnings.join("\n")).toMatch(/evil\.md: .*model/);
+  });
+
   it("reads CRLF files", () => {
     writeFileSync(join(dir, "tester.md"), role("tester").replace(/\n/g, "\r\n"));
     expect(listRolesWithWarnings().roles.map((r) => r.slug)).toEqual(["tester"]);

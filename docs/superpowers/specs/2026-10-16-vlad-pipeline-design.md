@@ -97,6 +97,7 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 - Yeni rol: `roles/architect.md` (`kind: advisory`) — mimari, arayüzler, plan; kod yazmaz.
 - Rol şemasına opsiyonel `skills: string[]`. Launcher prompt'u ve research agent prompt'u: "İşe başlamadan şu skill'leri yükle: …".
 - Başlangıç bağlamaları: analyst → `superpowers:brainstorming`, `superpowers:writing-plans`; architect → `superpowers:writing-plans`, `superpowers:brainstorming`; developer → `superpowers:test-driven-development`, `superpowers:requesting-code-review`, `superpowers:verification-before-completion` (büyük planda `superpowers:subagent-driven-development`); tester → `superpowers:test-driven-development`, `superpowers:systematic-debugging`, doğrulama fazında bir tarayıcı skill'i (Playwright); finans/pazarlama → `anthropic-skills:deep-research`; designer (`executor`, 2026-10-18) → `ui-ux-pro-max`, `impeccable` (denetimde yalnızca `audit`/`critique`), `design-taste-frontend` (taste-skill; yalnızca halka açık web sayfaları).
+- Rol şemasına opsiyonel `model` (2026-10-18, T20261018-07): dev fazının çalışanı `claude --model <model>` ile, research/plan fazlarının arka plan agent'ları Agent aracının `model` parametresiyle başlar; boşsa varsayılan. Tüm roller `model: sonnet` taşır (kullanım limiti); VLAD session'ı Opus'ta kalır. Ayrıntı: roller spec'i §4–5.
 - Skill adları kullanıcının kurulu skill listesine göre doğrulanmaz (Claude Code'un listesi CLI'dan görünmez); bulunamayan skill'i çalışan raporda "yüklenemedi" diye belirtir.
 - Rol dosyalarındaki dosya sahipliği §4'e göre güncellenir.
 
@@ -135,4 +136,4 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 
 ## 13. Kapsam dışı
 
-Fazlar arası otomatik merge (kapılar her zaman kullanıcıda), birden çok repoya yayılan pipeline, rol başına model seçimi, ajanların birbirine doğrudan mesaj atması, maliyet bütçesi/limitler.
+Fazlar arası otomatik merge (kapılar her zaman kullanıcıda), birden çok repoya yayılan pipeline, ajanların birbirine doğrudan mesaj atması, maliyet bütçesi/limitler.

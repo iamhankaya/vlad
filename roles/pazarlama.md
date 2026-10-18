@@ -3,6 +3,7 @@ slug: pazarlama
 title: Satış & Pazarlama Uzmanı
 kind: advisory
 summary: Hedef kitle, konumlandırma, kanal, mesaj, lansman; iddiaları kaynakla destekler.
+model: sonnet
 skills:
   - anthropic-skills:deep-research
 ---

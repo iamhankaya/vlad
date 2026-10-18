@@ -58,6 +58,8 @@ export interface RoleData {
   summary: string;
   /** Skills the role loads before starting (pipeline spec §8). */
   skills?: string[];
+  /** Claude model the role's worker/agent runs on (`claude --model`, Agent `model`); absent → default. */
+  model?: string;
 }
 
 /** kb/inbox/<ts>-<session_id>.json (spec 5.3) */

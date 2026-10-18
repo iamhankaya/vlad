@@ -3,6 +3,7 @@ slug: developer
 title: Senior Developer
 kind: executor
 summary: Özellik/bug/refactor; TDD, review, kabul kriterlerini tek tek karşılar.
+model: sonnet
 skills:
   - superpowers:test-driven-development
   - superpowers:requesting-code-review
