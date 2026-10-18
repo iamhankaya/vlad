@@ -3,6 +3,7 @@ slug: tester
 title: Senior Tester
 kind: executor
 summary: Test stratejisi, eksik testler, hata avı; üretim kodunu değiştirmez, hatayı kanıtlayan test + rapor.
+model: sonnet
 skills:
   - superpowers:test-driven-development
   - superpowers:systematic-debugging

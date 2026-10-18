@@ -4,6 +4,7 @@ export interface LaunchRequest {
   prompt: string; // başlangıç prompt'u
   env: Record<string, string>; // VLAD_TASK_ID vb.
   title: string; // pencere/sekme başlığı
+  model?: string; // claude --model; yoksa varsayılan model
 }
 export interface LaunchResult {
   ok: boolean;

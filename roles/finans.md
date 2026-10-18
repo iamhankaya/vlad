@@ -3,6 +3,7 @@ slug: finans
 title: Finans Uzmanı
 kind: advisory
 summary: Maliyet, fiyatlandırma, gelir modeli, bütçe; varsayımları ve rakamların kaynağını açıkça yazar.
+model: sonnet
 skills:
   - anthropic-skills:deep-research
 ---

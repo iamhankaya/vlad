@@ -112,6 +112,7 @@ describe("vlad cli", () => {
     writeFileSync(join(home, "roles", "bad.md"), "---\nslug: bad\n---\n");
     const j = JSON.parse(vlad(["role", "list", "--json"]).out);
     expect(j.roles.map((r: { slug: string }) => r.slug)).toEqual(["tester"]);
+    expect(j.roles[0]).toMatchObject({ slug: "tester", model: null });
     expect(j.warnings).toHaveLength(1);
     expect(vlad(["role", "list"]).out).toContain("tester  executor  Senior Tester");
   });

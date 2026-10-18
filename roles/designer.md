@@ -3,6 +3,7 @@ slug: designer
 title: Senior UI/UX Designer
 kind: executor
 summary: Arayüz tasarımı (ekranlar, durumlar, token'lar, mockup) ve uygulanmış UI'ın denetimi; üretim koduna dokunmaz, yalnızca docs/design/ yazar.
+model: sonnet
 skills:
   - ui-ux-pro-max
   - impeccable

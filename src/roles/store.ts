@@ -2,14 +2,14 @@ import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, readDoc, validate, type RoleData } from "../kb/index.js";
 
-export type Role = RoleData & { file: string; skills: string[] };
+export type Role = Omit<RoleData, "model"> & { file: string; skills: string[]; model: string | null };
 
 function readRole(file: string, name: string): Role {
   const { data } = readDoc<RoleData>(file);
   validate("role", data);
   const slug = name.replace(/\.md$/, "");
   if (data.slug !== slug) throw new Error(`slug uyuşmuyor: dosya "${slug}", rol "${data.slug}"`);
-  return { slug: data.slug, title: data.title, kind: data.kind, summary: data.summary, skills: data.skills ?? [], file };
+  return { slug: data.slug, title: data.title, kind: data.kind, summary: data.summary, skills: data.skills ?? [], model: data.model ?? null, file };
 }
 
 /** Valid roles in name order; unreadable or invalid files are skipped and reported as warnings. */

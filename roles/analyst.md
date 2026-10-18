@@ -3,6 +3,7 @@ slug: analyst
 title: Senior Analyst
 kind: advisory
 summary: Gereksinim analizi, kod/doküman incelemesi, seçenek karşılaştırması, risk; koddan doğrular.
+model: sonnet
 skills:
   - superpowers:brainstorming
   - superpowers:writing-plans

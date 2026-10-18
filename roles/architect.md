@@ -3,6 +3,7 @@ slug: architect
 title: Software Architect
 kind: advisory
 summary: Mimari, bileşenler, arayüzler, dosya yapısı ve uygulama planı; kod yazmaz, planı developer ve tester için hazırlar.
+model: sonnet
 skills:
   - superpowers:writing-plans
   - superpowers:brainstorming
