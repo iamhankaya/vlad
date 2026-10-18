@@ -23,7 +23,7 @@ Kullanıcının ilk vizyonu: VLAD'ın yanında Finans uzmanı, Satış & Pazarla
 - Launcher prompt'una rol satırı; vlad-worker protokolüne rol adımı.
 - `/delegate`, `/status`, `/digest` skill'lerinde rol desteği.
 
-**Kapsam dışı:** rol başına model/izin ayarı (Claude Code `--agent`/`--model` bayrakları), rollerin kendi aralarında iş devretmesi (ör. Developer bitince Tester'ı otomatik başlatmak), rol başına hafıza dosyaları, rol performans metrikleri. Rol dosyası bunlara alan açacak biçimde (frontmatter) tasarlandı.
+**Kapsam dışı:** rol başına izin ayarı (Claude Code `--agent` bayrağı), rollerin kendi aralarında iş devretmesi (ör. Developer bitince Tester'ı otomatik başlatmak), rol başına hafıza dosyaları, rol performans metrikleri. Rol dosyası bunlara alan açacak biçimde (frontmatter) tasarlandı. Rol başına model seçimi 2026-10-18'de eklendi (T20261018-07, §4 `model`).
 
 ## 3. Yaklaşımlar
 
@@ -52,6 +52,7 @@ summary: Test stratejisi kurar, eksik testleri yazar, hataları kanıtla raporla
 - `kind: advisory` → yalnızca `research` görevlerinde kullanılır; kod/repo değiştirmez.
 - `kind: executor` → yalnızca `dev` görevlerinde kullanılır; çalışan session'ı olarak koşar.
 - Şema: `slug` (`^[a-z][a-z0-9-]*$`, dosya adıyla aynı), `title`, `kind`, `summary` zorunlu; `additionalProperties: false`.
+- Opsiyonel `model` (2026-10-18): rolün çalışanının/agent'ının Claude modeli (ör. `sonnet`, `opus`, `claude-sonnet-5-5`). Desen `^[A-Za-z0-9][A-Za-z0-9._\[\]-]*$`; boş, boşluklu, tırnaklı veya `-` ile başlayan değer şemadan geçmez (rol uyarı olur). Yoksa varsayılan model kullanılır. Kullanım limiti için uygulayıcı ve danışman rollerin hepsi `model: sonnet` taşır; VLAD'ın kendi session'ı varsayılan modelde (Opus) kalır.
 - Gövdede dört bölüm zorunlu değildir (şema frontmatter'ı doğrular), ama 5 başlangıç rolü dördünü de taşır.
 
 ### Başlangıç rolleri
@@ -76,9 +77,10 @@ Ortak sınırlar (her rol dosyasında tekrarlanır, çünkü agent yalnızca ken
 - `vlad task new … --role <slug>`:
   - rol dosyası yoksa hata: `rol bulunamadı: <slug>; mevcut: …`;
   - `advisory` rol + `--kind dev` veya `executor` rol + `--kind research` → hata: `rol <slug> (<kind>) <task kind> görevinde kullanılamaz`.
-- `vlad role list [--json]` → `{ roles: [{slug,title,kind,summary,file}], warnings }` (bozuk rol dosyası uyarı olur, liste düşmez — `project list` ile aynı kalıp).
+- `vlad role list [--json]` → `{ roles: [{slug,title,kind,summary,skills,model,file}], warnings }` (`model` alanı yoksa `null`) (bozuk rol dosyası uyarı olur, liste düşmez — `project list` ile aynı kalıp).
 - `vlad task list` / `status --json` çıktısı `role` alanını zaten taşır (frontmatter'ın tamamı döner).
 - `buildPrompt(taskFile, autonomy, roleFile?)`: rol varsa prompt'a eklenir: `Rolün: <title>. Göreve başlamadan önce \`<roleFile>\` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.` `launchTask` rolü görev dosyasından okur; rol dosyası artık yoksa launch hata verir (görev `queued` kalır, `error` dolu — mevcut hata yolu).
+- Rolün `model`'i doluysa `launchTask` onu `LaunchRequest.model` olarak geçirir; launcher script'i `claude --model '<model>' $p` üretir (değer tek tırnakla quote'lanır ve launcher'da desenle yeniden doğrulanır; geçersizse script yazılmaz). Model yoksa veya görev rolsüzse bugünkü gibi `claude $p`.
 
 ## 6. Akışlar
 
@@ -86,8 +88,8 @@ Ortak sınırlar (her rol dosyasında tekrarlanır, çünkü agent yalnızca ken
 1. `vlad role list --json` ile rolleri al.
 2. Taslakta **Rol:** satırı: işe en uygun rolü öner (gerekçesiyle tek cümle) veya "rol yok". `kind` uyumunu gözet (research → advisory, dev → executor).
 3. `vlad task new … --role <slug>`.
-4. research + rol: arka plan agent'ının prompt'u: "Rol dosyan: `<VLAD_HOME>/roles/<slug>.md` — önce onu oku. Görev: `kb/tasks/<id>.md`." Agent sonucu döndürür; VLAD `vlad task report` ile yazar (mevcut akış).
-5. dev + rol: `vlad task launch` (prompt rolü taşır).
+4. research + rol: arka plan agent'ının prompt'u: "Rol dosyan: `<VLAD_HOME>/roles/<slug>.md` — önce onu oku. Görev: `kb/tasks/<id>.md`." Agent sonucu döndürür; VLAD `vlad task report` ile yazar (mevcut akış). Agent rolün `model`'iyle başlatılır (Agent aracının `model` parametresi); rolsüz/boşsa varsayılan.
+5. dev + rol: `vlad task launch` (prompt rolü, script rolün `model`'ini taşır).
 
 **vlad-worker:** adım 1'e: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku; rolün yetki sınırları autonomy kurallarıyla birlikte geçerlidir; çelişkide **daha kısıtlayıcı** olan uygulanır.
 

@@ -23,6 +23,17 @@ describe("buildScript", () => {
     expect(s).toContain("$host.UI.RawUI.WindowTitle = 'Oda ğüş'");
     expect(s).toContain("claude $p");
   });
+  it("passes a role model as a quoted --model argument, and none without a model", () => {
+    expect(buildScript(req({ model: "sonnet" }))).toMatch(/\nclaude --model 'sonnet' \$p\n$/);
+    expect(buildScript(req({ model: "claude-opus-5-5[1m]" }))).toContain("claude --model 'claude-opus-5-5[1m]' $p");
+    expect(buildScript(req())).toMatch(/\nclaude \$p\n$/);
+    expect(buildScript(req())).not.toContain("--model");
+  });
+  it("rejects an empty or unsafe model instead of writing it into the script", () => {
+    for (const model of ["", " ", "sonnet'; rm x", "a b", "$(evil)", "son`net", "--help"]) {
+      expect(() => buildScript(req({ model })), JSON.stringify(model)).toThrow(/geçersiz model/);
+    }
+  });
   it("protects lines starting with '@", () => {
     const s = buildScript(req({ prompt: "a\n'@ evil\nb" }));
     const lines = s.split("\n");

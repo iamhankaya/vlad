@@ -7,6 +7,8 @@ import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 // PowerShell treats typographic single quotes as quote characters too; double each one.
 const SQ = /['‘’‚‛]/g;
 const q = (s: string) => `'${s.replace(SQ, (m) => m + m)}'`;
+// Same as the role schema's `model` pattern; checked again here because the value lands in a script.
+const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
 export function buildScript(req: LaunchRequest): string {
   const lines: string[] = [];
@@ -20,7 +22,9 @@ export function buildScript(req: LaunchRequest): string {
     .map((l) => (/^['‘’‚‛]@/.test(l) ? " " + l : l))
     .join("\n");
   lines.push("$p = @'", prompt, "'@");
-  lines.push("claude $p");
+  if (req.model === undefined) lines.push("claude $p");
+  else if (MODEL.test(req.model)) lines.push(`claude --model ${q(req.model)} $p`);
+  else throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   return lines.join("\n") + "\n";
 }
 

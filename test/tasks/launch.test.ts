@@ -150,6 +150,19 @@ describe("launchTask", () => {
     expect(buildPrompt("f.md", "commit")).not.toContain("Rolün");
   });
 
+  it("launch passes the role's model to the launcher; no model without one or without a role", async () => {
+    const file = writeRole("tester");
+    writeFileSync(file, readFileSync(file, "utf8").replace("summary: s\n", "summary: s\nmodel: sonnet\n"));
+    const l = fakeLauncher();
+    const a = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });
+    await launchTask(a.data.id, { launcher: l, cfg });
+    writeRole("tester");
+    const b = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });
+    await launchTask(b.data.id, { launcher: l, cfg });
+    await launchTask(mk().data.id, { launcher: l, cfg });
+    expect(l.reqs.map((r) => r.model)).toEqual(["sonnet", undefined, undefined]);
+  });
+
   it("prompt lists the role's skills, and has no skill sentence for an empty list", () => {
     const r = { title: "T", file: "r.md" };
     expect(buildPrompt("f.md", "commit", { ...r, skills: ["a:b", "c"] }))
