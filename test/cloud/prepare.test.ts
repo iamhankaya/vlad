@@ -142,6 +142,15 @@ describe("prepareCloudLaunch", () => {
   });
 
   it.each([
+    ["cse_01ABC", "session_01ABC"],
+    ["session_01ABC", "session_01ABC"],
+  ])("VLAD session id %s is given to create_trigger as %s", (given, expected) => {
+    const { prompt } = prepareCloudLaunch(mk().data.id, { vladSession: given });
+    expect(prompt).toContain(`persistent_session_id: ${expected}`);
+    expect(prompt).not.toContain("cse_");
+  });
+
+  it.each([
     ["noremote", /repo: owner\/name/],
     ["winonly", /yalnızca yerel.*WPF derlenmez/],
   ])("project %s: clear error, task stays queued with error set", (project, re) => {
