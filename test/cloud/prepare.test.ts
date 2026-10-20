@@ -54,7 +54,7 @@ describe("prepareCloudLaunch", () => {
     const r = prepareCloudLaunch(t.data.id);
     expect(r).toMatchObject({
       id: t.data.id, state: "running", mode: "cloud", action: "create_session", repo: "owner/alpha",
-      source_url: "https://github.com/owner/alpha", source_revision: null, base_branch: null,
+      source_url: "https://github.com/owner/alpha", source_revision: "master", base_branch: "master",
       outcome_branch: `vlad/${t.data.id}`, branch: `vlad/${t.data.id}`, worktree: null, integration: null,
       model: "sonnet", title: `VLAD ${t.data.id} — İş`, permission_mode: "auto",
     });
@@ -89,7 +89,7 @@ describe("prepareCloudLaunch", () => {
     const b = createTask({ project: "alpha", title: "b", kind: "dev", body, role: "developer", parent: pipe.data.id });
     const ra = prepareCloudLaunch(a.data.id);
     const int = `vlad/${pipe.data.id}`;
-    expect(ra).toMatchObject({ source_revision: int, base_branch: int, integration: { branch: int, needs_remote_create: true } });
+    expect(ra).toMatchObject({ source_revision: int, base_branch: int, integration: { branch: int, needs_remote_create: true, from: "master" } });
     expect(ra.prompt).toContain("SPEC-RAPORU");
     expect(getTask(pipe.data.id).data).toMatchObject({ state: "running", branch: int });
     // the second phase finds the branch already recorded

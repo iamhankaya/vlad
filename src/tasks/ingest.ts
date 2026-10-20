@@ -30,10 +30,22 @@ function assistantText(ev: any): string {
   return "";
 }
 
+/** JSON (array/wrapper) or JSONL text. */
+export function parseEvents(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 2) throw e;
+    return lines.map((l) => JSON.parse(l));
+  }
+}
+
 export function eventList(json: unknown): unknown[] {
   if (Array.isArray(json)) return json;
   const o = json as Record<string, unknown> | null;
   for (const k of ["data", "events", "items"]) if (Array.isArray(o?.[k])) return o![k] as unknown[];
+  if (o && typeof o === "object" && ("type" in o || "role" in o || "kind" in o)) return [o]; // single JSONL line
   throw new Error("olay listesi bulunamadı (dizi veya {data|events|items: [...]} bekleniyor)");
 }
 

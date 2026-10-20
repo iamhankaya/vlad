@@ -152,8 +152,8 @@ vlad task launch <id> --json
 `vlad task launch` komutu `launcher: cloud` ise veya `auto` + `CLAUDE_CODE_REMOTE=true` ise bulut modundadır. Yerel worktree/terminal açılmaz; komut `create_session` argümanlarını JSON olarak döner ve görevi `running` yapar. Akış:
 
 1. `vlad task launch <id> --json` çalıştır. Hata (kartta `repo` yok, `local_only`, dev değil) → görev `queued` kalır, `error` doludur; hatayı göster, ne yapılacağını sor.
-2. `integration.needs_remote_create` doğruysa entegrasyon branch'ini `integration.branch` adıyla remote'ta oluştur (GitHub MCP `create_branch`, repo'nun varsayılan branch'inden; kullanıcı onayı pipeline taslak onayında alınmıştır). Pipeline'ın sonraki fazlarında bu alan `false` döner.
-3. `create_session` çağır: `source_url`, `source_revision` (null ise repo'nun varsayılan branch'i), `outcome_branch`, `model`, `title`, `tags`, `permission_mode`, `prompt` alanlarını çıktıdan aynen ver.
+2. `integration.needs_remote_create` doğruysa entegrasyon branch'ini `integration.branch` adıyla remote'ta oluştur (GitHub MCP `create_branch`, `integration.from` branch'inden; kullanıcı onayı pipeline taslak onayında alınmıştır). Pipeline'ın sonraki fazlarında bu alan `false` döner.
+3. `create_session` çağır: `source_url`, `source_revision`, `outcome_branch`, `model`, `title`, `tags`, `permission_mode`, `prompt` alanlarını çıktıdan aynen ver.
 4. Dönen session ID'sini yaz: `vlad task session <id> <session_id>`. `create_session` başarısızsa `vlad task set <id> failed` (görev `running`'den `queued`'a dönemez); hatayı göster, yeni görev öner.
 5. Bildirim yoktur; izleme `/status` ile yapılır (`get_session`/`list_events` → `vlad task ingest`). Kullanıcıya session'ı, branch'i (`vlad/<id>`) ve base'i göster.
 

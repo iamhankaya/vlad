@@ -28,7 +28,7 @@ Opsiyonel alanlar (mevcut kartlar geçerli kalır):
 
 ## 4. `vlad task launch --json` (cloud)
 
-`prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse `null` = repo'nun varsayılan branch'i), `outcome_branch`, `integration {branch, needs_remote_create, from}`, `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`.
+`prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse kartın opsiyonel `default_branch`'i, yoksa `master`), `outcome_branch`, `integration {branch, needs_remote_create, from}`, `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`.
 
 Prompt görev bölümlerini (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), rol dosyasının gövdesini, `depends_on` görevlerin `## Kapanış raporu`'nu ve "VLAD bulut protokolü"nü satır içi taşır (çalışanın `kb/`/CLI erişimi yoktur).
 
@@ -73,5 +73,5 @@ Terminal akışı (`launchTask`, `TerminalLauncher`, `closeWorkerWindow`) deği�
 
 ## 9. Bilinen sınırlar
 
-- `source_revision: null` repo varsayılan branch'ini ifade eder; VLAD bunu `create_session`'a vermeden bırakır.
+- Varsayılan branch adı `default_branch` kartında yoksa `master` varsayılır.
 - `create_session`'ın `outcome_branch`'i remote'ta yoksa kendisinin oluşturduğu, ASK sonrası `send_message`'ın idle çalışanı uyandırdığı ve GitHub MCP branch/PR/merge araçlarının çalıştığı doğrulanmadı.
