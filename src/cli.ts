@@ -15,7 +15,7 @@ import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  eventList, getTask, ingestEvents, logTask, parseEvents, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -149,8 +149,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
 }).option("--dry-run", "terminal açmadan komutu göster");
 
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
-  const events = eventList(parseEvents(readInput(((o.eventsFile ?? o.file) as string | undefined) ?? "-")));
-  const r = ingestEvents(id, events, { head: o.remoteHead as string | undefined });
+  const parsed = parseEvents(readInput(((o.eventsFile ?? o.file) as string | undefined) ?? "-"));
+  const r = ingestEvents(id, eventList(parsed), { head: o.remoteHead as string | undefined, warnings: pageWarnings(parsed) });
   out(o, r, [
     `${r.processed.length} işaret işlendi, ${r.skipped.length} zaten işlenmişti`,
     ...r.warnings.map((w) => `uyarı: ${w}`),
