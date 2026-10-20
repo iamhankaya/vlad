@@ -89,7 +89,7 @@ def(project, "list", "Kartları listeler", (o: Opts) => {
   out(
     o,
     { projects, warnings },
-    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}${p.exposure ? `  [${p.exposure}]` : ""}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
   );
 });
 
