@@ -9,6 +9,15 @@ description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin
 - **Session raporları:** global SessionEnd hook'unun yazdığı ham raporlar. Her rapor: `session_id`, `cwd`, `project` (null olabilir), `task_id`, `ended`, `git` (branch, son commit'ler, değişen dosyalar), `excerpt` (son mesajlar), `user_message_count`.
 - **Biten görevler:** kapanış raporu henüz işlenmemiş `done` görevler. Çalışan pencereleri `vlad task cleanup` ile zorla kapatıldığı için çoğu çalışan session'ının inbox raporu olmaz; o işin kaydı görev dosyasındaki `## Kapanış raporu`'dur.
 
+## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
+
+Bulutta bu akış `kb/`'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) `master` ile eşitlen:
+```
+git fetch origin master
+git merge origin/master
+```
+Çakışma çıkarsa (`git merge --abort` ile temizle) **dur**, yazma; kullanıcıya hangi dosyaların çakıştığını bildir ve nasıl ilerleyeceğini sor. Yerelde (`CLAUDE_CODE_REMOTE` yok) bu adım atlanır.
+
 ## 1. Raporları al
 
 ```

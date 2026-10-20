@@ -66,6 +66,10 @@ Görev ID'leri bulutta günlük `51`'den başlar (`T20261020-51`), yerel VLAD il
 - Çalışan yalnızca `vlad/<id>`'ye push eder (kalıcı kural).
 - Bulut VLAD'ın `kb:` commit'leri session branch'ine gider; `commitKb --push` upstream yoksa `git push -u origin <branch>` ile push eder (kb dışı push edilmemiş commit varsa yine push etmez; "push edilmemiş" = hiçbir remote-tracking branch'ten erişilemeyen). `master`'a onaylı merge.
 
+### kb senkronu (kriter 9)
+
+Bulut VLAD `kb/`'ye yazmadan önce (status, delegate, digest akışlarının başında, bir kez) `git fetch origin master` + `git merge origin/master` çalıştırır; böylece başka session'ların/yerelin `master`'a aldığı kb değişiklikleri üzerine yazılır. Çakışmada `git merge --abort` ile temizlenir, akış durur ve kullanıcıya bildirilir. Yerelde atlanır. `vlad kb sync` komutu eklenmedi (isteğe bağlıydı).
+
 ## 7. Windows güvencesi
 
 Terminal akışı (`launchTask`, `TerminalLauncher`, `closeWorkerWindow`) değişmedi. `auto` Windows'ta aynı seçimi yapar. Cloud görevi için `cleanupTask` worktree `null` olduğundan hiçbir şey yapmaz.
