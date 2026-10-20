@@ -38,6 +38,17 @@ describe("schemas", () => {
     validate("config", { ...defaultConfig(), launcher: "cloud" }, home);
     expect(() => validate("config", { ...defaultConfig(), launcher: "tmux" }, home)).toThrow();
   });
+  it("project card: exposure is optional, accepts local|network|internet, rejects other values", () => {
+    makeHome();
+    const base = {
+      slug: "a", name: "A", path: "C:\\dev\\a", stack: [], status: "active", autonomy: "commit",
+      last_activity: null, last_scanned: null,
+    };
+    validate("project", base);
+    for (const exposure of ["local", "network", "internet"]) validate("project", { ...base, exposure });
+    expect(() => validate("project", { ...base, exposure: "public" })).toThrow();
+    expect(() => validate("project", { ...base, exposure: true })).toThrow();
+  });
   it("project card: repo/local_only are optional; old cards stay valid; bad repo rejected", () => {
     makeHome();
     const base = {

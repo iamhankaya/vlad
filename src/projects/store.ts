@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { kbPaths, parseDoc, readDoc, validate, writeDoc, type ProjectCard } from "../kb/index.js";
+import { kbPaths, parseDoc, readDoc, validate, writeDoc, type Exposure, type ProjectCard } from "../kb/index.js";
 
 export function writeProject(slug: string, md: string): ProjectCard {
   if (!/^[a-z0-9-]+$/.test(slug)) {
@@ -15,7 +15,13 @@ export function writeProject(slug: string, md: string): ProjectCard {
   return data;
 }
 
-export type ProjectSummary = { slug: string; path: string; status: string; last_activity: string | null };
+export type ProjectSummary = {
+  slug: string;
+  path: string;
+  status: string;
+  last_activity: string | null;
+  exposure?: Exposure;
+};
 
 /** Valid cards in name order; unreadable or invalid cards are skipped and reported as warnings. */
 export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnings: string[] } {
@@ -27,7 +33,13 @@ export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnin
     try {
       const { data } = readDoc<ProjectCard>(join(dir, f));
       validate("project", data);
-      projects.push({ slug: data.slug, path: data.path, status: data.status, last_activity: data.last_activity });
+      projects.push({
+        slug: data.slug,
+        path: data.path,
+        status: data.status,
+        last_activity: data.last_activity,
+        ...(data.exposure ? { exposure: data.exposure } : {}),
+      });
     } catch (e) {
       warnings.push(`${f}: ${(e as Error).message}`);
     }

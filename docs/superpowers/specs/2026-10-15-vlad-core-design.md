@@ -331,5 +331,6 @@ Başlangıç prompt'u (şablon):
 VLAD bulut Claude Code ortamında (Linux) da çalışır (tasarım: `2026-10-20-vlad-cloud-design.md`):
 - `launcher: cloud` (veya Windows dışında `auto` + `CLAUDE_CODE_REMOTE=true`): `vlad task launch --json` yerel worktree/terminal açmaz; `create_session` argümanlarını döner ve görevi `running` yapar. Windows davranışı değişmez.
 - Proje kartında opsiyonel `repo: owner/name`, `local_only`, `local_only_reason`; `path` bulutta kullanılmaz.
+- Proje kartında opsiyonel `exposure: local | network | internet` (2026-10-20): sistemin erişim kapsamı; architect/analyst çıktılarını ölçekler. `local_only`'den bağımsızdır (o bulutta çalışabilirliği anlatır). `project list --json` alanı gösterir.
 - Bulut çalışanı `kb/` yazmaz; transcript'e `[VLAD:LOG|ASK|REPORT…END|FAIL]` işaretleri yazar, VLAD `vlad task ingest` ile işler.
 - Bulut görev ID'leri günlük `51`'den başlar; `kb:` commit'leri session branch'ine gider (`vlad kb commit --push` upstream yoksa `-u origin <branch>`); merge kapıları GitHub PR ile.
