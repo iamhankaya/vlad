@@ -202,3 +202,31 @@ describe("commitKb push without upstream", () => {
     expect(r.warning).toMatch(/code\.ts/);
   });
 });
+
+describe("ingestEvents: assistant olayı tanıma", () => {
+  const real = (text: string) => ({ assistant: { internal_anthropic_catchall: { message: { content: [{ type: "text", text }] } } } });
+  const result = (text: string) => ({ result: { internal_anthropic_catchall: { result: text } } });
+
+  it("hiç assistant olayı yoksa uyarı verir", () => {
+    const r = ingestEvents(id, [user("[VLAD:LOG #1] x"), { foo: 1 }]);
+    expect(r.processed).toEqual([]);
+    expect(r.warnings.join("\n")).toMatch(/assistant olayı bulunamadı/);
+  });
+
+  it("anahtar adıyla gelen gerçek şekil okunur; result olayı çift işlemez", () => {
+    const r = ingestEvents(id, [real("[VLAD:LOG #1] a"), result("[VLAD:LOG #1] a")]);
+    expect(r.processed).toEqual([{ seq: 1, kind: "LOG" }]);
+    expect(r.skipped).toEqual([]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("assistant yoksa result yedek olur (uyarıyla)", () => {
+    const r = ingestEvents(id, [result("[VLAD:LOG #1] a")]);
+    expect(r.processed).toEqual([{ seq: 1, kind: "LOG" }]);
+    expect(r.warnings.join("\n")).toMatch(/assistant olayı bulunamadı/);
+  });
+
+  it("eventList ccr sarmalayıcısını açar", () => {
+    expect(eventList({ ccr: { data: [1, 2] } })).toEqual([1, 2]);
+  });
+});
