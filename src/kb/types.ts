@@ -10,6 +10,8 @@ export type TaskState =
   | "failed"
   | "cancelled";
 export type ProjectStatus = "active" | "paused" | "archived";
+/** Who can reach the system: sizes the architect's `### Sistem tasarımı`. Unrelated to `local_only`. */
+export type Exposure = "local" | "network" | "internet";
 export type Launcher = "auto" | "wt" | "powershell" | "cloud";
 
 /** kb/projects/<slug>.md frontmatter (spec 5.1) */
@@ -25,6 +27,8 @@ export interface ProjectCard {
   /** Cannot run in the cloud (e.g. needs Windows); cloud launch fails with `local_only_reason`. */
   /** Branch cloud phases start from outside a pipeline; absent → `master`. */
   default_branch?: string;
+  /** Reach of the system (local | network | internet); asked from the user, never guessed from the stack. */
+  exposure?: Exposure;
   local_only?: boolean;
   local_only_reason?: string;
   last_activity: string | null;

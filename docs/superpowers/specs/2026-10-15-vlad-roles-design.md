@@ -65,6 +65,20 @@ summary: Test stratejisi kurar, eksik testleri yazar, hataları kanıtla raporla
 | `tester` | Senior Tester | executor | reviewer | Test stratejisi, eksik testler, hata avı; üretim kodunu değiştirmez, hatayı kanıtlayan test + rapor. |
 | `developer` | Senior Developer | executor | implementer | Özellik/bug/refactor; TDD, review, kabul kriterlerini tek tek karşılar. |
 
+### Sistem tasarımı ve `exposure` (2026-10-20, T20261020-53)
+
+Sistem tasarımı ayrı bir role bölünmez; `architect`'e `### Sistem tasarımı` bölümü olarak eklenir. Derinliği proje kartının opsiyonel `exposure` alanı belirler:
+
+| `exposure` | `### Sistem tasarımı` |
+|---|---|
+| `local` | Kısa: süreç modeli, veri/dosya saklama, yetkiler, kurtarma, dağıtım. |
+| `network` | `local` ile `internet` arası: veri akışı, yetki/kimlik doğrulama, depolama, hata senaryoları; ölçek/maliyet gerekiyorsa. |
+| `internet` | Tam: veri akışı, depolama/cache, ölçeklenme, gerçek zamanlı topoloji, auth/güvenlik, altyapı, hata senaryoları, maliyet. |
+
+İş sisteme etki etmiyorsa bölüm tek satır gerekçedir. Alan boşsa architect tahmin etmez; `### Açık noktalar`'a "exposure belirsiz" yazar. `analyst` spec'e kısa `### Sistem etkisi` ekler: `özellik` döngüsünde (architect fazı yok) sistem tasarımının yerini tutar, `tam` döngüsünde architect'e girdi olur ve görev seviyesindeki istisnaları kapsar.
+
+**`exposure` ≠ `local_only`.** `local_only` (+ `local_only_reason`) "bulutta derlenip çalıştırılabilir mi?" sorusunu cevaplar (ör. WPF/Windows) ve yalnızca bulut launcher'ını etkiler. `exposure` "sisteme kim erişir?" sorusunu cevaplar ve yalnızca mimari/spec çıktılarını ölçekler. İki alan bağımsızdır (yerel çalışan bir proje internete açık olabilir, bulutta derlenen bir proje `local` olabilir). `exposure` stack'ten tahmin edilmez: `/scan` yeni projede kullanıcıya sorar, mevcut kartta boşsa "exposure belirsiz" diye listeler.
+
 Ortak sınırlar (her rol dosyasında tekrarlanır, çünkü agent yalnızca kendi rol dosyasını okur):
 - Doğruluk kaynağı görev dosyası; yazma yalnızca `vlad` CLI ile.
 - Dışa etkili eylem (push, PR, mail, ödeme, yayın) yok; `autonomy: pr` dışında push yok (vlad-worker kuralı).
