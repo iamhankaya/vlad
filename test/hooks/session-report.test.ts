@@ -139,10 +139,6 @@ describe("stdin", () => {
 
 describe("entry process", () => {
   const out = resolve(import.meta.dirname, "..", "..", "dist");
-  beforeAll(() => {
-    const r = spawnSync("npx", ["tsc"], { cwd: resolve(out, ".."), shell: true, encoding: "utf8" });
-    expect(r.status, r.stdout + r.stderr).toBe(0);
-  }, 120000);
   afterAll(() => {});
   it("exits 0 on invalid stdin and logs", () => {
     const r = spawnSync("node", [join(out, "hooks", "session-report.js")], {

@@ -18,34 +18,61 @@ export interface IngestResult {
 const MARK = /^\[VLAD:(LOG|ASK|REPORT|END|FAIL)\s+#(\d+)([^\]]*)\]\s*(.*)$/;
 const FENCE = /^\s*(```|~~~)/;
 
-/** Text blocks of one `list_events` entry, whatever shape it comes in; only assistant events yield text. */
-function assistantText(ev: any): string {
-  const kind = ev?.kind ?? ev?.type ?? ev?.role ?? ev?.data?.type ?? ev?.data?.role;
-  if (kind !== "assistant") return "";
-  const content = ev?.message?.content ?? ev?.data?.message?.content ?? ev?.content ?? ev?.data?.content ?? ev?.text ?? ev?.data?.text;
+const blocksText = (content: unknown): string => {
   if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    return content.map((b) => (typeof b === "string" ? b : b?.type === "text" || b?.text ? String(b.text ?? "") : "")).join("\n");
+  if (!Array.isArray(content)) return "";
+  return content.map((b) => (typeof b === "string" ? b : b?.type === "text" || b?.text ? String(b.text ?? "") : "")).join("\n");
+};
+
+/** Real `list_events` entries name their kind by key: `{assistant: {internal_anthropic_catchall: {message}}}`. */
+const catchall = (ev: any, key: string): any => ev?.[key]?.internal_anthropic_catchall ?? ev?.[key];
+
+/**
+ * Text of one `list_events` entry, whatever shape it comes in. `kind` is "assistant" for assistant
+ * output (real keyed shape or the older kind/type/role shapes), "result" for a turn-end result event.
+ */
+function eventText(ev: any): { kind: "assistant" | "result" | null; text: string } {
+  if (ev?.assistant && typeof ev.assistant === "object") {
+    const c = catchall(ev, "assistant");
+    return { kind: "assistant", text: blocksText(c?.message?.content ?? c?.content) };
   }
-  return "";
+  if (ev?.result && typeof ev.result === "object") {
+    const r = catchall(ev, "result")?.result;
+    return { kind: "result", text: typeof r === "string" ? r : "" };
+  }
+  const kind = ev?.kind ?? ev?.type ?? ev?.role ?? ev?.data?.type ?? ev?.data?.role;
+  if (kind !== "assistant") return { kind: null, text: "" };
+  const content = ev?.message?.content ?? ev?.data?.message?.content ?? ev?.content ?? ev?.data?.content ?? ev?.text ?? ev?.data?.text;
+  return { kind: "assistant", text: blocksText(content) };
 }
 
-/** JSON (array/wrapper) or JSONL text. */
+/** JSON (array/wrapper) or JSONL text, possibly with a text envelope around the JSON. */
 export function parseEvents(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch (e) {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
-    if (lines.length < 2) throw e;
-    return lines.map((l) => JSON.parse(l));
+    if (lines.length >= 2) {
+      try { return lines.map((l) => JSON.parse(l)); } catch { /* try the envelope strip below */ }
+    }
+    const start = text.search(/[{[]/);
+    if (start >= 0) {
+      const close = text[start] === "{" ? "}" : "]";
+      const end = text.lastIndexOf(close);
+      if (end > start) {
+        try { return JSON.parse(text.slice(start, end + 1)); } catch { /* original error below */ }
+      }
+    }
+    throw e;
   }
 }
 
 export function eventList(json: unknown): unknown[] {
   if (Array.isArray(json)) return json;
-  const o = json as Record<string, unknown> | null;
+  let o = json as Record<string, any> | null;
+  if (o && typeof o === "object" && o.ccr && typeof o.ccr === "object") o = o.ccr; // list_events wrapper
   for (const k of ["data", "events", "items"]) if (Array.isArray(o?.[k])) return o![k] as unknown[];
-  if (o && typeof o === "object" && ("type" in o || "role" in o || "kind" in o)) return [o]; // single JSONL line
+  if (o && typeof o === "object" && ["type", "role", "kind", "assistant", "result", "user"].some((k) => k in o!)) return [o]; // single JSONL line
   throw new Error("olay listesi bulunamadı (dizi veya {data|events|items: [...]} bekleniyor)");
 }
 
@@ -112,7 +139,12 @@ export function ingestEvents(
   id: string, events: unknown[], o: { remoteHead?: (repo: string, branch: string) => string | null; head?: string } = {},
 ): IngestResult {
   const res: IngestResult = { processed: [], skipped: [], warnings: [] };
-  const markers = events.flatMap((ev) => parseMarkers(assistantText(ev), res.warnings));
+  const texts = events.map(eventText);
+  const assistants = texts.filter((t) => t.kind === "assistant");
+  if (!assistants.length) res.warnings.push("assistant olayı bulunamadı; işaret işlenmedi (olay şekli beklenenden farklı olabilir)");
+  // result events repeat the last turn's text: only a fallback when no assistant event was recognized
+  const used = assistants.length ? assistants : texts.filter((t) => t.kind === "result");
+  const markers = used.flatMap((t) => parseMarkers(t.text, res.warnings));
   for (const m of markers) {
     const tag = `[cloud #${m.seq}]`;
     if (getTask(id).body.includes(tag)) { res.skipped.push(m.seq); continue; }

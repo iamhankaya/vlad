@@ -36,6 +36,7 @@ function card(slug: string): ProjectCard {
 
 const PROTOCOL = (id: string, autonomy: string) => [
   "## VLAD bulut protokolü",
+  "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
   `- Görev: ${id}. Çalışma branch'in \`vlad/${id}\`; commit'lerini yalnızca oraya push et (\`git push -u origin vlad/${id}\`).`,
   "- `master`'a veya başka bir branch'e push etme; merge etme; PR açma. `kb/` altına yazma; `vlad` CLI'ı ve `vlad-worker` skill'i kullanma.",
   autonomy === "plan"
