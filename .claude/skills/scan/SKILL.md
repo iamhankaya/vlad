@@ -28,6 +28,7 @@ Amaç: Her repo için doğru ve güncel bir proje kartı (`kb/projects/<slug>.md
    stack: [typescript, react]
    status: active
    autonomy: commit
+   exposure: internet
    last_activity: 2026-10-15T21:10:00+03:00
    last_scanned: 2026-10-15T21:30:00+03:00
    ---
@@ -40,6 +41,7 @@ Amaç: Her repo için doğru ve güncel bir proje kartı (`kb/projects/<slug>.md
    - `stack`: manifest ve README'den çıkar; emin olmadığını yazma.
    - `autonomy`: `vlad.config.json`'daki `projects.<slug>.autonomy`, yoksa `defaultAutonomy`.
    - `last_activity`: en son commit tarihi (yoksa `null`); `last_scanned`: şimdi, yerel ofsetli ISO 8601.
+   - `exposure` (opsiyonel; `local | network | internet`): sisteme kimin eriştiğini söyler ve architect'in sistem tasarımını ölçekler. **Yeni projede stack'ten veya README'den tahmin etme; kullanıcıya sor** ("Bu sistem yalnızca bu makinede mi (`local`), yerel ağda mı (`network`), internete açık mı (`internet`)?") ve cevabı karta yaz. Mevcut kartta alan boşsa kartı değiştirme, özette "exposure belirsiz" diye listele ve sor. Alan `local_only`'den farklıdır: `local_only` bulutta derlenip çalışıp çalışmadığını, `exposure` erişim kapsamını anlatır; ikisi bağımsız kalır.
    - `status`: yeni kartta `active`; mevcut kartta kullanıcının değerini koru.
    - **Mevcut kartta** `## Mimari notlar`, `## Açık konular`, `## Son aktivite` içeriğini koru; yalnızca yanlış/eskimiş olanı düzelt. `## Özet`'i README ve commit'lere göre güncelle.
 4. **Yaz:** Kartı geçici bir dosyaya yaz ve:
@@ -56,6 +58,7 @@ Kısa bir Türkçe özet:
 - **Yeni projeler:** slug, yol, stack (tek satır).
 - **Güncellenen kartlar:** neyin değiştiği (ör. "son aktivite 3 gün önce → bugün", "stack'e vite eklendi").
 - **Değişmeyenler:** yalnızca sayı.
+- **exposure belirsiz:** `exposure` alanı boş olan mevcut kartların slug listesi (sorulması gerekenler).
 - **Hatalar:** yazılamayan kartlar ve nedeni.
 
 Çok sayıda (10+) yeni repo bulunursa hepsini yazmadan önce listeyi göster ve hangilerinin kart alacağını sor (ör. denemeler, arşiv klasörleri).

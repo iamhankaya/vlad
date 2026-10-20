@@ -12,6 +12,7 @@
     "autonomy": { "enum": ["plan", "commit", "pr"] },
     "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
     "default_branch": { "type": "string", "minLength": 1 },
+    "exposure": { "enum": ["local", "network", "internet"] },
     "local_only": { "type": "boolean" },
     "local_only_reason": { "type": "string" },
     "last_activity": { "type": ["string", "null"], "format": "date-time" },

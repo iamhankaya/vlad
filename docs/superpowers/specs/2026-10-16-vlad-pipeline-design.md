@@ -80,13 +80,15 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 
 | Faz | Rol | Tür | Çıktı |
 |---|---|---|---|
-| spec | analyst | research | Amaç, kapsam, senaryolar (her biri Verilen/Olduğunda/O zaman), fazlar, kabul kriterleri, açık sorular |
+| spec | analyst | research | Amaç, kapsam, senaryolar (her biri Verilen/Olduğunda/O zaman), sistem etkisi, fazlar, kabul kriterleri, açık sorular |
 | tasarım | designer | dev | `docs/design/` (DESIGN.md, mockup'lar) + rapor: ekranlar/durumlar, bileşen envanteri, token tablosu, erişilebilirlik kararları |
-| plan | architect | research | Bileşenler, arayüzler, dosya yapısı, görev listesi (developer için), test stratejisi (tester için), riskler |
+| plan | architect | research | Bileşenler, sistem tasarımı (`exposure`'a göre ölçekli), arayüzler, dosya yapısı, görev listesi (developer için), test stratejisi (tester için), riskler |
 | kabul / karakterizasyon | tester | dev | Testler (branch'te) + test matrisi (senaryo → test → beklenen) |
 | uygulama | developer | dev | Kod + unit testler; kabul testlerini yeşile çevirme hedefi |
 | doğrulama | tester | dev | Tüm suite sonucu, tarayıcı/E2E bulguları, kanıtlı hata listesi |
 | denetim | designer | dev | Tasarıma uyum, erişilebilirlik, responsive bulguları (önem + kanıt), developer için önerilen düzeltmeler; kod değişmez |
+
+**Sistem tasarımı (2026-10-20).** `tam` döngüsünde sistem tasarımı architect'in plan çıktısındaki `### Sistem tasarımı` bölümüdür; `özellik` döngüsünde architect fazı olmadığından analyst'in spec'indeki kısa `### Sistem etkisi` onun yerini tutar. Derinliği proje kartının `exposure` alanı (`local | network | internet`) belirler; alan boşsa rol tahmin etmez, "açık nokta / exposure belirsiz" yazar ve VLAD kullanıcıya sorar. `exposure`, `local_only`'den farklıdır: `local_only` bulutta derlenip çalışabilirliği, `exposure` sisteme kimin eriştiğini anlatır. Ayrıntı: roller spec'i §4.
 
 `tasarım` fazı dev türündedir (dosyaları branch'e yazar, entegrasyon branch'ine merge edilir); research olan `plan` fazı tasarımı kapanış raporundan ve entegrasyon branch'indeki `docs/design/`'dan okur. `denetim`'de kritik/yüksek bulgu varsa kapı kuralı doğrulamadaki kırmızı test kuralıyla aynıdır: yeni `uygulama` fazı ve ona bağlı yeni `doğrulama` + `denetim` fazları.
 
