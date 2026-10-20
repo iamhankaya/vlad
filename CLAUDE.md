@@ -14,7 +14,7 @@ Görevlerin:
 - `kb/` git'te tutulur (remote: private `iamhankaya/vlad`). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
-Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|list`, `vlad task new|launch|ready|log|ask|answer|report|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
+Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|list`, `vlad task new|launch|ready|log|ask|answer|report|ingest|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
 
 ## Yetki sınırları
 

@@ -26,6 +26,23 @@ T20261016-03  watchparty  Oda sohbeti  [pipeline: running]
 ```
 Satırlar: faz (`phase`), rol başlığı, durum, bağımlılık (`depends_on`); bekleyen kapıyı işaretle.
 
+### 1b. Bulut görevleri (`CLAUDE_CODE_REMOTE=true`)
+
+Bulutta çalışan bildirimi yoktur; her `/status` çağrısında `session_id`'si dolu, `running`/`blocked` bulut görevleri için durumu **sen** çek (`vlad status --json`'dan önce, tablo güncel olsun):
+1. `get_session(session_id)`: `status_bucket` `failed` → `vlad task log` + `vlad task set <id> failed`; kullanıcıya bildir.
+2. `list_events(session_id, kinds=["assistant", "result"], limit=100)` çıktısını geçici dosyaya yaz ve `vlad task ingest <id> --file <events.json> --json` çalıştır. Birden çok sayfa gerekirse (`has_more: true`) sayfaların ham çıktılarını art arda aynı dosyaya yaz; CLI ardışık `{ccr:{data,has_more}}` sayfalarını birleştirir. `result` olayı yalnızca assistant olayı tanınmazsa yedek olarak kullanılır (çift işleme olmaz). Çalışan bitişte tüm işaretlerini son tur mesajında tekrar eder; işleme idempotenttir. `warnings` boş değilse göster (ör. `head=` remote uçla eşleşmiyor → rapor onaya sunulmadı; GitHub'dan `vlad/<id>` ucunu doğrulayıp gerekirse `--remote-head <sha>` ile tekrar dene).
+3. İşaretsiz biten session (`review_ready`/`completed` ama görev `awaiting_approval`/`failed` değil) → kullanıcıya sor.
+4. `blocked` görev: cevabı `vlad task answer` ile yazdıktan sonra `send_message(session_id, "[VLAD:ANSWER #n] <cevap>")` ile çalışana ilet (`n` = görev dosyasındaki `[cloud #n]`).
+5. Sürekli yoklama yoktur; ancak karar günlüğündeki "Bulut çalışanları için tek seferlik hatırlatmalar" gereği her bulut çalışanını başlattıktan sonra `send_later` ile ~15 dk sonrasına tek seferlik hatırlatma kurulur; çalışan bitmemişse yeniden kurulur (çalışan başına en fazla 4 deneme).
+
+### 2-cloud. Bulutta merge kapıları (GitHub PR)
+
+Bulut VLAD yalnızca kendi session branch'ine push edebilir; kapılar yerel `git merge` yerine **GitHub PR** ile geçer (karar 2026-10-20). Diff özeti: `git fetch origin vlad/<id>` sonra `git log --oneline origin/<hedef>..origin/vlad/<id>` ve `git diff --stat origin/<hedef>...origin/vlad/<id>` (veya GitHub MCP `pull_request_read`). Aşağıdaki 2. adımdaki seçenekler aynıdır; yalnızca eylem farklıdır:
+1. **Merge et:** PR aç (`create_pull_request`, head `vlad/<id>`, base: pipeline fazında `vlad/<çatı-id>`, değilse repo'nun ana branch'i). PR açmak dış etkilidir: önce açık onay iste; PR linkini ve base'i göster; kullanıcı **açık onay** verince `merge_pull_request`. Sonra `vlad task set <id> done`. Merge hatasında görevi `done` yapma, hatayı göster.
+2. **Değişiklik iste:** `send_message(session_id, …)` ile çalışana ilet; `vlad task log` düş.
+3. **Olduğu gibi kabul et:** aynı kurallar.
+Son kapı (`vlad/<çatı-id>` → ana branch) ayrı bir PR ve ayrı açık onaydır. Bulut görevinde `vlad task cleanup` worktree olmadığı için zararsızdır. Bulut VLAD'ın `kb:` commit'leri session branch'ine gider (`vlad kb commit --push`); `master`'a alınması ayrıca onaylı merge/PR'dır.
+
 ## 2. `awaiting_approval` görevler
 
 `kind: pipeline` (çatı) ise adım 3'teki **son kapıya** git. Diğerleri için `kb/tasks/<id>.md`'yi oku ve göster:

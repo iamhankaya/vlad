@@ -5,6 +5,8 @@ description: VLAD tarafından başlatılmış bir çalışan session'ının prot
 
 # VLAD çalışan protokolü
 
+> **Bulut çalışanı:** başlangıç prompt'u görevi satır içi veriyor ve "VLAD bulut protokolü" bölümü içeriyorsa bu skill'i yükleme; tek doğru kaynak prompt'taki "VLAD bulut protokolü"dür (`src/tasks/cloud.ts`). Aşağıdaki 0–7. adımlar yerel (Windows) çalışanlar içindir.
+
 Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. Kullanıcıyla Türkçe konuş. **Doğruluk kaynağı görev dosyasıdır**; ilerlemeni, sorularını ve raporunu her zaman `vlad` CLI ile oraya yaz.
 
 ## 0. Görevini bul
@@ -84,3 +86,7 @@ Bildirim yalnızca bir dürtmedir; asıl bilgi görev dosyasındadır. Bildirim 
 ## Hata durumu
 
 Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad task log <id> "…"` ile yaz ve `vlad task set <id> failed` çalıştır, sonra bildirim gönder.
+
+## Bulut modu (`create_session` ile açılan çalışan)
+
+Bulut çalışanı bu skill'i kullanmaz: `kb/`, `vlad` CLI'ı ve görev dosyası yoktur; `kb/`'ye yalnızca VLAD yazar. Çalışan, prompt'unun sonundaki **"VLAD bulut protokolü"** bölümünü uygular (rol gövdesindeki "vlad-worker protokolünü uygula" ve Yetki'deki `kb/`/CLI/worktree adımları yerine geçer). İşaretler (`LOG`/`ASK`/`REPORT`/`FAIL`), `ANSWER` mesajı, push kuralı ve "son tur mesajında tüm işaretleri tekrar et" kuralı orada tanımlıdır; VLAD bunları `vlad task ingest` ile işler (tasarım: `docs/superpowers/specs/2026-10-20-vlad-cloud-design.md` §5).
