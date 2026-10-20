@@ -157,6 +157,29 @@ describe("vlad cli", () => {
     expect(i.items).toEqual([]);
     expect(i.warnings).toHaveLength(1);
   });
+  it("project set: valid, invalid, delete, unknown field, missing project", () => {
+    writeCard(home);
+    const file = join(home, "kb", "projects", "alpha.md");
+    const before = readFileSync(file, "utf8");
+    expect(vlad(["project", "set", "alpha", "exposure", "internet", "--json"]).code).toBe(0);
+    expect(vlad(["project", "set", "alpha", "local_only", "true", "--json"]).code).toBe(0);
+    const set = readFileSync(file, "utf8");
+    expect(set).toMatch(/exposure: internet/);
+    expect(set).toMatch(/local_only: true/);
+    expect(set).toMatch(/name: Alpha/);
+    expect(set.endsWith("## Özet\nx\n")).toBe(true);
+    const bad = vlad(["project", "set", "alpha", "exposure", "mars", "--json"]);
+    expect(bad.code).toBe(1);
+    expect(JSON.parse(bad.err)).toHaveProperty("error");
+    expect(readFileSync(file, "utf8")).toBe(set);
+    expect(vlad(["project", "set", "alpha", "local_only", "evet", "--json"]).code).toBe(1);
+    expect(vlad(["project", "set", "alpha", "path", "x", "--json"]).code).toBe(1);
+    expect(vlad(["project", "set", "nope", "exposure", "local", "--json"]).code).toBe(1);
+    expect(vlad(["project", "set", "alpha", "exposure", "", "--json"]).code).toBe(0);
+    expect(readFileSync(file, "utf8")).not.toMatch(/exposure/);
+    expect(vlad(["project", "set", "alpha", "local_only", "", "--json"]).code).toBe(0);
+    expect(readFileSync(file, "utf8")).toBe(before);
+  });
   it("inbox count --json", () => {
     const r = vlad(["inbox", "count", "--json"]);
     expect(JSON.parse(r.out)).toEqual({ count: 0 });
