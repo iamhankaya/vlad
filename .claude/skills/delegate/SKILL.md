@@ -53,6 +53,7 @@ vlad project list --json
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
 - İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.
 - İşaretler çelişiyorsa veya gereksinim belirsizse taslaktan önce **kullanıcıya sor**: iki aday döngüyü artı/eksiyle göster (ör. "`özellik`: + spec ile kapsam netleşir, − bir faz ve bir kapı fazla; `kısa`: + hızlı, − gereksinim belirsizliği uygulamaya kalır") ve seçimini bekle.
+- **`exposure` işareti:** kartın `exposure` değerine bak (`vlad project list --json` / kart). `internet` veya `network` ise ve iş auth, veri modeli/saklama, altyapı, dışa açık yüzey ya da ölçeği etkiliyorsa en az `özellik` döngüsü öner (sistem etkisi spec'te ele alınır; yeni alt sistemde `tam`). Yine de `kısa`/`tek` seçilirse taslakta gerekçesini yaz (ör. "exposure: internet, ama sistem yüzeyine dokunmuyor"). `local` ise döngüyü etkilemez. `exposure` boşsa tahmin etme: taslakta "exposure belirsiz" uyarısı göster ve kullanıcıya sor ("Bu sistem yalnızca bu makinede mi (`local`), yerel ağda mı (`network`), internete açık mı (`internet`)?"); cevabı döngü seçerken kullan, karta yazmak için `/scan` öner.
 - Küçük işe tam departman çalıştırma; şüphede küçük döngüyü öner.
 
 `tek` → adım 3a. Diğerleri (pipeline) → adım 3b.
@@ -67,6 +68,7 @@ Kullanıcıya şunu göster:
 ```markdown
 **Proje:** <slug>   **Tür:** dev|research   **Yetki:** <autonomy, karttan>
 **Döngü:** tek — <gerekçe, tek cümle>
+**Exposure:** <local|network|internet|belirsiz — kartta boş; kullanıcıya sorulmalı>
 **Rol:** <title> (`<slug>`) — <neden bu rol, tek cümle> | rol yok
 **Başlık:** <kısa başlık>
 
@@ -89,6 +91,7 @@ Kullanıcıya şunu göster:
 ```markdown
 **Proje:** <slug>   **Yetki:** <autonomy, karttan>
 **Döngü:** <tam|özellik|kısa> — <gerekçe, tek cümle>
+**Exposure:** <local|network|internet|belirsiz — kartta boş; kullanıcıya sorulmalı>
 **Başlık:** <kısa başlık>
 
 ## Tanım
