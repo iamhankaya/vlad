@@ -3,6 +3,7 @@
 // `vlad task launch --json` cloud çıktısı. Uygulama gelmeden kırmızı olması beklenir.
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultConfig } from "../../src/kb/index.js";
 import { loadConfig } from "../../src/kb/config.js";
@@ -153,10 +154,36 @@ describe.runIf(onLinux)("senaryo 5: cloud launch --json", () => {
 describe.runIf(onLinux)("senaryo 6: pipeline fazı", () => {
   beforeEach(() => { setLauncher("cloud"); writeCard(home, "alpha", { repo: "iamhankaya/vlad" }); });
 
-  it("kaynak entegrasyon dalı vlad/<çatı-id>; remote'ta yoksa needs_remote_create: true", () => {
+  // `git ls-remote https://github.com/iamhankaya/vlad.git` is redirected to a local bare repo, so the
+  // remote state is deterministic (no network, no dependency on branches of the real repo).
+  const fakeRemote = (withBranch?: string) => {
+    const bare = join(tmp(), "remote.git");
+    const work = join(tmp(), "work");
+    const git = (cwd: string, ...a: string[]) => execFileSync("git", a, {
+      cwd, stdio: "pipe",
+      env: { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" },
+    });
+    mkdirSync(bare, { recursive: true });
+    git(bare, "init", "--bare", "-q");
+    mkdirSync(work, { recursive: true });
+    git(work, "init", "-q");
+    git(work, "commit", "--allow-empty", "-q", "-m", "x");
+    git(work, "push", "-q", bare, `HEAD:refs/heads/${withBranch ?? "master"}`);
+    return {
+      ...CLOUD_ENV,
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: `url.${bare}.insteadOf`,
+      GIT_CONFIG_VALUE_0: "https://github.com/iamhankaya/vlad.git",
+    };
+  };
+  const pipelinePhase = () => {
     const parent = JSON.parse(vlad(home, ["task", "new", "--project", "alpha", "--title", "P", "--kind", "pipeline", "--json"]).out).id as string;
-    const phase = newTask(home, ["--parent", parent, "--phase", "kabul"]);
-    const r = launch(phase, CLOUD_ENV);
+    return { parent, phase: newTask(home, ["--parent", parent, "--phase", "kabul"]) };
+  };
+
+  it("kaynak entegrasyon dalı vlad/<çatı-id>; remote'ta yoksa needs_remote_create: true", () => {
+    const { parent, phase } = pipelinePhase();
+    const r = launch(phase, fakeRemote());
     expect(r.code, r.err).toBe(0);
     const j = JSON.parse(r.out);
     expect(j.source_revision).toBe(`vlad/${parent}`);
@@ -165,6 +192,14 @@ describe.runIf(onLinux)("senaryo 6: pipeline fazı", () => {
     expect(j.integration).toMatchObject({ branch: `vlad/${parent}`, needs_remote_create: true });
     expect(typeof j.integration.from).toBe("string");
     expect(j.worktree).toBeNull();
+  });
+
+  it("remote'ta varsa needs_remote_create: false", () => {
+    const parent = JSON.parse(vlad(home, ["task", "new", "--project", "alpha", "--title", "P", "--kind", "pipeline", "--json"]).out).id as string;
+    const phase = newTask(home, ["--parent", parent, "--phase", "kabul"]);
+    const r = launch(phase, fakeRemote(`vlad/${parent}`));
+    expect(r.code, r.err).toBe(0);
+    expect(JSON.parse(r.out).integration).toMatchObject({ branch: `vlad/${parent}`, needs_remote_create: false });
   });
 
   it("prompt bağımlı fazın kapanış raporunu satır içi taşır", () => {
