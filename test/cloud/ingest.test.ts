@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -228,5 +228,16 @@ describe("ingestEvents: assistant olayı tanıma", () => {
 
   it("eventList ccr sarmalayıcısını açar", () => {
     expect(eventList({ ccr: { data: [1, 2] } })).toEqual([1, 2]);
+  });
+});
+
+describe("ingestEvents: idempotans yalnızca İlerleme/Sorular'da aranır", () => {
+  it("kapanış raporu gövdesindeki '[cloud #2]' LOG #2'yi atlatmaz", () => {
+    const t = getTask(id);
+    writeFileSync(t.file, readFileSync(t.file, "utf8").replace("## Kapanış raporu", "## Kapanış raporu\nönceki not: [cloud #2] metni"), "utf8");
+    const r = ingestEvents(id, [asst("[VLAD:LOG #2] gerçek adım")]);
+    expect(r.processed).toEqual([{ seq: 2, kind: "LOG" }]);
+    expect(r.skipped).toEqual([]);
+    expect(getTask(id).body).toContain("[cloud #2] gerçek adım");
   });
 });

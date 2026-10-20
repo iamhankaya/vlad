@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { kbPaths, readDoc } from "../kb/index.js";
+import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
 import { askTask, getTask, logTask, reportTask, setState } from "./store.js";
 
@@ -46,29 +46,72 @@ function eventText(ev: any): { kind: "assistant" | "result" | null; text: string
   return { kind: "assistant", text: blocksText(content) };
 }
 
-/** JSON (array/wrapper) or JSONL text, possibly with a text envelope around the JSON. */
+/** End index (exclusive) of the balanced JSON object/array starting at `start`, or -1. */
+function balancedEnd(text: string, start: number): number {
+  let depth = 0;
+  let inStr = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (c === "\\") i++;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === "{" || c === "[") depth++;
+    else if (c === "}" || c === "]") {
+      if (--depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+/** Every JSON object/array embedded in free text, in order; stray `[ok]` / `{call}` in the envelope are skipped. */
+function embeddedJson(text: string): unknown[] {
+  const out: unknown[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "{" && text[i] !== "[") continue;
+    const end = balancedEnd(text, i);
+    if (end < 0) continue;
+    try {
+      out.push(JSON.parse(text.slice(i, end)));
+      i = end - 1;
+    } catch { /* not JSON: keep scanning from the next character */ }
+  }
+  return out;
+}
+
+/** JSON (array/wrapper) or JSONL text, possibly with a text envelope around it; several JSON values (pages) come back as an array. */
 export function parseEvents(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch (e) {
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
     if (lines.length >= 2) {
-      try { return lines.map((l) => JSON.parse(l)); } catch { /* try the envelope strip below */ }
+      try { return lines.map((l) => JSON.parse(l)); } catch { /* try the envelope scan below */ }
     }
-    const start = text.search(/[{[]/);
-    if (start >= 0) {
-      const close = text[start] === "{" ? "}" : "]";
-      const end = text.lastIndexOf(close);
-      if (end > start) {
-        try { return JSON.parse(text.slice(start, end + 1)); } catch { /* original error below */ }
-      }
-    }
+    const found = embeddedJson(text);
+    if (found.length === 1) return found[0];
+    if (found.length > 1) return found;
     throw e;
   }
 }
 
+const isPage = (x: any): boolean => !!x && typeof x === "object" && !Array.isArray(x) && !!x.ccr && typeof x.ccr === "object";
+
+/** Warning when the last `{ccr:{has_more}}` page says more events exist than were given. */
+export function pageWarnings(json: unknown): string[] {
+  const pages = (Array.isArray(json) ? json : [json]).filter(isPage);
+  const last = pages[pages.length - 1] as any;
+  return last?.ccr?.has_more === true
+    ? ["has_more: true — sayfa eksik olabilir; sonraki sayfaları (after_id/before_id) da getirip birlikte ver"]
+    : [];
+}
+
 export function eventList(json: unknown): unknown[] {
-  if (Array.isArray(json)) return json;
+  if (Array.isArray(json)) {
+    // consecutive `{ccr:{data,has_more}}` pages: concatenate their events
+    if (json.length && json.every(isPage)) return json.flatMap((p) => eventList(p));
+    return json;
+  }
   let o = json as Record<string, any> | null;
   if (o && typeof o === "object" && o.ccr && typeof o.ccr === "object") o = o.ccr; // list_events wrapper
   for (const k of ["data", "events", "items"]) if (Array.isArray(o?.[k])) return o![k] as unknown[];
@@ -130,15 +173,21 @@ function projectRepo(slug: string): string | null {
   return existsSync(file) ? readDoc<ProjectCard>(file).data.repo ?? null : null;
 }
 
+/** Tags are only looked up where ingest writes them (İlerleme, and Sorular for ASK); a report body may quote `[cloud #n]`. */
+const seen = (id: string, tag: string): boolean => {
+  const body = getTask(id).body;
+  return ["## İlerleme", "## Sorular"].some((h) => getSection(body, h)?.includes(tag));
+};
+
 /**
  * Cloud transcript → kb. Processes the `[VLAD:LOG|ASK|REPORT|FAIL]` markers of assistant events in
  * order; a marker whose `[cloud #<seq>]` is already in the task file is skipped, so re-running is safe.
  * A REPORT whose `head=` does not match the remote `vlad/<id>` tip is not applied (warning).
  */
 export function ingestEvents(
-  id: string, events: unknown[], o: { remoteHead?: (repo: string, branch: string) => string | null; head?: string } = {},
+  id: string, events: unknown[], o: { warnings?: string[]; remoteHead?: (repo: string, branch: string) => string | null; head?: string } = {},
 ): IngestResult {
-  const res: IngestResult = { processed: [], skipped: [], warnings: [] };
+  const res: IngestResult = { processed: [], skipped: [], warnings: [...(o.warnings ?? [])] };
   const texts = events.map(eventText);
   const assistants = texts.filter((t) => t.kind === "assistant");
   if (!assistants.length) res.warnings.push("assistant olayı bulunamadı; işaret işlenmedi (olay şekli beklenenden farklı olabilir)");
@@ -147,7 +196,7 @@ export function ingestEvents(
   const markers = used.flatMap((t) => parseMarkers(t.text, res.warnings));
   for (const m of markers) {
     const tag = `[cloud #${m.seq}]`;
-    if (getTask(id).body.includes(tag)) { res.skipped.push(m.seq); continue; }
+    if (seen(id, tag)) { res.skipped.push(m.seq); continue; }
     try {
       if (m.kind === "LOG") logTask(id, `${tag} ${m.text}`);
       else if (m.kind === "ASK") askTask(id, `${tag} ${m.text}`);
