@@ -24,4 +24,31 @@ describe("repo roles/", () => {
       for (const h of ["## Sorumluluk", "## Yetki", "## Kaynaklar", "## Çıktı"]) expect(body, `${r.slug} ${h}`).toContain(h);
     }
   });
+
+  it("architect carries ### Sistem tasarımı scaled by exposure; analyst carries ### Sistem etkisi", () => {
+    const read = (n: string) => readFileSync(resolve(dir, `${n}.md`), "utf8");
+    const arch = read("architect");
+    expect(arch).toContain("### Sistem tasarımı");
+    for (const w of ["exposure", "local", "network", "internet", "açık nokta"]) expect(arch, w).toContain(w);
+    const analyst = read("analyst");
+    expect(analyst).toContain("### Sistem etkisi");
+    expect(analyst).toContain("exposure");
+  });
+
+  it("specs and scan skill document exposure and its difference from local_only", () => {
+    const root = resolve(dir, "..");
+    const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+    for (const p of [
+      "docs/superpowers/specs/2026-10-15-vlad-roles-design.md",
+      "docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md",
+    ]) {
+      const t = read(p);
+      expect(t, p).toContain("exposure");
+      expect(t, p).toContain("local_only");
+      expect(t, p).toContain("Sistem tasarımı");
+    }
+    const scan = read(".claude/skills/scan/SKILL.md");
+    expect(scan).toContain("exposure");
+    expect(scan).toContain("exposure belirsiz");
+  });
 });
