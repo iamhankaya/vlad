@@ -10,6 +10,9 @@
     "stack": { "type": "array", "items": { "type": "string" } },
     "status": { "enum": ["active", "paused", "archived"] },
     "autonomy": { "enum": ["plan", "commit", "pr"] },
+    "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+    "local_only": { "type": "boolean" },
+    "local_only_reason": { "type": "string" },
     "last_activity": { "type": ["string", "null"], "format": "date-time" },
     "last_scanned": { "type": ["string", "null"], "format": "date-time" }
   }

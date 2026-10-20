@@ -36,14 +36,24 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
     r.sha = git(home, ["rev-parse", "--short", "HEAD"]).trim();
   }
   if (!o.push) return r;
-  const outside = git(home, ["log", "--name-only", "--format=", "@{u}..HEAD"])
+  // a fresh session branch has no upstream: everything on it is unpushed, and the first push sets it
+  let upstream = true;
+  try {
+    git(home, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  } catch {
+    upstream = false;
+  }
+  const branch = git(home, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  // without upstream, "unpushed" = not reachable from any remote-tracking branch
+  const range = upstream ? ["@{u}..HEAD"] : ["HEAD", "--not", "--remotes"];
+  const outside = git(home, ["log", "--name-only", "--format=", ...range])
     .split(/\r?\n/).filter((f) => f && !f.startsWith("kb/"));
   if (outside.length) {
     r.pushed = false;
     r.warning = `push edilmedi: push edilmemiş commit'lerde kb dışı dosyalar var (${[...new Set(outside)].join(", ")}); bunlar onayla push edilir`;
     return r;
   }
-  git(home, ["push", "-q"]);
+  git(home, upstream ? ["push", "-q"] : ["push", "-q", "-u", "origin", branch]);
   r.pushed = true;
   return r;
 }
