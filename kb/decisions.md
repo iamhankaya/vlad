@@ -54,3 +54,9 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 - **Gerekçe:** AniList şartları rakip takip servisinde kullanımı izne bağlıyor (yasal risk); TMDB tek API ile dizi+anime sezon/bölüm yapısını karşılar. Diğerleri internet exposure'da gizlilik ve KVKK/GDPR gereği.
 - **Kaynak:** görev T20261020-59 (spec), kullanıcı onayı 2026-10-20
 - **Kaynak:** T20261020-59
+
+### 2026-10-20 — medialog — medialog v1 planı: TypeScript yığını, 6 dikey uygulama fazı
+- **Karar:** medialog v1 planı (T20261020-61) önerilerle kabul edildi: yığın A — TypeScript tam yığın (Node 22 + Fastify + `ws` + React/Vite + PostgreSQL 16; `pg` + parametreli SQL + `zod`, ORM yok); uygulama 6 dikey faza bölünür (U1 temel/oturum, U2 arama/detay, U3 listeler/ilerleme, U4 sosyal/gizlilik, U5 sohbet/şikâyet, U6 hesap/veri hakları; her fazda kabul ∥ uygulama), U7 dağıtım isteğe bağlı ve ayrıca onaylı; kayıttan sonra otomatik oturum yok (e-posta doğrulamasıyla oturum açılır; hesap sayımı sızmasın); başkasının listesinde not gizli, puan görünür; parola sıfırlama e-postayı doğrulanmış sayar; anime = TMDB animasyon türü (16) + orijinal dil `ja` (anime sekmesinde eksik sonuç kabul); kapalı konuşma mesajları 30 gün sonra silinir; barındırma önerisi (Hetzner + .com + Resend + B2/R2, ~5–7 €/ay) U7'de kesinleşir.
+- **Gerekçe:** Bulut çalışanlarında derlenip test edilebilen tek yığın A; tek dil/tek sözleşme; dikey dilimler çalışan oturumuna sığar ve her kapıda çalışan bir kullanıcı akışı bırakır.
+- **Kaynak:** görev T20261020-61 (plan, developer+tester eleştirileriyle), kullanıcı onayı 2026-10-20
+- **Kaynak:** T20261020-61
