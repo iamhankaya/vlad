@@ -2,6 +2,7 @@
 slug: vlad
 name: VLAD
 path: C:\dev\vlad
+exposure: local
 repo: iamhankaya/vlad
 default_branch: master
 stack:
