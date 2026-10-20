@@ -36,3 +36,15 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 2026-10-20 "VLAD bulut çalışma modeli" kararının 3. maddesi güncellendi (kullanıcı onayı): bulut çalışanları temiz bitişte VLAD'a haber vermediği için VLAD, her bulut çalışanını başlattıktan sonra kendi session'ına tek seferlik hatırlatma (`send_later`, ~15 dk) kurar. Hatırlatmada çalışan bitmemişse yeniden kurar; çalışan başına en fazla 4 deneme. Sürekli yoklama yok. Yalnızca bulut modu; yerelde `SendMessage` bildirimi değişmez.
 İleride denenecek: çalışanın bitişte VLAD session'ına tek seferlik zamanlanmış görev kurarak haber vermesi (hızlı yol; hatırlatma yedek).
 - **Kaynak:** T20261020-05
+
+### 2026-10-20 — vlad — System design architect'te; exposure alanına göre ölçeklenir
+- **Karar:** System design ayrı bir role bölünmez; architect `### Sistem tasarımı` bölümünü kartın `exposure` alanına göre ölçekleyerek yazar (`local` kısa, `network` orta, `internet` tam; etkisizse tek satır gerekçe). Analyst spec'e `### Sistem etkisi` ekler. `exposure` stack'ten tahmin edilmez, kullanıcıya sorulur; `local_only` (bulutta derlenebilir mi) ayrı bir alandır.
+- **Gerekçe:** Ayrı rol her büyük döngüye bir faz ve soğuk başlangıç ekler (kullanım limiti); sunuculu proje şimdilik yalnızca watchparty; altyapı kararları ile bileşen yapısı aynı agent'ta tutarlı kalır.
+- **Kaynak:** sohbet 2026-10-20 / görev T20261020-53 (PR #15)
+- **Kaynak:** T20261020-53
+
+### 2026-10-20 — vlad — Tüm roller Sonnet ile çalışır
+- **Karar:** Uygulayıcı ve danışman rollerin hepsi `model: sonnet` taşır; VLAD'ın kendi session'ı varsayılan modelde kalır. Dev çalışanı `claude --model`, research agent'ları Agent `model` parametresiyle başlar.
+- **Gerekçe:** Kullanım limiti tasarrufu.
+- **Kaynak:** görev T20261018-07 (commit d00e020); roller spec'i §4
+- **Kaynak:** T20261018-07
