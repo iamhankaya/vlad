@@ -13,13 +13,13 @@ export interface CloudLaunch {
   action: "create_session";
   repo: string;
   source_url: string;
-  /** Branch the worker starts from; null → the repo's default branch. */
-  source_revision: string | null;
-  base_branch: string | null;
+  /** Branch the worker starts from: the integration branch in a pipeline, else the card's default branch. */
+  source_revision: string;
+  base_branch: string;
   outcome_branch: string;
   branch: string;
   worktree: null;
-  integration: { branch: string; needs_remote_create: boolean; from: string | null } | null;
+  integration: { branch: string; needs_remote_create: boolean; from: string } | null;
   model: string | null;
   title: string;
   tags: string[];
@@ -105,9 +105,9 @@ export function prepareCloudLaunch(id: string): CloudLaunch {
         throw new Error(`çatı görev ${parent.data.id} ${parent.data.state}; fazı başlatılamaz`);
       }
       integrationBranch = `vlad/${parent.data.id}`;
-      integration = { branch: integrationBranch, needs_remote_create: parent.data.branch !== integrationBranch, from: null };
+      integration = { branch: integrationBranch, needs_remote_create: parent.data.branch !== integrationBranch, from: c.default_branch ?? "master" };
     }
-    const base = integration ? integration.branch : null;
+    const base = integration ? integration.branch : c.default_branch ?? "master";
     res = {
       id, state: "running", mode: "cloud", action: "create_session",
       repo: c.repo, source_url: `https://github.com/${c.repo}`,
@@ -119,7 +119,7 @@ export function prepareCloudLaunch(id: string): CloudLaunch {
       permission_mode: "auto",
       prompt: buildCloudPrompt(task, role),
       next: [
-        ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta (repo varsayılan branch'inden) oluştur`] : []),
+        ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
         "create_session(source_url, source_revision, outcome_branch, model, title, tags, prompt)",
         `vlad task session ${id} <session_id>`,
         "create_session başarısızsa: vlad task set " + id + " failed",

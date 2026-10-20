@@ -15,7 +15,7 @@ import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  eventList, getTask, ingestEvents, logTask, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
+  eventList, getTask, ingestEvents, logTask, parseEvents, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -134,7 +134,7 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   if (mode === "cloud") {
     const r = prepareCloudLaunch(id);
     out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
-      `base: ${r.base_branch ?? "(varsayılan)"}\n${r.next.map((n) => `- ${n}`).join("\n")}`);
+      `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}`);
     return;
   }
   let last: LaunchResult | undefined;
@@ -149,14 +149,15 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
 }).option("--dry-run", "terminal açmadan komutu göster");
 
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
-  const events = eventList(JSON.parse(readInput((o.file as string | undefined) ?? "-")));
+  const events = eventList(parseEvents(readInput(((o.eventsFile ?? o.file) as string | undefined) ?? "-")));
   const r = ingestEvents(id, events, { head: o.remoteHead as string | undefined });
   out(o, r, [
     `${r.processed.length} işaret işlendi, ${r.skipped.length} zaten işlenmişti`,
     ...r.warnings.map((w) => `uyarı: ${w}`),
   ].join("\n"));
 })
-  .option("--file <json>", "list_events çıktısı (- veya yok = stdin)")
+  .option("--events-file <yol>", "list_events çıktısı: JSON veya JSONL (- veya yok = stdin)")
+  .option("--file <json>", "--events-file takma adı")
   .option("--remote-head <sha>", "vlad/<id> ucunun sha'sı (git ls-remote yerine; ör. GitHub'dan)");
 
 def(task, "log <id> <mesaj>", "## İlerleme'ye zaman damgalı satır ekler", (id: string, msg: string, o: Opts) => {
