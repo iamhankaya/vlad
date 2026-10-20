@@ -2,6 +2,8 @@
 slug: vlad
 name: VLAD
 path: C:\dev\vlad
+repo: iamhankaya/vlad
+default_branch: master
 stack:
   - typescript
   - node
