@@ -7,6 +7,15 @@ description: Aktif görevlerin durumunu gösterir; onay bekleyen görevler için
 
 **Onay kapısı:** `git push`, `gh pr create` ve merge yalnızca kullanıcının o görev ve o eylem için verdiği **açık onaydan** sonra yapılır. Seçenekleri sun, cevabı bekle; varsayılan eylem yoktur.
 
+## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
+
+Bulutta bu akış `kb/`'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) `master` ile eşitlen:
+```
+git fetch origin master
+git merge origin/master
+```
+Çakışma çıkarsa (`git merge --abort` ile temizle) **dur**, yazma; kullanıcıya hangi dosyaların çakıştığını bildir ve nasıl ilerleyeceğini sor. Yerelde (`CLAUDE_CODE_REMOTE` yok) bu adım atlanır.
+
 ## 1. Durumu oku
 
 ```
