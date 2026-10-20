@@ -3,13 +3,12 @@
 // {"result":{"internal_anthropic_catchall":{"result":"<tur sonu metni>"}}}]}}; çevresinde metin zarfı olabilir.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
-import { build, forceRunning, newTask, readTask, taskState, vlad, writeCard } from "./cloud-helpers.js";
+import { forceRunning, newTask, readTask, taskState, vlad, writeCard } from "./cloud-helpers.js";
 
 let home: string;
 let id: string;
-beforeAll(build, 120000);
 beforeEach(() => {
   home = makeHome();
   writeCard(home, "alpha", { repo: "iamhankaya/vlad" });
