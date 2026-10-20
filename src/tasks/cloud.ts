@@ -38,7 +38,7 @@ const PROTOCOL = (id: string, autonomy: string) => [
   "## VLAD bulut protokolü",
   "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
   `- Görev: ${id}. Çalışma branch'in \`vlad/${id}\`; commit'lerini yalnızca oraya push et (\`git push -u origin vlad/${id}\`).`,
-  "- `master`'a veya başka bir branch'e push etme; merge etme; PR açma. `kb/` altına yazma; `vlad` CLI'ı ve `vlad-worker` skill'i kullanma.",
+  "- `master`'a veya başka bir branch'e push etme; merge etme; PR açma. `kb/` altına yazma; `vlad` CLI'ı ve `vlad-worker` skill'ini kullanma: rol metnindeki \"vlad-worker protokolünü uygula\" yerine bu protokol geçerlidir (tek doğru kaynak).",
   autonomy === "plan"
     ? "- Yetki seviyen `plan`: kod yazma ve push etme; yalnızca planı raporla."
     : `- Yetki seviyen \`${autonomy}\`: yalnızca \`vlad/${id}\`'ye commit + push.`,
@@ -48,6 +48,7 @@ const PROTOCOL = (id: string, autonomy: string) => [
   "- Bitince önce push et, sonra aşağıdaki biçimde kapanış raporunu yaz (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
+  "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
 ].join("\n");
 
 function buildCloudPrompt(task: Task, role: { title: string; file: string; skills: string[] } | undefined): string {
@@ -121,7 +122,7 @@ export function prepareCloudLaunch(id: string): CloudLaunch {
       prompt: buildCloudPrompt(task, role),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
-        "create_session(source_url, source_revision, outcome_branch, model, title, tags, prompt)",
+        "create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt)",
         `vlad task session ${id} <session_id>`,
         "create_session başarısızsa: vlad task set " + id + " failed",
       ],

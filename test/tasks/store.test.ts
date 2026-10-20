@@ -90,6 +90,23 @@ describe("task store", () => {
     expect(getTask(a.data.id).data.state).toBe("stalled");
     expect(getTask(b.data.id).data.state).toBe("running");
   });
+  it("markStale: bulut ortamında yalnızca bulut session'lı görevleri stalled yapar", () => {
+    const local = mk("local");
+    const cloud = mk("cloud");
+    const old = nowIso(new Date(Date.now() - 7 * 3600_000));
+    writeDoc(local.file, { ...local.data, state: "running" as const, updated: old, session_id: null }, local.body);
+    writeDoc(cloud.file, { ...cloud.data, state: "running" as const, updated: old, session_id: "session_01abc" }, cloud.body);
+    const prev = process.env.CLAUDE_CODE_REMOTE;
+    process.env.CLAUDE_CODE_REMOTE = "true";
+    try {
+      expect(markStale(new Date(), 6).map((x) => x.data.id)).toEqual([cloud.data.id]);
+    } finally {
+      if (prev === undefined) delete process.env.CLAUDE_CODE_REMOTE;
+      else process.env.CLAUDE_CODE_REMOTE = prev;
+    }
+    expect(getTask(local.data.id).data.state).toBe("running");
+    expect(getTask(cloud.data.id).data.state).toBe("stalled");
+  });
   it("listTasks filters; corrupt files become warnings", () => {
     mk();
     const t2 = mk();
