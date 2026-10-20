@@ -36,6 +36,22 @@ describe("projects store", () => {
   });
 });
 
+describe("exposure", () => {
+  beforeEach(() => {
+    makeHome();
+  });
+  it("is listed when the card has it and omitted when it does not", () => {
+    writeProject("alpha", card("alpha").replace("autonomy: commit\n", "autonomy: commit\nexposure: internet\n"));
+    writeProject("beta", card("beta"));
+    const [a, b] = listProjects();
+    expect(a.exposure).toBe("internet");
+    expect("exposure" in b).toBe(false);
+  });
+  it("rejects an invalid exposure value", () => {
+    expect(() => writeProject("alpha", card("alpha").replace("autonomy: commit\n", "autonomy: commit\nexposure: public\n"))).toThrow();
+  });
+});
+
 describe("listProjectsWithWarnings", () => {
   it("skips unreadable/invalid cards and reports them; listProjects returns only valid ones", () => {
     makeHome();
