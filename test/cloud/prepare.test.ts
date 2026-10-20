@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import {
-  createTask, getTask, logTask, nextTaskId, prepareCloudLaunch, reportTask, setState,
+  createTask, getTask, logTask, nextTaskId, prepareCloudLaunch, reportTask, saveTask, setState,
 } from "../../src/tasks/index.js";
 import { makeHome } from "../helpers.js";
 
@@ -93,13 +93,52 @@ describe("prepareCloudLaunch", () => {
     setState(spec.data.id, "done");
     const a = createTask({ project: "alpha", title: "a", kind: "dev", body, role: "developer", parent: pipe.data.id, dependsOn: [spec.data.id] });
     const b = createTask({ project: "alpha", title: "b", kind: "dev", body, role: "developer", parent: pipe.data.id });
-    const ra = prepareCloudLaunch(a.data.id);
+    const probe = (state: "exists" | "missing" | "unknown") => ({ remoteBranch: () => state });
+    const ra = prepareCloudLaunch(a.data.id, probe("missing"));
     const int = `vlad/${pipe.data.id}`;
-    expect(ra).toMatchObject({ source_revision: int, base_branch: int, integration: { branch: int, needs_remote_create: true, from: "master" } });
+    expect(ra).toMatchObject({ source_revision: int, base_branch: int, integration: { branch: int, needs_remote_create: true, from: "master" }, warnings: [] });
     expect(ra.prompt).toContain("SPEC-RAPORU");
-    expect(getTask(pipe.data.id).data).toMatchObject({ state: "running", branch: int });
-    // the second phase finds the branch already recorded
-    expect(prepareCloudLaunch(b.data.id).integration?.needs_remote_create).toBe(false);
+    // launch no longer records the unverified branch on the parent
+    expect(getTask(pipe.data.id).data.branch).not.toBe(int);
+    // a stale record does not matter: the remote decides
+    const pg = getTask(pipe.data.id);
+    pg.data.branch = int;
+    saveTask(pg);
+    expect(prepareCloudLaunch(b.data.id, probe("missing")).integration?.needs_remote_create).toBe(true);
+  });
+
+  it("pipeline phase: branch present on the remote means no creation; unreachable remote assumes creation and warns", () => {
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
+    const a = createTask({ project: "alpha", title: "a", kind: "dev", body, role: "developer", parent: pipe.data.id });
+    const b = createTask({ project: "alpha", title: "b", kind: "dev", body, role: "developer", parent: pipe.data.id });
+    const seen: string[][] = [];
+    const rb = prepareCloudLaunch(a.data.id, { remoteBranch: (r, br) => (seen.push([r, br]), "exists") });
+    expect(rb.integration?.needs_remote_create).toBe(false);
+    expect(rb.warnings).toEqual([]);
+    expect(seen).toEqual([["owner/alpha", `vlad/${pipe.data.id}`]]);
+    const ru = prepareCloudLaunch(b.data.id, { remoteBranch: () => "unknown" });
+    expect(ru.integration?.needs_remote_create).toBe(true);
+    expect(ru.warnings.join()).toMatch(/kontrol edilemedi/);
+  });
+
+  it("pipeline phase prompt inlines the parent's sections without Fazlar/Kapılar; a phaseless task has no parent section", () => {
+    const pbody = "## Tanım\nCATI-TANIM\n\n### Fazlar\nFAZ-LISTESI\n\n### Gerekçe\nCATI-GEREKCE\n\n## Kabul kriterleri\n- [ ] CATI-KRITER\n\n### Kapılar\nKAPI-LISTESI\n\n## Bağlam\nCATI-BAGLAM\n";
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: pbody });
+    const ph = createTask({ project: "alpha", title: "faz", kind: "dev", body, role: "developer", parent: pipe.data.id });
+    const { prompt } = prepareCloudLaunch(ph.data.id, { remoteBranch: () => "exists" });
+    expect(prompt).toContain(`## Çatı görev (${pipe.data.id})`);
+    for (const m of ["CATI-TANIM", "CATI-GEREKCE", "CATI-KRITER", "CATI-BAGLAM", "TANIM-METNİ"]) expect(prompt).toContain(m);
+    for (const m of ["FAZ-LISTESI", "KAPI-LISTESI"]) expect(prompt).not.toContain(m);
+    expect(prepareCloudLaunch(mk().data.id).prompt).not.toContain("## Çatı görev");
+  });
+
+  it("prompt carries VLAD's session id and the one-shot notification instruction; omitted without a session", () => {
+    const withSession = prepareCloudLaunch(mk().data.id, { vladSession: "session_VLAD123" });
+    for (const needle of ["session_VLAD123", "create_trigger", "persistent_session_id", "run_once_at", "VLAD görev T", "ingest et", "yalnızca bir `[VLAD:LOG #n]`"]) {
+      expect(withSession.prompt).toContain(needle);
+    }
+    const none = prepareCloudLaunch(mk().data.id, { vladSession: "" });
+    expect(none.prompt).not.toContain("create_trigger");
   });
 
   it.each([

@@ -28,9 +28,9 @@ Opsiyonel alanlar (mevcut kartlar geçerli kalır):
 
 ## 4. `vlad task launch --json` (cloud)
 
-`prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse kartın opsiyonel `default_branch`'i, yoksa `master`), `outcome_branch`, `integration {branch, needs_remote_create, from}`, `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`.
+`prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse kartın opsiyonel `default_branch`'i, yoksa `master`), `outcome_branch`, `integration {branch, needs_remote_create, from}` (`needs_remote_create` her launch'ta `git ls-remote https://github.com/<repo>.git refs/heads/<branch>` ile hesaplanır; çatının `branch` alanına güvenilmez, erişilemezse `true` + `warnings`), `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`.
 
-Prompt görev bölümlerini (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), rol dosyasının gövdesini, `depends_on` görevlerin `## Kapanış raporu`'nu ve "VLAD bulut protokolü"nü satır içi taşır (çalışanın `kb/`/CLI erişimi yoktur).
+Prompt görev bölümlerini (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), pipeline fazında çatı görevin aynı üç bölümünü ("## Çatı görev (<id>)"; `### Fazlar`/`### Kapılar` hariç), rol dosyasının gövdesini, `depends_on` görevlerin `## Kapanış raporu`'nu ve "VLAD bulut protokolü"nü satır içi taşır (çalışanın `kb/`/CLI erişimi yoktur).
 
 `needs_remote_create`: çatı görevin `branch` alanı entegrasyon branch'ine eşit değilse `true`. Launch çatının `branch`'ini kaydeder; VLAD branch'i remote'ta hemen oluşturur (`create_branch`), sonraki fazlarda `false` döner.
 
@@ -60,7 +60,8 @@ Görev ID'leri bulutta günlük `51`'den başlar (`T20261020-51`), yerel VLAD il
 
 ## 6. İzleme, kapılar, kb
 
-- Bildirim yok; `/status` her çağrıda `get_session`/`list_events` → `ingest`. Sürekli yoklama yok; bunun yerine her bulut çalışanı başlatıldıktan sonra VLAD `send_later` ile ~15 dk sonrasına tek seferlik hatırlatma kurar, çalışan bitmemişse yeniden kurar (çalışan başına en fazla 4 deneme) — karar günlüğü "Bulut çalışanları için tek seferlik hatırlatmalar" (2026-10-20), 3. karar maddesini günceller. Yalnızca bulut modu.
+- **Hızlı yol (T20261020-52):** prompt VLAD'ın session ID'sini (`CLAUDE_CODE_REMOTE_SESSION_ID`) taşır; çalışan REPORT/ASK/FAIL sonrası VLAD session'ına ~1 dk sonrası için tek seferlik zamanlanmış görev kurar ("VLAD görev <id>: <durum> — ingest et"); kuramazsa yalnızca LOG yazar. Bildirim gelince VLAD ingest eder ve o görevin hatırlatmasını iptal eder.
+- **Yedek:** `/status` her çağrıda `get_session`/`list_events` → `ingest`. Sürekli yoklama yok; bunun yerine her bulut çalışanı başlatıldıktan sonra VLAD `send_later` ile ~15 dk sonrasına tek seferlik hatırlatma kurar, çalışan bitmemişse yeniden kurar (çalışan başına en fazla 4 deneme) — karar günlüğü "Bulut çalışanları için tek seferlik hatırlatmalar" (2026-10-20), 3. karar maddesini günceller. Yalnızca bulut modu.
 - Bulut ortamında `markStale` (`vlad status`, SessionStart hook) yalnızca `session_id`'si `session_` önekli (bu bulut VLAD'ın açtığı) görevleri `stalled` yapar; yerel görevlere dokunmaz. Yerelde davranış aynı.
 - Merge kapıları GitHub PR ile: PR aç (onay), kullanıcı onaylar, VLAD `merge_pull_request`. Son kapı ayrı PR + onay.
 - Çalışan yalnızca `vlad/<id>`'ye push eder (kalıcı kural).
