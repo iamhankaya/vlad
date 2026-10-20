@@ -95,7 +95,7 @@ Global olarak kurulanlar:
   - `plan`: çalışan yalnızca plan yazar, onaysız kod yazmaz
   - `commit`: kendi branch'inde commit'e kadar (varsayılan)
   - `pr`: push + PR açmaya kadar; merge her zaman kullanıcıda
-- `launcher`: `auto` (önce Windows Terminal, yoksa PowerShell penceresi) | `wt` | `powershell`
+- `launcher`: `auto` (Windows'ta önce Windows Terminal, yoksa PowerShell penceresi; Windows dışında bulut algılanırsa `cloud`) | `wt` | `powershell` | `cloud` (bkz. §14)
 - `worktreeDir`: worktree'lerin oluşturulacağı klasör şablonu; `{repo}` repo yolu ile değiştirilir. Görev worktree'si `<worktreeDir>\<task-id>` olur.
 
 ## 5. Veri modeli
@@ -325,3 +325,11 @@ Başlangıç prompt'u (şablon):
 - Session adları otomatik ve sabit değil: `<cwd klasör adı>-<2 hex>` (ör. `vlad-72`, `watchparty-b1`). `ListAgents` çıktısının ilk satırı session'ın kendi adını verir: `This session is <ad> [<ref>]`.
 - Bu yüzden VLAD açılışta kendi adını `ListAgents` ile öğrenip `vlad session register <ad>` ile `kb/vlad-session.txt`'ye yazar; çalışanlar `vlad session name` ile okuyup `SendMessage` gönderir. Dosya yoksa veya ad `ListAgents`'ta görünmüyorsa bildirim atlanır (dosya tabanlı durum yeterli).
 - Not: Farklı izin modundaki session'lar gelen mesajı kullanıcı onayına bekletebilir; bildirimler yalnızca "görev dosyasına bak" içerdiği için bu kabul edilebilir.
+
+## 14. Linux / bulut
+
+VLAD bulut Claude Code ortamında (Linux) da çalışır (tasarım: `2026-10-20-vlad-cloud-design.md`):
+- `launcher: cloud` (veya Windows dışında `auto` + `CLAUDE_CODE_REMOTE=true`): `vlad task launch --json` yerel worktree/terminal açmaz; `create_session` argümanlarını döner ve görevi `running` yapar. Windows davranışı değişmez.
+- Proje kartında opsiyonel `repo: owner/name`, `local_only`, `local_only_reason`; `path` bulutta kullanılmaz.
+- Bulut çalışanı `kb/` yazmaz; transcript'e `[VLAD:LOG|ASK|REPORT…END|FAIL]` işaretleri yazar, VLAD `vlad task ingest` ile işler.
+- Bulut görev ID'leri günlük `51`'den başlar; `kb:` commit'leri session branch'ine gider (`vlad kb commit --push` upstream yoksa `-u origin <branch>`); merge kapıları GitHub PR ile.
