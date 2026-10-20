@@ -10,7 +10,7 @@ stack:
   - node
 status: active
 autonomy: commit
-last_activity: 2026-10-20T15:20:07+03:00
+last_activity: 2026-10-20T15:51:31+03:00
 last_scanned: 2026-10-18T22:54:00+03:00
 ---
 
@@ -25,6 +25,8 @@ Kullanıcının projelerinin kalıcı hafızası ve iş dağıtıcısı. `vlad` 
 - Rol başına model (`model: sonnet`); kartta `repo`, `local_only`, `default_branch`, `exposure`.
 
 ## Son aktivite
+- 2026-10-20: Son dokunuşlar: C16, C17, `vlad project set` (PR #19). (T20261020-57)
+- 2026-10-20: System design iş akışına bağlandı: `/delegate` exposure işareti, tester/developer (PR #17). (T20261020-56)
 - 2026-10-20: `exposure` alanı ve architect/analyst sistem tasarımı bölümleri `master`'da (PR #15). (T20261020-53)
 - 2026-10-20: Bulut başlatma sağlamlığı (C7), çalışan bitiş bildirimi (C9), fazda çatı bölümü (C15) (PR #13). (T20261020-52)
 - 2026-10-20: Bulut kb master senkronu ve `commitKb` push kontrolü (PR #10). (T20261020-51)
@@ -37,6 +39,6 @@ Kullanıcının projelerinin kalıcı hafızası ve iş dağıtıcısı. `vlad` 
 - Bulut ortamında `vlad` CLI kurulumu (setup script / SessionStart hook) yok; VLAD `npm ci && build` ile çalışıyor (B6).
 - watchparty kartına `repo` değeri kullanıcıdan bekleniyor.
 - Yerel Windows'ta `git pull`, `npm run build`, `vlad install` yapılmalı (bugünkü değişiklikler).
-- İsteğe bağlı: `types.ts` `local_only` JSDoc yeri; `/scan` boş `exposure`'ı `null` yazmamalı (C16).
 - `list_events` çok sayfalı girdi yalnızca sentetik verilerle test edildi.
+- Sistem tasarımı bölümü henüz gerçek bir plan fazında denenmedi; ilk `tam` döngüde architect çıktısının derinliği değerlendirilecek.
 
