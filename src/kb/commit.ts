@@ -44,8 +44,9 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
     upstream = false;
   }
   const branch = git(home, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
-  // without upstream, "unpushed" = not reachable from any remote-tracking branch
-  const range = upstream ? ["@{u}..HEAD"] : ["HEAD", "--not", "--remotes"];
+  // "unpushed" = not reachable from any remote-tracking branch; `@{u}..HEAD` would also count code
+  // commits that already sit on another remote branch (e.g. after ff-merging origin/master)
+  const range = ["HEAD", "--not", "--remotes"];
   const outside = git(home, ["log", "--name-only", "--format=", ...range])
     .split(/\r?\n/).filter((f) => f && !f.startsWith("kb/"));
   if (outside.length) {
