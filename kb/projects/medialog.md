@@ -17,11 +17,11 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 
 ## Mimari notlar
 - Yığın henüz seçilmedi; architect plan fazında önerecek, kullanıcı plan kapısında onaylayacak (2026-10-20).
-- Exposure: internet (kullanıcı onayı 2026-10-20). Repo: private `iamhankaya/medialog` (kullanıcı açacak; VLAD'ın GitHub bağlantısı repo oluşturamıyor).
+- Exposure: internet (kullanıcı onayı 2026-10-20). Repo: private `iamhankaya/medialog` (kullanıcı açtı 2026-10-20; ana branch `main`, ilk commit 5d850eb).
 
 ## Son aktivite
+- 2026-10-20: GitHub reposu açıldı ve VLAD session'ına eklendi.
 - 2026-10-20: Proje fikri alındı; `tam` döngü pipeline'ı onaylandı, spec başladı.
 
 ## Açık konular
-- GitHub reposu henüz yok; kullanıcı `iamhankaya/medialog` (private, README ile) açacak ve Claude GitHub uygulamasına erişim verecek.
 - TMDB API anahtarı kullanıcıdan alınacak (uygulama fazına kadar).
