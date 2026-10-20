@@ -79,7 +79,7 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
   ...(vladSession
     ? [
-        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` (veya \`send_later\`) ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` ≈ şimdi+1 dk, prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
+        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` ≈ şimdi+1 dk, prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). \`send_later\` kullanma: hatırlatmayı kendi session'ına kurar. Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
       ]
     : []),
 ].join("\n");
