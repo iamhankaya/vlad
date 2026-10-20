@@ -4,13 +4,12 @@
 // uç commit'i verir (senaryo 10). Olay biçimi: {"type":"assistant","message":{"content":[{"type":"text","text":…}]}}.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
-import { assistantEvent, build, forceRunning, jsonl, newTask, readTask, taskState, userEvent, vlad, writeCard } from "./cloud-helpers.js";
+import { assistantEvent, forceRunning, jsonl, newTask, readTask, taskState, userEvent, vlad, writeCard } from "./cloud-helpers.js";
 
 let home: string;
 let id: string;
-beforeAll(build, 120000);
 beforeEach(() => {
   home = makeHome();
   writeCard(home, "alpha", { repo: "iamhankaya/vlad" });
