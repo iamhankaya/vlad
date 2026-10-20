@@ -85,3 +85,31 @@ describe("exposure: role/spec text matches the schema and each other", () => {
     expect(rolesSpec).toMatch(/^## 4\. /m);
   });
 });
+
+describe("exposure: workflow wiring (delegate, tester, developer)", () => {
+  const delegate = read(".claude/skills/delegate/SKILL.md");
+  const tester = read("roles/tester.md");
+  const developer = read("roles/developer.md");
+
+  it("delegate shows exposure in both drafts, uses it for cycle choice, and flags unknown", () => {
+    expect(delegate.match(/\*\*Exposure:\*\*/g)?.length).toBe(2);
+    expect(delegate).toMatch(/`exposure` işareti[^\n]*en az `özellik`/);
+    expect(delegate).toContain("exposure belirsiz");
+  });
+  it("tester reads Sistem tasarımı/Sistem etkisi failure scenarios as test candidates", () => {
+    expect(tester).toContain("### Sistem tasarımı");
+    expect(tester).toContain("### Sistem etkisi");
+    expect(tester).toMatch(/test senaryosu adayı/);
+  });
+  it("developer reports conformance to the system design", () => {
+    expect(developer).toContain("sistem tasarımına uyum");
+    expect(developer).toMatch(/uyuldu \/ sapıldı/);
+  });
+  it("both specs describe the wiring", () => {
+    for (const s of [rolesSpec, pipelineSpec]) {
+      expect(s).toContain("sistem tasarımına uyum");
+    }
+    expect(rolesSpec).toContain("test adayı");
+    expect(pipelineSpec).toContain("test adayı");
+  });
+});
