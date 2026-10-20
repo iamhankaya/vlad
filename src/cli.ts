@@ -134,7 +134,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   if (mode === "cloud") {
     const r = prepareCloudLaunch(id);
     out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
-      `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}`);
+      `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}` +
+      r.warnings.map((w) => `\nuyarı: ${w}`).join(""));
     return;
   }
   let last: LaunchResult | undefined;
