@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
@@ -26,6 +27,28 @@ export interface CloudLaunch {
   permission_mode: "auto";
   prompt: string;
   next: string[];
+  warnings: string[];
+}
+
+/** Whether `branch` exists on the project's GitHub repo; "unknown" when the remote cannot be reached. */
+export type RemoteBranchState = "exists" | "missing" | "unknown";
+
+/** `git ls-remote` of the repo: empty output means the branch is absent, a failing command means unknown. */
+export function remoteBranchState(repo: string, branch: string): RemoteBranchState {
+  try {
+    const out = execFileSync("git", ["ls-remote", `https://github.com/${repo}.git`, `refs/heads/${branch}`], {
+      encoding: "utf8", stdio: "pipe", timeout: 20000, windowsHide: true,
+    });
+    return out.trim() ? "exists" : "missing";
+  } catch {
+    return "unknown";
+  }
+}
+
+export interface CloudLaunchOptions {
+  remoteBranch?: (repo: string, branch: string) => RemoteBranchState;
+  /** The launching VLAD's own session id (`CLAUDE_CODE_REMOTE_SESSION_ID`); the worker notifies it on finishing. */
+  vladSession?: string;
 }
 
 function card(slug: string): ProjectCard {
@@ -34,7 +57,7 @@ function card(slug: string): ProjectCard {
   return readDoc<ProjectCard>(file).data;
 }
 
-const PROTOCOL = (id: string, autonomy: string) => [
+const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "## VLAD bulut protokolü",
   "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
   `- Görev: ${id}. Çalışma branch'in \`vlad/${id}\`; commit'lerini yalnızca oraya push et (\`git push -u origin vlad/${id}\`).`,
@@ -49,9 +72,14 @@ const PROTOCOL = (id: string, autonomy: string) => [
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
   "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
+  ...(vladSession
+    ? [
+        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` (veya \`send_later\`) ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` ≈ şimdi+1 dk, prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
+      ]
+    : []),
 ].join("\n");
 
-function buildCloudPrompt(task: Task, role: { title: string; file: string; skills: string[] } | undefined): string {
+function buildCloudPrompt(task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string): string {
   const parts: string[] = [
     `Sen bir VLAD çalışanısın (bulut). Görev ${task.data.id}: ${task.data.title}. Görev dosyasına erişimin yok; görev aşağıda satır içi verilmiştir.`,
   ];
@@ -74,7 +102,7 @@ function buildCloudPrompt(task: Task, role: { title: string; file: string; skill
     try { report = getSection(getTask(d).body, "## Kapanış raporu"); } catch { /* reported as missing below */ }
     parts.push(`## Girdi: ${d} kapanış raporu\n${report || "(rapor yok)"}`);
   }
-  parts.push(PROTOCOL(task.data.id, task.data.autonomy));
+  parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession));
   return parts.join("\n\n");
 }
 
@@ -83,14 +111,15 @@ function buildCloudPrompt(task: Task, role: { title: string; file: string; skill
  * project card, builds the `create_session` arguments and moves the task to `running`. Any
  * failure leaves the task `queued` with `error` set.
  */
-export function prepareCloudLaunch(id: string): CloudLaunch {
+export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): CloudLaunch {
   const task = getTask(id);
   if (task.data.state !== "queued") throw new Error(`görev queued değil (${task.data.state}): ${id}`);
   if (task.data.kind !== "dev") throw new Error(`yalnızca dev görevleri başlatılır (kind=${task.data.kind}): ${id}`);
 
   const branch = `vlad/${id}`;
   let res: CloudLaunch;
-  let integrationBranch: string | null = null;
+  const warnings: string[] = [];
+  const vladSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
   try {
     const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     const c = card(task.data.project);
@@ -106,8 +135,11 @@ export function prepareCloudLaunch(id: string): CloudLaunch {
       if (["done", "cancelled", "failed"].includes(parent.data.state)) {
         throw new Error(`çatı görev ${parent.data.id} ${parent.data.state}; fazı başlatılamaz`);
       }
-      integrationBranch = `vlad/${parent.data.id}`;
-      integration = { branch: integrationBranch, needs_remote_create: parent.data.branch !== integrationBranch, from: c.default_branch ?? "master" };
+      const integrationBranch = `vlad/${parent.data.id}`;
+      // the parent's `branch` field is only a record; the remote decides whether the branch must be created
+      const state = (o.remoteBranch ?? remoteBranchState)(c.repo, integrationBranch);
+      if (state === "unknown") warnings.push(`${integrationBranch} remote'ta kontrol edilemedi (git ls-remote); yok sayılıp oluşturulacak`);
+      integration = { branch: integrationBranch, needs_remote_create: state !== "exists", from: c.default_branch ?? "master" };
     }
     const base = integration ? integration.branch : c.default_branch ?? "master";
     res = {
@@ -119,13 +151,14 @@ export function prepareCloudLaunch(id: string): CloudLaunch {
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",
-      prompt: buildCloudPrompt(task, role),
+      prompt: buildCloudPrompt(task, role, vladSession || undefined),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
         "create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt)",
         `vlad task session ${id} <session_id>`,
         "create_session başarısızsa: vlad task set " + id + " failed",
       ],
+      warnings,
     };
   } catch (e) {
     const msg = (e as Error).message;
@@ -135,13 +168,5 @@ export function prepareCloudLaunch(id: string): CloudLaunch {
     throw new Error(msg);
   }
   setState(id, "running", { branch, worktree: null, error: null });
-  // VLAD creates the integration branch right after this call; recording it lets later phases skip the creation
-  if (integrationBranch) {
-    const p = getTask(task.data.parent as string);
-    if (p.data.branch !== integrationBranch) {
-      p.data.branch = integrationBranch;
-      saveTask(p);
-    }
-  }
   return res;
 }
