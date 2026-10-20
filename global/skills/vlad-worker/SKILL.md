@@ -5,6 +5,8 @@ description: VLAD tarafından başlatılmış bir çalışan session'ının prot
 
 # VLAD çalışan protokolü
 
+> **Bulut çalışanı:** başlangıç prompt'u görevi satır içi veriyor ve "VLAD bulut protokolü" bölümü içeriyorsa aşağıdaki "Bulut modu" bölümünü uygula; 0–7. adımlar yerel (Windows) çalışanlar içindir.
+
 Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. Kullanıcıyla Türkçe konuş. **Doğruluk kaynağı görev dosyasıdır**; ilerlemeni, sorularını ve raporunu her zaman `vlad` CLI ile oraya yaz.
 
 ## 0. Görevini bul
@@ -84,3 +86,31 @@ Bildirim yalnızca bir dürtmedir; asıl bilgi görev dosyasındadır. Bildirim 
 ## Hata durumu
 
 Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad task log <id> "…"` ile yaz ve `vlad task set <id> failed` çalıştır, sonra bildirim gönder.
+
+## Bulut modu (`create_session` ile açılan çalışan)
+
+VLAD seni bulut session'ı olarak açtı: `kb/`, `vlad` CLI'ı ve görev dosyası yok. **`kb/`'ye yalnızca VLAD yazar**; sen ilerlemeni, sorunu ve raporunu kendi yanıtlarına işaretlerle yazarsın, VLAD transcript'ini okuyup `vlad task ingest` ile görev dosyasına işler. Prompt'ta görev (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), rol kuralları ve bağımlı fazların kapanış raporları satır içi gelir.
+
+- `vlad` CLI'ını, `VLAD_HOME`'u ve `SendMessage` bildirimini **kullanma**; `kb/` altına yazma.
+- Yalnızca `vlad/<id>` branch'ine commit + push et (`git push -u origin vlad/<id>`); `master`'a veya başka branch'e push, merge, PR yok (kalıcı kural, 2026-10-20). `autonomy: plan` ise kod yazma ve push etme.
+- Rol dosyası prompt'ta; rolün skill'lerini yüklemeyi dene, yüklenemezse raporda belirt. Rolün "Yetki" bölümündeki `kb/`/CLI/worktree adımları yerine bu protokol geçerlidir.
+
+### İşaretler
+
+Her işaret **satır başında**, **kod çitinin dışında** ve yanıtın (assistant) metnindedir; `#seq` 1'den başlayıp her işaretle artar (tekrar kullanma — VLAD aynı `seq`'i bir kez işler).
+
+```
+[VLAD:LOG #n] <kısa adım>
+[VLAD:ASK #n] <soru, seçenekleriyle>
+[VLAD:REPORT #n branch=vlad/<id> head=<sha>]
+### Yapılanlar
+…
+[VLAD:END #n]
+[VLAD:FAIL #n] <neden, tek satır>
+```
+
+- **LOG:** önemli adımlarda (plan hazır, ilk testler geçti, review bitti).
+- **ASK:** kullanıcı kararı gerektiren belirsizlikte; işareti yaz ve **turunu bitir**. Cevap `[VLAD:ANSWER #n] <cevap>` mesajıyla gelir; gelene kadar bekle.
+- **REPORT:** önce commit'leri `vlad/<id>`'ye push et, `head=` push ettiğin son commit'in sha'sı olsun (VLAD remote ucuyla karşılaştırır; uyuşmazsa raporu onaya sunmaz). Rapor başlıkları yalnızca `###` veya daha derin; `## ` yok. İçerik adım 6 ile aynı (`### Yapılanlar`, `### Test sonuçları`, `### Kabul kriterleri`, `### Açık noktalar`; rol başka başlık istiyorsa onlar).
+- **FAIL:** görevi tamamlayamıyorsan.
+- VLAD'a ayrıca mesaj gönderme; VLAD seni `get_session`/`list_events` ile izler.
