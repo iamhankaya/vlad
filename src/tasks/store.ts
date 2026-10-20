@@ -238,6 +238,8 @@ export function markStale(now: Date, hours: number): Task[] {
   for (const t of listTasks({ state: ["running"] })) {
     // no worker updates a pipeline; it waits on its phases and on the user's gates
     if (t.data.kind === "pipeline") continue;
+    // a cloud VLAD only owns the workers it opened itself; local tasks (no cloud session_id) belong to the local VLAD
+    if (isCloudEnv() && !String(t.data.session_id ?? "").startsWith("session_")) continue;
     const updated = Date.parse(t.data.updated);
     if (Number.isNaN(updated) || updated + hours * 3600_000 >= now.getTime()) continue;
     out.push(setState(t.data.id, "stalled"));

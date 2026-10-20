@@ -30,10 +30,10 @@ Satırlar: faz (`phase`), rol başlığı, durum, bağımlılık (`depends_on`);
 
 Bulutta çalışan bildirimi yoktur; her `/status` çağrısında `session_id`'si dolu, `running`/`blocked` bulut görevleri için durumu **sen** çek (`vlad status --json`'dan önce, tablo güncel olsun):
 1. `get_session(session_id)`: `status_bucket` `failed` → `vlad task log` + `vlad task set <id> failed`; kullanıcıya bildir.
-2. `list_events(session_id, kinds=["assistant"], limit=100)` çıktısını geçici dosyaya yaz ve `vlad task ingest <id> --file <events.json> --json` çalıştır (sayfalayıp hepsini ver; işleme idempotenttir). `warnings` boş değilse göster (ör. `head=` remote uçla eşleşmiyor → rapor onaya sunulmadı; GitHub'dan `vlad/<id>` ucunu doğrulayıp gerekirse `--remote-head <sha>` ile tekrar dene).
+2. `list_events(session_id, kinds=["assistant", "result"], limit=100)` çıktısını geçici dosyaya yaz ve `vlad task ingest <id> --file <events.json> --json` çalıştır. Birden çok sayfa gerekirse (`has_more: true`) sayfaların ham çıktılarını art arda aynı dosyaya yaz; CLI ardışık `{ccr:{data,has_more}}` sayfalarını birleştirir. `result` olayı yalnızca assistant olayı tanınmazsa yedek olarak kullanılır (çift işleme olmaz). Çalışan bitişte tüm işaretlerini son tur mesajında tekrar eder; işleme idempotenttir. `warnings` boş değilse göster (ör. `head=` remote uçla eşleşmiyor → rapor onaya sunulmadı; GitHub'dan `vlad/<id>` ucunu doğrulayıp gerekirse `--remote-head <sha>` ile tekrar dene).
 3. İşaretsiz biten session (`review_ready`/`completed` ama görev `awaiting_approval`/`failed` değil) → kullanıcıya sor.
 4. `blocked` görev: cevabı `vlad task answer` ile yazdıktan sonra `send_message(session_id, "[VLAD:ANSWER #n] <cevap>")` ile çalışana ilet (`n` = görev dosyasındaki `[cloud #n]`).
-5. Zamanlı kontrol yoktur (kullanım limiti); izleme yalnızca `/status` çağrılarında olur.
+5. Sürekli yoklama yoktur; ancak karar günlüğündeki "Bulut çalışanları için tek seferlik hatırlatmalar" gereği her bulut çalışanını başlattıktan sonra `send_later` ile ~15 dk sonrasına tek seferlik hatırlatma kurulur; çalışan bitmemişse yeniden kurulur (çalışan başına en fazla 4 deneme).
 
 ### 2-cloud. Bulutta merge kapıları (GitHub PR)
 

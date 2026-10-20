@@ -69,7 +69,13 @@ describe("prepareCloudLaunch", () => {
     const p = prepareCloudLaunch(t.data.id).prompt;
     for (const s of ["TANIM-METNİ", "KRİTER", "BAĞLAM-METNİ", "ROL-GÖVDESİ", "superpowers:test-driven-development",
       "[VLAD:LOG #n]", "[VLAD:ASK #n]", `[VLAD:REPORT #n branch=vlad/${t.data.id}`, "[VLAD:END #n]", "[VLAD:FAIL #n]",
-      `git push -u origin vlad/${t.data.id}`, "kb/` altına yazma"]) expect(p).toContain(s);
+      `git push -u origin vlad/${t.data.id}`, "kb/` altına yazma",
+      "son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et", "tek doğru kaynak"]) expect(p).toContain(s);
+  });
+
+  it("next lists permission_mode among the create_session arguments", () => {
+    const r = prepareCloudLaunch(mk().data.id);
+    expect(r.next.find((n) => n.startsWith("create_session("))).toContain("permission_mode");
   });
 
   it("autonomy plan forbids pushing in the prompt", () => {

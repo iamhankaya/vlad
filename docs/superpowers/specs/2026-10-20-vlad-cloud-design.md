@@ -50,15 +50,18 @@ Görev ID'leri bulutta günlük `51`'den başlar (`T20261020-51`), yerel VLAD il
 ```
 
 `vlad task ingest <id> [--file events.json|-] [--remote-head <sha>]`:
-- Girdi `list_events` çıktısı (dizi veya `{data|events|items}`); yalnızca assistant olaylarının metni okunur (user olayları prompt'taki örnekleri içerir).
+- Girdi `list_events` çıktısı. Gerçek şekil: araç sonucu bir metin zarfı içinde `{"ccr": {"data": [...], "has_more": bool, "first_id", "last_id"}}` döner; olay türü anahtar adıdır (`{"assistant": {"internal_anthropic_catchall": {"message": {"content": [{"type":"text","text":…}]}}}}`, `user`, `result` aynı biçimde). Ayrıştırıcı ayrıca düz diziyi, `{data|events|items}` sarmalayıcısını ve JSONL'i kabul eder; zarf metninde `[`/`{` olsa da gömülü JSON'u bulur.
+- Sayfalama: dosyada ardışık birden çok `{ccr:{…}}` nesnesi olabilir; `data` dizileri birleştirilir. Son sayfada `has_more: true` ise `warnings`'e "sayfa eksik olabilir" eklenir. Çalışan bitişte tüm işaretlerini (LOG'lar dahil) son tur mesajında tekrar eder; böylece son sayfa yeterlidir.
+- Yalnızca assistant olaylarının metni okunur (user olayları prompt'taki örnekleri içerir). `result` olayı son turun metnini tekrar eder; yalnızca hiç assistant olayı tanınmazsa yedek olarak okunur (çift işleme yok).
 - LOG → `vlad task log`; ASK → `blocked`; FAIL → log + `failed`; REPORT → `## Kapanış raporu` + `awaiting_approval`.
-- Idempotent: işlenen her işaret görev dosyasına `[cloud #n]` etiketiyle yazılır; etiketi taşıyan seq atlanır.
+- Idempotent: işlenen her işaret görev dosyasına `[cloud #n]` etiketiyle yazılır (`## İlerleme`, ASK için `## Sorular`); etiketi bu bölümlerde taşıyan seq atlanır. Kapanış raporu gövdesindeki `[cloud #n]` metni sayılmaz.
 - REPORT'ta `branch=` `vlad/<id>` olmalı ve `head=`, remote `vlad/<id>` ucuyla eşleşmeli (`git ls-remote https://github.com/<repo>.git`, veya `--remote-head`; kısa sha kabul). Eşleşmez/okunamazsa `awaiting_approval` yapılmaz, uyarı verilir; eşleşen rapor sonra tekrar ingest edilince işlenir.
 - Geçersiz geçiş (ör. blocked iken yeni ASK) uyarıdır; diğer işaretler işlenmeye devam eder.
 
 ## 6. İzleme, kapılar, kb
 
-- Bildirim yok; `/status` her çağrıda `get_session`/`list_events` → `ingest`. Zamanlı kontrol yok.
+- Bildirim yok; `/status` her çağrıda `get_session`/`list_events` → `ingest`. Sürekli yoklama yok; bunun yerine her bulut çalışanı başlatıldıktan sonra VLAD `send_later` ile ~15 dk sonrasına tek seferlik hatırlatma kurar, çalışan bitmemişse yeniden kurar (çalışan başına en fazla 4 deneme) — karar günlüğü "Bulut çalışanları için tek seferlik hatırlatmalar" (2026-10-20), 3. karar maddesini günceller. Yalnızca bulut modu.
+- Bulut ortamında `markStale` (`vlad status`, SessionStart hook) yalnızca `session_id`'si `session_` önekli (bu bulut VLAD'ın açtığı) görevleri `stalled` yapar; yerel görevlere dokunmaz. Yerelde davranış aynı.
 - Merge kapıları GitHub PR ile: PR aç (onay), kullanıcı onaylar, VLAD `merge_pull_request`. Son kapı ayrı PR + onay.
 - Çalışan yalnızca `vlad/<id>`'ye push eder (kalıcı kural).
 - Bulut VLAD'ın `kb:` commit'leri session branch'ine gider; `commitKb --push` upstream yoksa `git push -u origin <branch>` ile push eder (kb dışı push edilmemiş commit varsa yine push etmez; "push edilmemiş" = hiçbir remote-tracking branch'ten erişilemeyen). `master`'a onaylı merge.
