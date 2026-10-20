@@ -8,14 +8,14 @@ import { installGlobal } from "./install.js";
 import { commitKb } from "./kb/commit.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
-import { TerminalLauncher } from "./launcher/index.js";
-import type { LaunchResult, Launcher } from "./launcher/index.js";
+import { TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
+import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { listProjectsWithWarnings, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  getTask, logTask, markDigested, readyTasks, reportTask, saveTask, setState, statusSummary,
+  eventList, getTask, ingestEvents, logTask, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -124,8 +124,21 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
 
 def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {
   const cfg = loadConfig();
+  let mode: LaunchMode;
+  try {
+    mode = resolveLaunchMode(cfg.launcher);
+  } catch (e) {
+    if (!o.dryRun) throw e; // a dry run only prints the terminal command, so it works anywhere
+    mode = "auto-terminal";
+  }
+  if (mode === "cloud") {
+    const r = prepareCloudLaunch(id);
+    out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
+      `base: ${r.base_branch ?? "(varsayılan)"}\n${r.next.map((n) => `- ${n}`).join("\n")}`);
+    return;
+  }
   let last: LaunchResult | undefined;
-  const real = new TerminalLauncher({ mode: cfg.launcher, dryRun: !!o.dryRun });
+  const real = new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   const t = await launchTask(id, { launcher, cfg });
   out(
@@ -134,6 +147,17 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
     `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}`,
   );
 }).option("--dry-run", "terminal açmadan komutu göster");
+
+def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
+  const events = eventList(JSON.parse(readInput((o.file as string | undefined) ?? "-")));
+  const r = ingestEvents(id, events, { head: o.remoteHead as string | undefined });
+  out(o, r, [
+    `${r.processed.length} işaret işlendi, ${r.skipped.length} zaten işlenmişti`,
+    ...r.warnings.map((w) => `uyarı: ${w}`),
+  ].join("\n"));
+})
+  .option("--file <json>", "list_events çıktısı (- veya yok = stdin)")
+  .option("--remote-head <sha>", "vlad/<id> ucunun sha'sı (git ls-remote yerine; ör. GitHub'dan)");
 
 def(task, "log <id> <mesaj>", "## İlerleme'ye zaman damgalı satır ekler", (id: string, msg: string, o: Opts) => {
   logTask(id, msg);
