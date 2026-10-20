@@ -48,3 +48,9 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 - **Gerekçe:** Kullanım limiti tasarrufu.
 - **Kaynak:** görev T20261018-07 (commit d00e020); roller spec'i §4
 - **Kaynak:** T20261018-07
+
+### 2026-10-20 — medialog — medialog v1 kapsam kararları (anime TMDB'den, gizlilik, veri hakları)
+- **Karar:** medialog v1 kapsamı spec T20261020-59'daki önerilerle kabul edildi: animeyi TMDB'den al (AniList yok; izin gelirse v2); site reklamsız ve ücretsiz (TMDB ticari olmayan şartı); e-posta doğrulaması ve parola sıfırlama v1 (gönderim servisini architect seçer); son bölümde "sıradaki bölüm" tek tıkla "izledim"e geçmeyi sorar; "herkese açık" profil girişsiz görünür ama noindex; yeni hesap varsayılanı "arkadaşlara"; hesap silinince mesajlar "silinmiş kullanıcı" olarak anonimleşir; JSON dışa aktarma, engelleme ve şikâyet (yalnızca kayıt) v1; arayüz Türkçe, içerik başlığı Türkçe varsa Türkçe yoksa orijinal; alan adı/barındırma için architect düşük maliyetli öneri getirir; arkadaş aktivite akışı v2.
+- **Gerekçe:** AniList şartları rakip takip servisinde kullanımı izne bağlıyor (yasal risk); TMDB tek API ile dizi+anime sezon/bölüm yapısını karşılar. Diğerleri internet exposure'da gizlilik ve KVKK/GDPR gereği.
+- **Kaynak:** görev T20261020-59 (spec), kullanıcı onayı 2026-10-20
+- **Kaynak:** T20261020-59
