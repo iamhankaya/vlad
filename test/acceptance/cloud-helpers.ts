@@ -7,10 +7,8 @@ import { expect } from "vitest";
 export const root = resolve(import.meta.dirname, "..", "..");
 export const cli = join(root, "dist", "cli.js");
 
-export function build(): void {
-  const r = spawnSync("npx", ["tsc"], { cwd: root, shell: true, encoding: "utf8" });
-  expect(r.status, r.stdout + r.stderr).toBe(0);
-}
+/** dist/ is built once by vitest globalSetup (test/global-setup.ts); kept so test files can still call it in beforeAll. */
+export function build(): void {}
 
 /** Runs the built CLI. `env` entries set to undefined are removed from the child environment. */
 export function vlad(home: string, args: string[], o: { input?: string; env?: Record<string, string | undefined> } = {}) {

@@ -2,17 +2,13 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "./helpers.js";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = join(root, "dist", "cli.js");
 let home: string;
 
-beforeAll(() => {
-  const r = spawnSync("npx", ["tsc"], { cwd: root, shell: true, encoding: "utf8" });
-  expect(r.status, r.stdout + r.stderr).toBe(0);
-}, 120000);
 beforeEach(() => { home = makeHome(); });
 
 function vlad(args: string[], input?: string, extraEnv: Record<string, string> = {}) {
