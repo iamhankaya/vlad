@@ -2,6 +2,7 @@
 slug: diskpilot
 name: DiskPilot
 path: C:\dev\diskpilot
+exposure: local
 local_only: true
 local_only_reason: WPF masaüstü uygulaması; bulutta (Linux) derlenip çalıştırılamaz
 stack:

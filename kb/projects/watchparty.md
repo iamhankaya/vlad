@@ -2,6 +2,7 @@
 slug: watchparty
 name: WatchParty
 path: C:\dev\watchparty
+exposure: internet
 stack:
   - csharp
   - dotnet
