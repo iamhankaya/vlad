@@ -10,7 +10,7 @@ export type TaskState =
   | "failed"
   | "cancelled";
 export type ProjectStatus = "active" | "paused" | "archived";
-export type Launcher = "auto" | "wt" | "powershell";
+export type Launcher = "auto" | "wt" | "powershell" | "cloud";
 
 /** kb/projects/<slug>.md frontmatter (spec 5.1) */
 export interface ProjectCard {
@@ -20,6 +20,13 @@ export interface ProjectCard {
   stack: string[];
   status: ProjectStatus;
   autonomy: Autonomy;
+  /** GitHub `owner/name` the cloud launcher works on; absent → no cloud launch. */
+  repo?: string;
+  /** Cannot run in the cloud (e.g. needs Windows); cloud launch fails with `local_only_reason`. */
+  /** Branch cloud phases start from outside a pipeline; absent → `master`. */
+  default_branch?: string;
+  local_only?: boolean;
+  local_only_reason?: string;
   last_activity: string | null;
   last_scanned: string | null;
 }

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  appendToSection, autonomyFor, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
+  appendToSection, autonomyFor, CLOUD_ID_FLOOR, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
   setSection, validate, writeDoc,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskState } from "../kb/index.js";
@@ -59,7 +59,7 @@ function taskFile(id: string): string {
 /** Next free `T<YYYYMMDD>-<NN>` for the given day. */
 export function nextTaskId(tasksDir: string, date: Date): string {
   const prefix = dayPrefix(date);
-  let max = 0;
+  let max = isCloudEnv() ? CLOUD_ID_FLOOR : 0;
   if (existsSync(tasksDir)) {
     for (const f of readdirSync(tasksDir)) {
       const m = f.startsWith(prefix) ? /^-?(\d+)\.md$/.exec(f.slice(prefix.length)) : null;
