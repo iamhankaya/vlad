@@ -7,6 +7,15 @@ description: Bir projede yapılacak işi görev olarak tanımlar, kullanıcı on
 
 **Onay kapısı:** Kullanıcı taslağı açıkça onaylamadan `vlad task new` **çalıştırılmaz**. Onay = "evet", "tamam", "başlat" gibi açık bir cevap. Düzeltme isterse taslağı güncelleyip yeniden göster.
 
+## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
+
+Bulutta bu akış `kb/`'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) `master` ile eşitlen:
+```
+git fetch origin master
+git merge origin/master
+```
+Çakışma çıkarsa (`git merge --abort` ile temizle) **dur**, yazma; kullanıcıya hangi dosyaların çakıştığını bildir ve nasıl ilerleyeceğini sor. Yerelde (`CLAUDE_CODE_REMOTE` yok) bu adım atlanır.
+
 ## 1. Bağlamı topla
 
 ```

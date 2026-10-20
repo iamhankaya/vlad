@@ -79,6 +79,27 @@ describe("commitKb", () => {
     expect(execFileSync("git", ["log", "-1", "--format=%s", "main"], { cwd: remote, encoding: "utf8" }).trim()).toBe("init");
   });
 
+  it("with push: ignores code commits already on another remote branch even with an upstream", () => {
+    const remote = mkdtempSync(join(tmpdir(), "vlad-remote-"));
+    execFileSync("git", ["init", "--bare", "-b", "main"], { cwd: remote, stdio: "pipe" });
+    git("remote", "add", "origin", remote);
+    git("push", "-u", "origin", "main");
+    git("checkout", "-q", "-b", "session");
+    git("push", "-u", "origin", "session");
+    git("checkout", "-q", "main");
+    writeFileSync(join(home, "code.ts"), "2");
+    git("commit", "-q", "-am", "kod");
+    git("push", "-q", "origin", "main");
+    git("checkout", "-q", "session");
+    git("merge", "-q", "--ff-only", "main");
+    writeFileSync(join(home, "kb", "tasks", "T1.md"), "x");
+    const r = commitKb("kb", { push: true });
+    expect(r.committed).toBe(true);
+    expect(r.pushed).toBe(true);
+    expect(r.warning).toBeUndefined();
+    expect(execFileSync("git", ["log", "-1", "--format=%s", "session"], { cwd: remote, encoding: "utf8" }).trim()).toBe("kb: kb");
+  });
+
   it("rejects an empty message", () => {
     expect(() => commitKb("  ")).toThrow(/mesaj/);
   });
