@@ -30,7 +30,7 @@ Opsiyonel alanlar (mevcut kartlar geçerli kalır):
 
 `prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse kartın opsiyonel `default_branch`'i, yoksa `master`), `outcome_branch`, `integration {branch, needs_remote_create, from}` (`needs_remote_create` her launch'ta `git ls-remote https://github.com/<repo>.git refs/heads/<branch>` ile hesaplanır; çatının `branch` alanına güvenilmez, erişilemezse `true` + `warnings`), `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`.
 
-Prompt görev bölümlerini (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), rol dosyasının gövdesini, `depends_on` görevlerin `## Kapanış raporu`'nu ve "VLAD bulut protokolü"nü satır içi taşır (çalışanın `kb/`/CLI erişimi yoktur).
+Prompt görev bölümlerini (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), pipeline fazında çatı görevin aynı üç bölümünü ("## Çatı görev (<id>)"; `### Fazlar`/`### Kapılar` hariç), rol dosyasının gövdesini, `depends_on` görevlerin `## Kapanış raporu`'nu ve "VLAD bulut protokolü"nü satır içi taşır (çalışanın `kb/`/CLI erişimi yoktur).
 
 `needs_remote_create`: çatı görevin `branch` alanı entegrasyon branch'ine eşit değilse `true`. Launch çatının `branch`'ini kaydeder; VLAD branch'i remote'ta hemen oluşturur (`create_branch`), sonraki fazlarda `false` döner.
 

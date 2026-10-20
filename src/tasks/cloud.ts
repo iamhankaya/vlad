@@ -79,13 +79,36 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
     : []),
 ].join("\n");
 
-function buildCloudPrompt(task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string): string {
+/** Drops `###` subsections (up to the next heading of level 1-3) whose title is in `names`. */
+function dropSubsections(text: string, names: string[]): string {
+  const out: string[] = [];
+  let skipping = false;
+  for (const line of text.split("\n")) {
+    const m = /^(#{1,3})\s+(.*?)\s*$/.exec(line);
+    if (m) skipping = m[1] === "###" && names.includes(m[2]);
+    if (!skipping) out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
+function buildCloudPrompt(
+  task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task,
+): string {
   const parts: string[] = [
     `Sen bir VLAD çalışanısın (bulut). Görev ${task.data.id}: ${task.data.title}. Görev dosyasına erişimin yok; görev aşağıda satır içi verilmiştir.`,
   ];
   for (const h of ["## Tanım", "## Kabul kriterleri", "## Bağlam"]) {
     const s = getSection(task.body, h);
     if (s) parts.push(`${h}\n${s}`);
+  }
+  if (parent) {
+    // the worker cannot read kb/, so a phase that says "see the pipeline" needs the pipeline text inline
+    const sections = ["## Tanım", "## Kabul kriterleri", "## Bağlam"].flatMap((h) => {
+      const s = getSection(parent.body, h);
+      const t = s ? dropSubsections(s, ["Fazlar", "Kapılar"]) : "";
+      return t ? [`### ${h.slice(3)}\n${t}`] : [];
+    });
+    parts.push(`## Çatı görev (${parent.data.id})\n${sections.join("\n\n") || "(çatı görevde Tanım/Kabul kriterleri/Bağlam yok)"}`);
   }
   if (role) {
     const body = readDoc<unknown>(role.file).body.trim();
@@ -130,8 +153,9 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       throw new Error(`proje ${c.slug} kartında bulut için \`repo: owner/name\` yok; bulutta başlatılamaz (yerel yol: ${c.path})`);
     }
     let integration: CloudLaunch["integration"] = null;
+    let parent: Task | undefined;
     if (task.data.parent) {
-      const parent = getTask(task.data.parent);
+      parent = getTask(task.data.parent);
       if (["done", "cancelled", "failed"].includes(parent.data.state)) {
         throw new Error(`çatı görev ${parent.data.id} ${parent.data.state}; fazı başlatılamaz`);
       }
@@ -151,7 +175,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",
-      prompt: buildCloudPrompt(task, role, vladSession || undefined),
+      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
         "create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt)",

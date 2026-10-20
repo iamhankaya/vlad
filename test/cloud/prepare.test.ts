@@ -121,6 +121,17 @@ describe("prepareCloudLaunch", () => {
     expect(ru.warnings.join()).toMatch(/kontrol edilemedi/);
   });
 
+  it("pipeline phase prompt inlines the parent's sections without Fazlar/Kapılar; a phaseless task has no parent section", () => {
+    const pbody = "## Tanım\nCATI-TANIM\n\n### Fazlar\nFAZ-LISTESI\n\n### Gerekçe\nCATI-GEREKCE\n\n## Kabul kriterleri\n- [ ] CATI-KRITER\n\n### Kapılar\nKAPI-LISTESI\n\n## Bağlam\nCATI-BAGLAM\n";
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: pbody });
+    const ph = createTask({ project: "alpha", title: "faz", kind: "dev", body, role: "developer", parent: pipe.data.id });
+    const { prompt } = prepareCloudLaunch(ph.data.id, { remoteBranch: () => "exists" });
+    expect(prompt).toContain(`## Çatı görev (${pipe.data.id})`);
+    for (const m of ["CATI-TANIM", "CATI-GEREKCE", "CATI-KRITER", "CATI-BAGLAM", "TANIM-METNİ"]) expect(prompt).toContain(m);
+    for (const m of ["FAZ-LISTESI", "KAPI-LISTESI"]) expect(prompt).not.toContain(m);
+    expect(prepareCloudLaunch(mk().data.id).prompt).not.toContain("## Çatı görev");
+  });
+
   it("prompt carries VLAD's session id and the one-shot notification instruction; omitted without a session", () => {
     const withSession = prepareCloudLaunch(mk().data.id, { vladSession: "session_VLAD123" });
     for (const needle of ["session_VLAD123", "create_trigger", "persistent_session_id", "run_once_at", "VLAD görev T", "ingest et", "yalnızca bir `[VLAD:LOG #n]`"]) {
