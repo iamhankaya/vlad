@@ -50,3 +50,28 @@ export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnin
 export function listProjects(): ProjectSummary[] {
   return listProjectsWithWarnings().projects;
 }
+
+export const SETTABLE_FIELDS = ["exposure", "repo", "default_branch", "local_only", "local_only_reason"] as const;
+export type SettableField = (typeof SETTABLE_FIELDS)[number];
+
+/** Sets (or, with an empty value, removes) one optional card field; the rest of the card and its body stay as they are. */
+export function setProjectField(slug: string, field: string, value: string): ProjectCard {
+  if (!(SETTABLE_FIELDS as readonly string[]).includes(field)) {
+    throw new Error(`bilinmeyen alan: "${field}" (geçerli: ${SETTABLE_FIELDS.join(", ")})`);
+  }
+  const file = join(kbPaths().projects, `${slug}.md`);
+  if (!/^[a-z0-9-]+$/.test(slug) || !existsSync(file)) throw new Error(`proje kartı bulunamadı: ${slug}`);
+  const { data, body } = readDoc<ProjectCard>(file);
+  const next: Record<string, unknown> = { ...data };
+  if (value === "") {
+    delete next[field];
+  } else if (field === "local_only") {
+    if (value !== "true" && value !== "false") throw new Error(`local_only için true|false bekleniyor: "${value}"`);
+    next[field] = value === "true";
+  } else {
+    next[field] = value;
+  }
+  validate("project", next);
+  writeDoc(file, next, body);
+  return next as unknown as ProjectCard;
+}

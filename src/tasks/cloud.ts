@@ -51,6 +51,11 @@ export interface CloudLaunchOptions {
   vladSession?: string;
 }
 
+/** `create_trigger` takes `session_…` ids; the env var may carry the `cse_…` form of the same id. */
+export function toSessionId(id: string): string {
+  return id.startsWith("cse_") ? `session_${id.slice(4)}` : id;
+}
+
 function card(slug: string): ProjectCard {
   const file = join(kbPaths().projects, `${slug}.md`);
   if (!existsSync(file)) throw new Error(`proje kartı bulunamadı: ${slug}`);
@@ -74,7 +79,7 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
   ...(vladSession
     ? [
-        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` (veya \`send_later\`) ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` ≈ şimdi+1 dk, prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
+        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` ≈ şimdi+1 dk, prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). \`send_later\` kullanma: hatırlatmayı kendi session'ına kurar. Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
       ]
     : []),
 ].join("\n");
@@ -142,7 +147,8 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   const branch = `vlad/${id}`;
   let res: CloudLaunch;
   const warnings: string[] = [];
-  const vladSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
+  const rawSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
+  const vladSession = rawSession ? toSessionId(rawSession) : rawSession;
   try {
     const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     const c = card(task.data.project);

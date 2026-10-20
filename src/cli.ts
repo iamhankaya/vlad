@@ -10,7 +10,7 @@ import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, Validatio
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
-import { listProjectsWithWarnings, writeProject } from "./projects/store.js";
+import { listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
@@ -84,6 +84,10 @@ def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts
   const card = writeProject(slug, readInput(o.file as string));
   out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
 }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
+def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
+  setProjectField(slug, field, value);
+  out(o, { slug, field, value: value === "" ? null : value }, value === "" ? `silindi: ${slug}.${field}` : `yazıldı: ${slug}.${field}=${value}`);
+});
 def(project, "list", "Kartları listeler", (o: Opts) => {
   const { projects, warnings } = listProjectsWithWarnings();
   out(

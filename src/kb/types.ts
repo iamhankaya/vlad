@@ -24,11 +24,11 @@ export interface ProjectCard {
   autonomy: Autonomy;
   /** GitHub `owner/name` the cloud launcher works on; absent → no cloud launch. */
   repo?: string;
-  /** Cannot run in the cloud (e.g. needs Windows); cloud launch fails with `local_only_reason`. */
   /** Branch cloud phases start from outside a pipeline; absent → `master`. */
   default_branch?: string;
   /** Reach of the system (local | network | internet); asked from the user, never guessed from the stack. */
   exposure?: Exposure;
+  /** Cannot run in the cloud (e.g. needs Windows); cloud launch fails with `local_only_reason`. */
   local_only?: boolean;
   local_only_reason?: string;
   last_activity: string | null;

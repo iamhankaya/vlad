@@ -137,8 +137,19 @@ describe("prepareCloudLaunch", () => {
     for (const needle of ["session_VLAD123", "create_trigger", "persistent_session_id", "run_once_at", "VLAD görev T", "ingest et", "yalnızca bir `[VLAD:LOG #n]`"]) {
       expect(withSession.prompt).toContain(needle);
     }
+    expect(withSession.prompt).not.toContain("(veya `send_later`)");
+    expect(withSession.prompt).toContain("`send_later` kullanma");
     const none = prepareCloudLaunch(mk().data.id, { vladSession: "" });
     expect(none.prompt).not.toContain("create_trigger");
+  });
+
+  it.each([
+    ["cse_01ABC", "session_01ABC"],
+    ["session_01ABC", "session_01ABC"],
+  ])("VLAD session id %s is given to create_trigger as %s", (given, expected) => {
+    const { prompt } = prepareCloudLaunch(mk().data.id, { vladSession: given });
+    expect(prompt).toContain(`persistent_session_id: ${expected}`);
+    expect(prompt).not.toContain("cse_");
   });
 
   it.each([
