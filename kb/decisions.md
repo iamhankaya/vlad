@@ -60,3 +60,8 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 - **Gerekçe:** Bulut çalışanlarında derlenip test edilebilen tek yığın A; tek dil/tek sözleşme; dikey dilimler çalışan oturumuna sığar ve her kapıda çalışan bir kullanıcı akışı bırakır.
 - **Kaynak:** görev T20261020-61 (plan, developer+tester eleştirileriyle), kullanıcı onayı 2026-10-20
 - **Kaynak:** T20261020-61
+
+### 2026-10-20 — medialog — medialog faz merge kapıları VLAD'a devredildi
+- **Karar:** medialog v1 pipeline'ında (T20261020-58) faz kapıları VLAD'a devredildi: VLAD fazların kabul + uygulama branch'lerini yerelde birleştirip build, birim, lint ve kabul testlerini çalıştırır; hepsi yeşilse ve merge önerisi varsa sormadan PR açıp entegrasyon branch'ine (`vlad/T20261020-58`) merge eder ve sıradaki fazları başlatır. Kırmızı varsa önce düzeltme turu ister.
+- **Kapsam dışı:** son kapı (`vlad/T20261020-58` → `main`) ve dağıtım (U7) yine ayrıca açık onay ister.
+- **Kaynak:** kullanıcı 2026-10-20, T20261020-58
