@@ -82,3 +82,7 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 ### 2026-10-20 — medialog — medialog SEC-08 ön-kaçırma düzeltme biçimi
 - **Karar:** SEC-08 (hesap ön-kaçırma) için kayıt parolası doğrulamadan sonra geçerli kalır (meşru akış korunur); e-posta doğrulanınca hesabın doğrulamadan önce açılmış tüm oturumları (WS dahil) iptal edilir; doğrulanmamış e-postayla yeniden kayıtta parola hash'i yenisiyle değişir, eski doğrulama belirteçleri ve oturumlar iptal edilir, yeni doğrulama e-postası gider (hesap sayımı eşitliği korunur); doğrulama e-postasına 'Bu kaydı sen yapmadıysan bağlantıya tıklama' satırı. VLAD gece otonom yürütme kapsamında verdi.
 - **Kaynak:** T20261020-88
+
+### 2026-10-21 — medialog — medialog v2 V1c'nin V7c'ye katılması
+- **Karar:** v2 planındaki V1c (denetim kalanları, F12–F20) ayrı faz olarak açılmadı. Son tasarım denetimi (T20261020-79) F12–F20'nin hepsini 'giderildi' buldu; tek kısmi madde F14, N7 olarak T20261020-88'de düzeltildi. Kalan doğrulama (yeniden üretilebilir kontrol listesi + `v2-audit-leftovers` regresyonu) V7c (a11y + tarayıcı) kapsamına alınır. VLAD gece otonom yürütme kapsamında verdi.
+- **Kaynak:** T20261020-84
