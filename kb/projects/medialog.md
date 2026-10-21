@@ -37,6 +37,7 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 - Canlı ortam (karar 2026-10-21): Oracle Always Free ARM VM + DuckDNS `medialogforfriends.duckdns.org` + Gmail SMTP (`MAIL_TRANSPORT=smtp`). Adımlar `deploy/RUNBOOK.md` §1–2'de.
 
 ## Son aktivite
+- 2026-10-21: Takvim kullanıcıda doğrulandı; ilk `airing_refresh` turundan sonra doldu, hata yok.
 - 2026-10-21: **Canlıya alındı**: https://medialogforfriends.duckdns.org (deploy run 7, ef3eb0c). Üç dağıtım hatası düzeltildi: initdb izinleri, stdin yutma, sürüm paketi izinleri + pipefail (PR #58–#60). Kayıt ve doğrulama postası çalışıyor. (T20261020-58, T20261021-86..88)
 - 2026-10-21: v2 `main`'e merge edildi (PR #57, e438e19). Son kapı: birim 1892/1892, kabul 2047/2047, güvenlik 30/30. (görev T20261020-84)
 - 2026-10-21: İki güvenlik denetimi (V7b, final-clean) ve SEC2/SEC3 düzeltme turları tamamlandı; açık kritik/yüksek/orta bulgu yok. (T20261021-79, -82, -81, -84)
@@ -45,7 +46,6 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 - 2026-10-20: Proje başladı; repo açıldı, `tam` döngü pipeline'ı.
 
 ## Açık konular
-- **Takvim:** kullanıcı yeni bölümlerin takvimde görünmediğini bildirdi (2026-10-21). Olası neden: `airing_refresh` 30 dakikada bir çalışıyor; kullanıcıya `jobs-cli run-once --job=airing_refresh` önerildi. Hangi dizi olduğu ve beklentinin ne olduğu (yaklaşan bölümler mi, izlenmemiş birikmiş bölümler mi) bekleniyor.
 - **Canlı ortam bilgileri:**
   - Oracle VM 144.21.41.159, IP rezerve değil (ephemeral; VM silinmedikçe değişmez).
   - Dağıtım anahtarı Cloud Shell'de `~/medialog_deploy` (ECDSA).
