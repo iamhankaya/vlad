@@ -95,3 +95,12 @@ V7c (T20261021-77) açık noktaları için VLAD kararları (gece talimatı kapsa
 - `v2-browser` (L3) ve V7a `perf-v2`/`v2-failure-scenarios` 60 sn bütçesini aşabilir: L3/seri dosyalar bütçeden muaf, bölünmez.
 - Uygulama DB rolü: süper kullanıcı olmayan ayrı bir uygulama rolü (önyükleme süper kullanıcısı yalnız yönetim/yedek için) — v2 düzeltme turunda.
 - **Kaynak:** T20261021-77
+
+### 2026-10-21 — medialog — v2 V7b güvenlik bulguları: SEC-08 (b) geri alındı, tüm bulgular canlı öncesi düzeltilir
+V7b (T20261021-79) bulguları için VLAD kararları (gece talimatı: canlıya almadan önce güvenlik denetimi; plan kuralı: kritik/yüksek bulgu kalmaz):
+- **SEC2-01 (yüksek) — SEC-08 kararı (b) değişti:** doğrulanmamış e-postayla yeniden kayıt artık parolayı, oturumları ve belirteçleri **değiştirmez**; adrese `reset_password` bağlantısı gider (posta kutusu kanıtı), yanıt yine 202 (hesap varlığı sızmaz). Gerekçe: eski akış kimliksiz hesap ele geçirmeye izin veriyordu. Plan v1 `docs/plan/v1.md:186` buna göre güncellenir.
+- **SEC2-02 (düşük, canlı öncesi düzeltilir):** iki rol — sahip/göç rolü `medialog` (süper kullanıcı değil) ve çalışma rolü `medialog_app` (ne süper kullanıcı ne sahip); `mod_actions` yalnız SELECT/INSERT; `report_gc` SECURITY DEFINER. Düzeltme turu 1'e (T20261021-80) eklendi.
+- **SEC2-03, -04, -05, -06, -07, -08:** düzeltme turu 2'de düzeltilir (düşükler de ucuz olduğu için canlı öncesi). SEC2-03 için `sessions.admin_verified_at` göçü (plan şeması değişir).
+- **NV-V2-01 (IPv6 /64):** `clientIp` /64 gruplaması SEC2-05 kapsamında yapılır; sahibin `dig AAAA` kontrolü RUNBOOK'a not.
+- Düzeltmelerden sonra güvenlik denetimi "final-clean" turu tekrar koşulur (koşu durumu `incomplete` kapanır).
+- **Kaynak:** T20261021-79
