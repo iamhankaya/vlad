@@ -86,3 +86,12 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 ### 2026-10-21 — medialog — medialog v2 V1c'nin V7c'ye katılması
 - **Karar:** v2 planındaki V1c (denetim kalanları, F12–F20) ayrı faz olarak açılmadı. Son tasarım denetimi (T20261020-79) F12–F20'nin hepsini 'giderildi' buldu; tek kısmi madde F14, N7 olarak T20261020-88'de düzeltildi. Kalan doğrulama (yeniden üretilebilir kontrol listesi + `v2-audit-leftovers` regresyonu) V7c (a11y + tarayıcı) kapsamına alınır. VLAD gece otonom yürütme kapsamında verdi.
 - **Kaynak:** T20261020-84
+
+### 2026-10-21 — medialog — v2 V7c a11y açık noktaları ve DB rolü
+V7c (T20261021-77) açık noktaları için VLAD kararları (gece talimatı kapsamında, plana uyarak):
+- Bulgu 8 (zil 99+): erişilebilir ad görünür metni içerir — "Bildirimler, 99+ okunmamış" (WCAG 2.5.3 önceliklidir; gerçek sayı ≥ 100 iken söylenmez).
+- Bulgu 9 (44 px): proje kuralı (≥ 44 px dokunma hedefi) geçerli; listelenen bağlantılar düzeltilir.
+- N5 sekme şeridi yüksekliği 50 px: gözlem olarak kalır, düzeltme yok.
+- `v2-browser` (L3) ve V7a `perf-v2`/`v2-failure-scenarios` 60 sn bütçesini aşabilir: L3/seri dosyalar bütçeden muaf, bölünmez.
+- Uygulama DB rolü: süper kullanıcı olmayan ayrı bir uygulama rolü (önyükleme süper kullanıcısı yalnız yönetim/yedek için) — v2 düzeltme turunda.
+- **Kaynak:** T20261021-77
