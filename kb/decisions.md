@@ -104,3 +104,12 @@ V7b (T20261021-79) bulguları için VLAD kararları (gece talimatı: canlıya al
 - **NV-V2-01 (IPv6 /64):** `clientIp` /64 gruplaması SEC2-05 kapsamında yapılır; sahibin `dig AAAA` kontrolü RUNBOOK'a not.
 - Düzeltmelerden sonra güvenlik denetimi "final-clean" turu tekrar koşulur (koşu durumu `incomplete` kapanır).
 - **Kaynak:** T20261021-79
+
+### 2026-10-21 — medialog — Canlı ortam: Oracle Always Free + DuckDNS + Gmail SMTP
+Kullanıcı kararı (2026-10-21, AskUserQuestion): medialog canlı ortamı tamamen ücretsiz kaynaklarla.
+- **Sunucu:** Oracle Cloud Always Free ARM VM (Ampere A1, Ubuntu 24.04). Mevcut Docker compose + GitHub Actions SSH dağıtımı korunur. AWS kullanılmaz.
+- **Alan adı:** DuckDNS ücretsiz alt alan adı (`<ad>.duckdns.org`). HTTPS'i Caddy Let's Encrypt ile otomatik alır.
+- **E-posta:** Gmail SMTP, uygulama şifresiyle (günde ~500). Bunun için uygulamaya `MAIL_TRANSPORT=smtp` eklenir. Resend gerekmez, çünkü alan adı DNS kaydı yok.
+- **Yedek:** isteğe bağlı; ücretsiz seçenek rclone ile Google Drive.
+- Kullanıcının yapacakları: Oracle hesabı ve VM, DuckDNS kaydı, Gmail 2FA ve uygulama şifresi, TMDB belirteci, SSH anahtarı üretimi, GitHub sırlarının girilmesi. VLAD GitHub sırlarını yazamaz: bu session'da sır API'sine erişim yok.
+- **Kaynak:** kullanıcı
