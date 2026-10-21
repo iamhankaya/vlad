@@ -113,3 +113,11 @@ Kullanıcı kararı (2026-10-21, AskUserQuestion): medialog canlı ortamı tamam
 - **Yedek:** isteğe bağlı; ücretsiz seçenek rclone ile Google Drive.
 - Kullanıcının yapacakları: Oracle hesabı ve VM, DuckDNS kaydı, Gmail 2FA ve uygulama şifresi, TMDB belirteci, SSH anahtarı üretimi, GitHub sırlarının girilmesi. VLAD GitHub sırlarını yazamaz: bu session'da sır API'sine erişim yok.
 - **Kaynak:** kullanıcı
+
+### 2026-10-21 — medialog — Manga: ayrı tür, kaynak MangaUpdates (AniList koşulları tracker'ı yasaklıyor)
+Kullanıcı kararı (2026-10-21), manga desteği (T20261021-89):
+- **Tür:** kitaptan **ayrı** içerik türü "Manga". Köken rozeti: Manga, Manhwa, Manhua.
+- **Kaynak: MangaUpdates API**, AniList değil. Gerekçe: AniList kullanım koşulları API'nin rakip liste/tracker servislerinde kullanılmasını yasaklıyor; yasak kullanıcı ve eser verisini kapsıyor (docs.anilist.co/guide/terms-of-use, arama özetinden; sayfaya doğrudan erişilemedi). MangaUpdates kabul edilebilir kullanım politikası: kaynak gösterilir, istekler aralıklı yapılır ve önbellek kullanılır; tracker kullanımına bir yasak yok.
+- **Anime:** TMDB'de kalır (2026-10-20 kararı değişmedi).
+- **VLAD kararları:** yetişkin içerik tamamen gizli, açmak için ayar yok. İstatistikte okuma süresi bölüm başına 6 dk tahmin edilir ve "tahmini" etiketiyle gösterilir.
+- **Kaynak:** T20261021-90
