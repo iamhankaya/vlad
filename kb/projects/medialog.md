@@ -46,6 +46,7 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 - 2026-10-20: Proje başladı; repo açıldı, `tam` döngü pipeline'ı.
 
 ## Açık konular
+- **Backlog — dış yedek:** gece yedeği (03:17) Google Drive'a rclone ile ücretsiz kopyalansın (`BACKUP_RCLONE_*` sırları, RUNBOOK §1.8); şimdilik yalnız sunucuda. (kullanıcı 2026-10-21)
 - **Canlı ortam bilgileri:**
   - Oracle VM 144.21.41.159, IP rezerve değil (ephemeral; VM silinmedikçe değişmez).
   - Dağıtım anahtarı Cloud Shell'de `~/medialog_deploy` (ECDSA).
