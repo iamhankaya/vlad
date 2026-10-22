@@ -152,3 +152,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile spec kararları ve cihaz sondası
 - **Karar:** Spec (T20261022-65) açık noktaları: karantina yok, medya dışı `SİL` ile kalıcı; yalnızca `SİL` (Türkçe İ); eşikler büyük ≥100 MB, eski ≥365 gün ve ≥50 MB, kopya ≥1 MB, APK ≥30 gün; keystore kullanıcı üretir, repo private; sohbet medyası silinebilir/işaretsiz; targetSdk 35; log/döküm kategorisi cihaz sondası verisinden sonra. Plan öncesi cihaz sondası fazı (T20261022-76) eklendi.
 - **Kaynak:** T20261022-65
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile tasarımı; ağaçtan silme yok
+- **Karar:** Tasarım (T20261022-66, `docs/design/DESIGN.md`) kabul edildi, entegrasyon branch'ine merge edildi. v1'de klasör ağacından doğrudan silme yok; silme yalnızca Temizlik kategorilerinden.
+- **Kaynak:** T20261022-66
