@@ -51,6 +51,8 @@ Push, PR ve merge her zaman açık onayınla yapılır.
 
 **Bulgu kaydı:** ertelenen/açık noktalar `kb/findings/` altında tutulur: `vlad finding add --project <slug> --severity <kritik|yüksek|orta|düşük|bilgi> --source <görev> --title "<…>" [--detail-file <md>] [--state deferred]`, `vlad finding list [--project] [--state] [--severity] [--json]`, `vlad finding set <id> <open|deferred|fixed|wontfix> [--by <görev>]`. `/digest` kapanış raporlarının açık noktalarını buraya işler; `vlad status --summary` açık kritik/yüksek bulgu sayısını ekler.
 
+**Dağıtım provası:** iş dağıtım betiğine/CI'a/altyapıya dokunuyorsa `/delegate` `prova` fazı (`devops` rolü) önerir; devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder ve `### Prova matrisi` / `### Prova edilemeyenler` raporlar. Kırmızı provada `/status` canlıya almayı önermez.
+
 **Çalışma notları:** pipeline bittikten sonra `/status` kısa bir retro yapar; dersler `vlad project note <slug> "<ders>"` ile kartın `## Çalışma notları` bölümüne yazılır. Çalışanlar ve roller bu bölümü işe başlarken okur.
 
 ## Geliştirme
