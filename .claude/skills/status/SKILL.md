@@ -70,6 +70,12 @@ Kartta `gate` **yoksa**: VLAD mevcut ad hoc koşuyu (projenin bilinen test/build
   ```
 **`role: tester` ise:** Tester hatayı kanıtlamak için kasıtlı başarısız testler commit'leyebilir. Raporun `### Kırmızı bırakılan testler` bölümünü seçeneklerden önce göster. Liste boş değilse merge ana branch'in test suite'ini kırmızıya çevirir; varsayılan öneri merge değil, `### Önerilen düzeltmeler`'den bir Developer görevi açmaktır (`/delegate`, `--role developer`, kabul kriteri: o testlerin yeşile dönmesi). Merge yine seçenek olarak kalır ama bu riski açıkça söyle.
 Pipeline'da kural entegrasyon branch'ine uyarlanır: `kabul`/`karakterizasyon` fazının kırmızı testleri beklenendir (developer'ın hedefi), entegrasyon branch'ine merge varsayılan öneridir. `doğrulama` fazında kırmızı test varsa varsayılan öneri, aynı çatı altında yeni bir `uygulama` fazı (developer, kabul kriteri: o testlerin yeşile dönmesi) ve ona bağlı yeni bir `doğrulama` fazı açmaktır (`/delegate` adım 4). Ana branch'e merge, doğrulama fazı yeşil bitmeden önerilmez.
+**Güvenlik incelemesi:** faz auth, yetki, oturum veya veri silmeye dokunuyorsa (rapor/diff'ten ya da fazın Tanım'ındaki işaretten anla) ya da VLAD güvenlik etkili bir kararı otonom vermişse, merge'den önce kısa bir güvenlik incelemesi yürüt: arka plan agent'ı (yalnızca okur; auth/yetki/oturum/silme yolları, girdi doğrulama, sır sızıntısı) veya `security-review` skill'i. Bulguları (önem + `dosya:satır`) kapıda göster; kritik/yüksek bulgu varsa merge önerme, düzeltme fazı öner; kalanları `vlad finding add` ile kaydet. VLAD'ın otonom verdiği güvenlik etkili kararı kullanıcıya açıkça söyle ve onay iste; sessizce geçme.
+
+**Entegrasyon öncesi kontrol:** dev fazı raporunun `### Test sonuçları`'nda entegrasyon branch'i merge + lint + gate sonucu yoksa veya kırmızıysa (çakışma, kırmızı) merge önerme; çalışana düzeltme iste (seçenek 3). Raporda yeşilse kapıdaki doğrulamayı yine de yap.
+
+**Ara denetim (`denetim` fazı pipeline ortasındaysa):** kritik/yüksek bulgular sonraki `uygulama` fazının girdisidir; kalan fazların Tanım'ına ekle (`/delegate` adım 4), orta/düşük bulguları son kapı listesine ekle.
+
 **`role: devops` ise:** `### Prova matrisi`ni ve `### Prova edilemeyenler`'i göster; kırmızı senaryo varsa merge/canlıya alma önerme. Devops gerçek sunucuya dağıtım yapmaz; canlıya alma ayrıca onaylanır.
 
 **`role: designer` ise:** `tasarım` fazında `docs/design/` dosyalarını ve `### Token'lar` tablosunu göster; entegrasyon branch'ine merge varsayılan öneridir. `denetim` fazı kod değiştirmez; `### Bulgular` tablosunu göster. Kritik veya yüksek önemde bulgu varsa varsayılan öneri, doğrulamadaki kırmızı test kuralıyla aynıdır: yeni bir `uygulama` fazı (kabul kriteri: o bulguların giderilmesi) ve ona bağlı yeni `doğrulama` + `denetim` fazları. Yalnızca orta/düşük bulgular varsa bunları son kapıdaki açık noktalar listesine ekle.
@@ -146,6 +152,8 @@ Kullanıcı döngüyü ortada büyütmek/küçültmek isterse de böyle: çatı 
 vlad task answer <id> "<cevap>" --json
 ```
 Çalışanın session'ı açıksa ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder.
+
+**Test itirazı** (soru `Test itirazı:` ile başlıyorsa; developer bir kabul testini yanlış buluyor): soruyu, itiraz edilen testi ve tester'ın görevini (`T…`) kullanıcıya göster, özetle ve şu seçenekleri sun: (a) **tester'a yönlendir** — tester görevi hâlâ açıksa `vlad task log <tester-id> "Test itirazı: …"` düş ve çalışana ilet, kapanmışsa yeni bir kısa `kabul` düzeltme fazı aç (`/delegate` adım 4, rol `tester`); (b) **VLAD karar verir** — spec/sözleşmeye bakıp testin doğru/yanlış olduğunu gerekçesiyle söyle (kullanıcı onayıyla); testi sen düzenlemezsin. Cevabı `vlad task answer` ile developer'a yaz ("test düzeltilecek, şu görev/commit" veya "test doğru, gerekçe"). Karar kullanıcıda değilse bile kayda geçer: `vlad task log`.
 
 ## 5. `stalled` görevler
 
