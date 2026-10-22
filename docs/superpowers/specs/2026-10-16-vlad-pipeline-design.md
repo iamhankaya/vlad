@@ -146,6 +146,14 @@ Retro bulgusu: kapıdaki yanlış kırmızılar ortamdan geldi (bayat vitest ön
 - **`/scan`:** kart oluştururken `gate` sorar; repoda `scripts/gate.sh` ya da `gate` npm script'i varsa önerir.
 - **Test hijyeni (`roles/tester.md`, `roles/developer.md`):** süre eşiğine bağlı iddia yok (zorunluysa geniş pay + gerekçe); FakeClock/tarihler "şimdi"ye göre göreli; koşudan önce test önbelleği ve şablon DB temizliği (gate yapmıyorsa); kararsız test "flake" diye geçilmez, kök neden ya da açık nokta.
 
+## 15. Bulgu kaydı ve retro (T20261022-57)
+
+Retro bulgusu: ertelenen bulgular kayboluyordu (manga B-*/T-*, DiskPilot 17 bulgu) ve dersler kalıcı değildi.
+
+- **Bulgu kaydı:** `kb/findings/<id>.md` (`F-<proje>-NNN`), `vlad finding add|list|set`; şema ve alanlar core spec §5.6. Çalışanlar `### Açık noktalar` maddelerini `- [önem] başlık — ayrıntı` biçiminde yazar; `/digest` bunları `finding add` ile kaydeder, kartın `## Açık konular` bölümüne açık bulguların özetini yansıtır. Son kapıda `/status` açık bulguları açık noktalar listesine ekler. `vlad status --summary` açık kritik/yüksek bulgu sayısını gösterir.
+- **Retro:** son kapıdan sonra (çatı `done`) `/status` kısa retro yapar: ne iyi gitti, ne sürtündü, ders. Proje dersleri `vlad project note` ile kartın `## Çalışma notları` bölümüne yazılır; rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur (VLAD rol dosyasını kendisi düzenlemez).
+- **Okuma:** `vlad-worker` ve tüm rollerin `## Kaynaklar` bölümü kartın `## Çalışma notları`'nı işe başlamadan okumayı söyler; bulut çalışanda kb okunamadığı için notlar prompt'a `## Proje çalışma notları` olarak satır içi girer (`src/tasks/cloud.ts`).
+
 ## 13. Kapsam dışı
 
 Fazlar arası otomatik merge (kapılar her zaman kullanıcıda), birden çok repoya yayılan pipeline, ajanların birbirine doğrudan mesaj atması, maliyet bütçesi/limitler.
