@@ -49,10 +49,7 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 - 2026-10-20: v1 `main`'e merge edildi (PR #24). (görev T20261020-58)
 
 ## Açık konular
-- **Açık bulgular** (`vlad finding list --project medialog`):
-  - orta: F-medialog-001 canlı gece yedeği (cron) doğrulanmadı; dış hedef (rclone) yok.
-  - düşük: F-medialog-003 K-m-09 zamanlama eşiği (900 ms) yük altında sınırda; F-medialog-004 B-02 metni toplam bilinirken aşımda da "toplam bilinmediği için" diyor (ertelendi); F-medialog-006 manga tasarımda tanımsızlar T-2/T-4/T-5/T-8/T-10 (ertelendi).
-  - bilgi: F-medialog-007 "son bilinen/son çıkan bölüm" terim birliği.
+- **Açık bulgu:** F-medialog-001 (orta) canlı gece yedeği (cron) doğrulanmadı; dış hedef (rclone) yok. Diğer manga bulguları kullanıcı kararıyla kapandı (2026-10-22).
 - **Backlog — dış yedek:** gece yedeği (03:17) Google Drive'a rclone ile kopyalansın (`BACKUP_RCLONE_*`, RUNBOOK §1.8). (kullanıcı 2026-10-21)
 - **Canlı ortam bilgileri:**
   - Oracle VM 144.21.41.159, IP rezerve değil (ephemeral; VM silinmedikçe değişmez).
