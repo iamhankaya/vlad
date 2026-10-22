@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths } from "../../src/kb/index.js";
-import { listProjects, listProjectsWithWarnings, writeProject } from "../../src/projects/store.js";
+import { listProjects, listProjectsWithWarnings, setProjectField, writeProject } from "../../src/projects/store.js";
 import { makeHome } from "../helpers.js";
 
 const card = (slug: string) => `---
@@ -49,6 +49,28 @@ describe("exposure", () => {
   });
   it("rejects an invalid exposure value", () => {
     expect(() => writeProject("alpha", card("alpha").replace("autonomy: commit\n", "autonomy: commit\nexposure: public\n"))).toThrow();
+  });
+});
+
+describe("gate", () => {
+  beforeEach(() => {
+    makeHome();
+  });
+  it("is listed when the card has it and omitted when it does not", () => {
+    writeProject("alpha", card("alpha").replace("autonomy: commit\n", "autonomy: commit\ngate: scripts/gate.sh\n"));
+    writeProject("beta", card("beta"));
+    const [a, b] = listProjects();
+    expect(a.gate).toBe("scripts/gate.sh");
+    expect("gate" in b).toBe(false);
+  });
+  it("is set and removed with setProjectField", () => {
+    writeProject("alpha", card("alpha"));
+    expect(setProjectField("alpha", "gate", "npm run gate").gate).toBe("npm run gate");
+    expect(listProjects()[0].gate).toBe("npm run gate");
+    expect("gate" in setProjectField("alpha", "gate", "")).toBe(false);
+  });
+  it("rejects a non-string gate on write", () => {
+    expect(() => writeProject("alpha", card("alpha").replace("autonomy: commit\n", "autonomy: commit\ngate: 5\n"))).toThrow();
   });
 });
 

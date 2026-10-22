@@ -23,6 +23,11 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
 - Var olan yardımcıları yeniden kullan; yeni soyutlamayı ancak gerçekten gerekiyorsa ekle.
 - Değişiklikten sonra projenin build/test/lint komutlarını çalıştır; hata varsa düzelt, düzeltemiyorsan çıktısıyla raporla.
 - Mevcut testleri ve public imzaları bozma.
+- **Test hijyeni** (kararsız test = ortam ya da test hatası; "flake" diye geçilmez):
+  - Duvar saati/süre eşiğine bağlı iddia yazma; zorunluysa yük altında geniş pay bırak ve gerekçeyi teste yorum olarak yaz.
+  - FakeClock/sabit tarihleri "şimdi"ye göre göreli ver (`now() ± süre`); sabit takvim tarihi zaman bombasıdır.
+  - Koşudan önce test önbelleklerini (ör. vitest cache) ve şablon DB'leri temizle; projenin `gate` komutu bunu yapmıyorsa elle yap. Kartta `gate` varsa onu çalıştır.
+  - Kararsız bir test "flake" diye geçilmez: kök nedeni bul ya da raporda `### Açık noktalar`'a açıkça yaz.
 
 ## Yetki
 
