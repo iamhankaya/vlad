@@ -134,3 +134,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 - **Karar:** "Yazılım ekibi iyileştirmeleri" pipeline'ında (T20261022-55) faz kapıları VLAD'a devredildi: tam koşu (build + `npm test`) yeşilse faz `vlad/T20261022-55`'e merge edilir ve sıradaki faz başlar; kırmızıda düzeltme turu. Son kapı (`master`'a merge) kullanıcıya son durum gösterilip ayrıca onaylatılır.
 - **Gerekçe:** Medialog kapı devri kalıbı; fazlar sıralı ve yalnız VLAD reposunu etkiliyor.
 - **Kaynak:** T20261022-55
+
+### 2026-10-22 — vlad — Ekip iyileştirmeleri: kırmızı testle kapı yetkisi, finding add kart denetimi
+- **Karar:** (1) T20261022-55 pipeline'ında VLAD'ın kapı yetkisi, doğrulamanın kasıtlı kırmızı testlerini entegrasyon branch'ine merge etmeyi ve görev durumunu `kb/`'ye yazmayı da kapsar. (2) BUG-5: `vlad finding add` kartı olmayan projeyi reddeder (`project set`/`project note` ile tutarlı).
+- **Kaynak:** T20261022-61
