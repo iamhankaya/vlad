@@ -52,3 +52,16 @@ describe("repo roles/", () => {
     expect(scan).toContain("exposure belirsiz");
   });
 });
+
+describe("test hygiene rules", () => {
+  for (const slug of ["tester", "developer"]) {
+    it(`${slug} carries the four hygiene rules`, () => {
+      const body = readFileSync(resolve(dir, `${slug}.md`), "utf8");
+      expect(body).toContain("Test hijyeni");
+      expect(body).toMatch(/duvar saati/i);
+      expect(body).toMatch(/FakeClock/);
+      expect(body).toMatch(/önbellek/);
+      expect(body).toMatch(/flake/);
+    });
+  }
+});

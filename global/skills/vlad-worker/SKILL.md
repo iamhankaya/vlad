@@ -54,11 +54,13 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 
 ## 6. Kapanış raporu
 
+Rapordan önce proje kartında `gate` alanı varsa (`vlad project list --json` → `gate`) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
+
 Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
 ### Yapılanlar
 ### Test sonuçları
-(çalıştırılan komutlar ve sonuçları)
+(çalıştırılan komutlar ve sonuçları; kartta `gate` varsa önce o)
 ### Kabul kriterleri
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
