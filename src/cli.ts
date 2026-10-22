@@ -162,7 +162,7 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
   .option("--role <slug>", "roles/<slug>.md uzman rolü (advisory → research, executor → dev)")
   .option("--parent <id>", "çatı (pipeline) görevi")
   .option("--depends-on <ids>", "virgülle ayrılmış, aynı pipeline'daki bağımlılıklar")
-  .option("--phase <ad>", "faz adı (spec, plan, kabul, uygulama, doğrulama, …)")
+  .option("--phase <ad>", "faz adı (spec, tasarım, plan, sözleşme, kabul, karakterizasyon, uygulama, doğrulama, denetim, prova, danışma)")
   .requiredOption("--project <slug>", "proje slug'ı")
   .requiredOption("--title <başlık>", "görev başlığı")
   .option("--kind <kind>", "dev | research | pipeline", "dev")

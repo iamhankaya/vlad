@@ -61,6 +61,7 @@ describe("adım 1: project set gate", () => {
 });
 
 describe("adım 2: finding add|list|set + status --summary", () => {
+  beforeEach(() => writeCard(home, "alpha"));
   const add = (extra: string[], detail?: string) =>
     vlad(["finding", "add", "--project", "alpha", "--source", "T20261022-01", ...extra, "--json"], detail);
 
@@ -87,6 +88,7 @@ describe("adım 2: finding add|list|set + status --summary", () => {
     expect(readFileSync(join(home, "kb", "findings", `${a.id}.md`), "utf8")).not.toMatch(/fixed_by/);
   });
   it("ID'ler proje başına sayılır", () => {
+    writeCard(home, "beta");
     add(["--severity", "orta", "--title", "a"]);
     const r = JSON.parse(vlad(["finding", "add", "--project", "beta", "--source", "T20261022-01", "--severity", "orta", "--title", "b", "--json"]).out);
     expect(r.id).toBe("F-beta-001");

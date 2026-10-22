@@ -7,8 +7,12 @@ import {
 } from "../../src/findings/store.js";
 import { makeHome } from "../helpers.js";
 
-const add = (o: Partial<Parameters<typeof addFinding>[0]> = {}) =>
-  addFinding({ project: "alpha", severity: "orta", source: "T20261022-01", title: "başlık", ...o });
+// addFinding requires an existing project card; only its presence matters here
+const add = (o: Partial<Parameters<typeof addFinding>[0]> = {}) => {
+  const project = o.project ?? "alpha";
+  if (/^[a-z0-9-]+$/.test(project)) writeFileSync(join(kbPaths().projects, `${project}.md`), "---\nslug: x\n---\n");
+  return addFinding({ severity: "orta", source: "T20261022-01", title: "başlık", ...o, project });
+};
 
 describe("findings store", () => {
   beforeEach(() => { makeHome(); });
@@ -30,6 +34,10 @@ describe("findings store", () => {
     expect(add({ state: "deferred" }).data.state).toBe("deferred");
     expect(() => add({ state: "fixed" })).toThrow(/open\|deferred/);
   });
+  it("rejects a project without a card with the same message as project set/note", () => {
+    expect(() => addFinding({ project: "yok", severity: "orta", source: "T20261022-01", title: "x" })).toThrow(/proje kartı bulunamadı: yok/);
+  });
+
   it("rejects an invalid severity, project slug, source task and empty title", () => {
     expect(() => add({ severity: "acil" })).toThrow(/geçersiz önem.*kritik/);
     expect(() => add({ project: "A b" })).toThrow(/slug/);
