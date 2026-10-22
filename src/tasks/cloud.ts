@@ -62,6 +62,13 @@ function card(slug: string): ProjectCard {
   return readDoc<ProjectCard>(file).data;
 }
 
+/** The card's `## Çalışma notları`; the cloud worker cannot read kb/, so they travel in the prompt. */
+function workNotes(slug: string): string | null {
+  const file = join(kbPaths().projects, `${slug}.md`);
+  if (!existsSync(file)) return null;
+  return getSection(readDoc<ProjectCard>(file).body, "## Çalışma notları") || null;
+}
+
 const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "## VLAD bulut protokolü",
   "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
@@ -115,6 +122,8 @@ function buildCloudPrompt(
     });
     parts.push(`## Çatı görev (${parent.data.id})\n${sections.join("\n\n") || "(çatı görevde Tanım/Kabul kriterleri/Bağlam yok)"}`);
   }
+  const notes = workNotes(task.data.project);
+  if (notes) parts.push(`## Proje çalışma notları (${task.data.project} kartı)\n${notes}`);
   if (role) {
     const body = readDoc<unknown>(role.file).body.trim();
     parts.push(`## Rolün: ${role.title}\n${body}`);
