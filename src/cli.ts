@@ -84,7 +84,7 @@ def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts
   const card = writeProject(slug, readInput(o.file as string));
   out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
 }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
-def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
+def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
   setProjectField(slug, field, value);
   out(o, { slug, field, value: value === "" ? null : value }, value === "" ? `silindi: ${slug}.${field}` : `yazıldı: ${slug}.${field}=${value}`);
 });
@@ -93,7 +93,7 @@ def(project, "list", "Kartları listeler", (o: Opts) => {
   out(
     o,
     { projects, warnings },
-    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}${p.exposure ? `  [${p.exposure}]` : ""}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}${p.exposure ? `  [${p.exposure}]` : ""}${p.gate ? `  gate: ${p.gate}` : ""}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
   );
 });
 

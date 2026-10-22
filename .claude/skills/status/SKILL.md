@@ -53,6 +53,12 @@ Bulut VLAD yalnızca kendi session branch'ine push edebilir; kapılar yerel `git
 3. **Olduğu gibi kabul et:** aynı kurallar.
 Son kapı (`vlad/<çatı-id>` → ana branch) ayrı bir PR ve ayrı açık onaydır. Bulut görevinde `vlad task cleanup` worktree olmadığı için zararsızdır. Bulut VLAD'ın `kb:` commit'leri session branch'ine gider (`vlad kb commit --push`); `master`'a alınması ayrıca onaylı merge/PR'dır.
 
+### Kapı doğrulaması (`gate`)
+
+Entegrasyon doğrulaması (faz merge'ünden önce/sonra, son kapı) projenin proje kartındaki **`gate`** komutuyla yapılır (`vlad project list --json` → `gate`; ör. `scripts/gate.sh`, `npm run gate`). Komutu ilgili worktree'de çalıştır ve sonucu (çıkış kodu, kırmızıysa özet) kullanıcıya göster; kırmızı gate'te merge önerme.
+
+Kartta `gate` **yoksa**: VLAD mevcut ad hoc koşuyu (projenin bilinen test/build komutları) yapar ve kullanıcıya şunu gösterir: "⚠ gate tanımlı değil — kart için öneri: tek kapı komutu tanımla (`vlad project set <slug> gate "<komut>"`); test önbelleği/şablon DB temizliği ve build'i içersin." Gate'i kullanıcı onayı olmadan kendin yazma.
+
 ## 2. `awaiting_approval` görevler
 
 `kind: pipeline` (çatı) ise adım 3'teki **son kapıya** git. Diğerleri için `kb/tasks/<id>.md`'yi oku ve göster:
@@ -99,7 +105,7 @@ vlad task ready --parent <çatı-id> --json
 `{"tasks":[...]}` içindeki her fazı **sormadan** başlat — kullanıcı pipeline'ı taslakta onayladı: dev → `vlad task launch <id> --json` (**PowerShell aracıyla**, `/delegate` 5a), research → `/delegate` 5b, plan fazı → `/delegate` 6. Kullanıcıya hangi fazların başladığını söyle. Merge kapıları ise her zaman sorulur.
 
 **Tüm fazlar `done`** (`vlad task list --parent <çatı-id> --json`; `cancelled` fazlar yerine yenisi açılmışsa onlar sayılmaz) → `vlad task set <çatı-id> awaiting_approval --json` ve son kapı:
-- Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
+- Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
 - Diff özeti: `git -C <çatı worktree> log --oneline main..HEAD` ve `git -C <çatı worktree> diff --stat main...HEAD`.
 

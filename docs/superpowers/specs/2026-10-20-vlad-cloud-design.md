@@ -25,6 +25,7 @@ Bulut algılama: `CLAUDE_CODE_REMOTE=true` (`src/kb/env.ts`, `src/launcher/mode.
 Opsiyonel alanlar (mevcut kartlar geçerli kalır):
 - `repo: owner/name` — bulutun çalışacağı GitHub reposu. `path` bulutta kullanılmaz (`C:\dev\…`).
 - `local_only: true` + `local_only_reason` — bulutta başlatılamaz (ör. DiskPilot/WPF).
+- `gate: <komut>` — projenin tek kapı komutu (bulut/yerel fark etmez); bkz. pipeline spec §14.
 
 ## 4. `vlad task launch --json` (cloud)
 

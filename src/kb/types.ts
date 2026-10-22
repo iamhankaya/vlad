@@ -31,6 +31,8 @@ export interface ProjectCard {
   /** Cannot run in the cloud (e.g. needs Windows); cloud launch fails with `local_only_reason`. */
   local_only?: boolean;
   local_only_reason?: string;
+  /** Single gate command of the project (e.g. `scripts/gate.sh`); absent → no gate defined. */
+  gate?: string;
   last_activity: string | null;
   last_scanned: string | null;
 }

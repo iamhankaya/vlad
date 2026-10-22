@@ -136,6 +136,16 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 - **Süre:** görev oluşturmadan rapora ~6 dakika (19:18 → 19:24). Küçük bir test görevi için tek faz bu sürede bitiyor; `kısa` döngü (developer → tester) birkaç küçük iş için makul, `tam` döngü yalnızca §3'teki işaretlerde.
 - **Açık nokta (pipeline'a girdi):** Tester'ın "CI'a ekle" gibi kapsam dışı önerileri raporda kalıyor. Pipeline'da bunlar çatı görevin açık noktalarına toplanmalı ve son kapıda kullanıcıya gösterilmeli (§10 /status).
 
+## 14. Proje kapısı (`gate`) ve test hijyeni (T20261022-56)
+
+Retro bulgusu: kapıdaki yanlış kırmızılar ortamdan geldi (bayat vitest önbelleği, eski şablon DB, yük altında kararsız testler, FakeClock zaman bombası).
+
+- **Kart alanı:** opsiyonel `gate` (string, boş olamaz) — projenin tek kapı komutu. `vlad project set <slug> gate "<komut>"` (boş değer siler); `vlad project list --json` çıktısında `gate` görünür.
+- **`/status`:** entegrasyon doğrulaması (faz merge'ü, son kapı) kartta `gate` varsa onunla yapılır. Yoksa VLAD ad hoc koşuyu yapar ve "gate tanımlı değil" uyarısı + kart için öneri gösterir.
+- **`vlad-worker`:** rapordan önce kartta `gate` varsa çalıştırılır, sonucu `### Test sonuçları`'na yazılır.
+- **`/scan`:** kart oluştururken `gate` sorar; repoda `scripts/gate.sh` ya da `gate` npm script'i varsa önerir.
+- **Test hijyeni (`roles/tester.md`, `roles/developer.md`):** süre eşiğine bağlı iddia yok (zorunluysa geniş pay + gerekçe); FakeClock/tarihler "şimdi"ye göre göreli; koşudan önce test önbelleği ve şablon DB temizliği (gate yapmıyorsa); kararsız test "flake" diye geçilmez, kök neden ya da açık nokta.
+
 ## 13. Kapsam dışı
 
 Fazlar arası otomatik merge (kapılar her zaman kullanıcıda), birden çok repoya yayılan pipeline, ajanların birbirine doğrudan mesaj atması, maliyet bütçesi/limitler.
