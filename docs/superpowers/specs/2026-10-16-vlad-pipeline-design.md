@@ -59,7 +59,7 @@ Görev şemasına eklenenler:
 - `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
 - `parent: string | null` — çatı görevin ID'si.
 - `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
-- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `uygulama`, `doğrulama`, `denetim`, `danışma`).
+- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
 
 Kurallar (CLI doğrular):
 - `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.
@@ -86,6 +86,7 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 | kabul / karakterizasyon | tester | dev | Testler (branch'te) + test matrisi (senaryo → test → beklenen) |
 | uygulama | developer | dev | Kod + unit testler; kabul testlerini yeşile çevirme hedefi |
 | doğrulama | tester | dev | Tüm suite sonucu, tarayıcı/E2E bulguları, kanıtlı hata listesi |
+| prova | devops | dev | `### Prova matrisi` (senaryo \| ortam \| sonuç), `### Bulunan hatalar`, `### Prova edilemeyenler`; dağıtım/CI/altyapı dosyaları düzeltilebilir, gerçek sunucuya dağıtım yok |
 | denetim | designer | dev | Tasarıma uyum, erişilebilirlik, responsive bulguları (önem + kanıt), developer için önerilen düzeltmeler; kod değişmez |
 
 **Sistem tasarımı (2026-10-20).** `tam` döngüsünde sistem tasarımı architect'in plan çıktısındaki `### Sistem tasarımı` bölümüdür; `özellik` döngüsünde architect fazı olmadığından analyst'in spec'indeki kısa `### Sistem etkisi` onun yerini tutar. Derinliği proje kartının `exposure` alanı (`local | network | internet`) belirler; alan boşsa rol tahmin etmez, "açık nokta / exposure belirsiz" yazar ve VLAD kullanıcıya sorar. `exposure`, `local_only`'den farklıdır: `local_only` bulutta derlenip çalışabilirliği, `exposure` sisteme kimin eriştiğini anlatır. Ayrıntı: roller spec'i §4. Bağlar: `/delegate` `exposure`'ı döngü seçiminde işaret olarak kullanır (`internet`/`network` + auth, veri, altyapı, dışa açık yüzey veya ölçeği etkileyen iş → en az `özellik`; daha küçük döngüde gerekçe taslakta yazılır) ve taslakta gösterir; tester kabul fazında hata senaryolarını test adayı olarak okur; developer kapanış raporunda sistem tasarımına uyumu bildirir.
@@ -161,6 +162,15 @@ Retro bulgusu: oturum limiti kesintileri (T20261018-04: bir ajan yanlış worktr
 - **`maxParallel`** (`vlad.config.json`, opsiyonel pozitif tamsayı; yoksa sınırsız = önceki davranış). `vlad task ready [--parent <id>] --json` → `{ tasks, held_by_limit, running, maxParallel }`: `running` = şu an `running` olan dev görevleri (tüm projeler; research/pipeline sayılmaz); boş yuva = `maxParallel − running`. Hazır fazlar ID sırasıyla `tasks`'a (yuva kadar), kalanı `held_by_limit`'e girer. `tasks`'ın anlamı değişmedi: başlatılacaklar. `/delegate` ve `/status` yalnızca `tasks`'ı başlatır.
 - **`vlad task resume <id> [--json]`** (yalnızca `running`/`stalled`; diğer durum, bilinmeyen görev → standart hata). Kayıtlı `worktree` varsa yerel: klasör yoksa hata, branch `vlad/<id>` değilse hata, kaydedilmemiş değişiklik hata değil `dirty` listesidir. Çıktı `{mode:"local", worktree, branch, dirty, log_tail, prompt}`; prompt worktree yolunu açıkça verir, "ana dizinde çalışma" uyarısı ve son 5 `task log` satırını içerir. `worktree` yok, `session_id` varsa bulut: `{mode:"cloud", action:"send_message", session_id, message, args}`; ikisi de yoksa hata. Komut durum değiştirmez; `stalled` → `running` geçişini `/status` yapar.
 - **`vlad-worker`:** her anlamlı adımda WIP commit + `task log` "kaldığım yer"; devam mesajında önce `git status`/branch doğrulaması.
+
+## 17. Dağıtım provası ve `devops` rolü (T20261022-59)
+
+Retro bulgusu: dağıtım hataları canlıda çıktı (T20261021-86/-87/-88, T20261022-51) ve bulutta `check-deploy` koşmadı (T20261022-53).
+
+- **`prova` fazı:** iş dağıtım betiğine, CI'a veya altyapıya dokunuyorsa `/delegate` `prova` fazını (devops, dev, bağımlılık: `uygulama`) önerir; `doğrulama` ile paralel çalışır ya da canlıya alma kapısından önce koşar.
+- **Senaryolar:** kısıtlayıcı umask (077); `bash -s < script` (stdin tüketimi); `pipefail` tuzakları (`grep -q` + SIGPIPE); boş volume ile ilk kurulum; yedek alma + geri yükleme; idempotent ikinci koşu; yetkisiz kullanıcı.
+- **Çıktı:** `### Prova matrisi` (senaryo | ortam | sonuç), `### Bulunan hatalar`, `### Prova edilemeyenler` (ör. bulutta Docker yok) + standart bölümler.
+- **Kapı:** `/status` son kapıda `prova` fazı varsa gösterir; kırmızıysa canlıya alma önerilmez. Devops dışa etkili eylem yapmaz (gerçek sunucuya dağıtım yok).
 
 ## 13. Kapsam dışı
 
