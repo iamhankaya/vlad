@@ -60,3 +60,72 @@ Gerekçe: bulut session'ı yalnızca kendi branch'ine push edebilir; çalışan�
 - **Gerekçe:** Bulut çalışanlarında derlenip test edilebilen tek yığın A; tek dil/tek sözleşme; dikey dilimler çalışan oturumuna sığar ve her kapıda çalışan bir kullanıcı akışı bırakır.
 - **Kaynak:** görev T20261020-61 (plan, developer+tester eleştirileriyle), kullanıcı onayı 2026-10-20
 - **Kaynak:** T20261020-61
+
+### 2026-10-20 — medialog — medialog faz merge kapıları VLAD'a devredildi
+- **Karar:** medialog v1 pipeline'ında (T20261020-58) faz kapıları VLAD'a devredildi: VLAD fazların kabul + uygulama branch'lerini yerelde birleştirip build, birim, lint ve kabul testlerini çalıştırır; hepsi yeşilse ve merge önerisi varsa sormadan PR açıp entegrasyon branch'ine (`vlad/T20261020-58`) merge eder ve sıradaki fazları başlatır. Kırmızı varsa önce düzeltme turu ister.
+- **Kapsam dışı:** son kapı (`vlad/T20261020-58` → `main`) ve dağıtım (U7) yine ayrıca açık onay ister.
+- **Kaynak:** kullanıcı 2026-10-20, T20261020-58
+
+### 2026-10-20 — medialog — Gece boyu otonom yürütme: v1 bitiş, güvenlik denetimi, canlıya alma, Faz 2
+- **Karar:** Kullanıcı (2026-10-20 akşam) gece boyunca medialog'u VLAD'ın yürütmesini istedi: v1'i bitir; canlıya almadan hemen önce `security-audit` skill'i (cloudflare/security-audit-skill, repoya eklendi f1c55ff) ile güvenlik incelemesi yaptır; mümkünse v1'i canlıya al (U7 dağıtım + `vlad/T20261020-58` → `main` son kapısı bu talimatla onaylı); alamıyorsan kullanıcıdan ne gerektiğini söyle. Ardından Faz 2'yi baştan sona yürüt: spec → plan → (gerekirse) tasarım → geliştirme + test → iterasyon; her kapıyı VLAD kendi onaylar (spec/plan/tasarım "tamam" kararı, testler yeşil + inceleme), "uygulama tamamen hazır" diyene kadar.
+- **Sınırlar (VLAD yorumu):** para harcamak, hesap açmak, DNS/alan adı/üçüncü taraf hesap işlemleri, sırların yazılması kullanıcıdadır; gerçek dağıtım yalnızca kullanıcının sağladığı altyapı ve GitHub repo sırlarıyla (Actions) yapılır. Kullanıcı kararı gerektiren ürün sorularında VLAD makul varsayımı seçip karar günlüğüne ve sabah özetine yazar. Güvenlik denetiminde kritik/yüksek bulgu varsa canlıya alma düzeltme turundan sonra.
+- **Kaynak:** kullanıcı 2026-10-20, T20261020-58
+
+### 2026-10-20 — medialog — medialog v2 spec kabulü ve varsayılanlar
+- **Karar:** medialog v2 spec'i (T20261020-85) VLAD tarafından kabul edildi (gece otonom yürütme kararı). Kapsam Must: arkadaş aktivite akışı (varsayılan açık, 90 gün, geçmişe dönük doldurma yok), yayın takvimi (active+planned, 14 gün, Europe/Istanbul), site içi bildirim merkezi, MAL/Letterboxd/Goodreads içe aktarma (ZIP yok; yalnız güvenli eşleşme; çakışmada atla; MAL On-Hold→active, Dropped→atla), istatistikler (`watch_log` + `content_facts`, "tahmini" etiketi), minimal yönetici + şikâyet kuyruğu (yalnız CLI ile yetki, 15 dk yeniden doğrulama, askı 1/7/30/süresiz). Should: haftalık e-posta özeti (varsayılan kapalı, günlük 80 bütçe), yıllık özet, gizli etiketler, şikâyet kategorisi, F12–F20, logo/favicon (VLAD üretir: metin wordmark + SVG favicon), TMDB logosu (doğrulanamazsa yalnız metin). Won't: grup sohbeti, web push, OAuth, AniList, yeni liste durumları, tepki/yorum. Diğer 27 açık soruda spec'teki VLAD varsayılanları geçerli.
+- **Kaynak:** VLAD (otonom), T20261020-85
+
+### 2026-10-20 — medialog — medialog v2 plan kabulü
+- **Karar:** medialog v2 son planı (T20261020-86; architect taslak + developer/tester eleştirileri) VLAD tarafından kabul edildi. 21 faz: V0a/V0b tasarım; V1a (davranış çekirdeği: zamanlayıcı + ayrı kilit havuzu, clock, listener, 0006), V1b (iskelet/sabitler/kabuk kayıt defteri), V1T (tester altyapısı: runJobAsync/--now/pid, fake genişlemesi, conventions), V1c (denetim kalanları; G1'i bloklamaz); G1 kapısından sonra paralel V2 akış, V3a-1/2/3 takvim-bildirim, V3b e-posta özeti, V4a-1/2 + V4b içe aktarma, V5a istatistik, V5b etiket, V6a/V6b moderasyon; V7a bütünleşik doğrulama, V7b security-audit, V7c a11y/tarayıcı/ops. Askı `suspended_forever` (infinity yok); iş/Outbox SQL'inde `now()` yasak (clock parametresi); `watch_log` konum tabanlı; WS `notification.new` yalnız `hello.features` isteyene. v2 entegrasyon branch'i `vlad/T20261020-84` v1 `main`'e alındıktan sonra `main`'den açılır; `docs/spec/v2.md` ve `docs/plan/v2.md` oraya commit'lenir. v1 son düzeltme fazı denetim N1–N15'i kapsadığı için V1c yalnız kalanları alır.
+- **Kaynak:** VLAD (otonom), T20261020-86
+
+### 2026-10-20 — medialog — medialog SEC-08 ön-kaçırma düzeltme biçimi
+- **Karar:** SEC-08 (hesap ön-kaçırma) için kayıt parolası doğrulamadan sonra geçerli kalır (meşru akış korunur); e-posta doğrulanınca hesabın doğrulamadan önce açılmış tüm oturumları (WS dahil) iptal edilir; doğrulanmamış e-postayla yeniden kayıtta parola hash'i yenisiyle değişir, eski doğrulama belirteçleri ve oturumlar iptal edilir, yeni doğrulama e-postası gider (hesap sayımı eşitliği korunur); doğrulama e-postasına 'Bu kaydı sen yapmadıysan bağlantıya tıklama' satırı. VLAD gece otonom yürütme kapsamında verdi.
+- **Kaynak:** T20261020-88
+
+### 2026-10-21 — medialog — medialog v2 V1c'nin V7c'ye katılması
+- **Karar:** v2 planındaki V1c (denetim kalanları, F12–F20) ayrı faz olarak açılmadı. Son tasarım denetimi (T20261020-79) F12–F20'nin hepsini 'giderildi' buldu; tek kısmi madde F14, N7 olarak T20261020-88'de düzeltildi. Kalan doğrulama (yeniden üretilebilir kontrol listesi + `v2-audit-leftovers` regresyonu) V7c (a11y + tarayıcı) kapsamına alınır. VLAD gece otonom yürütme kapsamında verdi.
+- **Kaynak:** T20261020-84
+
+### 2026-10-21 — medialog — v2 V7c a11y açık noktaları ve DB rolü
+V7c (T20261021-77) açık noktaları için VLAD kararları (gece talimatı kapsamında, plana uyarak):
+- Bulgu 8 (zil 99+): erişilebilir ad görünür metni içerir — "Bildirimler, 99+ okunmamış" (WCAG 2.5.3 önceliklidir; gerçek sayı ≥ 100 iken söylenmez).
+- Bulgu 9 (44 px): proje kuralı (≥ 44 px dokunma hedefi) geçerli; listelenen bağlantılar düzeltilir.
+- N5 sekme şeridi yüksekliği 50 px: gözlem olarak kalır, düzeltme yok.
+- `v2-browser` (L3) ve V7a `perf-v2`/`v2-failure-scenarios` 60 sn bütçesini aşabilir: L3/seri dosyalar bütçeden muaf, bölünmez.
+- Uygulama DB rolü: süper kullanıcı olmayan ayrı bir uygulama rolü (önyükleme süper kullanıcısı yalnız yönetim/yedek için) — v2 düzeltme turunda.
+- **Kaynak:** T20261021-77
+
+### 2026-10-21 — medialog — v2 V7b güvenlik bulguları: SEC-08 (b) geri alındı, tüm bulgular canlı öncesi düzeltilir
+V7b (T20261021-79) bulguları için VLAD kararları (gece talimatı: canlıya almadan önce güvenlik denetimi; plan kuralı: kritik/yüksek bulgu kalmaz):
+- **SEC2-01 (yüksek) — SEC-08 kararı (b) değişti:** doğrulanmamış e-postayla yeniden kayıt artık parolayı, oturumları ve belirteçleri **değiştirmez**; adrese `reset_password` bağlantısı gider (posta kutusu kanıtı), yanıt yine 202 (hesap varlığı sızmaz). Gerekçe: eski akış kimliksiz hesap ele geçirmeye izin veriyordu. Plan v1 `docs/plan/v1.md:186` buna göre güncellenir.
+- **SEC2-02 (düşük, canlı öncesi düzeltilir):** iki rol — sahip/göç rolü `medialog` (süper kullanıcı değil) ve çalışma rolü `medialog_app` (ne süper kullanıcı ne sahip); `mod_actions` yalnız SELECT/INSERT; `report_gc` SECURITY DEFINER. Düzeltme turu 1'e (T20261021-80) eklendi.
+- **SEC2-03, -04, -05, -06, -07, -08:** düzeltme turu 2'de düzeltilir (düşükler de ucuz olduğu için canlı öncesi). SEC2-03 için `sessions.admin_verified_at` göçü (plan şeması değişir).
+- **NV-V2-01 (IPv6 /64):** `clientIp` /64 gruplaması SEC2-05 kapsamında yapılır; sahibin `dig AAAA` kontrolü RUNBOOK'a not.
+- Düzeltmelerden sonra güvenlik denetimi "final-clean" turu tekrar koşulur (koşu durumu `incomplete` kapanır).
+- **Kaynak:** T20261021-79
+
+### 2026-10-21 — medialog — Canlı ortam: Oracle Always Free + DuckDNS + Gmail SMTP
+Kullanıcı kararı (2026-10-21, AskUserQuestion): medialog canlı ortamı tamamen ücretsiz kaynaklarla.
+- **Sunucu:** Oracle Cloud Always Free ARM VM (Ampere A1, Ubuntu 24.04). Mevcut Docker compose + GitHub Actions SSH dağıtımı korunur. AWS kullanılmaz.
+- **Alan adı:** DuckDNS ücretsiz alt alan adı (`<ad>.duckdns.org`). HTTPS'i Caddy Let's Encrypt ile otomatik alır.
+- **E-posta:** Gmail SMTP, uygulama şifresiyle (günde ~500). Bunun için uygulamaya `MAIL_TRANSPORT=smtp` eklenir. Resend gerekmez, çünkü alan adı DNS kaydı yok.
+- **Yedek:** isteğe bağlı; ücretsiz seçenek rclone ile Google Drive.
+- Kullanıcının yapacakları: Oracle hesabı ve VM, DuckDNS kaydı, Gmail 2FA ve uygulama şifresi, TMDB belirteci, SSH anahtarı üretimi, GitHub sırlarının girilmesi. VLAD GitHub sırlarını yazamaz: bu session'da sır API'sine erişim yok.
+- **Kaynak:** kullanıcı
+
+### 2026-10-21 — medialog — Manga: ayrı tür, kaynak MangaUpdates (AniList koşulları tracker'ı yasaklıyor)
+Kullanıcı kararı (2026-10-21), manga desteği (T20261021-89):
+- **Tür:** kitaptan **ayrı** içerik türü "Manga". Köken rozeti: Manga, Manhwa, Manhua.
+- **Kaynak: MangaUpdates API**, AniList değil. Gerekçe: AniList kullanım koşulları API'nin rakip liste/tracker servislerinde kullanılmasını yasaklıyor; yasak kullanıcı ve eser verisini kapsıyor (docs.anilist.co/guide/terms-of-use, arama özetinden; sayfaya doğrudan erişilemedi). MangaUpdates kabul edilebilir kullanım politikası: kaynak gösterilir, istekler aralıklı yapılır ve önbellek kullanılır; tracker kullanımına bir yasak yok.
+- **Anime:** TMDB'de kalır (2026-10-20 kararı değişmedi).
+- **VLAD kararları:** yetişkin içerik tamamen gizli, açmak için ayar yok. İstatistikte okuma süresi bölüm başına 6 dk tahmin edilir ve "tahmini" etiketiyle gösterilir.
+- **Kaynak:** T20261021-90
+
+### 2026-10-22 — medialog — Manga: devam eden seride '/ N+' biçimi
+Toplamı bilinmeyen ama son çıkan bölümü bilinen manga serilerinde konum "Bölüm N / 128+" biçiminde gösterilir ("?" yerine). Son bölüm de bilinmiyorsa "?" kalır; tamamlanmış seride toplam gösterilir. Kaynak: kullanıcı, 2026-10-22.
+- **Kaynak:** T20261022-53
+
+### 2026-10-22 — medialog — CI yalnız main PR/push (Actions dakikası)
+GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız main'e PR, main push ve elle tetiklemede çalışır; concurrency ile eski koşu iptal, docs/md değişikliklerinde atlanır. vlad/* push'larında CI yok; kapı doğrulaması VLAD'ın yerel tam koşusudur. Kaynak: kullanıcı, 2026-10-22.
+- **Kaynak:** T20261022-54
