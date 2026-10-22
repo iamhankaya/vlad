@@ -43,6 +43,8 @@ Uzun süre sessiz kalma: kayıt `staleAfterHours`'tan eskirse görev `stalled` s
 
 ## 4. Soru sorma
 
+**Test itirazı:** pipeline'da kabul testini yanlış buluyorsan raporda bırakma; sorunu `vlad task ask <id> "Test itirazı: <test yol:satır>, tester görevi <T…> — neden yanlış, önerin"` ile sor. VLAD tester'a yönlendirir ya da karar verir; testi kendin değiştirme.
+
 Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:
 ```
 vlad task ask <id> "<soru, seçenekleriyle>"
@@ -57,6 +59,8 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 - Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e asla merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et.
 
 ## 6. Kapanış raporu
+
+**Entegrasyon öncesi kontrol (pipeline fazı, `parent` dolu):** rapordan önce entegrasyon branch'ini (`vlad/<parent>`) kendi branch'ine merge et (`git merge vlad/<parent>`; bu, kendi branch'ine güncel tabanı almaktır, entegrasyon branch'ine merge değildir), sonra lint + `gate` (yoksa tam test/build) koş. Çakışma veya kırmızı varsa kendi kapsamındaysa düzelt; değilse (başka fazın kodu, ortam) çözmeye çalışma, raporun `### Test sonuçları`'na kanıtıyla ve `### Açık noktalar`'a `- [yüksek] entegrasyon kontrolü kırmızı — …` olarak yaz. Merge'ü geri alma gerekirse `git merge --abort`. Faz kapısında sürpriz çıkmasın diye kapıdan önce koşulur.
 
 Rapordan önce proje kartında `gate` alanı varsa (`vlad project list --json` → `gate`) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
 
