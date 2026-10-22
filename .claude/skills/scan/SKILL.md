@@ -42,6 +42,7 @@ Amaç: Her repo için doğru ve güncel bir proje kartı (`kb/projects/<slug>.md
    - `autonomy`: `vlad.config.json`'daki `projects.<slug>.autonomy`, yoksa `defaultAutonomy`.
    - `last_activity`: en son commit tarihi (yoksa `null`); `last_scanned`: şimdi, yerel ofsetli ISO 8601.
    - `exposure` (opsiyonel; `local | network | internet`): sisteme kimin eriştiğini söyler ve architect'in sistem tasarımını ölçekler. **Yeni projede stack'ten veya README'den tahmin etme; kullanıcıya sor** ("Bu sistem yalnızca bu makinede mi (`local`), yerel ağda mı (`network`), internete açık mı (`internet`)?") ve cevabı karta yaz. Mevcut kartta alan boşsa kartı değiştirme, özette "exposure belirsiz" diye listele ve sor. Alan `local_only`'den farklıdır: `local_only` bulutta derlenip çalışıp çalışmadığını, `exposure` erişim kapsamını anlatır; ikisi bağımsız kalır. Boş/bilinmeyen `exposure` karta `null` (veya boş değer) olarak yazılmaz; alan hiç eklenmez. Kullanıcının cevabını mevcut karta `vlad project set <slug> exposure <local|network|internet>` ile yaz.
+   - `gate` (opsiyonel; string): projenin **tek kapı komutu** (test önbelleği/şablon DB temizliği + build + test). `/status` entegrasyon doğrulamasını, `vlad-worker` rapordan önceki koşuyu bununla yapar. Yeni kartta repoda `scripts/gate.sh` ya da `package.json`'da `gate` script'i (`npm run gate`) varsa öner ve kullanıcıya sor; yoksa alanı ekleme, özette "gate tanımlı değil" diye listele. Mevcut kartta alan boşsa kartı değiştirme, aynı şekilde listele. Cevabı `vlad project set <slug> gate "<komut>"` ile yaz. Boş değer alanı siler.
    - `status`: yeni kartta `active`; mevcut kartta kullanıcının değerini koru.
    - **Mevcut kartta** `## Mimari notlar`, `## Açık konular`, `## Son aktivite` içeriğini koru; yalnızca yanlış/eskimiş olanı düzelt. `## Özet`'i README ve commit'lere göre güncelle.
 4. **Yaz:** Kartı geçici bir dosyaya yaz ve:
@@ -59,6 +60,7 @@ Kısa bir Türkçe özet:
 - **Güncellenen kartlar:** neyin değiştiği (ör. "son aktivite 3 gün önce → bugün", "stack'e vite eklendi").
 - **Değişmeyenler:** yalnızca sayı.
 - **exposure belirsiz:** `exposure` alanı boş olan mevcut kartların slug listesi (sorulması gerekenler).
+- **gate tanımlı değil:** `gate` alanı boş kartların slug listesi (öneri varsa komutuyla).
 - **Hatalar:** yazılamayan kartlar ve nedeni.
 
 Çok sayıda (10+) yeni repo bulunursa hepsini yazmadan önce listeyi göster ve hangilerinin kart alacağını sor (ör. denemeler, arşiv klasörleri).

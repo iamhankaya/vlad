@@ -31,6 +31,8 @@ export interface ProjectCard {
   /** Cannot run in the cloud (e.g. needs Windows); cloud launch fails with `local_only_reason`. */
   local_only?: boolean;
   local_only_reason?: string;
+  /** Single gate command of the project (e.g. `scripts/gate.sh`); absent → no gate defined. */
+  gate?: string;
   last_activity: string | null;
   last_scanned: string | null;
 }
@@ -59,6 +61,27 @@ export interface TaskData {
   depends_on?: string[];
   /** Human-readable phase name (spec, plan, kabul, uygulama, doğrulama, …). */
   phase?: string | null;
+}
+
+export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
+export type FindingState = "open" | "deferred" | "fixed" | "wontfix";
+
+/** kb/findings/<id>.md frontmatter (findings spec §2) */
+export interface FindingData {
+  /** `F-<project>-NNN`, numbered per project. */
+  id: string;
+  project: string;
+  severity: FindingSeverity;
+  state: FindingState;
+  /** Task whose report raised the finding. */
+  source_task: string;
+  title: string;
+  /** Task that fixed it; only while `state` is `fixed`. */
+  fixed_by?: string | null;
+  created: string;
+  updated: string;
+  /** When the state became `fixed`. */
+  fixed?: string | null;
 }
 
 /** roles/<slug>.md frontmatter (roles spec §4) */
@@ -98,6 +121,8 @@ export interface VladConfig {
   ignore: string[];
   defaultAutonomy: Autonomy;
   staleAfterHours: number;
+  /** Max simultaneously `running` dev workers (all projects); absent → unlimited. */
+  maxParallel?: number;
   launcher: Launcher;
   worktreeDir: string;
   projects: Record<string, { autonomy?: Autonomy }>;

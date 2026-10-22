@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
+import { addFinding } from "../../src/findings/store.js";
 import { buildPrompt, cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
@@ -405,6 +406,12 @@ describe("statusSummary", () => {
     expect(s.counts.running).toBe(0);
     expect(s.active.map((t) => t.data.id).sort()).toEqual([a.data.id, b.data.id].sort());
     expect(s.inbox).toBe(0);
+  });
+  it("counts open critical/high findings in openSevereFindings", () => {
+    expect(statusSummary(cfg, new Date()).openSevereFindings).toBe(0);
+    addFinding({ project: "alpha", severity: "yüksek", source: "T20261022-01", title: "x", state: "deferred" });
+    addFinding({ project: "alpha", severity: "orta", source: "T20261022-01", title: "y" });
+    expect(statusSummary(cfg, new Date()).openSevereFindings).toBe(1);
   });
   it("lists failed tasks and queued tasks with an error in `failed`", () => {
     const a = mk(); // failed

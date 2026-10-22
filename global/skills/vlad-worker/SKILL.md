@@ -18,7 +18,7 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 ## 1. Oku
 
 - Görev dosyası: `## Tanım`, `## Kabul kriterleri`, `## Bağlam`, frontmatter'daki `project`, `autonomy`, `branch`.
-- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`.
+- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`. Kartın `## Çalışma notları` bölümü bu projede öğrenilmiş derslerdir (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
 - Rol: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku (başlangıç prompt'u da bu dosyayı söyler). Rolün sorumluluk, yetki ve çıktı kuralları bu protokolle birlikte geçerlidir; rol kuralı ile `autonomy` kuralı çelişirse **daha kısıtlayıcı** olan uygulanır. Kapanış raporunu rolün `## Çıktı` bölümündeki başlıklarla yaz (adım 6'daki başlıklar her durumda bulunur).
 - Pipeline fazı: frontmatter'da `parent` doluysa bir pipeline'ın `phase` fazısın. `vlad task list --parent <parent> --json` ile kardeş fazları gör; `depends_on`'daki her görevin `<VLAD_HOME>/kb/tasks/<dep-id>.md` dosyasındaki `## Kapanış raporu`'nu oku — fazın girdisi (spec, plan, test matrisi…) budur. Danışma fazlarının (`phase: danışma`) raporları da bağlamdır.
 - Bu dosyaları **elle düzenleme**; yalnızca okursun.
@@ -37,7 +37,13 @@ vlad task log <id> "<kısa Türkçe açıklama>"
 ```
 Uzun süre sessiz kalma: kayıt `staleAfterHours`'tan eskirse görev `stalled` sayılır.
 
+**Checkpoint kuralı:** oturum limiti veya çökme seni her an kesebilir. Her anlamlı adımda (test yeşile döndü, bir dosya/modül bitti, review düzeltmesi) WIP commit at (`git commit -m "wip: <ne>"`) ve `vlad task log <id> "kaldığım yer: <sonraki adım>"` yaz. Kaydedilmemiş iş bırakma.
+
+**Devam mesajı gelince** (VLAD `vlad task resume` ile seni sürdürür): işe başlamadan önce `git branch --show-current` (`vlad/<id>` olmalı) ve `git status` çalıştır, çalışma dizininin görevin worktree'si olduğunu doğrula; ana dizinde veya başka branch'te çalışma. Kirli ağaç varsa incele, anlamlıysa WIP commit'le; sonra son "kaldığım yer" satırından devam et.
+
 ## 4. Soru sorma
+
+**Test itirazı:** pipeline'da kabul testini yanlış buluyorsan raporda bırakma; sorunu `vlad task ask <id> "Test itirazı: <test yol:satır>, tester görevi <T…> — neden yanlış, önerin"` ile sor. VLAD tester'a yönlendirir ya da karar verir; testi kendin değiştirme.
 
 Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:
 ```
@@ -54,14 +60,19 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 
 ## 6. Kapanış raporu
 
+**Entegrasyon öncesi kontrol (pipeline fazı, `parent` dolu):** rapordan önce entegrasyon branch'ini (`vlad/<parent>`) kendi branch'ine merge et (`git merge vlad/<parent>`; bu, kendi branch'ine güncel tabanı almaktır, entegrasyon branch'ine merge değildir), sonra lint + `gate` (yoksa tam test/build) koş. Çakışma veya kırmızı varsa kendi kapsamındaysa düzelt; değilse (başka fazın kodu, ortam) çözmeye çalışma, raporun `### Test sonuçları`'na kanıtıyla ve `### Açık noktalar`'a `- [yüksek] entegrasyon kontrolü kırmızı — …` olarak yaz. Merge'ü geri alma gerekirse `git merge --abort`. Faz kapısında sürpriz çıkmasın diye kapıdan önce koşulur.
+
+Rapordan önce proje kartında `gate` alanı varsa (`vlad project list --json` → `gate`) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
+
 Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
 ### Yapılanlar
 ### Test sonuçları
-(çalıştırılan komutlar ve sonuçları)
+(çalıştırılan komutlar ve sonuçları; kartta `gate` varsa önce o)
 ### Kabul kriterleri
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
+(ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir)
 ```
 ve:
 ```

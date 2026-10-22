@@ -64,6 +64,9 @@ summary: Test stratejisi kurar, eksik testleri yazar, hataları kanıtla raporla
 | `analyst` | Senior Analyst | advisory | planner, explorer | Gereksinim analizi, kod/doküman incelemesi, seçenek karşılaştırması, risk; koddan doğrular. |
 | `tester` | Senior Tester | executor | reviewer | Test stratejisi, eksik testler, hata avı; üretim kodunu değiştirmez, hatayı kanıtlayan test + rapor. |
 | `developer` | Senior Developer | executor | implementer | Özellik/bug/refactor; TDD, review, kabul kriterlerini tek tek karşılar. |
+| `devops` | Senior DevOps Engineer | executor | — | Dağıtım/CI/altyapı betikleri, runbook; dağıtımı temiz ortamda prova eder (`### Prova matrisi`, `### Bulunan hatalar`, `### Prova edilemeyenler`); gerçek sunucuya dağıtım yok (T20261022-59, pipeline spec §17). |
+
+**Ekip kuralları (T20261022-60, pipeline spec §18):** developer `sözleşme` fazı + test itirazı (`vlad task ask`) + UI öz-kontrolü; tester sözleşmeden kabul testi, gerçek fixture, ad alanı; architect `### Paylaşılan dosyalar ve ad alanları`; analyst/architect gerçek yanıt örneği; designer ara `denetim`.
 
 ### Sistem tasarımı ve `exposure` (2026-10-20, T20261020-53)
 
