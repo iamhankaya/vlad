@@ -84,6 +84,7 @@ Global olarak kurulanlar:
   "ignore": ["*-wt", "node_modules", "vlad"],
   "defaultAutonomy": "commit",
   "staleAfterHours": 6,
+  "maxParallel": 3,
   "launcher": "auto",
   "worktreeDir": "{repo}-wt",
   "projects": {
@@ -96,6 +97,7 @@ Global olarak kurulanlar:
   - `plan`: çalışan yalnızca plan yazar, onaysız kod yazmaz
   - `commit`: kendi branch'inde commit'e kadar (varsayılan)
   - `pr`: push + PR açmaya kadar; merge her zaman kullanıcıda
+- `maxParallel` (opsiyonel): aynı anda `running` olabilecek dev çalışan sayısı; yoksa sınırsız (bkz. pipeline spec §16)
 - `launcher`: `auto` (Windows'ta önce Windows Terminal, yoksa PowerShell penceresi; Windows dışında bulut algılanırsa `cloud`) | `wt` | `powershell` | `cloud` (bkz. §14)
 - `worktreeDir`: worktree'lerin oluşturulacağı klasör şablonu; `{repo}` repo yolu ile değiştirilir. Görev worktree'si `<worktreeDir>\<task-id>` olur.
 

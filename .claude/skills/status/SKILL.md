@@ -102,7 +102,7 @@ Bir faz `done` olduktan (veya iptal edildikten) sonra:
 ```
 vlad task ready --parent <çatı-id> --json
 ```
-`{"tasks":[...]}` içindeki her fazı **sormadan** başlat — kullanıcı pipeline'ı taslakta onayladı: dev → `vlad task launch <id> --json` (**PowerShell aracıyla**, `/delegate` 5a), research → `/delegate` 5b, plan fazı → `/delegate` 6. Kullanıcıya hangi fazların başladığını söyle. Merge kapıları ise her zaman sorulur.
+`{"tasks":[...],"held_by_limit":[...],"running":N,"maxParallel":M|null}` — `tasks` `maxParallel` sınırına uyan başlatılabilir fazlardır; `held_by_limit` sınır yüzünden bekleyenlerdir (başlatma; bir çalışan bitince `task ready`'yi tekrar çalıştır, kullanıcıya "N faz maxParallel nedeniyle bekliyor" de). `tasks` içindeki her fazı **sormadan** başlat — kullanıcı pipeline'ı taslakta onayladı: dev → `vlad task launch <id> --json` (**PowerShell aracıyla**, `/delegate` 5a), research → `/delegate` 5b, plan fazı → `/delegate` 6. Kullanıcıya hangi fazların başladığını söyle. Merge kapıları ise her zaman sorulur.
 
 **Tüm fazlar `done`** (`vlad task list --parent <çatı-id> --json`; `cancelled` fazlar yerine yenisi açılmışsa onlar sayılmaz) → `vlad task set <çatı-id> awaiting_approval --json` ve son kapı:
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
@@ -147,7 +147,10 @@ vlad task answer <id> "<cevap>" --json
 ## 5. `stalled` görevler
 
 Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
-- **Devam:** `vlad task set <id> running --json`; kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa `claude --continue`.
+- **Devam:** önce `vlad task resume <id> --json` (yalnızca `running`/`stalled`). Hata verirse (worktree yok, yanlış branch, session yok) mesajı göster; **yanlış worktree'de devam ettirme**. Başarılıysa:
+  - `mode: "local"`: `dirty` doluysa kullanıcıya söyle; `stalled` ise `vlad task set <id> running --json`; kullanıcıya `worktree` yolunda devam etmesini ve `prompt`'u çalışana vermesini öner (`claude --resume <session_id>` / `claude --continue` ile birlikte).
+  - `mode: "cloud"`: `stalled` ise `vlad task set <id> running --json`; `args` ile `send_message` çağır (`session_id`, `message`). Bu bir dış eylem değil, mevcut çalışana devam mesajıdır.
+  Kesilen çalışanları (oturum limiti, çökme) bu yolla sürdür; yeni görev açma.
 - **İptal:** `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`.
 
 ## 6. Hatalı görevler (`failed` listesi)
