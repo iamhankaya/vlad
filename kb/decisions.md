@@ -129,3 +129,8 @@ Toplamı bilinmeyen ama son çıkan bölümü bilinen manga serilerinde konum "B
 ### 2026-10-22 — medialog — CI yalnız main PR/push (Actions dakikası)
 GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız main'e PR, main push ve elle tetiklemede çalışır; concurrency ile eski koşu iptal, docs/md değişikliklerinde atlanır. vlad/* push'larında CI yok; kapı doğrulaması VLAD'ın yerel tam koşusudur. Kaynak: kullanıcı, 2026-10-22.
 - **Kaynak:** T20261022-54
+
+### 2026-10-22 — vlad — Ekip iyileştirmeleri pipeline'ı: faz kapıları VLAD'da
+- **Karar:** "Yazılım ekibi iyileştirmeleri" pipeline'ında (T20261022-55) faz kapıları VLAD'a devredildi: tam koşu (build + `npm test`) yeşilse faz `vlad/T20261022-55`'e merge edilir ve sıradaki faz başlar; kırmızıda düzeltme turu. Son kapı (`master`'a merge) kullanıcıya son durum gösterilip ayrıca onaylatılır.
+- **Gerekçe:** Medialog kapı devri kalıbı; fazlar sıralı ve yalnız VLAD reposunu etkiliyor.
+- **Kaynak:** T20261022-55
