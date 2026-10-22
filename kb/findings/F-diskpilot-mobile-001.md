@@ -2,11 +2,12 @@
 id: F-diskpilot-mobile-001
 project: diskpilot-mobile
 severity: orta
-state: open
+state: fixed
 source_task: T20261022-77
 title: Ağaç silme yarıda kalınca Skipped(Missing) raporlanıyor
 created: 2026-10-22T16:55:39+00:00
-updated: 2026-10-22T16:55:39+00:00
+updated: 2026-10-22T18:53:05+00:00
+fixed: 2026-10-22T18:53:05+00:00
 ---
 
 ## Ayrıntı
