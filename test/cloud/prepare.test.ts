@@ -73,6 +73,14 @@ describe("prepareCloudLaunch", () => {
       "son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et", "tek doğru kaynak"]) expect(p).toContain(s);
   });
 
+  it("protocol states one shared counter and an unambiguous push/report order", () => {
+    const p = prepareCloudLaunch(mk().data.id).prompt;
+    expect(p).toContain("tüm işaretlerde (LOG, ASK, REPORT, END, FAIL) ortak tek sayaçtır");
+    expect(p).toContain("REPORT ve END aynı numarayı taşır");
+    expect(p).toContain("Önce tüm işini push et, ardından kapanış raporunu yaz; rapordan sonra yeni commit/push yapma.");
+    expect(p).not.toContain("sonra aşağıdaki biçimde");
+  });
+
   it("next lists permission_mode among the create_session arguments", () => {
     const r = prepareCloudLaunch(mk().data.id);
     expect(r.next.find((n) => n.startsWith("create_session("))).toContain("permission_mode");

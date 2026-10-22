@@ -68,6 +68,34 @@ describe("parseMarkers", () => {
   });
 });
 
+describe("REPORT/END number mismatches", () => {
+  it("parseMarkers accepts a differing END number with a warning", () => {
+    const w: string[] = [];
+    const [m] = parseMarkers("[VLAD:REPORT #6 head=abc1234]\n### x\n[VLAD:END #7]\nsonrası", w);
+    expect(m).toMatchObject({ kind: "REPORT", seq: 6, text: "### x" });
+    expect(w[0]).toMatch(/REPORT #6 için END #6 bulunamadı \(END #7 var\)/);
+  });
+
+  it("ingest processes REPORT #6 / END #7 and warns", () => {
+    const text = `[VLAD:REPORT #6 branch=vlad/${id} head=${SHA}]\n### Yapılanlar\n- a\n[VLAD:END #7]`;
+    const r = ingestEvents(id, [asst(text)], remote(SHA));
+    expect(r.warnings.join("\n")).toMatch(/END #7 var/);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+  });
+
+  it("REPORT sharing a number with a processed LOG warns and is still processed; rerun is idempotent", () => {
+    const evs = [asst(`[VLAD:LOG #1] x\n${report(1)}`)];
+    const r = ingestEvents(id, evs, remote(SHA));
+    expect(r.warnings.join("\n")).toMatch(/REPORT #1 daha önce işlenmiş #1 ile çakışıyor/);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+    const before = getTask(id).body;
+    const r2 = ingestEvents(id, evs, remote(SHA));
+    expect(r2.processed).toEqual([]);
+    expect(r2.skipped).toEqual([1, 1]);
+    expect(getTask(id).body).toBe(before);
+  });
+});
+
 describe("eventList", () => {
   it("accepts an array or data/events/items wrappers", () => {
     expect(eventList([1])).toEqual([1]);
