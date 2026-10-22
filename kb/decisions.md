@@ -164,3 +164,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: CI yalnız main (düzeltme)
 - **Karar (düzeltme, önceki kaydın kesik ikinci maddesi yerine):** GitHub Actions dakikası kısıtlı. CI yalnızca `main` branch'ine PR/push ve elle tetiklemede (`workflow_dispatch`) koşar; faz branch'lerinde CI yok. Ara CI/APK koşusu yalnızca kullanıcı onayıyla elle tetiklenir.
 - **Kaynak:** T20261022-67
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: faz merge yetkisi VLAD'da
+- **Karar:** Kullanıcı DiskPilot Mobile v1 pipeline'ı (T20261022-64) için faz kapılarında entegrasyon branch'ine (vlad/T20261022-64) merge yetkisini VLAD'a verdi: faz raporu ve kontroller temizse (kritik/yüksek bulgu yok, yerel kapı yeşil) sormadan merge edip bağımlı fazları başlatır; durumu kullanıcıya bildirir. Güvenlik etkili kararlar yine kullanıcıya açıkça raporlanır; son kapı (main'e merge/PR) ve CI/APK koşuları ayrıca onaylıdır.
+- **Kaynak:** T20261022-68
