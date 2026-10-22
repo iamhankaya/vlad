@@ -8,6 +8,7 @@
     "ignore": { "type": "array", "items": { "type": "string" } },
     "defaultAutonomy": { "enum": ["plan", "commit", "pr"] },
     "staleAfterHours": { "type": "number", "exclusiveMinimum": 0 },
+    "maxParallel": { "type": "integer", "minimum": 1 },
     "launcher": { "enum": ["auto", "wt", "powershell", "cloud"] },
     "worktreeDir": { "type": "string" },
     "projects": {

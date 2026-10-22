@@ -172,6 +172,20 @@ export function readyTasks(f: { parent?: string } = {}): Task[] {
     (t.data.depends_on ?? []).every((d) => state.get(d) === "done"));
 }
 
+/**
+ * `readyTasks` split by the `maxParallel` limit (pipeline spec §9a): running dev tasks (all projects)
+ * use up slots; the ready tasks beyond the free slots are held. No limit → everything starts.
+ */
+export function readyWithLimit(
+  f: { parent?: string } = {}, maxParallel?: number,
+): { tasks: Task[]; held_by_limit: Task[]; running: number; maxParallel: number | null } {
+  const ready = readyTasks(f);
+  const running = listTasks({ state: ["running"] }).filter((t) => t.data.kind === "dev").length;
+  if (maxParallel === undefined) return { tasks: ready, held_by_limit: [], running, maxParallel: null };
+  const free = Math.max(0, maxParallel - running);
+  return { tasks: ready.slice(0, free), held_by_limit: ready.slice(free), running, maxParallel };
+}
+
 export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {}): Task {
   const t = getTask(id);
   assertTransition(t.data.state, to);

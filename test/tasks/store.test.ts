@@ -6,7 +6,7 @@ import { getSection, kbPaths, nowIso, readDoc, validate, writeDoc } from "../../
 import type { TaskData } from "../../src/kb/index.js";
 import {
   TransitionError, answerTask, askTask, createTask, getTask, listTasks, listTasksWithWarnings,
-  logTask, markDigested, markStale, nextTaskId, readyTasks, reportTask, setState, undigestedTasks,
+  logTask, markDigested, markStale, nextTaskId, readyTasks, readyWithLimit, reportTask, setState, undigestedTasks,
 } from "../../src/tasks/index.js";
 
 const D = new Date(2026, 9, 15, 10, 0, 0);
@@ -184,6 +184,53 @@ describe("pipeline", () => {
     expect(readyTasks().map((t) => t.data.id)).toEqual([b.data.id]);
     expect(readyTasks().map((t) => t.data.id)).not.toContain(c.data.id);
     expect(readyTasks().map((t) => t.data.id)).not.toContain(p.data.id);
+  });
+
+  describe("readyWithLimit (maxParallel)", () => {
+    const dev = (parent: string, ph: string) =>
+      createTask({ project: "p", title: ph, kind: "dev", body: "", parent, phase: ph }, D);
+    const ids = (ts: { data: { id: string } }[]) => ts.map((t) => t.data.id);
+
+    it("no limit: everything ready, nothing held", () => {
+      const p = pipe();
+      const a = dev(p.data.id, "a");
+      const b = dev(p.data.id, "b");
+      const r = readyWithLimit({ parent: p.data.id });
+      expect(ids(r.tasks)).toEqual([a.data.id, b.data.id]);
+      expect(r.held_by_limit).toEqual([]);
+      expect(r.maxParallel).toBeNull();
+    });
+    it("limit full: all ready tasks are held", () => {
+      const p = pipe();
+      const run = dev(p.data.id, "run");
+      setState(run.data.id, "running");
+      const a = dev(p.data.id, "a");
+      const r = readyWithLimit({ parent: p.data.id }, 1);
+      expect(r.tasks).toEqual([]);
+      expect(ids(r.held_by_limit)).toEqual([a.data.id]);
+      expect(r.running).toBe(1);
+    });
+    it("partly full: free slots start, the rest is held", () => {
+      const p = pipe();
+      const run = dev(p.data.id, "run");
+      setState(run.data.id, "running");
+      const a = dev(p.data.id, "a");
+      const b = dev(p.data.id, "b");
+      const r = readyWithLimit({ parent: p.data.id }, 2);
+      expect(ids(r.tasks)).toEqual([a.data.id]);
+      expect(ids(r.held_by_limit)).toEqual([b.data.id]);
+    });
+    it("counts running dev tasks of other projects; research and blocked-free states do not use slots", () => {
+      const other = createTask({ project: "q", title: "o", kind: "dev", body: "" }, D);
+      setState(other.data.id, "running");
+      const res = createTask({ project: "p", title: "r", kind: "research", body: "" }, D);
+      setState(res.data.id, "running");
+      const p = pipe();
+      const a = dev(p.data.id, "a");
+      const r = readyWithLimit({ parent: p.data.id }, 2);
+      expect(r.running).toBe(1);
+      expect(ids(r.tasks)).toEqual([a.data.id]);
+    });
   });
 
   it("a phase going to running also starts a queued pipeline (research-only start)", () => {
