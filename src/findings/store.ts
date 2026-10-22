@@ -34,6 +34,7 @@ export function addFinding(
   now: Date = new Date(),
 ): Finding {
   if (!/^[a-z0-9-]+$/.test(o.project)) throw new Error(`geçersiz proje slug'ı: "${o.project}" (yalnızca a-z, 0-9 ve '-')`);
+  if (!existsSync(join(kbPaths().projects, `${o.project}.md`))) throw new Error(`proje kartı bulunamadı: ${o.project}`);
   if (!(SEVERITIES as readonly string[]).includes(o.severity)) {
     throw new Error(`geçersiz önem: "${o.severity}" (geçerli: ${SEVERITIES.join(", ")})`);
   }

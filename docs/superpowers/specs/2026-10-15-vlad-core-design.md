@@ -219,7 +219,7 @@ Kapanış raporlarındaki ertelenen/çözülmeyen noktalar kaybolmasın diye bul
 | `fixed_by` | string? | Düzelten görev; yalnızca `fixed` iken (`finding set … --by`) |
 | `created`, `updated`, `fixed` | datetime | `fixed`: durumun `fixed` olduğu an (başka duruma dönünce `fixed`/`fixed_by` silinir) |
 
-Gövde: `## Ayrıntı` (`--detail-file`). "Açık" bulgu = `open` + `deferred`.
+Gövde: `## Ayrıntı` (`--detail-file`). "Açık" bulgu = `open` + `deferred`. `finding add` kartı olmayan projeyi `proje kartı bulunamadı: <slug>` ile reddeder (`project set`/`note` ile aynı). Değeri `-` ile başlayan `project set` girdileri için `--` kullan (`vlad project set <slug> gate -- "- a"`).
 
 ### 5.5 Günlük — `kb/journal/<YYYY-MM-DD>.md`
 

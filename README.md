@@ -47,7 +47,7 @@ Açılışta SessionStart hook'u `İşlenmemiş N rapor, M aktif görev (…, F 
 
 Push, PR ve merge her zaman açık onayınla yapılır.
 
-**Proje kapısı (`gate`):** proje kartında opsiyonel `gate` alanı projenin tek kapı komutunu tutar (ör. `scripts/gate.sh`, `npm run gate`): `vlad project set <slug> gate "<komut>"`. `/status` entegrasyon doğrulamasını, çalışanlar rapordan önceki koşuyu bununla yapar; tanımlı değilse `/status` uyarır ve `/scan` kart için öneri sorar.
+**Proje kapısı (`gate`):** proje kartında opsiyonel `gate` alanı projenin tek kapı komutunu tutar (ör. `scripts/gate.sh`, `npm run gate`): `vlad project set <slug> gate "<komut>"`. `/status` entegrasyon doğrulamasını, çalışanlar rapordan önceki koşuyu bununla yapar; bulut çalışanının prompt'una da satır içi girer (entegrasyon öncesi `git merge vlad/<çatı>` kuralıyla birlikte); tanımlı değilse `/status` uyarır ve `/scan` kart için öneri sorar.
 
 **Bulgu kaydı:** ertelenen/açık noktalar `kb/findings/` altında tutulur: `vlad finding add --project <slug> --severity <kritik|yüksek|orta|düşük|bilgi> --source <görev> --title "<…>" [--detail-file <md>] [--state deferred]`, `vlad finding list [--project] [--state] [--severity] [--json]`, `vlad finding set <id> <open|deferred|fixed|wontfix> [--by <görev>]`. `/digest` kapanış raporlarının açık noktalarını buraya işler; `vlad status --summary` açık kritik/yüksek bulgu sayısını ekler.
 
