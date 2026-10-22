@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "project", "severity", "state", "source_task", "title", "created", "updated"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^F-[a-z0-9-]+-\\d{3,}$" },
+    "project": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "severity": { "enum": ["kritik", "yüksek", "orta", "düşük", "bilgi"] },
+    "state": { "enum": ["open", "deferred", "fixed", "wontfix"] },
+    "source_task": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" },
+    "title": { "type": "string", "minLength": 1 },
+    "fixed_by": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
+    "created": { "type": "string", "format": "date-time" },
+    "updated": { "type": "string", "format": "date-time" },
+    "fixed": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
+import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { commitKb } from "./kb/commit.js";
@@ -10,12 +11,12 @@ import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, Validatio
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
-import { listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
+import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -84,18 +85,59 @@ def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts
   const card = writeProject(slug, readInput(o.file as string));
   out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
 }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
-def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
+def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
   setProjectField(slug, field, value);
   out(o, { slug, field, value: value === "" ? null : value }, value === "" ? `silindi: ${slug}.${field}` : `yazıldı: ${slug}.${field}=${value}`);
 });
+def(project, "note <slug> [not]", "Karta `## Çalışma notları` altına tarihli not ekler (--file: çok satırlı, - = stdin)", (slug: string, note: string | undefined, o: Opts) => {
+  const text = o.file ? readInput(o.file as string) : note ?? "";
+  const line = addProjectNote(slug, text);
+  out(o, { slug, note: line }, `not eklendi: ${slug}`);
+}).option("--file <md>", "not dosyası (- = stdin)");
 def(project, "list", "Kartları listeler", (o: Opts) => {
   const { projects, warnings } = listProjectsWithWarnings();
   out(
     o,
     { projects, warnings },
-    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}${p.exposure ? `  [${p.exposure}]` : ""}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+    [...projects.map((p) => `${p.slug}  ${p.status}  ${p.path}${p.exposure ? `  [${p.exposure}]` : ""}${p.gate ? `  gate: ${p.gate}` : ""}`), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
   );
 });
+
+const finding = program.command("finding").description("Bulgu kaydı (ertelenen/açık noktalar)");
+const findingLine = (f: { data: { id: string; severity: string; state: string; project: string; title: string; fixed_by?: string | null } }) =>
+  `${f.data.id}  ${f.data.severity.padEnd(7)} ${f.data.state.padEnd(8)} ${f.data.title}${f.data.fixed_by ? `  (düzeltti: ${f.data.fixed_by})` : ""}`;
+def(finding, "add", "Bulgu kaydı oluşturur (varsayılan open)", (o: Opts) => {
+  const f = addFinding({
+    project: o.project as string, severity: o.severity as string, source: o.source as string, title: o.title as string,
+    detail: o.detailFile ? readInput(o.detailFile as string) : undefined, state: o.state as string | undefined,
+  });
+  out(o, { id: f.data.id }, f.data.id);
+})
+  .requiredOption("--project <slug>", "proje slug'ı")
+  .requiredOption("--severity <önem>", SEVERITIES.join(" | "))
+  .requiredOption("--source <görev>", "bulguyu raporlayan görev ID'si")
+  .requiredOption("--title <başlık>", "bulgu başlığı")
+  .option("--detail-file <md>", "ayrıntı (- = stdin)")
+  .option("--state <durum>", "open | deferred", "open");
+def(finding, "list", "Bulguları listeler", (o: Opts) => {
+  const { findings, warnings } = listFindingsWithWarnings({
+    project: o.project as string | undefined,
+    state: o.state ? parseFilter(String(o.state), STATES, "durum") : undefined,
+    severity: o.severity ? parseFilter(String(o.severity), SEVERITIES, "önem") : undefined,
+  });
+  out(
+    o,
+    { findings: findings.map((f) => ({ ...f.data, detail: f.body.replace(/^## Ayrıntı\n?/, "").trim() })), warnings },
+    [...findings.map(findingLine), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+  );
+})
+  .option("--project <slug>", "proje slug'ı")
+  .option("--state <durumlar>", `virgülle ayrılmış: ${STATES.join(", ")}`)
+  .option("--severity <önemler>", `virgülle ayrılmış: ${SEVERITIES.join(", ")}`);
+def(finding, "set <id> <state>", "Bulgunun durumunu değiştirir", (id: string, state: string, o: Opts) => {
+  const f = setFindingState(id, state, o.by as string | undefined);
+  out(o, { id, state: f.data.state, fixed_by: f.data.fixed_by ?? null }, `${id} -> ${f.data.state}`);
+}).option("--by <görev>", "düzelten görev (yalnızca fixed)");
 
 const role = program.command("role").description("Uzman roller");
 def(role, "list", "roles/ altındaki rolleri listeler", (o: Opts) => {
@@ -120,7 +162,7 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
   .option("--role <slug>", "roles/<slug>.md uzman rolü (advisory → research, executor → dev)")
   .option("--parent <id>", "çatı (pipeline) görevi")
   .option("--depends-on <ids>", "virgülle ayrılmış, aynı pipeline'daki bağımlılıklar")
-  .option("--phase <ad>", "faz adı (spec, plan, kabul, uygulama, doğrulama, …)")
+  .option("--phase <ad>", "faz adı (spec, tasarım, plan, sözleşme, kabul, karakterizasyon, uygulama, doğrulama, denetim, prova, danışma)")
   .requiredOption("--project <slug>", "proje slug'ı")
   .requiredOption("--title <başlık>", "görev başlığı")
   .option("--kind <kind>", "dev | research | pipeline", "dev")
@@ -186,6 +228,12 @@ def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, sta
   const t = setState(id, state as TaskState);
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
 });
+def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", (id: string, o: Opts) => {
+  const r = resumeInfo(id);
+  out(o, r, r.mode === "local"
+    ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
+    : `send_message session_id=${r.session_id}\n${r.message}`);
+});
 def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
   cleanupTask(id);
   out(o, { id }, `${id} worktree kaldırıldı`);
@@ -217,8 +265,16 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
   .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
   .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
 def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
-  const tasks = readyTasks({ parent: o.parent as string | undefined });
-  out(o, { tasks: tasks.map((t) => t.data) }, tasks.map(taskLine).join("\n"));
+  const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel);
+  const lines = [
+    ...r.tasks.map(taskLine),
+    ...r.held_by_limit.map((t) => `${taskLine(t)}  (maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor)`),
+  ];
+  out(
+    o,
+    { tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel },
+    lines.join("\n"),
+  );
 }).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
@@ -227,7 +283,8 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
     // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
     const line =
       `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
-      `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)`;
+      `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)` +
+      (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "");
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
       process.stdout.write(JSON.stringify({

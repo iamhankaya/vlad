@@ -4,7 +4,7 @@
   "additionalProperties": false,
   "required": ["id", "project", "title", "kind", "state", "autonomy", "created", "updated"],
   "properties": {
-    "id": { "type": "string", "pattern": "^T\\d{8}-\\d{2}$" },
+    "id": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" },
     "project": { "type": "string" },
     "title": { "type": "string" },
     "kind": { "enum": ["dev", "research", "pipeline"] },
@@ -18,8 +18,8 @@
     "error": { "type": ["string", "null"] },
     "digested": { "type": ["string", "null"], "format": "date-time" },
     "role": { "type": ["string", "null"] },
-    "parent": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2}$" },
-    "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{8}-\\d{2}$" } },
+    "parent": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
+    "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" } },
     "phase": { "type": ["string", "null"] }
   }
 }

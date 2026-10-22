@@ -63,12 +63,25 @@ vlad journal append <YYYY-MM-DD> --file <geçici.md> --json
 
 Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamamını** güncellenmiş hâliyle geçici dosyaya yaz:
 - `## Son aktivite`: en yeni olaylar üstte, tarih + kısa özet + kaynak ID; en fazla ~10 madde tut.
-- `## Açık konular`: yeni açılanları ekle, kapananları çıkar.
+- `## Açık konular`: yeni açılanları ekle, kapananları çıkar. Açık bulguların özetini de yansıt (`vlad finding list --project <slug> --state open,deferred --json`): önem sırasıyla kısa liste, `F-…` ID'leriyle; kritik/yüksek olanlar üstte. Düzelen/wontfix olanları çıkar.
+- `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` ve retro yazar). Kartı yeniden yazarken bölümü aynen koru.
 - `last_activity`: en yeni `ended` (mevcuttan yeniyse).
 - Diğer bölümleri ve alanları koru.
 ```
 vlad project write <slug> --file <geçici.md> --json
 ```
+
+## 4b. Bulgular
+
+Kapanış raporlarının `### Açık noktalar` bölümündeki (danışman rollerde `### Varsayımlar`, `### Açık sorular ve varsayımlar`; designer'da `### Bulgular`) **ertelenen/çözülmeyen** maddeleri bulgu kaydına geçir; kaybolmasınlar. Çalışanlar maddeleri `- [önem] başlık — ayrıntı` biçiminde yazar; önem yoksa içerikten tahmin etme, kullanıcıya sor (ya da `bilgi`). Yalnızca "yapılmadı / atlandı / sonraya" türü gerçek işleri kaydet; salt bilgi notlarını ve zaten düzeltilmiş maddeleri atla.
+1. Önce yinelemeyi önle: `vlad finding list --project <slug> --json`; aynı başlık zaten kayıtlıysa yenisini ekleme.
+2. Ayrıntı varsa geçici dosyaya yaz, sonra:
+   ```
+   vlad finding add --project <slug> --severity <kritik|yüksek|orta|düşük|bilgi> --source <görev-id> --title "<başlık>" [--detail-file <md>] [--state deferred] --json
+   ```
+   Kullanıcı bilerek ertelediyse `--state deferred`, aksi halde `open`.
+3. Rapor bir bulgunun düzeltildiğini söylüyorsa (ör. "F-alpha-003 giderildi"): `vlad finding set <id> fixed --by <görev-id> --json`; "yapmayacağız" kararı için `wontfix`.
+4. Kritik/yüksek bulguları kullanıcıya ayrıca belirt.
 
 ## 5. Kararlar
 
@@ -101,4 +114,4 @@ Yalnızca `kb/` commit'lenir (inbox ve loglar `.gitignore`'da). Hata verirse kul
 
 ## Kullanıcıya göster
 
-Proje başına 1–3 satırlık özet, eklenen kararlar, açık konulardaki değişiklikler ve işlenen rapor sayısı. `task_id` taşıyan ve görevi hâlâ `running` görünen raporlar varsa `/status` öner.
+Proje başına 1–3 satırlık özet, kaydedilen bulgular (kritik/yüksek vurgulu), eklenen kararlar, açık konulardaki değişiklikler ve işlenen rapor sayısı. `task_id` taşıyan ve görevi hâlâ `running` görünen raporlar varsa `/status` öner.

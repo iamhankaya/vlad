@@ -25,7 +25,9 @@ vlad install
 - `global/skills/vlad-worker/` klasörünü `~/.claude/skills/vlad-worker/`'a kopyalar (çalışan protokolü her repoda kullanılabilir olur). Her çalıştırmada hedefteki `vlad-worker` klasörünün üzerine yazılır; orada yaptığınız elle değişiklikler kaybolur.
 - `VLAD_CLAUDE_DIR` ortam değişkeni `~/.claude` yerine başka bir klasörü hedefler (test ve deneme için).
 
-Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterHours`, launcher).
+Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterHours`, launcher, opsiyonel `maxParallel` — aynı anda en fazla bu kadar `running` dev çalışanı; yoksa sınırsız).
+
+`vlad task ready --parent <id>` sınıra uyan fazları `tasks`, sınır yüzünden bekleyenleri `held_by_limit` olarak verir. `vlad task resume <id>` kesilmiş (`running`/`stalled`) bir çalışan için devam bilgisi üretir: yerelde worktree/branch/kirli ağaç kontrolü ve devam prompt'u, bulutta `send_message` argümanları.
 
 ## Günlük kullanım
 
@@ -44,6 +46,16 @@ Açılışta SessionStart hook'u `İşlenmemiş N rapor, M aktif görev (…, F 
 | `/digest` | Session raporlarını günlüğe, kartlara ve karar günlüğüne işler |
 
 Push, PR ve merge her zaman açık onayınla yapılır.
+
+**Proje kapısı (`gate`):** proje kartında opsiyonel `gate` alanı projenin tek kapı komutunu tutar (ör. `scripts/gate.sh`, `npm run gate`): `vlad project set <slug> gate "<komut>"`. `/status` entegrasyon doğrulamasını, çalışanlar rapordan önceki koşuyu bununla yapar; bulut çalışanının prompt'una da satır içi girer (entegrasyon öncesi `git merge vlad/<çatı>` kuralıyla birlikte); tanımlı değilse `/status` uyarır ve `/scan` kart için öneri sorar.
+
+**Bulgu kaydı:** ertelenen/açık noktalar `kb/findings/` altında tutulur: `vlad finding add --project <slug> --severity <kritik|yüksek|orta|düşük|bilgi> --source <görev> --title "<…>" [--detail-file <md>] [--state deferred]`, `vlad finding list [--project] [--state] [--severity] [--json]`, `vlad finding set <id> <open|deferred|fixed|wontfix> [--by <görev>]`. `/digest` kapanış raporlarının açık noktalarını buraya işler; `vlad status --summary` açık kritik/yüksek bulgu sayısını ekler.
+
+**Ekip kuralları:** `tam`/`özellik`'te `sözleşme` fazı (kabul ∥ uygulamadan önce), developer'ın `vlad task ask` ile test itirazı, fazın rapordan önce entegrasyon branch'ini merge edip lint+gate koşması, ara `denetim` + UI öz-kontrolü, auth/yetki/oturum/silme için güvenlik incelemesi, dış API için gerçek fixture ve architect'in paylaşılan dosyalar tablosu (pipeline spec §18).
+
+**Dağıtım provası:** iş dağıtım betiğine/CI'a/altyapıya dokunuyorsa `/delegate` `prova` fazı (`devops` rolü) önerir; devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder ve `### Prova matrisi` / `### Prova edilemeyenler` raporlar. Kırmızı provada `/status` canlıya almayı önermez.
+
+**Çalışma notları:** pipeline bittikten sonra `/status` kısa bir retro yapar; dersler `vlad project note <slug> "<ders>"` ile kartın `## Çalışma notları` bölümüne yazılır. Çalışanlar ve roller bu bölümü işe başlarken okur.
 
 ## Geliştirme
 
