@@ -21,6 +21,7 @@ export type ProjectSummary = {
   status: string;
   last_activity: string | null;
   exposure?: Exposure;
+  gate?: string;
 };
 
 /** Valid cards in name order; unreadable or invalid cards are skipped and reported as warnings. */
@@ -39,6 +40,7 @@ export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnin
         status: data.status,
         last_activity: data.last_activity,
         ...(data.exposure ? { exposure: data.exposure } : {}),
+        ...(data.gate ? { gate: data.gate } : {}),
       });
     } catch (e) {
       warnings.push(`${f}: ${(e as Error).message}`);
@@ -51,7 +53,7 @@ export function listProjects(): ProjectSummary[] {
   return listProjectsWithWarnings().projects;
 }
 
-export const SETTABLE_FIELDS = ["exposure", "repo", "default_branch", "local_only", "local_only_reason"] as const;
+export const SETTABLE_FIELDS = ["exposure", "repo", "default_branch", "local_only", "local_only_reason", "gate"] as const;
 export type SettableField = (typeof SETTABLE_FIELDS)[number];
 
 /** Sets (or, with an empty value, removes) one optional card field; the rest of the card and its body stay as they are. */

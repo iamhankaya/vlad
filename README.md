@@ -45,6 +45,8 @@ Açılışta SessionStart hook'u `İşlenmemiş N rapor, M aktif görev (…, F 
 
 Push, PR ve merge her zaman açık onayınla yapılır.
 
+**Proje kapısı (`gate`):** proje kartında opsiyonel `gate` alanı projenin tek kapı komutunu tutar (ör. `scripts/gate.sh`, `npm run gate`): `vlad project set <slug> gate "<komut>"`. `/status` entegrasyon doğrulamasını, çalışanlar rapordan önceki koşuyu bununla yapar; tanımlı değilse `/status` uyarır ve `/scan` kart için öneri sorar.
+
 ## Geliştirme
 
 ```
