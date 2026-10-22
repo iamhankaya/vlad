@@ -33,3 +33,9 @@ DiskPilot'un Android sürümü: depolama görselleştirme ve güvenli temizlik. 
 
 ## Açık konular
 - APK imzalama: kalıcı keystore (GitHub secret) önerildi; kullanıcı kararı bekliyor.
+
+## Çalışma notları
+- 2026-10-22: Android'e dokunan ilk dilimden sonra tam kapıyı (lintDebug testDebugUnitTest assembleDebug) bir kez koş: ya ağ izniyle (dl.google.com, maven.google.com) yerelde ya da onaylı tek CI koşusuyla; kör yazılmış :app main kapısına bırakılmaz.
+- 2026-10-22: Compose test kodunda üye fonksiyonlar (onNode, onAllNodes) import edilmez; derlenemeyen ortamda kullanılan her test API'sinin (ör. assertTouchHeightIsAtLeast yok) varlığı doğrulanır.
+- 2026-10-22: CI testLogging en baştan exceptionFormat=FULL olur; Actions artifact'ları bulut proxy'sinden indirilemez (403), teşhis yalnız iş günlüğünden okunur.
+- 2026-10-22: Robolectric'te odaklı TextField AppNotIdleException, AlertDialog ikinci semantik kök üretir: test harness'i baştan otomatik odak kapalı (LocalAutoFocusTextField=false, canFocus) ve çoklu kökte en üst pencereyi yakalayacak şekilde kurulur.
