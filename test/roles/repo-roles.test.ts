@@ -9,11 +9,11 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the seven roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
+  it("the eight roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
-      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", finans: "advisory", pazarlama: "advisory",
+      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory", pazarlama: "advisory",
       tester: "executor",
     });
     for (const r of roles) {
@@ -53,8 +53,29 @@ describe("repo roles/", () => {
   });
 });
 
+describe("devops role and prova phase", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  it("devops carries the rehearsal scenarios and the three report sections", () => {
+    const body = read("roles/devops.md");
+    for (const w of ["umask 077", "bash -s < script", "pipefail", "grep -q", "SIGPIPE", "Boş volume", "Yedek alma", "İdempotent", "Yetkisiz kullanıcı",
+      "### Prova matrisi", "### Bulunan hatalar", "### Prova edilemeyenler", "Docker", "Dışa etkili eylem yok"]) expect(body, w).toContain(w);
+  });
+  it("delegate proposes and status gates on the prova phase; specs and docs list it", () => {
+    const delegate = read(".claude/skills/delegate/SKILL.md");
+    expect(delegate).toContain("`prova`");
+    expect(delegate).toContain("devops");
+    const status = read(".claude/skills/status/SKILL.md");
+    expect(status).toContain("`prova`");
+    expect(status).toMatch(/prova.*kırmızı/s);
+    expect(read("docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md")).toContain("`prova`");
+    expect(read("docs/superpowers/specs/2026-10-15-vlad-roles-design.md")).toContain("`devops`");
+    for (const p of ["CLAUDE.md", "README.md"]) expect(read(p), p).toContain("devops");
+  });
+});
+
 describe("test hygiene rules", () => {
-  for (const slug of ["tester", "developer"]) {
+  for (const slug of ["tester", "developer", "devops"]) {
     it(`${slug} carries the four hygiene rules`, () => {
       const body = readFileSync(resolve(dir, `${slug}.md`), "utf8");
       expect(body).toContain("Test hijyeni");
