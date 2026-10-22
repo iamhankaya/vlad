@@ -168,3 +168,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: faz merge yetkisi VLAD'da
 - **Karar:** Kullanıcı DiskPilot Mobile v1 pipeline'ı (T20261022-64) için faz kapılarında entegrasyon branch'ine (vlad/T20261022-64) merge yetkisini VLAD'a verdi: faz raporu ve kontroller temizse (kritik/yüksek bulgu yok, yerel kapı yeşil) sormadan merge edip bağımlı fazları başlatır; durumu kullanıcıya bildirir. Güvenlik etkili kararlar yine kullanıcıya açıkça raporlanır; son kapı (main'e merge/PR) ve CI/APK koşuları ayrıca onaylıdır.
 - **Kaynak:** T20261022-68
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: MIUI çöp konumu ve M9 boşaltma yolu
+- **Karar (VLAD, güvenlik etkili; kullanıcıya bildirildi):** MIUI çöpe atılan medyayı `.trash-storage` altına taşıyor (probe-2). `.trash-storage` doğrudan dosya silmeye korumalı kalır; M9 'çöp kutusunu boşalt' yalnızca MediaStore üzerinden (is_trashed=1 satırlar, yürütme anında yeniden doğrulama, tam SİL yetkisi), M9'a özel dar bir yürütme yoluyla yapılır.
+- **Kaynak:** T20261022-80
