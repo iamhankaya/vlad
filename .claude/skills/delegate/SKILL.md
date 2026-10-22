@@ -41,16 +41,24 @@ vlad project list --json
 
 | Döngü | Ne zaman | Fazlar |
 |---|---|---|
-| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
-| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
+| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → developer:sözleşme → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
+| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → developer:sözleşme → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
 | `kısa` | Tek modülde değişiklik, net gereksinim, görünür davranış değişiyor | developer:uygulama → tester:doğrulama |
 | `tek` | Küçük düzeltme, belge, bakım | tek görev (bugünkü akış, rol opsiyonel) |
 
+**Sözleşme fazı (`tam` ve `özellik`):** kabul ∥ uygulama paralelinden önce standart `sözleşme` fazı (developer, dev; bağımlılık: `plan`, `plan` yoksa `spec`, UI varsa `tasarım`): tipler/imzalar/şema taslakları + sözleşme testleri (arayüzün şekli; iş mantığı yok). `kabul` ve `uygulama` ona bağlanır; tester kabul testlerini sözleşmeden yazar, böylece "testin kendisi yanlış" türü uyumsuzluk azalır. **Küçük işte atlanabilir** (tek modül, yeni arayüz/şema yok); atlanırsa taslakta gerekçesini yaz (ör. "sözleşme atlandı: arayüz değişmiyor"). `kısa`'da sözleşme fazı yoktur.
+
 **Arayüz varsa designer fazlarını ekle** (kullanıcıya görünen UI değişiyorsa; yoksa ekleme):
 - `tam` / `özellik`: spec'ten sonra `tasarım` (designer, dev, bağımlılık: spec); `tam`'da `plan` ve `özellik`'te tester/developer fazları `tasarım`'a bağlanır.
-- Üç döngüde de `doğrulama` ile paralel `denetim` (designer, dev, bağımlılık: doğrulamayla aynı). `kısa`'da yalnızca `denetim` eklenir.
+- Üç döngüde de `doğrulama` ile paralel son `denetim` (designer, dev, bağımlılık: doğrulamayla aynı). `kısa`'da yalnızca `denetim` eklenir.
+- **Erken (ara) denetim:** UI'lı `tam`/`özellik` pipeline'ında, ilk kullanıcıya görünen dilim (ilk çalışan ekran/akış) `uygulama` fazlarından biri olarak bittiğinde ara bir `denetim` fazı öner (designer, dev, bağımlılık: o dilim). Bulgular geç değil, kalan uygulama fazları sürerken gelir (retro: manga 25 bulgu geç çıktı). Uygulamayı dilimlere bölmek gerekiyorsa taslakta dilim fazlarını ayrı göster; ara denetimin kritik/yüksek bulguları sonraki `uygulama` fazının girdisi olur. Tek dilimli işte ara denetim eklenmez; yalnızca son `denetim` kalır.
+- **UI öz-kontrolü:** UI'ya dokunan her `uygulama` fazının Tanım'ına şunu yaz: "rapordan önce tarayıcıda (Chromium/Playwright) çalıştırıp ekran görüntüsüyle öz-kontrol yap" (developer rolü).
 
 **Dağıtım/altyapıya dokunuyorsa `prova` fazını ekle** (iş dağıtım betiğini, CI tanımını, Dockerfile/compose/systemd'yi veya altyapıyı değiştiriyorsa; yoksa ekleme): `prova` (devops, dev, bağımlılık: `uygulama`) — `doğrulama` ile paralel ya da canlıya alma kapısından önce. Devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail/SIGPIPE, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder; Docker yoksa neyi prova edemediğini raporlar. Kırmızı prova canlıya almayı engeller (`/status` son kapı).
+
+**Güvenlik incelemesi:** bir faz auth, yetki, oturum veya veri silmeye dokunuyorsa, ya da VLAD güvenlik etkili bir kararı otonom verecekse (ör. SEC-08 (b) türü seçim), ilgili fazın Tanım'ına "rapordan sonra kısa güvenlik incelemesi" ekle ve taslakta ayrıca belirt. İnceleme arka plan agent'ıyla ya da `security-review` skill'iyle yapılır; bulgular fazın kapısında gösterilir (`/status`). Bu tür bir kararı kullanıcıya sormadan verme: gerekçesiyle taslağa yaz.
+
+**Dış API gerçek fixture'ı:** iş dış bir API/servis yanıtına dayanıyorsa `spec`/`plan` fazının Tanım'ına "plan öncesi gerçek yanıt örnekleri" ekle (analyst/architect gerçek yanıtı kaydedip raporda verir; yoksa kullanıcıdan alınacağını `### Açık noktalar`'a yazar). Taslakta örnek yoksa bunu uyarı olarak göster ve kullanıcıdan iste. Kabul ve unit testler kaydedilmiş gerçek fixture'a karşı yazılır; uydurma yanıt şekline değil.
 
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
 - İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.
@@ -109,15 +117,16 @@ Kullanıcıya şunu göster:
 | # | Faz | Rol | Tür | Bağımlılık |
 |---|---|---|---|---|
 | 1 | spec | Senior Analyst (`analyst`) | research | — |
-| 2 | kabul | Senior Tester (`tester`) | dev | 1 |
-| 3 | uygulama | Senior Developer (`developer`) | dev | 1 |
-| 4 | doğrulama | Senior Tester (`tester`) | dev | 2, 3 |
+| 2 | sözleşme | Senior Developer (`developer`) | dev | 1 |
+| 3 | kabul | Senior Tester (`tester`) | dev | 2 |
+| 4 | uygulama | Senior Developer (`developer`) | dev | 2 |
+| 5 | doğrulama | Senior Tester (`tester`) | dev | 3, 4 |
 
 ### Kapılar
 - Her fazın sonunda onay (`/status`): research fazı raporu kabul edilir, dev fazı entegrasyon branch'ine (`vlad/<çatı-id>`) merge edilir. Bağımlı fazlar ancak bundan sonra başlar.
 - Son kapı: tüm fazlar bitince `vlad/<çatı-id>` ana branch'e merge (veya push + PR) — ayrıca onaylanır.
 ```
-Örnek tablo `özellik` döngüsüdür (karakterizasyon ve kabul tek tester fazında). Faz adları: `spec`, `tasarım`, `plan`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`. Rol başlıklarını `vlad role list --json`'dan al. Faz tablosu döngü şablonundan gelir; işe göre faz ekleyip çıkarabilirsin (gerekçesiyle).
+Örnek tablo `özellik` döngüsüdür (karakterizasyon ve kabul tek tester fazında). Faz adları: `spec`, `tasarım`, `plan`, `sözleşme`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`. Rol başlıklarını `vlad role list --json`'dan al. Faz tablosu döngü şablonundan gelir; işe göre faz ekleyip çıkarabilirsin (gerekçesiyle).
 
 Sonunda sor: "Bu pipeline'ı oluşturup ilk fazları başlatayım mı?" Bu onay fazların başlatılmasını da kapsar; merge kapıları yine ayrı ayrı sorulur.
 

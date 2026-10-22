@@ -26,14 +26,14 @@ Bir işi tek çalışana vermek yerine, işin boyutuna göre bir **yazılım dep
 
 | Döngü | Ne zaman | Fazlar (→ sıra, ∥ paralel) |
 |---|---|---|
-| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
-| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
+| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → developer:sözleşme → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
+| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → developer:sözleşme → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
 | `kısa` | Tek modülde değişiklik, net gereksinim, görünür davranış değişiyor | developer:uygulama → tester:doğrulama |
 | `tek` | Küçük düzeltme, belge, bakım | tek görev (bugünkü akış, rol opsiyonel) |
 
 **UI fazları (designer).** İş kullanıcıya görünen bir arayüz içeriyorsa döngüye designer fazları eklenir; arayüz yoksa eklenmez:
-- `tam`: analyst:spec → **designer:tasarım** → architect:plan → (tester:kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**). Tasarım plandan önce gelir; architect bileşen yapısını tasarıma göre planlar.
-- `özellik`: analyst:spec → **designer:tasarım** → (tester:karakterizasyon+kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**).
+- `tam`: analyst:spec → **designer:tasarım** → architect:plan → developer:sözleşme → (tester:kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**). Tasarım plandan önce gelir; architect bileşen yapısını tasarıma göre planlar.
+- `özellik`: analyst:spec → **designer:tasarım** → developer:sözleşme → (tester:karakterizasyon+kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**).
 - `kısa`: developer:uygulama → (tester:doğrulama ∥ **designer:denetim**). Tasarım fazı yoktur.
 
 Danışmanlar (finans, pazarlama) herhangi bir fazdan **yan görev** olarak açılabilir (research, `depends_on` yok, `parent` aynı); sonucu ilgili fazın Bağlam'ına eklenir.
@@ -59,7 +59,7 @@ Görev şemasına eklenenler:
 - `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
 - `parent: string | null` — çatı görevin ID'si.
 - `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
-- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
+- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `sözleşme`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
 
 Kurallar (CLI doğrular):
 - `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.
@@ -83,6 +83,7 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 | spec | analyst | research | Amaç, kapsam, senaryolar (her biri Verilen/Olduğunda/O zaman), sistem etkisi, fazlar, kabul kriterleri, açık sorular |
 | tasarım | designer | dev | `docs/design/` (DESIGN.md, mockup'lar) + rapor: ekranlar/durumlar, bileşen envanteri, token tablosu, erişilebilirlik kararları |
 | plan | architect | research | Bileşenler, sistem tasarımı (`exposure`'a göre ölçekli), arayüzler, dosya yapısı, görev listesi (developer için), test stratejisi (tester için), riskler |
+| sözleşme | developer | dev | Tipler/imzalar/şema taslakları + sözleşme testleri (kodda); rapor: sözleşmenin yeri (`yol:satır`), değişmemesi gerekenler |
 | kabul / karakterizasyon | tester | dev | Testler (branch'te) + test matrisi (senaryo → test → beklenen) |
 | uygulama | developer | dev | Kod + unit testler; kabul testlerini yeşile çevirme hedefi |
 | doğrulama | tester | dev | Tüm suite sonucu, tarayıcı/E2E bulguları, kanıtlı hata listesi |
@@ -171,6 +172,18 @@ Retro bulgusu: dağıtım hataları canlıda çıktı (T20261021-86/-87/-88, T20
 - **Senaryolar:** kısıtlayıcı umask (077); `bash -s < script` (stdin tüketimi); `pipefail` tuzakları (`grep -q` + SIGPIPE); boş volume ile ilk kurulum; yedek alma + geri yükleme; idempotent ikinci koşu; yetkisiz kullanıcı.
 - **Çıktı:** `### Prova matrisi` (senaryo | ortam | sonuç), `### Bulunan hatalar`, `### Prova edilemeyenler` (ör. bulutta Docker yok) + standart bölümler.
 - **Kapı:** `/status` son kapıda `prova` fazı varsa gösterir; kırmızıysa canlıya alma önerilmez. Devops dışa etkili eylem yapmaz (gerçek sunucuya dağıtım yok).
+
+## 18. Ekip iyileştirmeleri: sözleşme, itiraz, entegrasyon kontrolü, erken denetim (T20261022-60)
+
+Retro bulguları: sözleşmesiz kabul testleri (DiskPilot 7 "testin kendisi yanlış", T20261019-01), paralel fazlarda ad çakışması/merge çakışması (T20261020-58, -84), geç denetim (manga 25 bulgu, T20261021-95; SEC2-01 yüksek, VLAD'ın otonom SEC-08 kararı), dış API şeklinin geç öğrenilmesi (T20261020-05, T20261021-89).
+
+- **`sözleşme` fazı:** `tam` ve `özellik`'te kabul ∥ uygulamadan önce (developer, dev; bağımlılık plan/spec/tasarım). Tipler, imzalar, şema taslakları + sözleşme testleri; `kabul` ve `uygulama` ona bağlanır. Küçük işte (tek modül, yeni arayüz yok) atlanabilir; taslakta gerekçe yazılır. `kısa`'da yoktur.
+- **Test itirazı:** developer yanlış bulduğu kabul testini raporda bırakmaz; `vlad task ask` ile "Test itirazı: <test>, tester görevi <T…>" sorar. `/status` (blocked) tester'a yönlendirir (açık görev: log; kapalıysa kısa `kabul` düzeltme fazı) ya da VLAD gerekçeyle karar verir. Developer testi kendisi değiştirmez (test sahipliği §4 değişmez).
+- **Entegrasyon öncesi kontrol:** pipeline fazı rapordan önce `vlad/<çatı>`'yı kendi branch'ine merge eder, lint + gate/tam koşu yapar; çakışma/kırmızı `### Test sonuçları` ve `### Açık noktalar`'da raporlanır (`vlad-worker` adım 6). `/status` bunu kapıda kontrol eder.
+- **Paylaşılan dosyalar:** architect planı `### Paylaşılan dosyalar ve ad alanları` (dosya, dokunan fazlar, sahip, kural; test ad öneki/ad alanı) içerir; developer ve tester ona uyar.
+- **Erken denetim:** UI'lı pipeline'da ilk kullanıcıya görünen dilimden sonra ara `denetim` önerilir; kritik/yüksek bulgular sonraki `uygulama` fazının girdisidir. Developer UI değişikliğinde rapordan önce tarayıcıda (Chromium/Playwright) ekran görüntüsüyle öz-kontrol yapar.
+- **Güvenlik incelemesi:** auth/yetki/oturum/veri silmeye dokunan fazlarda ve VLAD'ın otonom verdiği güvenlik etkili kararlarda kısa inceleme (arka plan agent'ı veya `security-review`); kritik/yüksek bulguda merge önerilmez. VLAD güvenlik etkili kararı sessizce vermez, kullanıcıya sorar.
+- **Gerçek fixture:** dış API kullanan işte analyst/architect plan öncesi gerçek yanıt örneklerini ister (yoksa kullanıcıdan alınacağı açık nokta); tester ve developer testleri kayıtlı gerçek fixture'a karşı yazar.
 
 ## 13. Kapsam dışı
 
