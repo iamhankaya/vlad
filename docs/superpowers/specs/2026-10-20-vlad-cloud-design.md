@@ -25,10 +25,11 @@ Bulut algılama: `CLAUDE_CODE_REMOTE=true` (`src/kb/env.ts`, `src/launcher/mode.
 Opsiyonel alanlar (mevcut kartlar geçerli kalır):
 - `repo: owner/name` — bulutun çalışacağı GitHub reposu. `path` bulutta kullanılmaz (`C:\dev\…`).
 - `local_only: true` + `local_only_reason` — bulutta başlatılamaz (ör. DiskPilot/WPF).
+- `gate: <komut>` — projenin tek kapı komutu (bulut/yerel fark etmez); bkz. pipeline spec §14.
 
 ## 4. `vlad task launch --json` (cloud)
 
-`prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse kartın opsiyonel `default_branch`'i, yoksa `master`), `outcome_branch`, `integration {branch, needs_remote_create, from}` (`needs_remote_create` her launch'ta `git ls-remote https://github.com/<repo>.git refs/heads/<branch>` ile hesaplanır; çatının `branch` alanına güvenilmez, erişilemezse `true` + `warnings`), `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`.
+`prepareCloudLaunch` (`src/tasks/cloud.ts`): yerel worktree/terminal yok. Görev `running` olur, `branch=vlad/<id>`, `worktree=null`. Çıktı: `repo`, `source_url`, `source_revision`/`base_branch` (pipeline fazında `vlad/<çatı-id>`, değilse kartın opsiyonel `default_branch`'i, yoksa `master`), `outcome_branch`, `integration {branch, needs_remote_create, from}` (`needs_remote_create` her launch'ta `git ls-remote https://github.com/<repo>.git refs/heads/<branch>` ile hesaplanır; çatının `branch` alanına güvenilmez, erişilemezse `true` + `warnings`), `model` (rolden, yoksa `null`), `title`, `tags`, `permission_mode`, `prompt`, `next`. `prompt`, görevin Tanım/Kabul/Bağlam'ına ek olarak kartın `## Çalışma notları` bölümünü (varsa) `## Proje çalışma notları` olarak satır içi taşır (çalışan kb'yi okuyamaz). Kartta `gate` varsa komut ve "rapordan önce çalıştır, sonucu `### Test sonuçları`'na yaz" kuralı (`## Proje kapısı`), `parent` doluysa entegrasyon öncesi kontrol paragrafı (`git fetch origin vlad/<çatı>` + `git merge`, lint + gate/tam koşu, çakışma/kırmızı raporlanır) da satır içi girer.
 
 Prompt görev bölümlerini (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`), pipeline fazında çatı görevin aynı üç bölümünü ("## Çatı görev (<id>)"; `### Fazlar`/`### Kapılar` hariç), rol dosyasının gövdesini, `depends_on` görevlerin `## Kapanış raporu`'nu ve "VLAD bulut protokolü"nü satır içi taşır (çalışanın `kb/`/CLI erişimi yoktur).
 

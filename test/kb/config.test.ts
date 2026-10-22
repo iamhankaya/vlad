@@ -45,6 +45,15 @@ describe("config", () => {
     writeFileSync(join(home, "vlad.config.json"), "{bad");
     expect(() => loadConfig(home)).toThrow(join(home, "vlad.config.json"));
   });
+  it("maxParallel is optional and must be a positive integer", () => {
+    expect(loadConfig(home).maxParallel).toBeUndefined();
+    writeFileSync(join(home, "vlad.config.json"), '{"maxParallel": 2}');
+    expect(loadConfig(home).maxParallel).toBe(2);
+    for (const bad of ["0", "1.5", '"x"']) {
+      writeFileSync(join(home, "vlad.config.json"), `{"maxParallel": ${bad}}`);
+      expect(() => loadConfig(home)).toThrow();
+    }
+  });
   it("rejects invalid launcher", () => {
     writeFileSync(join(home, "vlad.config.json"), '{"launcher":"x"}');
     expect(() => loadConfig(home)).toThrow(ValidationError);

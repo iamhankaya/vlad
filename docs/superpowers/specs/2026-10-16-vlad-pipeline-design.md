@@ -26,14 +26,14 @@ Bir işi tek çalışana vermek yerine, işin boyutuna göre bir **yazılım dep
 
 | Döngü | Ne zaman | Fazlar (→ sıra, ∥ paralel) |
 |---|---|---|
-| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
-| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
+| `tam` | Sıfırdan proje/alt sistem; yeni arayüz/şema; gereksinim belirsiz | analyst:spec → architect:plan → developer:sözleşme → (tester:kabul ∥ developer:uygulama) → tester:doğrulama |
+| `özellik` | Mevcut projede net bir özellik; birkaç modül | analyst:spec → developer:sözleşme → (tester:karakterizasyon+kabul ∥ developer:uygulama) → tester:doğrulama |
 | `kısa` | Tek modülde değişiklik, net gereksinim, görünür davranış değişiyor | developer:uygulama → tester:doğrulama |
 | `tek` | Küçük düzeltme, belge, bakım | tek görev (bugünkü akış, rol opsiyonel) |
 
 **UI fazları (designer).** İş kullanıcıya görünen bir arayüz içeriyorsa döngüye designer fazları eklenir; arayüz yoksa eklenmez:
-- `tam`: analyst:spec → **designer:tasarım** → architect:plan → (tester:kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**). Tasarım plandan önce gelir; architect bileşen yapısını tasarıma göre planlar.
-- `özellik`: analyst:spec → **designer:tasarım** → (tester:karakterizasyon+kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**).
+- `tam`: analyst:spec → **designer:tasarım** → architect:plan → developer:sözleşme → (tester:kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**). Tasarım plandan önce gelir; architect bileşen yapısını tasarıma göre planlar.
+- `özellik`: analyst:spec → **designer:tasarım** → developer:sözleşme → (tester:karakterizasyon+kabul ∥ developer:uygulama) → (tester:doğrulama ∥ **designer:denetim**).
 - `kısa`: developer:uygulama → (tester:doğrulama ∥ **designer:denetim**). Tasarım fazı yoktur.
 
 Danışmanlar (finans, pazarlama) herhangi bir fazdan **yan görev** olarak açılabilir (research, `depends_on` yok, `parent` aynı); sonucu ilgili fazın Bağlam'ına eklenir.
@@ -59,7 +59,7 @@ Görev şemasına eklenenler:
 - `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
 - `parent: string | null` — çatı görevin ID'si.
 - `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
-- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `uygulama`, `doğrulama`, `denetim`, `danışma`).
+- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `sözleşme`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
 
 Kurallar (CLI doğrular):
 - `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.
@@ -83,9 +83,11 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 | spec | analyst | research | Amaç, kapsam, senaryolar (her biri Verilen/Olduğunda/O zaman), sistem etkisi, fazlar, kabul kriterleri, açık sorular |
 | tasarım | designer | dev | `docs/design/` (DESIGN.md, mockup'lar) + rapor: ekranlar/durumlar, bileşen envanteri, token tablosu, erişilebilirlik kararları |
 | plan | architect | research | Bileşenler, sistem tasarımı (`exposure`'a göre ölçekli), arayüzler, dosya yapısı, görev listesi (developer için), test stratejisi (tester için), riskler |
+| sözleşme | developer | dev | Tipler/imzalar/şema taslakları + sözleşme testleri (kodda); rapor: sözleşmenin yeri (`yol:satır`), değişmemesi gerekenler |
 | kabul / karakterizasyon | tester | dev | Testler (branch'te) + test matrisi (senaryo → test → beklenen) |
 | uygulama | developer | dev | Kod + unit testler; kabul testlerini yeşile çevirme hedefi |
 | doğrulama | tester | dev | Tüm suite sonucu, tarayıcı/E2E bulguları, kanıtlı hata listesi |
+| prova | devops | dev | `### Prova matrisi` (senaryo \| ortam \| sonuç), `### Bulunan hatalar`, `### Prova edilemeyenler`; dağıtım/CI/altyapı dosyaları düzeltilebilir, gerçek sunucuya dağıtım yok |
 | denetim | designer | dev | Tasarıma uyum, erişilebilirlik, responsive bulguları (önem + kanıt), developer için önerilen düzeltmeler; kod değişmez |
 
 **Sistem tasarımı (2026-10-20).** `tam` döngüsünde sistem tasarımı architect'in plan çıktısındaki `### Sistem tasarımı` bölümüdür; `özellik` döngüsünde architect fazı olmadığından analyst'in spec'indeki kısa `### Sistem etkisi` onun yerini tutar. Derinliği proje kartının `exposure` alanı (`local | network | internet`) belirler; alan boşsa rol tahmin etmez, "açık nokta / exposure belirsiz" yazar ve VLAD kullanıcıya sorar. `exposure`, `local_only`'den farklıdır: `local_only` bulutta derlenip çalışabilirliği, `exposure` sisteme kimin eriştiğini anlatır. Ayrıntı: roller spec'i §4. Bağlar: `/delegate` `exposure`'ı döngü seçiminde işaret olarak kullanır (`internet`/`network` + auth, veri, altyapı, dışa açık yüzey veya ölçeği etkileyen iş → en az `özellik`; daha küçük döngüde gerekçe taslakta yazılır) ve taslakta gösterir; tester kabul fazında hata senaryolarını test adayı olarak okur; developer kapanış raporunda sistem tasarımına uyumu bildirir.
@@ -135,6 +137,53 @@ Her faz kapanış raporuna kendi rolünün `## Çıktı` başlıklarını yazar.
 - **`cleanup` pencereyi otomatik kapattı:** öncesinde 1 çalışan süreci, sonrasında 0; worktree hatasız silindi.
 - **Süre:** görev oluşturmadan rapora ~6 dakika (19:18 → 19:24). Küçük bir test görevi için tek faz bu sürede bitiyor; `kısa` döngü (developer → tester) birkaç küçük iş için makul, `tam` döngü yalnızca §3'teki işaretlerde.
 - **Açık nokta (pipeline'a girdi):** Tester'ın "CI'a ekle" gibi kapsam dışı önerileri raporda kalıyor. Pipeline'da bunlar çatı görevin açık noktalarına toplanmalı ve son kapıda kullanıcıya gösterilmeli (§10 /status).
+
+## 14. Proje kapısı (`gate`) ve test hijyeni (T20261022-56)
+
+Retro bulgusu: kapıdaki yanlış kırmızılar ortamdan geldi (bayat vitest önbelleği, eski şablon DB, yük altında kararsız testler, FakeClock zaman bombası).
+
+- **Kart alanı:** opsiyonel `gate` (string, boş olamaz) — projenin tek kapı komutu. `vlad project set <slug> gate "<komut>"` (boş değer siler); `vlad project list --json` çıktısında `gate` görünür.
+- **`/status`:** entegrasyon doğrulaması (faz merge'ü, son kapı) kartta `gate` varsa onunla yapılır. Yoksa VLAD ad hoc koşuyu yapar ve "gate tanımlı değil" uyarısı + kart için öneri gösterir.
+- **`vlad-worker`:** rapordan önce kartta `gate` varsa çalıştırılır, sonucu `### Test sonuçları`'na yazılır.
+- **`/scan`:** kart oluştururken `gate` sorar; repoda `scripts/gate.sh` ya da `gate` npm script'i varsa önerir.
+- **Test hijyeni (`roles/tester.md`, `roles/developer.md`):** süre eşiğine bağlı iddia yok (zorunluysa geniş pay + gerekçe); FakeClock/tarihler "şimdi"ye göre göreli; koşudan önce test önbelleği ve şablon DB temizliği (gate yapmıyorsa); kararsız test "flake" diye geçilmez, kök neden ya da açık nokta.
+
+## 15. Bulgu kaydı ve retro (T20261022-57)
+
+Retro bulgusu: ertelenen bulgular kayboluyordu (manga B-*/T-*, DiskPilot 17 bulgu) ve dersler kalıcı değildi.
+
+- **Bulgu kaydı:** `kb/findings/<id>.md` (`F-<proje>-NNN`), `vlad finding add|list|set`; şema ve alanlar core spec §5.6. Çalışanlar `### Açık noktalar` maddelerini `- [önem] başlık — ayrıntı` biçiminde yazar; `/digest` bunları `finding add` ile kaydeder, kartın `## Açık konular` bölümüne açık bulguların özetini yansıtır. Son kapıda `/status` açık bulguları açık noktalar listesine ekler. `vlad status --summary` açık kritik/yüksek bulgu sayısını gösterir.
+- **Retro:** son kapıdan sonra (çatı `done`) `/status` kısa retro yapar: ne iyi gitti, ne sürtündü, ders. Proje dersleri `vlad project note` ile kartın `## Çalışma notları` bölümüne yazılır; rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur (VLAD rol dosyasını kendisi düzenlemez).
+- **Okuma:** `vlad-worker` ve tüm rollerin `## Kaynaklar` bölümü kartın `## Çalışma notları`'nı işe başlamadan okumayı söyler; bulut çalışanda kb okunamadığı için notlar prompt'a `## Proje çalışma notları` olarak satır içi girer (`src/tasks/cloud.ts`).
+
+## 16. Sınırlı paralellik ve kaldığı yerden devam (T20261022-58)
+
+Retro bulgusu: oturum limiti kesintileri (T20261018-04: bir ajan yanlış worktree'de devam etti; T20261020-84 03:10–05:20; T20261016-03 429).
+
+- **`maxParallel`** (`vlad.config.json`, opsiyonel pozitif tamsayı; yoksa sınırsız = önceki davranış). `vlad task ready [--parent <id>] --json` → `{ tasks, held_by_limit, running, maxParallel }`: `running` = şu an `running` olan dev görevleri (tüm projeler; research/pipeline sayılmaz); boş yuva = `maxParallel − running`. Hazır fazlar ID sırasıyla `tasks`'a (yuva kadar), kalanı `held_by_limit`'e girer. `tasks`'ın anlamı değişmedi: başlatılacaklar. `/delegate` ve `/status` yalnızca `tasks`'ı başlatır.
+- **`vlad task resume <id> [--json]`** (yalnızca `running`/`stalled`; diğer durum, bilinmeyen görev → standart hata). Kayıtlı `worktree` varsa yerel: klasör yoksa hata, branch `vlad/<id>` değilse hata, kaydedilmemiş değişiklik hata değil `dirty` listesidir. Çıktı `{mode:"local", worktree, branch, dirty, log_tail, prompt}`; prompt worktree yolunu açıkça verir, "ana dizinde çalışma" uyarısı ve son 5 `task log` satırını içerir. `worktree` yok, `session_id` varsa bulut: `{mode:"cloud", action:"send_message", session_id, message, args}`; ikisi de yoksa hata. Komut durum değiştirmez; `stalled` → `running` geçişini `/status` yapar.
+- **`vlad-worker`:** her anlamlı adımda WIP commit + `task log` "kaldığım yer"; devam mesajında önce `git status`/branch doğrulaması.
+
+## 17. Dağıtım provası ve `devops` rolü (T20261022-59)
+
+Retro bulgusu: dağıtım hataları canlıda çıktı (T20261021-86/-87/-88, T20261022-51) ve bulutta `check-deploy` koşmadı (T20261022-53).
+
+- **`prova` fazı:** iş dağıtım betiğine, CI'a veya altyapıya dokunuyorsa `/delegate` `prova` fazını (devops, dev, bağımlılık: `uygulama`) önerir; `doğrulama` ile paralel çalışır ya da canlıya alma kapısından önce koşar.
+- **Senaryolar:** kısıtlayıcı umask (077); `bash -s < script` (stdin tüketimi); `pipefail` tuzakları (`grep -q` + SIGPIPE); boş volume ile ilk kurulum; yedek alma + geri yükleme; idempotent ikinci koşu; yetkisiz kullanıcı.
+- **Çıktı:** `### Prova matrisi` (senaryo | ortam | sonuç), `### Bulunan hatalar`, `### Prova edilemeyenler` (ör. bulutta Docker yok) + standart bölümler.
+- **Kapı:** `/status` son kapıda `prova` fazı varsa gösterir; kırmızıysa canlıya alma önerilmez. Devops dışa etkili eylem yapmaz (gerçek sunucuya dağıtım yok).
+
+## 18. Ekip iyileştirmeleri: sözleşme, itiraz, entegrasyon kontrolü, erken denetim (T20261022-60)
+
+Retro bulguları: sözleşmesiz kabul testleri (DiskPilot 7 "testin kendisi yanlış", T20261019-01), paralel fazlarda ad çakışması/merge çakışması (T20261020-58, -84), geç denetim (manga 25 bulgu, T20261021-95; SEC2-01 yüksek, VLAD'ın otonom SEC-08 kararı), dış API şeklinin geç öğrenilmesi (T20261020-05, T20261021-89).
+
+- **`sözleşme` fazı:** `tam` ve `özellik`'te kabul ∥ uygulamadan önce (developer, dev; bağımlılık plan/spec/tasarım). Tipler, imzalar, şema taslakları + sözleşme testleri; `kabul` ve `uygulama` ona bağlanır. Küçük işte (tek modül, yeni arayüz yok) atlanabilir; taslakta gerekçe yazılır. `kısa`'da yoktur.
+- **Test itirazı:** developer yanlış bulduğu kabul testini raporda bırakmaz; `vlad task ask` ile "Test itirazı: <test>, tester görevi <T…>" sorar. `/status` (blocked) tester'a yönlendirir (açık görev: log; kapalıysa kısa `kabul` düzeltme fazı) ya da VLAD gerekçeyle karar verir. Developer testi kendisi değiştirmez (test sahipliği §4 değişmez).
+- **Entegrasyon öncesi kontrol:** pipeline fazı rapordan önce `vlad/<çatı>`'yı kendi branch'ine merge eder, lint + gate/tam koşu yapar; çakışma/kırmızı `### Test sonuçları` ve `### Açık noktalar`'da raporlanır (`vlad-worker` adım 6). `/status` bunu kapıda kontrol eder. Bulut çalışanı `kb/`/`vlad-worker` okuyamadığından kartın `gate` komutu ve (`parent` doluysa) `git fetch origin vlad/<çatı>` + `git merge` kuralı bulut prompt'una satır içi girer (`src/tasks/cloud.ts`, cloud spec §4).
+- **Paylaşılan dosyalar:** architect planı `### Paylaşılan dosyalar ve ad alanları` (dosya, dokunan fazlar, sahip, kural; test ad öneki/ad alanı) içerir; developer ve tester ona uyar.
+- **Erken denetim:** UI'lı pipeline'da ilk kullanıcıya görünen dilimden sonra ara `denetim` önerilir; kritik/yüksek bulgular sonraki `uygulama` fazının girdisidir. Developer UI değişikliğinde rapordan önce tarayıcıda (Chromium/Playwright) ekran görüntüsüyle öz-kontrol yapar.
+- **Güvenlik incelemesi:** auth/yetki/oturum/veri silmeye dokunan fazlarda ve VLAD'ın otonom verdiği güvenlik etkili kararlarda kısa inceleme (arka plan agent'ı veya `security-review`); kritik/yüksek bulguda merge önerilmez. VLAD güvenlik etkili kararı sessizce vermez, kullanıcıya sorar.
+- **Gerçek fixture:** dış API kullanan işte analyst/architect plan öncesi gerçek yanıt örneklerini ister (yoksa kullanıcıdan alınacağı açık nokta); tester ve developer testleri kayıtlı gerçek fixture'a karşı yazar.
 
 ## 13. Kapsam dışı
 
