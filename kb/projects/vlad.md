@@ -36,8 +36,8 @@ Kullanıcının projelerinin kalıcı hafızası ve iş dağıtıcısı. `vlad` 
 - 2026-10-18: Designer rolü eklendi (c79e2c3).
 
 ## Açık konular
-- **Açık bulgular:** düşük: F-vlad-001 `brainstorming`/`writing-plans`/`subagent-driven-development` vendored değil; F-vlad-002 yeni kurallar ilk gerçek pipeline'da sınanmalı. bilgi: F-vlad-003 retro adımının CLI komutu yok.
-- Rol skill'leri VLAD reposunda `.claude/skills` altında (C10 kısmen çözüldü); başka projelerin bulut çalışanları için skill'ler o projenin reposunda olmalı (medialog'da var).
+- **Açık bulgular:** düşük: F-vlad-002 yeni kurallar ilk gerçek pipeline'da sınanmalı. bilgi: F-vlad-003 retro adımının CLI komutu yok.
+- Rol skill'leri (superpowers 8 skill, security-audit, 3 tasarım skill'i) VLAD reposunda `.claude/skills` altında (C10; PR #36); başka projelerin bulut çalışanları için skill'ler o projenin reposunda olmalı (medialog'da var).
 - Bulut ortamında `vlad` CLI kurulumu (setup script / SessionStart hook) yok; VLAD `npm ci && build` ile çalışıyor (B6).
 - watchparty kartına `repo` değeri kullanıcıdan bekleniyor.
 - Yerel Windows'ta `git pull`, `npm run build`, `vlad install` yapılmalı (2026-10-20 ve 2026-10-22 değişiklikleri).
