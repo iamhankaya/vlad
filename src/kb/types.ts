@@ -63,6 +63,27 @@ export interface TaskData {
   phase?: string | null;
 }
 
+export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
+export type FindingState = "open" | "deferred" | "fixed" | "wontfix";
+
+/** kb/findings/<id>.md frontmatter (findings spec §2) */
+export interface FindingData {
+  /** `F-<project>-NNN`, numbered per project. */
+  id: string;
+  project: string;
+  severity: FindingSeverity;
+  state: FindingState;
+  /** Task whose report raised the finding. */
+  source_task: string;
+  title: string;
+  /** Task that fixed it; only while `state` is `fixed`. */
+  fixed_by?: string | null;
+  created: string;
+  updated: string;
+  /** When the state became `fixed`. */
+  fixed?: string | null;
+}
+
 /** roles/<slug>.md frontmatter (roles spec §4) */
 export interface RoleData {
   slug: string;

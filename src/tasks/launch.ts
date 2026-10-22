@@ -5,6 +5,7 @@ import {
 } from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
+import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
@@ -201,7 +202,7 @@ export function statusSummary(
   now: Date,
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
-  undigested: number;
+  undigested: number; openSevereFindings: number;
 } {
   const newlyStalled = markStale(now, cfg.staleAfterHours).map((t) => t.data.id);
   const tasks = listTasks();
@@ -214,5 +215,6 @@ export function statusSummary(
     newlyStalled,
     inbox: countInbox(),
     undigested: tasks.filter((t) => t.data.state === "done" && !t.data.digested).length,
+    openSevereFindings: countOpenSevere(),
   };
 }
