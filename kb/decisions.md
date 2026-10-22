@@ -172,3 +172,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: MIUI çöp konumu ve M9 boşaltma yolu
 - **Karar (VLAD, güvenlik etkili; kullanıcıya bildirildi):** MIUI çöpe atılan medyayı `.trash-storage` altına taşıyor (probe-2). `.trash-storage` doğrudan dosya silmeye korumalı kalır; M9 'çöp kutusunu boşalt' yalnızca MediaStore üzerinden (is_trashed=1 satırlar, yürütme anında yeniden doğrulama, tam SİL yetkisi), M9'a özel dar bir yürütme yoluyla yapılır.
 - **Kaynak:** T20261022-80
+
+### 2026-10-22 — diskpilot-mobile — Son denetim düzeltme fazları; Güvenli ön seçim kaldırılır
+diskpilot-mobile: son denetim (T20261022-84) sonrası çatı altına uygulama-3 + doğrulama-2 + denetim-2 fazları açıldı; yüksek/orta/düşük bulguların tamamı uygulama-3'e girer. Bulgu #8 kararı (a): Temizlik'te Güvenli öğelerin ön seçimi kaldırılır; tarama sonrası hiçbir öğe seçili gelmez (silmeyi zorlaştırma ilkesi).
+- **Kaynak:** T20261022-84
