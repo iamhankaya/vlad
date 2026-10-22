@@ -125,3 +125,7 @@ Kullanıcı kararı (2026-10-21), manga desteği (T20261021-89):
 ### 2026-10-22 — medialog — Manga: devam eden seride '/ N+' biçimi
 Toplamı bilinmeyen ama son çıkan bölümü bilinen manga serilerinde konum "Bölüm N / 128+" biçiminde gösterilir ("?" yerine). Son bölüm de bilinmiyorsa "?" kalır; tamamlanmış seride toplam gösterilir. Kaynak: kullanıcı, 2026-10-22.
 - **Kaynak:** T20261022-53
+
+### 2026-10-22 — medialog — CI yalnız main PR/push (Actions dakikası)
+GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız main'e PR, main push ve elle tetiklemede çalışır; concurrency ile eski koşu iptal, docs/md değişikliklerinde atlanır. vlad/* push'larında CI yok; kapı doğrulaması VLAD'ın yerel tam koşusudur. Kaynak: kullanıcı, 2026-10-22.
+- **Kaynak:** T20261022-54
