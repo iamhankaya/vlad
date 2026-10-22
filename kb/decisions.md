@@ -121,3 +121,7 @@ Kullanıcı kararı (2026-10-21), manga desteği (T20261021-89):
 - **Anime:** TMDB'de kalır (2026-10-20 kararı değişmedi).
 - **VLAD kararları:** yetişkin içerik tamamen gizli, açmak için ayar yok. İstatistikte okuma süresi bölüm başına 6 dk tahmin edilir ve "tahmini" etiketiyle gösterilir.
 - **Kaynak:** T20261021-90
+
+### 2026-10-22 — medialog — Manga: devam eden seride '/ N+' biçimi
+Toplamı bilinmeyen ama son çıkan bölümü bilinen manga serilerinde konum "Bölüm N / 128+" biçiminde gösterilir ("?" yerine). Son bölüm de bilinmiyorsa "?" kalır; tamamlanmış seride toplam gösterilir. Kaynak: kullanıcı, 2026-10-22.
+- **Kaynak:** T20261022-53
