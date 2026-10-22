@@ -28,8 +28,7 @@ DiskPilot'un Android sürümü: depolama görselleştirme ve güvenli temizlik. 
 - Bulut container'ında emülatör yok; UI öz-kontrolü Robolectric/Roborazzi ekran görüntüsüyle, gerçek cihaz testi kullanıcıda.
 
 ## Son aktivite
-- 2026-10-22: Proje açıldı; v1 pipeline'ı tanımlandı.
+- 2026-10-22: Proje açıldı; v1 pipeline T20261022-64 tanımlandı; repo `iamhankaya/diskpilot-mobile` (main, README) açıldı.
 
 ## Açık konular
-- Repo `iamhankaya/diskpilot-mobile` henüz yok; Claude GitHub App repo oluşturamadı (403). Kullanıcı açacak.
 - APK imzalama: kalıcı keystore (GitHub secret) önerildi; kullanıcı kararı bekliyor.
