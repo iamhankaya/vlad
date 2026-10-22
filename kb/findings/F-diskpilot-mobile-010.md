@@ -2,11 +2,12 @@
 id: F-diskpilot-mobile-010
 project: diskpilot-mobile
 severity: düşük
-state: open
+state: fixed
 source_task: T20261022-81
 title: Kısmi silme/NotVerified durumunda rapor başlığı 'Hiçbir şey silinmedi'
 created: 2026-10-22T18:27:12+00:00
-updated: 2026-10-22T18:27:12+00:00
+updated: 2026-10-22T18:43:39+00:00
+fixed: 2026-10-22T18:43:39+00:00
 ---
 
 ## Ayrıntı

@@ -2,11 +2,12 @@
 id: F-diskpilot-mobile-008
 project: diskpilot-mobile
 severity: orta
-state: open
+state: fixed
 source_task: T20261022-81
 title: M9 öğesi MediaStore okunamazsa düz dosya silmesine düşüyor
 created: 2026-10-22T18:27:12+00:00
-updated: 2026-10-22T18:27:12+00:00
+updated: 2026-10-22T18:43:38+00:00
+fixed: 2026-10-22T18:43:38+00:00
 ---
 
 ## Ayrıntı
