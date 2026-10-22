@@ -6,7 +6,8 @@ repo: iamhankaya/diskpilot-mobile
 default_branch: main
 exposure: local
 local_only: false
-gate: ./gradlew lintDebug testDebugUnitTest assembleDebug
+gate: "./gradlew lintDebug testDebugUnitTest assembleDebug (yalnızca CI/main);
+  bulutta yerel kapı: ./gradlew -PskipAndroid=true :core:test"
 stack:
   - kotlin
   - android

@@ -156,3 +156,11 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile tasarımı; ağaçtan silme yok
 - **Karar:** Tasarım (T20261022-66, `docs/design/DESIGN.md`) kabul edildi, entegrasyon branch'ine merge edildi. v1'de klasör ağacından doğrudan silme yok; silme yalnızca Temizlik kategorilerinden.
 - **Kaynak:** T20261022-66
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile planı ve CI yalnız main
+
+- **Kaynak:** T20261022-67
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: CI yalnız main (düzeltme)
+- **Karar (düzeltme, önceki kaydın kesik ikinci maddesi yerine):** GitHub Actions dakikası kısıtlı. CI yalnızca `main` branch'ine PR/push ve elle tetiklemede (`workflow_dispatch`) koşar; faz branch'lerinde CI yok. Ara CI/APK koşusu yalnızca kullanıcı onayıyla elle tetiklenir.
+- **Kaynak:** T20261022-67
