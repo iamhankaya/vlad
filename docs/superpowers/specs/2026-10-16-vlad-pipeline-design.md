@@ -154,6 +154,14 @@ Retro bulgusu: ertelenen bulgular kayboluyordu (manga B-*/T-*, DiskPilot 17 bulg
 - **Retro:** son kapıdan sonra (çatı `done`) `/status` kısa retro yapar: ne iyi gitti, ne sürtündü, ders. Proje dersleri `vlad project note` ile kartın `## Çalışma notları` bölümüne yazılır; rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur (VLAD rol dosyasını kendisi düzenlemez).
 - **Okuma:** `vlad-worker` ve tüm rollerin `## Kaynaklar` bölümü kartın `## Çalışma notları`'nı işe başlamadan okumayı söyler; bulut çalışanda kb okunamadığı için notlar prompt'a `## Proje çalışma notları` olarak satır içi girer (`src/tasks/cloud.ts`).
 
+## 16. Sınırlı paralellik ve kaldığı yerden devam (T20261022-58)
+
+Retro bulgusu: oturum limiti kesintileri (T20261018-04: bir ajan yanlış worktree'de devam etti; T20261020-84 03:10–05:20; T20261016-03 429).
+
+- **`maxParallel`** (`vlad.config.json`, opsiyonel pozitif tamsayı; yoksa sınırsız = önceki davranış). `vlad task ready [--parent <id>] --json` → `{ tasks, held_by_limit, running, maxParallel }`: `running` = şu an `running` olan dev görevleri (tüm projeler; research/pipeline sayılmaz); boş yuva = `maxParallel − running`. Hazır fazlar ID sırasıyla `tasks`'a (yuva kadar), kalanı `held_by_limit`'e girer. `tasks`'ın anlamı değişmedi: başlatılacaklar. `/delegate` ve `/status` yalnızca `tasks`'ı başlatır.
+- **`vlad task resume <id> [--json]`** (yalnızca `running`/`stalled`; diğer durum, bilinmeyen görev → standart hata). Kayıtlı `worktree` varsa yerel: klasör yoksa hata, branch `vlad/<id>` değilse hata, kaydedilmemiş değişiklik hata değil `dirty` listesidir. Çıktı `{mode:"local", worktree, branch, dirty, log_tail, prompt}`; prompt worktree yolunu açıkça verir, "ana dizinde çalışma" uyarısı ve son 5 `task log` satırını içerir. `worktree` yok, `session_id` varsa bulut: `{mode:"cloud", action:"send_message", session_id, message, args}`; ikisi de yoksa hata. Komut durum değiştirmez; `stalled` → `running` geçişini `/status` yapar.
+- **`vlad-worker`:** her anlamlı adımda WIP commit + `task log` "kaldığım yer"; devam mesajında önce `git status`/branch doğrulaması.
+
 ## 13. Kapsam dışı
 
 Fazlar arası otomatik merge (kapılar her zaman kullanıcıda), birden çok repoya yayılan pipeline, ajanların birbirine doğrudan mesaj atması, maliyet bütçesi/limitler.

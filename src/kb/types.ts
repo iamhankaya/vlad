@@ -121,6 +121,8 @@ export interface VladConfig {
   ignore: string[];
   defaultAutonomy: Autonomy;
   staleAfterHours: number;
+  /** Max simultaneously `running` dev workers (all projects); absent → unlimited. */
+  maxParallel?: number;
   launcher: Launcher;
   worktreeDir: string;
   projects: Record<string, { autonomy?: Autonomy }>;

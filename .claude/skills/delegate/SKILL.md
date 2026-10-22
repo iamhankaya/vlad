@@ -142,7 +142,7 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
    ```
    vlad task ready --parent <çatı-id> --json
    ```
-   `{"tasks":[...]}` — `queued` olup tüm bağımlılıkları `done` olanlar. Her birini başlat: dev → 5a, research → 5b, plan fazı → 6.
+   `{"tasks":[...],"held_by_limit":[...]}` — `tasks`: `queued`, tüm bağımlılıkları `done` ve `maxParallel` sınırına (`vlad.config.json`; yoksa sınırsız) sığanlar; `held_by_limit`: sınır dolu olduğu için bekleyenler. **Yalnızca `tasks`'ı başlat**, `held_by_limit`'i başlatma; kullanıcıya bekleyenleri söyle (bir çalışan bitince `/status` adım 3 yeniden bakar). Her birini başlat: dev → 5a, research → 5b, plan fazı → 6. Kesilmiş (`running`/`stalled`) bir çalışan varsa yenisini açmadan `vlad task resume <id> --json` ile sürdür (`/status` adım 5).
 4. Kullanıcıya ağacı göster: çatı ID'si, her faz (ID, faz, rol, bağımlılık), hangilerinin başlatıldığı.
 
 ## 5a. dev → çalışanı başlat
