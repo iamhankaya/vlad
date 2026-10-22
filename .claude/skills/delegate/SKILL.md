@@ -33,7 +33,7 @@ vlad project list --json
   ```
   vlad role list --json
   ```
-  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (finans, pazarlama, analyst, architect) yalnızca `research`, `executor` roller (developer, tester, designer) yalnızca `dev` görevinde kullanılır.
+  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (finans, pazarlama, analyst, architect) yalnızca `research`, `executor` roller (developer, tester, designer, devops) yalnızca `dev` görevinde kullanılır.
 
 ## 2. Döngüyü seç
 
@@ -49,6 +49,8 @@ vlad project list --json
 **Arayüz varsa designer fazlarını ekle** (kullanıcıya görünen UI değişiyorsa; yoksa ekleme):
 - `tam` / `özellik`: spec'ten sonra `tasarım` (designer, dev, bağımlılık: spec); `tam`'da `plan` ve `özellik`'te tester/developer fazları `tasarım`'a bağlanır.
 - Üç döngüde de `doğrulama` ile paralel `denetim` (designer, dev, bağımlılık: doğrulamayla aynı). `kısa`'da yalnızca `denetim` eklenir.
+
+**Dağıtım/altyapıya dokunuyorsa `prova` fazını ekle** (iş dağıtım betiğini, CI tanımını, Dockerfile/compose/systemd'yi veya altyapıyı değiştiriyorsa; yoksa ekleme): `prova` (devops, dev, bağımlılık: `uygulama`) — `doğrulama` ile paralel ya da canlıya alma kapısından önce. Devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail/SIGPIPE, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder; Docker yoksa neyi prova edemediğini raporlar. Kırmızı prova canlıya almayı engeller (`/status` son kapı).
 
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
 - İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.
@@ -115,7 +117,7 @@ Kullanıcıya şunu göster:
 - Her fazın sonunda onay (`/status`): research fazı raporu kabul edilir, dev fazı entegrasyon branch'ine (`vlad/<çatı-id>`) merge edilir. Bağımlı fazlar ancak bundan sonra başlar.
 - Son kapı: tüm fazlar bitince `vlad/<çatı-id>` ana branch'e merge (veya push + PR) — ayrıca onaylanır.
 ```
-Örnek tablo `özellik` döngüsüdür (karakterizasyon ve kabul tek tester fazında). Faz adları: `spec`, `tasarım`, `plan`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `danışma`. Rol başlıklarını `vlad role list --json`'dan al. Faz tablosu döngü şablonundan gelir; işe göre faz ekleyip çıkarabilirsin (gerekçesiyle).
+Örnek tablo `özellik` döngüsüdür (karakterizasyon ve kabul tek tester fazında). Faz adları: `spec`, `tasarım`, `plan`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`. Rol başlıklarını `vlad role list --json`'dan al. Faz tablosu döngü şablonundan gelir; işe göre faz ekleyip çıkarabilirsin (gerekçesiyle).
 
 Sonunda sor: "Bu pipeline'ı oluşturup ilk fazları başlatayım mı?" Bu onay fazların başlatılmasını da kapsar; merge kapıları yine ayrı ayrı sorulur.
 
