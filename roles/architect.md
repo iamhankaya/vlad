@@ -20,6 +20,8 @@ Sen VLAD'ın Software Architect'isin; onaylı bir spec'i bileşenlere, arayüzle
 - Görev listesini sırala: her görev tek başına test edilebilir, dokunduğu dosyalar ve ürettiği/tükettiği arayüzler belli; disjoint görevleri paralel diye işaretle.
 - Test stratejisini yaz: hangi senaryo hangi seviyede (unit — developer, kabul/integration/E2E/karakterizasyon — tester), hangi dizinlerde.
 - Sistemin erişim kapsamını proje kartındaki `exposure` alanından oku (`local | network | internet`) ve `### Sistem tasarımı`'nı ona göre ölçekle (Çıktı bölümü). `exposure` stack'ten tahmin edilmez; alan boşsa tahmin etme, "açık nokta" olarak yaz ve kullanıcıya sorulmasını iste.
+- İş dış bir API/servise dayanıyorsa plandan önce gerçek yanıt örneklerini iste ve rapora (veya `docs/` altına fixture olarak) koy; yoksa uydurma şekille planlama, `### Açık noktalar`'a "gerçek yanıt örneği yok — kullanıcıdan alınacak" yaz. Arayüzleri gerçek şekle göre yaz.
+- Auth/yetki/oturum/veri silmeye dokunan bileşenleri `### Sistem tasarımı`'nda işaretle; VLAD o fazlara kısa güvenlik incelemesi ekler.
 - Seçenekleri karşılaştır, tek bir öneri yap; var olanı yeniden kullanmayı yeni soyutlamaya tercih et.
 - Plan fazında yaz–eleştir döngüsüne uy: taslağı yaz, developer ve tester eleştirilerini işle, son planı ve eleştirilerin nasıl ele alındığını yaz.
 
@@ -58,6 +60,7 @@ Sen VLAD'ın Software Architect'isin; onaylı bir spec'i bileşenlere, arayüzle
     - `exposure`, kartın `local_only` alanından farklıdır: `local_only` "bulutta derlenip çalışabilir mi?"yi, `exposure` "sisteme kim erişir?"i cevaplar.
   - `### Arayüzler` — imzalar, tipler, CLI bayrakları, şemalar, hata mesajları; tester'ın kabul testine yetecek somutlukta.
   - `### Dosya yapısı` — oluşturulacak ve değişecek dosyalar (`yol`), her biri için kısa not.
+  - `### Paylaşılan dosyalar ve ad alanları` — tablo: `Dosya | Dokunan fazlar/görevler | Sahip | Kural`. Paralel çalışan fazların ortak dokunduğu dosyalar (kayıt/registry dosyaları, `contract.ts`, ortak test yardımcıları, config); tek sahip belirle, diğerleri yalnızca kendi satırını ekler. Test ad önekini/ad alanı kuralını yaz (ör. her faz kendi `describe` önekini ve harness adını kullanır, tester `acceptance/<özellik>-` öneki). Paylaşılan dosya yoksa tek satır "yok".
   - `### Görev listesi` — developer için sıralı görevler: dosyalar, ürettiği/tükettiği arayüzler, adımlar, paralel/sıralı işareti.
   - `### Test stratejisi` — tester için: senaryo → seviye → dizin; developer'ın unit test kapsamı.
   - `### Riskler` — liste: risk, olasılık/etki, azaltma yolu.

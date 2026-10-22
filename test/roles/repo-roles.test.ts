@@ -113,3 +113,64 @@ describe("work notes (## Çalışma notları) wiring", () => {
     expect(read("docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md")).toContain("## 15. Bulgu kaydı ve retro");
   });
 });
+
+describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erken denetim, fixture)", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+
+  it("delegate adds the sözleşme phase to tam/özellik and lists it in phase names", () => {
+    const delegate = read(".claude/skills/delegate/SKILL.md");
+    expect(delegate).toMatch(/\| `tam` \|.*developer:sözleşme/);
+    expect(delegate).toMatch(/\| `özellik` \|.*developer:sözleşme/);
+    expect(delegate).toContain("`sözleşme`");
+    expect(delegate).toMatch(/atlanabilir/);
+    const spec = read("docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md");
+    expect(spec).toMatch(/\| `tam` \|.*developer:sözleşme/);
+    expect(spec).toContain("## 18.");
+  });
+
+  it("test objection flows through ask: developer, worker, status and tester agree", () => {
+    for (const f of ["roles/developer.md", "global/skills/vlad-worker/SKILL.md"]) {
+      const t = read(f);
+      expect(t, f).toContain("Test itirazı");
+      expect(t, f).toContain("vlad task ask");
+    }
+    expect(read(".claude/skills/status/SKILL.md")).toContain("Test itirazı");
+    expect(read("roles/tester.md")).toContain("Test itirazı");
+    expect(read("roles/developer.md")).not.toMatch(/yanlış görünüyorsa raporda "açık nokta"/);
+  });
+
+  it("worker runs the pre-integration check; status checks it at the gate", () => {
+    const worker = read("global/skills/vlad-worker/SKILL.md");
+    expect(worker).toContain("Entegrasyon öncesi kontrol");
+    expect(worker).toMatch(/vlad\/<parent>.*merge/s);
+    expect(read(".claude/skills/status/SKILL.md")).toContain("Entegrasyon öncesi kontrol");
+  });
+
+  it("architect has the shared-files table; tester and developer obey it", () => {
+    expect(read("roles/architect.md")).toContain("### Paylaşılan dosyalar ve ad alanları");
+    expect(read("roles/tester.md")).toContain("Paylaşılan dosyalar ve ad alanları");
+    expect(read("roles/developer.md")).toContain("Paylaşılan dosyalar ve ad alanları");
+  });
+
+  it("early audit, UI self-check and security review are specified consistently", () => {
+    const delegate = read(".claude/skills/delegate/SKILL.md");
+    expect(delegate).toContain("Erken (ara) denetim");
+    expect(delegate).toContain("Güvenlik incelemesi");
+    expect(delegate).toContain("security-review");
+    expect(read("roles/designer.md")).toContain("ara denetim");
+    expect(read("roles/developer.md")).toMatch(/Chromium\/Playwright/);
+    const status = read(".claude/skills/status/SKILL.md");
+    expect(status).toContain("Güvenlik incelemesi");
+    expect(status).toContain("security-review");
+    expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
+  });
+
+  it("roles ask for real response fixtures on external-API work", () => {
+    for (const r of ["analyst", "architect", "tester", "developer"]) {
+      expect(read(`roles/${r}.md`), r).toMatch(/gerçek (yanıt|fixture)/);
+    }
+    expect(read(".claude/skills/delegate/SKILL.md")).toContain("fixture");
+  });
+});
+
