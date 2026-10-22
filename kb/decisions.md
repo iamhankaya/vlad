@@ -144,3 +144,39 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 - **Gerekçe:** Kullanıcı isteği (2026-10-22); medialog'daki vendoring kalıbı.
 - **Kaynak:** T20261022-55, commit 94e0e0e
 - **Kaynak:** T20261022-55
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: ayrı Android projesi, store dışı
+- **Karar:** DiskPilot Mobile, DiskPilot'tan ayrı bir Android projesi olarak açıldı: store dışı (sideload APK), yalnızca kullanıcının Xiaomi Redmi Note 13 Pro telefonu; kavramlar DiskPilot'tan alınır, kod paylaşılmaz; önerilen yığın Kotlin + Compose; `tam` döngü (T20261022-64).
+- **Kaynak:** T20261022-64
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile spec kararları ve cihaz sondası
+- **Karar:** Spec (T20261022-65) açık noktaları: karantina yok, medya dışı `SİL` ile kalıcı; yalnızca `SİL` (Türkçe İ); eşikler büyük ≥100 MB, eski ≥365 gün ve ≥50 MB, kopya ≥1 MB, APK ≥30 gün; keystore kullanıcı üretir, repo private; sohbet medyası silinebilir/işaretsiz; targetSdk 35; log/döküm kategorisi cihaz sondası verisinden sonra. Plan öncesi cihaz sondası fazı (T20261022-76) eklendi.
+- **Kaynak:** T20261022-65
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile tasarımı; ağaçtan silme yok
+- **Karar:** Tasarım (T20261022-66, `docs/design/DESIGN.md`) kabul edildi, entegrasyon branch'ine merge edildi. v1'de klasör ağacından doğrudan silme yok; silme yalnızca Temizlik kategorilerinden.
+- **Kaynak:** T20261022-66
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile planı ve CI yalnız main
+
+- **Kaynak:** T20261022-67
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: CI yalnız main (düzeltme)
+- **Karar (düzeltme, önceki kaydın kesik ikinci maddesi yerine):** GitHub Actions dakikası kısıtlı. CI yalnızca `main` branch'ine PR/push ve elle tetiklemede (`workflow_dispatch`) koşar; faz branch'lerinde CI yok. Ara CI/APK koşusu yalnızca kullanıcı onayıyla elle tetiklenir.
+- **Kaynak:** T20261022-67
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: faz merge yetkisi VLAD'da
+- **Karar:** Kullanıcı DiskPilot Mobile v1 pipeline'ı (T20261022-64) için faz kapılarında entegrasyon branch'ine (vlad/T20261022-64) merge yetkisini VLAD'a verdi: faz raporu ve kontroller temizse (kritik/yüksek bulgu yok, yerel kapı yeşil) sormadan merge edip bağımlı fazları başlatır; durumu kullanıcıya bildirir. Güvenlik etkili kararlar yine kullanıcıya açıkça raporlanır; son kapı (main'e merge/PR) ve CI/APK koşuları ayrıca onaylıdır.
+- **Kaynak:** T20261022-68
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: MIUI çöp konumu ve M9 boşaltma yolu
+- **Karar (VLAD, güvenlik etkili; kullanıcıya bildirildi):** MIUI çöpe atılan medyayı `.trash-storage` altına taşıyor (probe-2). `.trash-storage` doğrudan dosya silmeye korumalı kalır; M9 'çöp kutusunu boşalt' yalnızca MediaStore üzerinden (is_trashed=1 satırlar, yürütme anında yeniden doğrulama, tam SİL yetkisi), M9'a özel dar bir yürütme yoluyla yapılır.
+- **Kaynak:** T20261022-80
+
+### 2026-10-22 — diskpilot-mobile — Son denetim düzeltme fazları; Güvenli ön seçim kaldırılır
+diskpilot-mobile: son denetim (T20261022-84) sonrası çatı altına uygulama-3 + doğrulama-2 + denetim-2 fazları açıldı; yüksek/orta/düşük bulguların tamamı uygulama-3'e girer. Bulgu #8 kararı (a): Temizlik'te Güvenli öğelerin ön seçimi kaldırılır; tarama sonrası hiçbir öğe seçili gelmez (silmeyi zorlaştırma ilkesi).
+- **Kaynak:** T20261022-84
+
+### 2026-10-22 — diskpilot-mobile — SİL diyaloğu UI testleri geçici @Ignore
+diskpilot-mobile: kullanıcı kararı (2026-10-22) — PR #1 CI turu 8 sonrasında hâlâ kırmızı olan 8 SİL ConfirmDialog Robolectric testi (CleanupScreenLogicTest ×4, ShotDeleteFlowTest confirm* ×4) silinmez, @Ignore ile geçici olarak devre dışı bırakılır (app.skipped_max=8). Kullanıcı bulut ağ izin listesine dl.google.com ve maven.google.com eklediğinde testler yerelde koşulup düzeltilecek ve geri açılacak. SİL birebir eşleşme kuralı :core testlerinde yeşil; cihaz kontrol listesi C7 (SİL) zorunlu. Bulgu: F-diskpilot-mobile-028.
+- **Kaynak:** T20261022-64
