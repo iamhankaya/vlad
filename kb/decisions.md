@@ -176,3 +176,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — diskpilot-mobile — Son denetim düzeltme fazları; Güvenli ön seçim kaldırılır
 diskpilot-mobile: son denetim (T20261022-84) sonrası çatı altına uygulama-3 + doğrulama-2 + denetim-2 fazları açıldı; yüksek/orta/düşük bulguların tamamı uygulama-3'e girer. Bulgu #8 kararı (a): Temizlik'te Güvenli öğelerin ön seçimi kaldırılır; tarama sonrası hiçbir öğe seçili gelmez (silmeyi zorlaştırma ilkesi).
 - **Kaynak:** T20261022-84
+
+### 2026-10-22 — diskpilot-mobile — SİL diyaloğu UI testleri geçici @Ignore
+diskpilot-mobile: kullanıcı kararı (2026-10-22) — PR #1 CI turu 8 sonrasında hâlâ kırmızı olan 8 SİL ConfirmDialog Robolectric testi (CleanupScreenLogicTest ×4, ShotDeleteFlowTest confirm* ×4) silinmez, @Ignore ile geçici olarak devre dışı bırakılır (app.skipped_max=8). Kullanıcı bulut ağ izin listesine dl.google.com ve maven.google.com eklediğinde testler yerelde koşulup düzeltilecek ve geri açılacak. SİL birebir eşleşme kuralı :core testlerinde yeşil; cihaz kontrol listesi C7 (SİL) zorunlu. Bulgu: F-diskpilot-mobile-028.
+- **Kaynak:** T20261022-64
