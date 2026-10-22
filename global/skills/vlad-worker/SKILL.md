@@ -37,6 +37,10 @@ vlad task log <id> "<kısa Türkçe açıklama>"
 ```
 Uzun süre sessiz kalma: kayıt `staleAfterHours`'tan eskirse görev `stalled` sayılır.
 
+**Checkpoint kuralı:** oturum limiti veya çökme seni her an kesebilir. Her anlamlı adımda (test yeşile döndü, bir dosya/modül bitti, review düzeltmesi) WIP commit at (`git commit -m "wip: <ne>"`) ve `vlad task log <id> "kaldığım yer: <sonraki adım>"` yaz. Kaydedilmemiş iş bırakma.
+
+**Devam mesajı gelince** (VLAD `vlad task resume` ile seni sürdürür): işe başlamadan önce `git branch --show-current` (`vlad/<id>` olmalı) ve `git status` çalıştır, çalışma dizininin görevin worktree'si olduğunu doğrula; ana dizinde veya başka branch'te çalışma. Kirli ağaç varsa incele, anlamlıysa WIP commit'le; sonra son "kaldığım yer" satırından devam et.
+
 ## 4. Soru sorma
 
 Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:

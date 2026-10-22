@@ -16,7 +16,7 @@ import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyTasks, reportTask, saveTask, setState, statusSummary,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -228,6 +228,12 @@ def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, sta
   const t = setState(id, state as TaskState);
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
 });
+def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", (id: string, o: Opts) => {
+  const r = resumeInfo(id);
+  out(o, r, r.mode === "local"
+    ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
+    : `send_message session_id=${r.session_id}\n${r.message}`);
+});
 def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
   cleanupTask(id);
   out(o, { id }, `${id} worktree kaldırıldı`);
@@ -259,8 +265,16 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
   .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
   .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
 def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
-  const tasks = readyTasks({ parent: o.parent as string | undefined });
-  out(o, { tasks: tasks.map((t) => t.data) }, tasks.map(taskLine).join("\n"));
+  const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel);
+  const lines = [
+    ...r.tasks.map(taskLine),
+    ...r.held_by_limit.map((t) => `${taskLine(t)}  (maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor)`),
+  ];
+  out(
+    o,
+    { tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel },
+    lines.join("\n"),
+  );
 }).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
