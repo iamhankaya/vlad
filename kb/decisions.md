@@ -180,3 +180,7 @@ diskpilot-mobile: son denetim (T20261022-84) sonrası çatı altına uygulama-3 
 ### 2026-10-22 — diskpilot-mobile — SİL diyaloğu UI testleri geçici @Ignore
 diskpilot-mobile: kullanıcı kararı (2026-10-22) — PR #1 CI turu 8 sonrasında hâlâ kırmızı olan 8 SİL ConfirmDialog Robolectric testi (CleanupScreenLogicTest ×4, ShotDeleteFlowTest confirm* ×4) silinmez, @Ignore ile geçici olarak devre dışı bırakılır (app.skipped_max=8). Kullanıcı bulut ağ izin listesine dl.google.com ve maven.google.com eklediğinde testler yerelde koşulup düzeltilecek ve geri açılacak. SİL birebir eşleşme kuralı :core testlerinde yeşil; cihaz kontrol listesi C7 (SİL) zorunlu. Bulgu: F-diskpilot-mobile-028.
 - **Kaynak:** T20261022-64
+
+### 2026-10-22 — vlad — Session branch master'a alındı
+Kullanıcı onayıyla (2026-10-22) VLAD bulut oturumu branch'i ccr-ab0f6586-axq58x, PR #38 ile master'a merge edildi (yalnız kb/; diskpilot-mobile T20261022-64…-99, F-001…-029). Önceki "Master'a merge kalsın" erteleme kararı bununla kapandı; görev ID'leri master ile eşit.
+- **Kaynak:** session_015MgB5wHME79v1k6gicAgmu
