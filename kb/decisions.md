@@ -184,3 +184,8 @@ diskpilot-mobile: kullanıcı kararı (2026-10-22) — PR #1 CI turu 8 sonrasın
 ### 2026-10-22 — vlad — Session branch master'a alındı
 Kullanıcı onayıyla (2026-10-22) VLAD bulut oturumu branch'i ccr-ab0f6586-axq58x, PR #38 ile master'a merge edildi (yalnız kb/; diskpilot-mobile T20261022-64…-99, F-001…-029). Önceki "Master'a merge kalsın" erteleme kararı bununla kapandı; görev ID'leri master ile eşit.
 - **Kaynak:** session_015MgB5wHME79v1k6gicAgmu
+
+### 2026-10-22 — medialog — T20261022-100: gece faz merge + son kapı/deploy yetkisi VLAD'da
+Kullanıcı (2026-10-22): "evet, kapsam uygun, özellik döngüsüyle başlat. Gece boyu yine aşamaları merge etme yetkisi sende. Eğer her şey tamam olursa CI/CD deploy yetkisi de veriyorum. Her şeyden emin olduğunda deployment yapabiliriz."
+Kapsam: T20261022-100 faz merge kapıları (vlad/T20261022-100'e PR+merge) VLAD'da; tüm fazlar yeşil, doğrulama+denetim temiz, yerel tam koşu yeşilse main PR+merge ve deploy.yml ile CI/CD deploy VLAD'da. Güvenlik etkili kararlar yine açıkça raporlanır; kırmızı/emin olunmayan durumda deploy yapılmaz.
+- **Kaynak:** T20261022-100
