@@ -21,6 +21,7 @@ describe("BUG-1: günün 100. görevi şemaya takılır", () => {
     expect(JSON.parse(r.out).id).toBe(`T${ymd()}-100`);
   });
   it("finding add 3 haneli görev ID'sini kaynak olarak kabul eder", () => {
+    writeCard(home, "alpha");
     const r = vlad(["finding", "add", "--project", "alpha", "--source", `T${ymd()}-100`, "--severity", "orta", "--title", "x", "--json"]);
     expect(r.code, r.err).toBe(0);
   });

@@ -59,7 +59,7 @@ Görev şemasına eklenenler:
 - `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
 - `parent: string | null` — çatı görevin ID'si.
 - `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
-- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `kabul`, `sözleşme`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
+- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `sözleşme`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
 
 Kurallar (CLI doğrular):
 - `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.
@@ -179,7 +179,7 @@ Retro bulguları: sözleşmesiz kabul testleri (DiskPilot 7 "testin kendisi yanl
 
 - **`sözleşme` fazı:** `tam` ve `özellik`'te kabul ∥ uygulamadan önce (developer, dev; bağımlılık plan/spec/tasarım). Tipler, imzalar, şema taslakları + sözleşme testleri; `kabul` ve `uygulama` ona bağlanır. Küçük işte (tek modül, yeni arayüz yok) atlanabilir; taslakta gerekçe yazılır. `kısa`'da yoktur.
 - **Test itirazı:** developer yanlış bulduğu kabul testini raporda bırakmaz; `vlad task ask` ile "Test itirazı: <test>, tester görevi <T…>" sorar. `/status` (blocked) tester'a yönlendirir (açık görev: log; kapalıysa kısa `kabul` düzeltme fazı) ya da VLAD gerekçeyle karar verir. Developer testi kendisi değiştirmez (test sahipliği §4 değişmez).
-- **Entegrasyon öncesi kontrol:** pipeline fazı rapordan önce `vlad/<çatı>`'yı kendi branch'ine merge eder, lint + gate/tam koşu yapar; çakışma/kırmızı `### Test sonuçları` ve `### Açık noktalar`'da raporlanır (`vlad-worker` adım 6). `/status` bunu kapıda kontrol eder.
+- **Entegrasyon öncesi kontrol:** pipeline fazı rapordan önce `vlad/<çatı>`'yı kendi branch'ine merge eder, lint + gate/tam koşu yapar; çakışma/kırmızı `### Test sonuçları` ve `### Açık noktalar`'da raporlanır (`vlad-worker` adım 6). `/status` bunu kapıda kontrol eder. Bulut çalışanı `kb/`/`vlad-worker` okuyamadığından kartın `gate` komutu ve (`parent` doluysa) `git fetch origin vlad/<çatı>` + `git merge` kuralı bulut prompt'una satır içi girer (`src/tasks/cloud.ts`, cloud spec §4).
 - **Paylaşılan dosyalar:** architect planı `### Paylaşılan dosyalar ve ad alanları` (dosya, dokunan fazlar, sahip, kural; test ad öneki/ad alanı) içerir; developer ve tester ona uyar.
 - **Erken denetim:** UI'lı pipeline'da ilk kullanıcıya görünen dilimden sonra ara `denetim` önerilir; kritik/yüksek bulgular sonraki `uygulama` fazının girdisidir. Developer UI değişikliğinde rapordan önce tarayıcıda (Chromium/Playwright) ekran görüntüsüyle öz-kontrol yapar.
 - **Güvenlik incelemesi:** auth/yetki/oturum/veri silmeye dokunan fazlarda ve VLAD'ın otonom verdiği güvenlik etkili kararlarda kısa inceleme (arka plan agent'ı veya `security-review`); kritik/yüksek bulguda merge önerilmez. VLAD güvenlik etkili kararı sessizce vermez, kullanıcıya sorar.

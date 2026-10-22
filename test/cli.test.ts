@@ -89,6 +89,7 @@ describe("vlad cli", () => {
   it("finding add/list/set round-trip, filters, status --summary count and error format", () => {
     const detail = join(home, "d.md");
     writeFileSync(detail, "ayrıntı\n");
+    writeFileSync(join(home, "kb", "projects", "alpha.md"), "---\nslug: alpha\n---\n");
     const add = (sev: string, extra: string[] = []) =>
       vlad(["finding", "add", "--project", "alpha", "--severity", sev, "--source", "T20261022-01", "--title", `b-${sev}`, ...extra, "--json"]);
     const a = add("kritik", ["--detail-file", detail]);

@@ -69,6 +69,23 @@ function workNotes(slug: string): string | null {
   return getSection(readDoc<ProjectCard>(file).body, "## Çalışma notları") || null;
 }
 
+/** Gate command and (in a pipeline) the pre-integration check; the cloud worker cannot read the card or vlad-worker. */
+function gateRules(gate: string | undefined, parentId: string | undefined): string[] {
+  const out: string[] = [];
+  if (gate) {
+    out.push(
+      `## Proje kapısı\nProjenin kapı komutu: \`${gate}\`. Rapordan önce çalıştır, sonucunu \`### Test sonuçları\`'na yaz.`,
+    );
+  }
+  if (parentId) {
+    out.push(
+      `## Entegrasyon öncesi kontrol\nRapordan önce entegrasyon branch'ini kendi branch'ine al: \`git fetch origin vlad/${parentId}\` + \`git merge vlad/${parentId}\`. ` +
+        "Ardından lint + gate/tam testi koş. Çakışma ya da kırmızı varsa çözmeye çalışıp kapsamı genişletme; `### Test sonuçları` ve `### Açık noktalar`'da raporla.",
+    );
+  }
+  return out;
+}
+
 const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "## VLAD bulut protokolü",
   "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
@@ -104,7 +121,7 @@ function dropSubsections(text: string, names: string[]): string {
 }
 
 function buildCloudPrompt(
-  task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task,
+  task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task, gate?: string,
 ): string {
   const parts: string[] = [
     `Sen bir VLAD çalışanısın (bulut). Görev ${task.data.id}: ${task.data.title}. Görev dosyasına erişimin yok; görev aşağıda satır içi verilmiştir.`,
@@ -124,6 +141,7 @@ function buildCloudPrompt(
   }
   const notes = workNotes(task.data.project);
   if (notes) parts.push(`## Proje çalışma notları (${task.data.project} kartı)\n${notes}`);
+  parts.push(...gateRules(gate, parent?.data.id));
   if (role) {
     const body = readDoc<unknown>(role.file).body.trim();
     parts.push(`## Rolün: ${role.title}\n${body}`);
@@ -190,7 +208,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",
-      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent),
+      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
         "create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt)",
