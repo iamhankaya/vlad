@@ -106,7 +106,7 @@ vlad task ready --parent <çatı-id> --json
 
 **Tüm fazlar `done`** (`vlad task list --parent <çatı-id> --json`; `cancelled` fazlar yerine yenisi açılmışsa onlar sayılmaz) → `vlad task set <çatı-id> awaiting_approval --json` ve son kapı:
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
-- Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
+- Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
 - Diff özeti: `git -C <çatı worktree> log --oneline main..HEAD` ve `git -C <çatı worktree> diff --stat main...HEAD`.
 
 Seçenekler (açık onay):
@@ -116,6 +116,19 @@ Seçenekler (açık onay):
 4. **İptal et:** aşağıdaki "pipeline'ı iptal et".
 
 1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (entegrasyon worktree'si kaldırılır, branch kalır).
+
+### Retro (son kapıdan sonra)
+
+Çatı `done` olunca kısa bir retro yap (2–5 dakikalık özet; uzun rapor yazma). Kaynak: çatı ve faz görev dosyaları (`## İlerleme`, `## Sorular`, `## Kapanış raporu`), `failed`/`cancelled` fazlar, geri alınan merge'ler, kırmızı gate koşuları.
+1. Kullanıcıya üç başlıkta göster: **Ne iyi gitti**, **Ne sürtündü** (tekrar eden hata, ortam sorunu, çakışma, limit kesintisi, geç yakalanan bulgu), **Ders** (somut, bir cümle, eyleme dönük).
+2. Proje düzeyindeki dersleri kullanıcı onayıyla karta yaz (her ders ayrı komut; kart gövdesi elle düzenlenmez):
+   ```
+   vlad project note <slug> "<ders>" --json
+   ```
+   Notlar kartın `## Çalışma notları` bölümüne tarihli madde olarak eklenir; çalışanlar ve roller işe başlarken bunu okur. Aynı ders zaten notlardaysa ekleme.
+3. **Rol düzeyindeki** dersler (bir rolün sorumluluk/yetki/çıktı kuralı değişmeli) kartı değil `roles/<slug>.md`'yi ilgilendirir: bunları kullanıcıya **öneri** olarak sun (hangi rol, hangi satır, neden). Onaylanırsa `roles/` değişikliği ayrı bir görev olarak `/delegate` ile açılır; VLAD rol dosyasını kendisi düzenlemez.
+4. Retroda ortaya çıkan, düzeltilmemiş sorunları bulgu olarak kaydet: `vlad finding add --project <slug> --severity <…> --source <çatı-id> --title "<…>" --json`.
+5. Sonunda `vlad kb commit "retro <çatı-id>" --push --json`.
 
 **Faz `failed`/`cancelled`:** bağımlı fazlar `queued` kalır. Ağaçta göster ve seçenekleri sun:
 - **Fazı yeniden oluştur:** aynı faz/rol/bağımlılıkla yeni görev (`/delegate` adım 4). Eski faza bağlı fazlar yeni ID'yi beklemez; onları `cancelled` yapıp yeni faza bağlı olarak yeniden oluştur.

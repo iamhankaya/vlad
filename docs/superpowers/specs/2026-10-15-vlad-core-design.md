@@ -50,12 +50,13 @@ C:\dev\vlad\
 ├─ kb\
 │  ├─ projects\<slug>.md      proje kartları
 │  ├─ tasks\<id>.md           görevler
+│  ├─ findings\<id>.md        bulgu kaydı (§5.6)
 │  ├─ decisions.md            karar günlüğü
 │  ├─ journal\<YYYY-MM-DD>.md işlenmiş günlük özet
 │  ├─ inbox\<ts>-<sid>.json   ham session raporları        (gitignore)
 │  ├─ inbox\processed\        işlenmiş raporlar            (gitignore)
 │  └─ logs\                   hook/launcher hata kayıtları (gitignore)
-├─ schemas\                   project.schema.json, task.schema.json, inbox.schema.json, config.schema.json
+├─ schemas\                   project.schema.json, task.schema.json, finding.schema.json, inbox.schema.json, config.schema.json
 ├─ src\
 │  ├─ kb\                     frontmatter okuma/yazma, şema doğrulama, yol çözümleme
 │  ├─ scan\                   repo keşfi ve ham bilgi toplama
@@ -115,7 +116,7 @@ Tüm `.md` türleri YAML frontmatter + markdown gövdedir. Tarihler ISO 8601.
 | `last_activity` | datetime | Son raporlanan session veya commit |
 | `last_scanned` | datetime | |
 
-Gövde başlıkları: `## Özet`, `## Mimari notlar`, `## Açık konular`, `## Son aktivite` (digest tarafından güncellenir).
+Gövde başlıkları: `## Özet`, `## Mimari notlar`, `## Açık konular`, `## Son aktivite` (digest tarafından güncellenir), `## Çalışma notları` (opsiyonel; projede öğrenilmiş kalıcı dersler, tarihli madde listesi; yalnızca `vlad project note` ekler, digest dokunmaz; çalışanlar ve roller okur).
 
 ### 5.2 Görev — `kb/tasks/<id>.md`
 
@@ -201,6 +202,23 @@ Ekleme yapılan tek dosya; her karar bir blok:
 - **Kaynak:** session <id> / görev <id>
 ```
 
+### 5.6 Bulgu — `kb/findings/<id>.md`
+
+Kapanış raporlarındaki ertelenen/çözülmeyen noktalar kaybolmasın diye bulgu başına bir dosya (görev kalıbıyla aynı: frontmatter + gövde; tek dosyalı liste yerine, çünkü bulgular bağımsız durum geçişi yapar, ayrı ayrı commit/diff görünür ve CLI yazımı satır çakışması üretmez). Şema: `schemas/finding.schema.json`.
+
+| Alan | Tip | Açıklama |
+|---|---|---|
+| `id` | string | `F-<proje>-NNN` (proje başına sıralı, ör. `F-manga-003`) |
+| `project` | string | Proje slug'ı |
+| `severity` | `kritik`\|`yüksek`\|`orta`\|`düşük`\|`bilgi` | |
+| `state` | `open`\|`deferred`\|`fixed`\|`wontfix` | Yeni bulgu `open` veya `deferred`; geçişler serbest |
+| `source_task` | string | Bulguyu raporlayan görev (`T…`) |
+| `title` | string | Kısa başlık |
+| `fixed_by` | string? | Düzelten görev; yalnızca `fixed` iken (`finding set … --by`) |
+| `created`, `updated`, `fixed` | datetime | `fixed`: durumun `fixed` olduğu an (başka duruma dönünce `fixed`/`fixed_by` silinir) |
+
+Gövde: `## Ayrıntı` (`--detail-file`). "Açık" bulgu = `open` + `deferred`.
+
 ### 5.5 Günlük — `kb/journal/<YYYY-MM-DD>.md`
 
 Proje başlıkları altında o gün olanların özeti; her madde kaynak session/görev ID'si taşır.
@@ -224,6 +242,11 @@ Tüm komutlar `--json` ile makine okunur çıktı verir (skill'ler ve gelecektek
 | `vlad task cleanup <id>` | `done`/`cancelled` görevin çalışan penceresini kapatır, worktree'sini kaldırır (branch silinmez) |
 | `vlad task digested <id…>` | `done` görevlerin kapanış raporunu `/digest`'te işlenmiş olarak işaretler (`digested` alanı) |
 | `vlad task list [--state …] [--project …] [--undigested]` | Listeleme; `--undigested`: kapanış raporu işlenmemiş `done` görevler |
+| `vlad project note <slug> "<not>"` | Kartın `## Çalışma notları` bölümüne tarihli madde ekler (`--file`: çok satırlı, birleştirilir) |
+| `vlad finding add --project … --severity … --source <görev> --title … [--detail-file <md>] [--state deferred]` | Bulgu kaydı oluşturur, ID döndürür |
+| `vlad finding list [--project …] [--state a,b] [--severity a,b]` | Bulguları listeler (`--json`'da `detail` dahil) |
+| `vlad finding set <id> <state> [--by <görev>]` | Durum değiştirir; `--by` yalnızca `fixed` ile |
+| `vlad status --summary` | Tek satır özet; açık kritik/yüksek bulgu varsa `, K açık kritik/yüksek bulgu` eklenir (`--json`'da `openSevereFindings`) |
 | `vlad status` | Tüm aktif görevler; `running` olup `updated` + `staleAfterHours` geçmişse `stalled` yapar |
 | `vlad inbox list` / `vlad inbox count` | İşlenmemiş raporlar |
 | `vlad inbox done <dosya…>` | Raporları `processed/`'a taşır |

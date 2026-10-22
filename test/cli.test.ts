@@ -86,6 +86,49 @@ describe("vlad cli", () => {
     const j = JSON.parse(vlad(["status", "--summary", "--json"]).out);
     expect(j.failed.map((t: { id: string }) => t.id).sort()).toEqual([a, b].sort());
   });
+  it("finding add/list/set round-trip, filters, status --summary count and error format", () => {
+    const detail = join(home, "d.md");
+    writeFileSync(detail, "ayrıntı\n");
+    const add = (sev: string, extra: string[] = []) =>
+      vlad(["finding", "add", "--project", "alpha", "--severity", sev, "--source", "T20261022-01", "--title", `b-${sev}`, ...extra, "--json"]);
+    const a = add("kritik", ["--detail-file", detail]);
+    expect(a.code, a.err).toBe(0);
+    expect(JSON.parse(a.out).id).toBe("F-alpha-001");
+    expect(JSON.parse(add("orta", ["--state", "deferred"]).out).id).toBe("F-alpha-002");
+    const all = JSON.parse(vlad(["finding", "list", "--json"]).out);
+    expect(all.findings.map((f: { id: string }) => f.id)).toEqual(["F-alpha-001", "F-alpha-002"]);
+    expect(all.findings[0].detail).toBe("ayrıntı");
+    const def = JSON.parse(vlad(["finding", "list", "--state", "deferred", "--json"]).out);
+    expect(def.findings.map((f: { id: string }) => f.id)).toEqual(["F-alpha-002"]);
+    expect(vlad(["finding", "list", "--project", "alpha", "--severity", "kritik"]).out).toContain("F-alpha-001  kritik");
+    expect(vlad(["status", "--summary"]).out.trim()).toMatch(/hatalı\), 1 açık kritik\/yüksek bulgu$/);
+    expect(JSON.parse(vlad(["status", "--summary", "--json"]).out).openSevereFindings).toBe(1);
+    const s = vlad(["finding", "set", "F-alpha-001", "fixed", "--by", "T20261022-02", "--json"]);
+    expect(s.code, s.err).toBe(0);
+    expect(JSON.parse(s.out)).toEqual({ id: "F-alpha-001", state: "fixed", fixed_by: "T20261022-02" });
+    expect(vlad(["status", "--summary"]).out.trim()).toBe("İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)");
+    for (const bad of [
+      ["finding", "add", "--project", "alpha", "--severity", "acil", "--source", "T20261022-01", "--title", "x", "--json"],
+      ["finding", "set", "F-alpha-001", "closed", "--json"],
+      ["finding", "set", "F-alpha-001", "open", "--by", "T20261022-02", "--json"],
+      ["finding", "set", "F-alpha-077", "fixed", "--json"],
+      ["finding", "list", "--state", "x", "--json"],
+    ]) {
+      const r = vlad(bad);
+      expect(r.code, bad.join(" ")).toBe(1);
+      expect(JSON.parse(r.err)).toHaveProperty("error");
+    }
+  });
+  it("project note appends to ## Çalışma notları", () => {
+    writeCard("C:\\r");
+    expect(vlad(["project", "note", "alpha", "vitest önbelleğini temizle", "--json"]).code).toBe(0);
+    const nf = join(home, "n.md");
+    writeFileSync(nf, "ikinci\nsatır\n");
+    expect(vlad(["project", "note", "alpha", "--file", nf]).code).toBe(0);
+    const t = readFileSync(join(home, "kb", "projects", "alpha.md"), "utf8");
+    expect(t).toMatch(/## Çalışma notları\n- \d{4}-\d\d-\d\d: vitest önbelleğini temizle\n- \d{4}-\d\d-\d\d: ikinci satır\n/);
+    expect(vlad(["project", "note", "alpha", "--json"]).code).toBe(1);
+  });
   it("done tasks count as unprocessed until digested; task list --undigested and task digested", () => {
     const id = mkTask();
     const f = join(home, "kb", "tasks", readdirSync(join(home, "kb", "tasks")).find((n) => n.startsWith(id))!);
