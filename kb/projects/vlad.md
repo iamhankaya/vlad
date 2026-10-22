@@ -49,3 +49,4 @@ Kullanıcının projelerinin kalıcı hafızası ve iş dağıtıcısı. `vlad` 
 - 2026-10-22: Bulut prompt'unda önceki fazın raporunu özet olarak vermek yeterli; çalışan kodun tamamını entegrasyon branch'inden okuyor (T20261022-55).
 - 2026-10-22: Skill/rol kurallarının yalnız metin düzeyinde test edilmesi yetmiyor; doğrulama fazının uçtan uca testleri 3 haneli ID ve bulut prompt eksiği gibi gerçek hatalar buldu (T20261022-61).
 - 2026-10-22: Rol skill'leri artık .claude/skills altında (vendored); başka projeye bulut çalışanı gönderirken skill'lerin o projenin reposunda olup olmadığını kontrol et (T20261022-55).
+- 2026-10-22: Digest'te raporun açık noktasını bulgu olarak açmadan önce sonraki görevlerde/projenin ana branch'inde kapanıp kapanmadığını kontrol et; ilk digest'te kapanmış maddeler (F-medialog-002, -005) açık yazıldı (2026-10-22).
