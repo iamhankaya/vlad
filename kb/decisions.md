@@ -138,3 +138,9 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 ### 2026-10-22 — vlad — Ekip iyileştirmeleri: kırmızı testle kapı yetkisi, finding add kart denetimi
 - **Karar:** (1) T20261022-55 pipeline'ında VLAD'ın kapı yetkisi, doğrulamanın kasıtlı kırmızı testlerini entegrasyon branch'ine merge etmeyi ve görev durumunu `kb/`'ye yazmayı da kapsar. (2) BUG-5: `vlad finding add` kartı olmayan projeyi reddeder (`project set`/`project note` ile tutarlı).
 - **Kaynak:** T20261022-61
+
+### 2026-10-22 — vlad — Rol skill'leri repoda vendored
+- **Karar:** Rol skill'leri (superpowers TDD/debugging/verification/code review, security-audit, ui-ux-pro-max, impeccable, design-taste-frontend) VLAD reposunda `.claude/skills/` altına vendored; kaynak/commit/lisans `.claude/skills/README.md`'de. Bulut çalışanları eklenti kuramadığı için (C10).
+- **Gerekçe:** Kullanıcı isteği (2026-10-22); medialog'daki vendoring kalıbı.
+- **Kaynak:** T20261022-55, commit 94e0e0e
+- **Kaynak:** T20261022-55

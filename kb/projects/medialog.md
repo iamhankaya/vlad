@@ -8,7 +8,7 @@ exposure: internet
 stack: []
 status: active
 autonomy: commit
-last_activity: 2026-10-21T22:29:00+03:00
+last_activity: 2026-10-22T11:10:49+03:00
 last_scanned: null
 ---
 
@@ -37,21 +37,28 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 - Canlı ortam (karar 2026-10-21): Oracle Always Free ARM VM + DuckDNS `medialogforfriends.duckdns.org` + Gmail SMTP (`MAIL_TRANSPORT=smtp`). Adımlar `deploy/RUNBOOK.md` §1–2'de.
 
 ## Son aktivite
+- 2026-10-22: CI yalnız main PR/push + elle tetikleme, concurrency, docs/md atlama (Actions dakikası); PR #69. (T20261022-54)
+- 2026-10-22: Manga devam eden seride "Bölüm N / 128+" biçimi; PR #68, deploy 39741056149. (T20261022-53)
+- 2026-10-22: Liste "Bölüm N / ?" kökü düzeltildi + ertelenen 6 görsel bulgu; PR #67, deploy 39734935211. (T20261022-52)
+- 2026-10-22: Dağıtım: backup.sh compose kipinde pg_restore düzeltmesi; manga dağıtımı ön yedekten geçti. (T20261022-51)
+- 2026-10-22: **Manga/manhwa/manhua canlıda** (MangaUpdates; PR #65, deploy 39727634523); kullanıcı canlı aramayı doğruladı. Denetim 25 bulgu (2 yüksek) düzeltme turunda kapandı. (görev T20261021-89)
 - 2026-10-21: Takvim kullanıcıda doğrulandı; ilk `airing_refresh` turundan sonra doldu, hata yok.
-- 2026-10-21: **Canlıya alındı**: https://medialogforfriends.duckdns.org (deploy run 7, ef3eb0c). Üç dağıtım hatası düzeltildi: initdb izinleri, stdin yutma, sürüm paketi izinleri + pipefail (PR #58–#60). Kayıt ve doğrulama postası çalışıyor. (T20261020-58, T20261021-86..88)
-- 2026-10-21: v2 `main`'e merge edildi (PR #57, e438e19). Son kapı: birim 1892/1892, kabul 2047/2047, güvenlik 30/30. (görev T20261020-84)
-- 2026-10-21: İki güvenlik denetimi (V7b, final-clean) ve SEC2/SEC3 düzeltme turları tamamlandı; açık kritik/yüksek/orta bulgu yok. (T20261021-79, -82, -81, -84)
-- 2026-10-21: Ücretsiz canlı ortam hazırlığı tamamlandı: Gmail SMTP, Oracle/DuckDNS. (T20261021-85)
-- 2026-10-20: v1 `main`'e merge edildi (PR #24). Doğrulama 934/934; güvenlik denetimi ve düzeltmeler tamamlandı. (görev T20261020-58)
-- 2026-10-20: Proje başladı; repo açıldı, `tam` döngü pipeline'ı.
+- 2026-10-21: **Canlıya alındı**: https://medialogforfriends.duckdns.org (deploy run 7, ef3eb0c). Üç dağıtım hatası düzeltildi (PR #58–#60). (T20261020-58, T20261021-86..88)
+- 2026-10-21: v2 `main`'e merge edildi (PR #57, e438e19). (görev T20261020-84)
+- 2026-10-21: Güvenlik denetimleri ve SEC2/SEC3 düzeltmeleri tamamlandı; açık kritik/yüksek/orta yok. (T20261021-79, -82, -81, -84)
+- 2026-10-20: v1 `main`'e merge edildi (PR #24). (görev T20261020-58)
 
 ## Açık konular
-- **Backlog — dış yedek:** gece yedeği (03:17) Google Drive'a rclone ile ücretsiz kopyalansın (`BACKUP_RCLONE_*` sırları, RUNBOOK §1.8); şimdilik yalnız sunucuda. (kullanıcı 2026-10-21)
+- **Açık bulgular** (`vlad finding list --project medialog`):
+  - orta: F-medialog-001 canlı gece yedeği doğrulanmadı, dış hedef yok; F-medialog-002 MangaUpdates doğrulanmamış alanlar (MV1–MV5).
+  - düşük: F-medialog-003 K-m-09 zamanlama eşiği; F-medialog-004 B-02 reason ayrımı (ertelendi); F-medialog-005 B-25 toast (ertelendi); F-medialog-006 manga tasarımda tanımsızlar T-2/T-4/T-5/T-8/T-10 (ertelendi).
+  - bilgi: F-medialog-007 "son bilinen/son çıkan bölüm" terim birliği.
+- **Backlog — dış yedek:** gece yedeği (03:17) Google Drive'a rclone ile kopyalansın (`BACKUP_RCLONE_*`, RUNBOOK §1.8). (kullanıcı 2026-10-21)
 - **Canlı ortam bilgileri:**
   - Oracle VM 144.21.41.159, IP rezerve değil (ephemeral; VM silinmedikçe değişmez).
   - Dağıtım anahtarı Cloud Shell'de `~/medialog_deploy` (ECDSA).
   - Yönetici yetkisi: `jobs-cli grant-admin`, RUNBOOK §6a.
-- **Canlıda doğrulanacak:** IPv6/AAAA durumu (SEC3-08'in önemini etkiler); gece yedeği (03:17) dış hedef olmadan yalnız sunucuda tutuluyor.
+- **Canlıda doğrulanacak:** IPv6/AAAA durumu (SEC3-08'in önemini etkiler).
 - **Arayüz metni eksik (SEC-08/SEC3-03):** çekişmeli hesapta doğrulamadan sonra parola sıfırlamayla belirleniyor, ama arayüz bunu anlatmıyor.
 - **SEC-08 (v1):** yeniden kayıtta kullanıcı adı ilk kayıttaki kalıyor; ürün kararı gerekiyor.
 - **TMDB logosu:** kullanım koşulu doğrulanmadı; şimdilik yalnız metin atfı var.
