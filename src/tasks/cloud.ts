@@ -94,10 +94,10 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   autonomy === "plan"
     ? "- Yetki seviyen `plan`: kod yazma ve push etme; yalnızca planı raporla."
     : `- Yetki seviyen \`${autonomy}\`: yalnızca \`vlad/${id}\`'ye commit + push.`,
-  "- İlerlemeyi yanıtlarına satır başında şu işaretlerle yaz (kod çitinin dışında, `#seq` 1'den artan, her işaretle bir artar):",
+  "- İlerlemeyi yanıtlarına satır başında şu işaretlerle yaz (kod çitinin dışında). **`#n` tüm işaretlerde (LOG, ASK, REPORT, END, FAIL) ortak tek sayaçtır: 1'den başlar, her işarette bir artar. REPORT ve END aynı numarayı taşır; REPORT'u 1'den başlatma, sayacın devamını kullan.**",
   "  `[VLAD:LOG #n] <kısa adım>`",
   "- Karar gerektiren soru: `[VLAD:ASK #n] <soru, seçenekler>` yaz ve turunu bitir; cevap `[VLAD:ANSWER #n]` ile gelir.",
-  "- Bitince önce push et, sonra aşağıdaki biçimde kapanış raporunu yaz (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
+  "- Önce tüm işini push et, ardından kapanış raporunu yaz; rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
   "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",

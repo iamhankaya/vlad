@@ -140,10 +140,23 @@ export function parseMarkers(text: string, warnings: string[] = []): Marker[] {
     const body: string[] = [rest];
     let closed = false;
     let inFence = false;
+    let altEnd: { at: number; seq: string } | null = null; // first END with another number (fallback)
+    const start = i;
     for (i++; i < lines.length; i++) {
       if (FENCE.test(lines[i])) inFence = !inFence;
-      else if (!inFence && new RegExp(`^\\[VLAD:END\\s+#${seq}\\]`).test(lines[i])) { closed = true; break; }
+      else if (!inFence) {
+        const e = /^\[VLAD:END\s+#(\d+)\]/.exec(lines[i]);
+        if (e && Number(e[1]) === seq) { closed = true; break; }
+        if (e && !altEnd) altEnd = { at: i, seq: e[1] };
+      }
       body.push(lines[i]);
+    }
+    if (!closed && altEnd) {
+      // REPORT/END numbers disagree: still accept up to that END (the head= check guards the content), but say so
+      warnings.push(`REPORT #${seq} için END #${seq} bulunamadı (END #${altEnd.seq} var); rapor END #${altEnd.seq} satırına kadar işlendi`);
+      body.length = altEnd.at - start;
+      i = altEnd.at;
+      closed = true;
     }
     if (!closed) { warnings.push(`REPORT #${seq} kapanmamış ([VLAD:END #${seq}] yok); atlandı`); continue; }
     out.push({ kind: "REPORT", seq, branch: attr("branch"), head: attr("head"), text: body.join("\n").trim() });
@@ -196,7 +209,11 @@ export function ingestEvents(
   const markers = used.flatMap((t) => parseMarkers(t.text, res.warnings));
   for (const m of markers) {
     const tag = `[cloud #${m.seq}]`;
-    if (seen(id, tag)) { res.skipped.push(m.seq); continue; }
+    // REPORT sharing its number with an already-logged LOG/ASK is a counter mix-up, not a replay: process it unless this very report was done
+    if (seen(id, tag)) {
+      if (m.kind !== "REPORT" || seen(id, `${tag} kapanış raporu işlendi`)) { res.skipped.push(m.seq); continue; }
+      res.warnings.push(`REPORT #${m.seq} daha önce işlenmiş #${m.seq} ile çakışıyor; rapor yine de işlendi (işaret sayacı tek olmalı)`);
+    }
     try {
       if (m.kind === "LOG") logTask(id, `${tag} ${m.text}`);
       else if (m.kind === "ASK") askTask(id, `${tag} ${m.text}`);
