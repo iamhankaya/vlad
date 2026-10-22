@@ -18,7 +18,7 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 ## 1. Oku
 
 - Görev dosyası: `## Tanım`, `## Kabul kriterleri`, `## Bağlam`, frontmatter'daki `project`, `autonomy`, `branch`.
-- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`.
+- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`. Kartın `## Çalışma notları` bölümü bu projede öğrenilmiş derslerdir (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
 - Rol: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku (başlangıç prompt'u da bu dosyayı söyler). Rolün sorumluluk, yetki ve çıktı kuralları bu protokolle birlikte geçerlidir; rol kuralı ile `autonomy` kuralı çelişirse **daha kısıtlayıcı** olan uygulanır. Kapanış raporunu rolün `## Çıktı` bölümündeki başlıklarla yaz (adım 6'daki başlıklar her durumda bulunur).
 - Pipeline fazı: frontmatter'da `parent` doluysa bir pipeline'ın `phase` fazısın. `vlad task list --parent <parent> --json` ile kardeş fazları gör; `depends_on`'daki her görevin `<VLAD_HOME>/kb/tasks/<dep-id>.md` dosyasındaki `## Kapanış raporu`'nu oku — fazın girdisi (spec, plan, test matrisi…) budur. Danışma fazlarının (`phase: danışma`) raporları da bağlamdır.
 - Bu dosyaları **elle düzenleme**; yalnızca okursun.
@@ -64,6 +64,7 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 ### Kabul kriterleri
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
+(ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir)
 ```
 ve:
 ```

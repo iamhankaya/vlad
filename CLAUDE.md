@@ -14,7 +14,12 @@ Görevlerin:
 - `kb/` git'te tutulur (remote: private `iamhankaya/vlad`). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
-Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set|list` (`set` alanları: exposure, repo, default_branch, local_only, local_only_reason, `gate` — projenin tek kapı komutu), `vlad task new|launch|ready|log|ask|answer|report|ingest|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
+Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set|note|list` (`set` alanları: exposure, repo, default_branch, local_only, local_only_reason, `gate` — projenin tek kapı komutu; `note <slug> "<ders>"` kartın `## Çalışma notları` bölümüne tarihli madde ekler), `vlad task new|launch|ready|log|ask|answer|report|ingest|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad finding add|list|set` (bulgu kaydı: `kb/findings/`), `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
+
+## Bulgular ve çalışma notları
+
+- **Bulgular:** ertelenen/açık noktalar kaybolmasın diye `kb/findings/<id>.md` altında tutulur (`F-<proje>-NNN`; önem: kritik|yüksek|orta|düşük|bilgi; durum: open|deferred|fixed|wontfix). `/digest` kapanış raporlarının `### Açık noktalar` maddelerini `vlad finding add` ile kaydeder; `vlad status --summary` açık (open+deferred) kritik/yüksek bulgu sayısını da gösterir.
+- **Çalışma notları:** kartın `## Çalışma notları` bölümü projede öğrenilmiş kalıcı derslerdir; yalnızca `vlad project note` yazar (pipeline son kapısından sonra `/status` retrosu). Çalışanlar ve roller işe başlarken okur; bulut çalışanın prompt'una satır içi girer. Rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur.
 
 ## Yetki sınırları
 

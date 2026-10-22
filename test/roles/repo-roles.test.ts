@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { listRolesWithWarnings } from "../../src/roles/store.js";
@@ -64,4 +64,31 @@ describe("test hygiene rules", () => {
       expect(body).toMatch(/flake/);
     });
   }
+});
+
+describe("work notes (## Çalışma notları) wiring", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  it("every role's Kaynaklar and vlad-worker tell workers to read the card's Çalışma notları", () => {
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".md"))) {
+      expect(read(`roles/${f}`), f).toContain("`## Çalışma notları`");
+    }
+    expect(read("global/skills/vlad-worker/SKILL.md")).toContain("## Çalışma notları");
+  });
+  it("digest records findings and keeps the notes; status runs the retro", () => {
+    const digest = read(".claude/skills/digest/SKILL.md");
+    expect(digest).toContain("vlad finding add");
+    expect(digest).toContain("Açık noktalar");
+    expect(digest).toContain("`## Çalışma notları`'na **dokunma**");
+    const status = read(".claude/skills/status/SKILL.md");
+    for (const w of ["### Retro", "vlad project note", "Ne iyi gitti", "Ne sürtündü", "Ders", "roles/"]) expect(status, w).toContain(w);
+  });
+  it("CLAUDE.md, README and specs document the finding and note commands", () => {
+    for (const p of ["CLAUDE.md", "README.md", "docs/superpowers/specs/2026-10-15-vlad-core-design.md"]) {
+      expect(read(p), p).toContain("vlad finding");
+      expect(read(p), p).toContain("Çalışma notları");
+    }
+    expect(read("CLAUDE.md")).toContain("vlad project write|set|note|list");
+    expect(read("docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md")).toContain("## 15. Bulgu kaydı ve retro");
+  });
 });

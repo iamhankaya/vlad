@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths } from "../../src/kb/index.js";
-import { listProjects, listProjectsWithWarnings, setProjectField, writeProject } from "../../src/projects/store.js";
+import { addProjectNote, listProjects, listProjectsWithWarnings, setProjectField, writeProject } from "../../src/projects/store.js";
 import { makeHome } from "../helpers.js";
 
 const card = (slug: string) => `---
@@ -95,5 +95,31 @@ describe("slug validation", () => {
     for (const bad of ["..\\x","a/b", "A", "a b", ""]) {
       expect(() => writeProject(bad, card(bad))).toThrow(/slug/);
     }
+  });
+});
+
+describe("addProjectNote", () => {
+  const file = () => join(kbPaths().projects, "alpha.md");
+  beforeEach(() => { makeHome(); });
+  it("creates ## Çalışma notları and appends dated bullets, keeping frontmatter and other sections", () => {
+    writeProject("alpha", card("alpha"));
+    const d = new Date(2026, 9, 22);
+    expect(addProjectNote("alpha", "vitest önbelleğini temizle", d)).toBe("- 2026-10-22: vitest önbelleğini temizle");
+    addProjectNote("alpha", "ikinci\nnot", d);
+    const text = readFileSync(file(), "utf8");
+    expect(text).toContain("## Özet\nx\n\n## Çalışma notları\n- 2026-10-22: vitest önbelleğini temizle\n- 2026-10-22: ikinci not\n");
+    expect(text).toContain("slug: alpha");
+    expect(listProjects()).toHaveLength(1);
+  });
+  it("appends into an existing section without touching the next one", () => {
+    writeProject("alpha", card("alpha") + "\n## Çalışma notları\n- eski\n\n## Son aktivite\n- y\n");
+    addProjectNote("alpha", "yeni", new Date(2026, 9, 22));
+    expect(readFileSync(file(), "utf8")).toContain("## Çalışma notları\n- eski\n- 2026-10-22: yeni\n\n## Son aktivite\n- y\n");
+  });
+  it("rejects an empty note, unknown card and bad slug", () => {
+    writeProject("alpha", card("alpha"));
+    expect(() => addProjectNote("alpha", "  ")).toThrow(/boş/);
+    expect(() => addProjectNote("nope", "x")).toThrow(/bulunamadı/);
+    expect(() => addProjectNote("../x", "x")).toThrow(/bulunamadı/);
   });
 });

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { kbPaths, parseDoc, readDoc, validate, writeDoc, type Exposure, type ProjectCard } from "../kb/index.js";
+import { appendToSection, kbPaths, parseDoc, readDoc, validate, writeDoc, type Exposure, type ProjectCard } from "../kb/index.js";
 
 export function writeProject(slug: string, md: string): ProjectCard {
   if (!/^[a-z0-9-]+$/.test(slug)) {
@@ -76,4 +76,20 @@ export function setProjectField(slug: string, field: string, value: string): Pro
   validate("project", next);
   writeDoc(file, next, body);
   return next as unknown as ProjectCard;
+}
+
+const NOTES = "## Çalışma notları";
+
+/** Appends a dated bullet to the card's `## Çalışma notları` section (created if missing); frontmatter and other sections stay as they are. */
+export function addProjectNote(slug: string, note: string, now: Date = new Date()): string {
+  const text = note.trim().replace(/\s*\n\s*/g, " ");
+  if (!text) throw new Error("not boş olamaz");
+  const file = join(kbPaths().projects, `${slug}.md`);
+  if (!/^[a-z0-9-]+$/.test(slug) || !existsSync(file)) throw new Error(`proje kartı bulunamadı: ${slug}`);
+  const { data, body } = readDoc<ProjectCard>(file);
+  validate("project", data);
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const line = `- ${date}: ${text}`;
+  writeDoc(file, data, appendToSection(body, NOTES, line));
+  return line;
 }

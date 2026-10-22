@@ -78,6 +78,13 @@ describe("prepareCloudLaunch", () => {
     expect(r.next.find((n) => n.startsWith("create_session("))).toContain("permission_mode");
   });
 
+  it("prompt inlines the card's ## Çalışma notları; no section when the card has none", () => {
+    writeProject("alpha", card("alpha", "repo: owner/alpha\n") + "\n## Çalışma notları\n- 2026-10-22: NOT-METNİ\n");
+    const { prompt } = prepareCloudLaunch(mk().data.id);
+    expect(prompt).toContain("## Proje çalışma notları (alpha kartı)\n- 2026-10-22: NOT-METNİ");
+    writeProject("alpha", card("alpha", "repo: owner/alpha\n"));
+    expect(prepareCloudLaunch(mk().data.id).prompt).not.toContain("çalışma notları");
+  });
   it("autonomy plan forbids pushing in the prompt", () => {
     const t = mk();
     const g = getTask(t.data.id);
