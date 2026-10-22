@@ -144,3 +144,7 @@ GitHub Actions dakika sınırı (özel repo 2000 dk/ay) nedeniyle CI yalnız mai
 - **Gerekçe:** Kullanıcı isteği (2026-10-22); medialog'daki vendoring kalıbı.
 - **Kaynak:** T20261022-55, commit 94e0e0e
 - **Kaynak:** T20261022-55
+
+### 2026-10-22 — diskpilot-mobile — DiskPilot Mobile: ayrı Android projesi, store dışı
+- **Karar:** DiskPilot Mobile, DiskPilot'tan ayrı bir Android projesi olarak açıldı: store dışı (sideload APK), yalnızca kullanıcının Xiaomi Redmi Note 13 Pro telefonu; kavramlar DiskPilot'tan alınır, kod paylaşılmaz; önerilen yığın Kotlin + Compose; `tam` döngü (T20261022-64).
+- **Kaynak:** T20261022-64
