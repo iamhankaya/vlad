@@ -60,3 +60,9 @@ Anime, dizi, film ve kitap verilerini dış kaynaklardan çeken kişisel takip s
 - **SEC-08 (v1):** yeniden kayıtta kullanıcı adı ilk kayıttaki kalıyor; ürün kararı gerekiyor.
 - **TMDB logosu:** kullanım koşulu doğrulanmadı; şimdilik yalnız metin atfı var.
 - **Askı süresi:** değiştirme ya da erken kaldırma arayüzü yok (CLI `unsuspend`); v2.1 adayı.
+
+## Çalışma notları
+- 2026-10-23: Migration ekleyen işte kabul fazının Tanım'ına baştan yaz: tests/'teki 'son migration', şema sınıflandırma (integ.ts) ve MIG_DEPS beklentileri güncellenecek (T20261022-100: 0018 sekiz eski kabul testini kırdı).
+- 2026-10-23: 'Etkin bugün' (şimdi − 6 sa) kuralına bağlı testler --now/FakeClock ile yazılır; duvar saatine bağlı test yasak (K-mt-53/54/55/63 TR 06:00 öncesi kırmızıydı).
+- 2026-10-23: Çok --now adımlı manga_refresh testleri ayrı sunucu/DB'de koşar; MU arka plan kovası en fazla 120 rpm, her --now adımı önceki serileri bayatlatıp turu uzatır, zaman aşımı jobs-cli kilidini tutup sonraki işi skipped_locked yapar.
+- 2026-10-23: Denetim fazı bulgu tablosunu (numaralı) docs/design/audit/<özellik>/ altına commit eder; sonraki düzeltme/doğrulama fazları numarayla eşleştirebilsin.
