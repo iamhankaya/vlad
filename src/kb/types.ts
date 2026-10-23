@@ -61,6 +61,8 @@ export interface TaskData {
   depends_on?: string[];
   /** Human-readable phase name (spec, plan, kabul, uygulama, doğrulama, …). */
   phase?: string | null;
+  /** Repo file (relative path) holding this task's full closing report; a long report travels to dependants as summary + this path. */
+  report_file?: string | null;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";

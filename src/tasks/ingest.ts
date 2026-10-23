@@ -186,6 +186,12 @@ function projectRepo(slug: string): string | null {
   return existsSync(file) ? readDoc<ProjectCard>(file).data.repo ?? null : null;
 }
 
+/** A REPORT body that is empty or only points upward ("rapor yukarıda") instead of carrying the report. */
+export function isStubReport(text: string): boolean {
+  const t = text.trim();
+  return !t || (t.length < 400 && !/^#{3,}\s/m.test(t) && /yukar[ıi]|above|önceki mesaj/i.test(t));
+}
+
 /** Tags are only looked up where ingest writes them (İlerleme, and Sorular for ASK); a report body may quote `[cloud #n]`. */
 const seen = (id: string, tag: string): boolean => {
   const body = getTask(id).body;
@@ -207,6 +213,13 @@ export function ingestEvents(
   // result events repeat the last turn's text: only a fallback when no assistant event was recognized
   const used = assistants.length ? assistants : texts.filter((t) => t.kind === "result");
   const markers = used.flatMap((t) => parseMarkers(t.text, res.warnings));
+  // a stub REPORT ("yukarıda") takes the full text of the same-numbered REPORT from an earlier event
+  for (const m of markers) {
+    if (m.kind !== "REPORT" || !isStubReport(m.text)) continue;
+    const full = markers.find((x) => x.kind === "REPORT" && x.seq === m.seq && x !== m && !isStubReport(x.text));
+    if (full) m.text = full.text;
+    else res.warnings.push(`REPORT #${m.seq} gövdesi boş ya da yalnızca atıf; önceki olaylarda aynı numaralı tam REPORT bulunamadı`);
+  }
   for (const m of markers) {
     const tag = `[cloud #${m.seq}]`;
     // REPORT sharing its number with an already-logged LOG/ASK is a counter mix-up, not a replay: process it unless this very report was done
