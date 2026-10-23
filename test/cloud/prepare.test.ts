@@ -70,14 +70,15 @@ describe("prepareCloudLaunch", () => {
     for (const s of ["TANIM-METNİ", "KRİTER", "BAĞLAM-METNİ", "ROL-GÖVDESİ", "superpowers:test-driven-development",
       "[VLAD:LOG #n]", "[VLAD:ASK #n]", `[VLAD:REPORT #n branch=vlad/${t.data.id}`, "[VLAD:END #n]", "[VLAD:FAIL #n]",
       `git push -u origin vlad/${t.data.id}`, "kb/` altına yazma",
-      "son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et", "tek doğru kaynak"]) expect(p).toContain(s);
+      "son tur mesajında tüm işaretlerini (LOG'lar ve tam REPORT dahil) tekrar et", "tek doğru kaynak"]) expect(p).toContain(s);
   });
 
   it("protocol states one shared counter and an unambiguous push/report order", () => {
     const p = prepareCloudLaunch(mk().data.id).prompt;
     expect(p).toContain("tüm işaretlerde (LOG, ASK, REPORT, END, FAIL) ortak tek sayaçtır");
     expect(p).toContain("REPORT ve END aynı numarayı taşır");
-    expect(p).toContain("Önce tüm işini push et, ardından kapanış raporunu yaz; rapordan sonra yeni commit/push yapma.");
+    expect(p).toContain("kapanış raporunu **son tur mesajında tam metin olarak** yaz");
+    expect(p).toContain("rapordan sonra yeni commit/push yapma.");
     expect(p).not.toContain("sonra aşağıdaki biçimde");
   });
 
@@ -120,6 +121,44 @@ describe("prepareCloudLaunch", () => {
     pg.data.branch = int;
     saveTask(pg);
     expect(prepareCloudLaunch(b.data.id, probe("missing")).integration?.needs_remote_create).toBe(true);
+  });
+
+  describe("long dependency reports", () => {
+    const setup = (reportBody: string, extra: object = {}) => {
+      const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
+      const dep = createTask({ project: "alpha", title: "spec", kind: "research", body: "", parent: pipe.data.id, role: undefined });
+      setState(dep.data.id, "running");
+      reportTask(dep.data.id, reportBody);
+      setState(dep.data.id, "done");
+      if (Object.keys(extra).length) { const d = getTask(dep.data.id); Object.assign(d.data, extra); saveTask(d); }
+      const a = createTask({ project: "alpha", title: "a", kind: "dev", body, role: "developer", parent: pipe.data.id, dependsOn: [dep.data.id] });
+      return { pipe, a, prompt: () => prepareCloudLaunch(a.data.id, { remoteBranch: () => "exists" }).prompt };
+    };
+    const big = "### Amaç\n" + "uzun satır uzun satır uzun satır\n".repeat(400);
+
+    it("over the limit with a path in the report: summary + pointer on the base branch", () => {
+      const { pipe, prompt } = setup(big + "\nTam metin: docs/spec/x.md\n");
+      const p = prompt();
+      expect(p).toContain(`Tam metin \`vlad/${pipe.data.id}\` branch'inde: \`docs/spec/x.md\``);
+      expect(p.length).toBeLessThan(big.length / 2);
+    });
+
+    it("over the limit with report_file in the frontmatter", () => {
+      const { prompt } = setup(big, { report_file: "docs/spec/y.md" });
+      expect(prompt()).toContain("`docs/spec/y.md`");
+    });
+
+    it("over the limit without a path keeps the full text; under the limit is unchanged", () => {
+      expect(setup(big).prompt()).toContain(big.trim());
+      const small = setup("### Amaç\nKISA\nTam metin: docs/spec/z.md").prompt();
+      expect(small).toContain("KISA");
+      expect(small).not.toContain("branch'inde");
+    });
+  });
+
+  it("protocol: date -u before run_once_at", () => {
+    const p = prepareCloudLaunch(mk().data.id, { vladSession: "session_V1" }).prompt;
+    expect(p).toContain("date -u");
   });
 
   it("pipeline phase: branch present on the remote means no creation; unreachable remote assumes creation and warns", () => {

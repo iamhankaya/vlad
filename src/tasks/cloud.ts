@@ -97,13 +97,13 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "- İlerlemeyi yanıtlarına satır başında şu işaretlerle yaz (kod çitinin dışında). **`#n` tüm işaretlerde (LOG, ASK, REPORT, END, FAIL) ortak tek sayaçtır: 1'den başlar, her işarette bir artar. REPORT ve END aynı numarayı taşır; REPORT'u 1'den başlatma, sayacın devamını kullan.**",
   "  `[VLAD:LOG #n] <kısa adım>`",
   "- Karar gerektiren soru: `[VLAD:ASK #n] <soru, seçenekler>` yaz ve turunu bitir; cevap `[VLAD:ANSWER #n]` ile gelir.",
-  "- Önce tüm işini push et, ardından kapanış raporunu yaz; rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
+  "- Önce tüm işini push et, ardından kapanış raporunu **son tur mesajında tam metin olarak** yaz; \"rapor yukarıda\" gibi özet ya da atıf yasak (VLAD yalnızca son sayfayı okuyabilir); rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
-  "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
+  "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar ve tam REPORT dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
   ...(vladSession
     ? [
-        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` ≈ şimdi+1 dk, prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). \`send_later\` kullanma: hatırlatmayı kendi session'ına kurar. Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
+        `- Bildirim: REPORT, ASK veya FAIL işaretini yazdıktan sonra VLAD session'ına (\`${vladSession}\`) tek seferlik zamanlanmış görev kur: \`create_trigger\` ile \`persistent_session_id: ${vladSession}\`, \`run_once_at\` = şimdi+1 dk (önce \`date -u\` ile gerçek saati al, tahmin etme), prompt "VLAD görev ${id}: <durum> — ingest et" (<durum>: awaiting_approval, blocked veya failed). \`send_later\` kullanma: hatırlatmayı kendi session'ına kurar. Kuramazsan yalnızca bir \`[VLAD:LOG #n]\` satırıyla belirt; çalışmayı durdurma.`,
       ]
     : []),
 ].join("\n");
@@ -120,8 +120,30 @@ function dropSubsections(text: string, names: string[]): string {
   return out.join("\n").trim();
 }
 
+/** A dependency report above this many bytes travels as summary + file pointer when it names a repo file. */
+export const REPORT_INLINE_LIMIT = 8 * 1024;
+const REPORT_SUMMARY_CHARS = 3000;
+
+/** Repo file with the dependency's full report: the task's `report_file`, else a `Tam metin: <yol>` line in the report. */
+function reportFilePath(dep: Task, report: string): string | null {
+  const fm = dep.data.report_file?.trim();
+  if (fm) return fm;
+  const m = /^\s*(?:[-*]\s*)?(?:Tam metin|Rapor dosyası)\s*:\s*`?([^\s`]+)`?\s*$/im.exec(report);
+  return m ? m[1] : null;
+}
+
+/** Dependency report for the prompt: full text, or (over the limit, with a repo file) summary + path on `base`. */
+function inlineReport(dep: Task, report: string, base: string): string {
+  const file = Buffer.byteLength(report) > REPORT_INLINE_LIMIT ? reportFilePath(dep, report) : null;
+  if (!file) return report;
+  let cut = report.slice(0, REPORT_SUMMARY_CHARS);
+  cut = cut.slice(0, Math.max(cut.lastIndexOf("\n"), 0) || cut.length).trimEnd();
+  return `${cut}\n\n… (özet; rapor ${Math.round(Buffer.byteLength(report) / 1024)} KB)\nTam metin \`${base}\` branch'inde: \`${file}\``;
+}
+
 function buildCloudPrompt(
   task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task, gate?: string,
+  base = "master",
 ): string {
   const parts: string[] = [
     `Sen bir VLAD çalışanısın (bulut). Görev ${task.data.id}: ${task.data.title}. Görev dosyasına erişimin yok; görev aşağıda satır içi verilmiştir.`,
@@ -154,8 +176,12 @@ function buildCloudPrompt(
   }
   for (const d of task.data.depends_on ?? []) {
     let report: string | null = null;
-    try { report = getSection(getTask(d).body, "## Kapanış raporu"); } catch { /* reported as missing below */ }
-    parts.push(`## Girdi: ${d} kapanış raporu\n${report || "(rapor yok)"}`);
+    let dep: Task | undefined;
+    try {
+      dep = getTask(d);
+      report = getSection(dep.body, "## Kapanış raporu");
+    } catch { /* reported as missing below */ }
+    parts.push(`## Girdi: ${d} kapanış raporu\n${report && dep ? inlineReport(dep, report, base) : "(rapor yok)"}`);
   }
   parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession));
   return parts.join("\n\n");
@@ -208,7 +234,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",
-      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate),
+      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate, base),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
         "create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt)",
