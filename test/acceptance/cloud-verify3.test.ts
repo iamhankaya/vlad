@@ -93,7 +93,7 @@ describe("bulut launch prompt'u", () => {
     expect(r.code, r.out + r.err).toBe(0);
     const j = JSON.parse(r.out);
     expect(j.mode).toBe("cloud");
-    expect(j.prompt).toContain("son tur mesajında tüm işaretlerini (LOG'lar dahil) tekrar et");
+    expect(j.prompt).toContain("son tur mesajında tüm işaretlerini (LOG'lar ve tam REPORT dahil) tekrar et");
     expect(j.next.some((n: string) => n.includes("permission_mode"))).toBe(true);
     expect(j.permission_mode).toBe("auto");
   });
