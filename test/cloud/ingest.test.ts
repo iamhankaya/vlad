@@ -191,6 +191,28 @@ describe("ingestEvents", () => {
   });
 });
 
+describe("stub REPORT", () => {
+  const stub = (n: number) => `[VLAD:REPORT #${n} branch=vlad/${id} head=${SHA}]\nRapor yukarıda.\n[VLAD:END #${n}]`;
+
+  it("takes the full text of the same-numbered earlier REPORT", () => {
+    const r = ingestEvents(id, [asst(report(1)), asst(stub(1))], remote(SHA));
+    expect(r.warnings).toEqual([]);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+    expect(getTask(id).body).toContain("### Yapılanlar");
+    expect(getTask(id).body).not.toContain("Rapor yukarıda");
+  });
+
+  it("stub first, full report in a later event", () => {
+    ingestEvents(id, [asst(stub(2)), asst(report(2))], remote(SHA));
+    expect(getTask(id).body).toContain("### Yapılanlar");
+  });
+
+  it("warns when no full report exists", () => {
+    const r = ingestEvents(id, [asst(stub(1))], remote(SHA));
+    expect(r.warnings.join("\n")).toContain("tam REPORT bulunamadı");
+  });
+});
+
 describe("commitKb push without upstream", () => {
   it("pushes a fresh session branch with -u origin <branch>", () => {
     const ident = { GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" };
