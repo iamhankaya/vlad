@@ -20,6 +20,7 @@
     "role": { "type": ["string", "null"] },
     "parent": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
     "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" } },
-    "phase": { "type": ["string", "null"] }
+    "phase": { "type": ["string", "null"] },
+    "report_file": { "type": ["string", "null"] }
   }
 }
