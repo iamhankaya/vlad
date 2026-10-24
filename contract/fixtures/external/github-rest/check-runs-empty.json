@@ -1,0 +1,23 @@
+{
+ "_fixture_header": {
+  "source": "gerçek kayıt: GitHub REST (api.github.com), repo iamhankaya/vlad, gh CLI; D0A spike T20261024-98",
+  "captured_at": "2026-10-24",
+  "command": "gh api -i repos/iamhankaya/vlad/commits/<head.sha>/check-runs",
+  "description": "GET check-runs: check-run olmayan commit",
+  "masking": "yok gerekmedi: yanıtlarda token/sır yok; yalnız seçili yanıt başlıkları tutuldu"
+ },
+ "status": "HTTP/1.1 200 OK",
+ "headers": {
+  "content-type": "application/json; charset=utf-8",
+  "etag": "W/\"54be7dc175d1fdf79ec6cdb44438ddf458cc9fcd0cb0aa466341e21b429fefd5\"",
+  "x-accepted-github-permissions": "checks=read",
+  "x-github-api-version-selected": "2022-11-28",
+  "x-github-media-type": "github.v3; format=json",
+  "x-oauth-scopes": "",
+  "x-ratelimit-resource": "core"
+ },
+ "body": {
+  "total_count": 0,
+  "check_runs": []
+ }
+}
