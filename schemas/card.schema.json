@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "project", "task", "state", "title", "options", "answer", "created", "updated"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^C-\\d{8}-\\d{2,}$" },
+    "kind": { "enum": ["ci_red", "conflict", "vlad_question", "action_request", "kb_conflict"] },
+    "project": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "task": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
+    "state": { "enum": ["open", "resolved", "dismissed"] },
+    "title": { "type": "string", "minLength": 1 },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,40}$" },
+          "label": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "answer": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["by_device", "at"],
+          "anyOf": [{ "required": ["option"] }, { "required": ["text"] }],
+          "properties": {
+            "option": { "type": "string" },
+            "text": { "type": "string", "minLength": 1 },
+            "by_device": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$" },
+            "at": { "type": "string", "format": "date-time" }
+          }
+        }
+      ]
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repo"],
+      "properties": {
+        "kind": { "type": "string", "pattern": "^[a-z_]{1,40}$" },
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" },
+        "pr": { "type": "integer", "minimum": 1 },
+        "base": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "created": { "type": "string", "format": "date-time" },
+    "updated": { "type": "string", "format": "date-time" }
+  },
+  "if": { "properties": { "kind": { "const": "action_request" } } },
+  "then": { "required": ["action"] },
+  "else": { "not": { "required": ["action"] } }
+}
