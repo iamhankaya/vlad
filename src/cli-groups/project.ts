@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { def, out, readInput, type Opts } from "../cli-util.js";
+import { def, defWrite, out, readInput, type Opts } from "../cli-util.js";
 import { loadConfig } from "../kb/index.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "../projects/store.js";
 import { scanRootsWithWarnings } from "../scan/scan.js";
@@ -15,15 +15,15 @@ export function registerProject(program: Command): void {
   });
 
   const project = program.command("project").description("Proje kartları");
-  def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts) => {
+  defWrite(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts) => {
     const card = writeProject(slug, readInput(o.file as string));
     out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
   }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
-  def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
+  defWrite(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
     setProjectField(slug, field, value);
     out(o, { slug, field, value: value === "" ? null : value }, value === "" ? `silindi: ${slug}.${field}` : `yazıldı: ${slug}.${field}=${value}`);
   });
-  def(project, "note <slug> [not]", "Karta `## Çalışma notları` altına tarihli not ekler (--file: çok satırlı, - = stdin)", (slug: string, note: string | undefined, o: Opts) => {
+  defWrite(project, "note <slug> [not]", "Karta `## Çalışma notları` altına tarihli not ekler (--file: çok satırlı, - = stdin)", (slug: string, note: string | undefined, o: Opts) => {
     const text = o.file ? readInput(o.file as string) : note ?? "";
     const line = addProjectNote(slug, text);
     out(o, { slug, note: line }, `not eklendi: ${slug}`);
