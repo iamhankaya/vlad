@@ -1,11 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, utimesSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
 import { addCard, answerCard, getCard, listCardsWithWarnings, nextCardId, resolveCard } from "../../src/cards/store.js";
 import { makeHome } from "../helpers.js";
 
+const SHA = "a".repeat(40);
 const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 
@@ -18,7 +19,7 @@ beforeEach(() => {
 });
 
 const mk = (o: Partial<Parameters<typeof addCard>[0]> = {}, now?: Date) =>
-  addCard({ kind: "vlad_question", project: "alpha", title: "Soru?", options: [{ id: "a", label: "Evet" }, { id: "b", label: "Hayır" }], ...o }, now);
+  addCard({ kind: "vlad_question", project: "alpha", title: "Soru?", options: o.kind === "action_request" ? undefined : [{ id: "a", label: "Evet" }, { id: "b", label: "Hayır" }], ...o }, now);
 
 const run = (args: string[]) => new Promise<{ code: number; out: string; err: string }>((res) => {
   const p = spawn("node", [cli, ...args], { env: { ...process.env, VLAD_HOME: home } });
@@ -97,21 +98,22 @@ describe("records: card", () => {
 
   it("records: concurrent card answer one wins", async () => {
     const id = mk().data.id;
-    const rs = await Promise.all(Array.from({ length: 6 }, (_, i) =>
+    const rs = await Promise.all(Array.from({ length: 20 }, (_, i) =>
       run(["card", "answer", id, "--option", i % 2 ? "a" : "b", "--by-device", `dev-${i}`, "--json"])));
     const ok = rs.filter((r) => r.code === 0);
     const bad = rs.filter((r) => r.code !== 0);
     expect(ok).toHaveLength(1);
-    expect(bad).toHaveLength(5);
+    expect(bad).toHaveLength(19);
     for (const r of bad) expect(JSON.parse(r.err).error).toBe("zaten cevaplandı");
     const winner = JSON.parse(ok[0].out).answer;
     expect(getCard(id).data.answer).toEqual(winner);
   }, 60_000);
 
   it("records: action_request repo outside project allowlist rejected", () => {
-    const action = { kind: "merge", repo: "o/alpha", pr: 7, base: "main" };
+    const action = { kind: "merge_phase", repo: "o/alpha", sha: SHA, pr: 7, base: "main" };
     const c = mk({ kind: "action_request", action });
     expect(c.data.action).toEqual(action);
+    expect(c.data.options).toEqual([{ id: "approve", label: "Onayla" }, { id: "reject", label: "Reddet" }]);
     for (const repo of ["o/other", "evil/alpha", "o/alpha2", "O/alpha"]) {
       expect(() => mk({ kind: "action_request", action: { ...action, repo } })).toThrow("repo izin listesinde değil");
     }
@@ -122,7 +124,7 @@ describe("records: card", () => {
     expect(() => mk({ kind: "ci_red", action })).toThrow(/yalnızca action_request/);
     expect(() => mk({ kind: "action_request" })).toThrow();
     // malformed repo / pr never reach the file
-    expect(() => mk({ kind: "action_request", action: { kind: "merge", repo: "o/alpha;rm", pr: 1 } })).toThrow();
+    expect(() => mk({ kind: "action_request", action: { kind: "merge_phase", repo: "o/alpha;rm", sha: SHA, pr: 1 } })).toThrow();
     expect(() => mk({ kind: "action_request", action: { ...action, pr: 0 } })).toThrow();
     expect(readdirSync(kbPaths().cards)).toHaveLength(1);
   });
@@ -150,20 +152,102 @@ describe("records: card", () => {
   });
 
   it("records: card CLI new with repeated --option and action, then list/show/resolve", async () => {
-    const n = await run(["card", "new", "--kind", "action_request", "--project", "alpha", "--title", "Merge?", "--option", "yes=Evet", "--option", "no=Hayır",
-      "--action-kind", "merge", "--repo", "o/alpha", "--pr", "5", "--base", "main", "--json"]);
+    const n = await run(["card", "new", "--kind", "action_request", "--project", "alpha", "--title", "Merge?",
+      "--action-kind", "merge_phase", "--repo", "o/alpha", "--sha", SHA, "--pr", "5", "--base", "main", "--json"]);
     expect(n.code).toBe(0);
     const id = JSON.parse(n.out).id;
     const shown = JSON.parse((await run(["card", "show", id, "--json"])).out);
-    expect(shown.options).toEqual([{ id: "yes", label: "Evet" }, { id: "no", label: "Hayır" }]);
-    expect(shown.action).toEqual({ kind: "merge", repo: "o/alpha", pr: 5, base: "main" });
-    const bad = await run(["card", "new", "--kind", "action_request", "--project", "alpha", "--title", "x", "--action-kind", "merge", "--repo", "o/zzz", "--json"]);
+    expect(shown.options).toEqual([{ id: "approve", label: "Onayla" }, { id: "reject", label: "Reddet" }]);
+    expect(shown.action).toEqual({ kind: "merge_phase", repo: "o/alpha", sha: SHA, pr: 5, base: "main" });
+    const rep = await run(["card", "new", "--kind", "vlad_question", "--project", "alpha", "--title", "S?", "--option", "yes=Evet", "--option", "no=Hayır", "--json"]);
+    expect(JSON.parse((await run(["card", "show", JSON.parse(rep.out).id, "--json"])).out).options).toEqual([{ id: "yes", label: "Evet" }, { id: "no", label: "Hayır" }]);
+    const bad = await run(["card", "new", "--kind", "action_request", "--project", "alpha", "--title", "x", "--action-kind", "merge_phase", "--repo", "o/zzz", "--sha", SHA, "--json"]);
     expect(bad.code).toBe(1);
     expect(JSON.parse(bad.err).error).toBe("repo izin listesinde değil");
-    expect((await run(["card", "answer", id, "--option", "yes", "--by-device", "d1"])).code).toBe(0);
+    const ar = await run(["card", "answer", id, "--option", "approve", "--by-device", "d1", "--json"]);
+    expect(ar.code).toBe(1);
+    expect(JSON.parse(ar.err).error).toBe("action_request kartı yalnız onay yolundan cevaplanır");
     expect((await run(["card", "resolve", id])).code).toBe(0);
     const list = JSON.parse((await run(["card", "list", "--state", "resolved", "--json"])).out);
     expect(list.cards.map((c: { id: string }) => c.id)).toEqual([id]);
     expect((await run(["card", "list", "--state", "bogus"])).code).toBe(1);
+  }, 60_000);
+
+  it("records: action_request cannot be answered (store and CLI), even with a valid option", () => {
+    const c = mk({ kind: "action_request", action: { kind: "merge_final", repo: "o/alpha", sha: SHA, pr: 1 } });
+    expect(() => answerCard(c.data.id, { option: "approve", by_device: "evil" })).toThrow("action_request kartı yalnız onay yolundan cevaplanır");
+    expect(() => answerCard(c.data.id, { text: "evet", by_device: "evil" })).toThrow(/onay yolundan/);
+    expect(getCard(c.data.id).data.answer).toBeNull();
+  });
+
+  it("records: action_request options are fixed, agent-supplied options rejected", () => {
+    const action = { kind: "tag", repo: "o/alpha", sha: SHA, ref: "v1.0.0" };
+    expect(() => mk({ kind: "action_request", action, options: [{ id: "approve", label: "Onayla" }] })).toThrow(/seçenek verilemez/);
+    expect(() => mk({ kind: "action_request" })).toThrow(/action gerekli/);
+  });
+
+  it("records: action schema: kind enum, sha required 40 hex, base/ref pattern", () => {
+    const base = { kind: "push", repo: "o/alpha", sha: SHA };
+    const ok = (a: object) => mk({ kind: "action_request", action: { ...base, ...a } });
+    for (const k of ["merge_phase", "merge_final", "push", "tag"]) expect(ok({ kind: k }).data.action?.kind).toBe(k);
+    expect(() => ok({ kind: "merge" })).toThrow();
+    expect(() => ok({ kind: "delete_branch" })).toThrow();
+    expect(() => ok({ sha: undefined })).toThrow();
+    for (const sha of ["abc", "A".repeat(40), "a".repeat(39), "a".repeat(41), "g".repeat(40)]) expect(() => ok({ sha })).toThrow();
+    for (const bad of ["-delete", "--force", "a..b", "..", "a/../b", "x y", "a;b", "a\nb", "", "a".repeat(201)]) {
+      expect(() => ok({ base: bad }), `base ${bad}`).toThrow();
+      expect(() => ok({ ref: bad }), `ref ${bad}`).toThrow();
+    }
+    expect(ok({ base: "vlad/T20261024-94", ref: "refs/tags/v1.0.0" }).data.action?.base).toBe("vlad/T20261024-94");
+    expect(ok({ base: "a".repeat(200) }).data.action?.base).toHaveLength(200);
+  });
+
+  it("records: text limits and control/bidi characters rejected", () => {
+    expect(mk({ title: "a".repeat(200) }).data.title).toHaveLength(200);
+    expect(() => mk({ title: "a".repeat(201) })).toThrow();
+    for (const ch of ["\n", "\u0007", "\u007f", "\u202e", "\u202a", "\u2066", "\u2069", "\u0085"]) {
+      expect(() => mk({ title: `x${ch}y` }), JSON.stringify(ch)).toThrow();
+      expect(() => mk({ options: [{ id: "a", label: `x${ch}y` }] }), JSON.stringify(ch)).toThrow();
+    }
+    expect(mk({ options: [{ id: "a", label: "a".repeat(80) }] }).data.options).toHaveLength(1);
+    expect(() => mk({ options: [{ id: "a", label: "a".repeat(81) }] })).toThrow();
+    const c = mk();
+    expect(() => answerCard(c.data.id, { text: "a".repeat(2001), by_device: "d" })).toThrow();
+    expect(() => answerCard(c.data.id, { text: "x\u202ey", by_device: "d" })).toThrow();
+    expect(() => answerCard(c.data.id, { text: "x\u0007y", by_device: "d" })).toThrow();
+    expect(getCard(c.data.id).data.answer).toBeNull();
+    expect(answerCard(c.data.id, { text: "a".repeat(1000) + "\nsatır", by_device: "d" }).data.answer?.text).toContain("\nsatır");
+  });
+
+  it("records: options max 8 and unique ids", () => {
+    const opts = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `o${i}`, label: `L${i}` }));
+    expect(mk({ options: opts(8) }).data.options).toHaveLength(8);
+    expect(() => mk({ options: opts(9) })).toThrow();
+    expect(() => mk({ options: [{ id: "a", label: "x" }, { id: "a", label: "y" }] })).toThrow(/yinelenen/);
+  });
+
+  it("records: per-card lock: a held lock makes answer/resolve fail, a stale one is taken over", () => {
+    const c = mk();
+    const lock = join(kbPaths().cards, `${c.data.id}.lock`);
+    writeFileSync(lock, "");
+    expect(() => answerCard(c.data.id, { option: "a", by_device: "d" })).toThrow("kart meşgul");
+    expect(() => resolveCard(c.data.id)).toThrow("kart meşgul");
+    const old = new Date(Date.now() - 120_000);
+    utimesSync(lock, old, old);
+    expect(answerCard(c.data.id, { option: "a", by_device: "d" }).data.answer?.option).toBe("a");
+    expect(existsSync(lock)).toBe(false);
+    expect(listCardsWithWarnings().warnings).toEqual([]);
+  });
+
+  it("records: --pr/--base/--ref/--sha without --action-kind/--repo is an error", async () => {
+    for (const extra of [["--pr", "3"], ["--base", "main"], ["--ref", "v1"], ["--sha", SHA]]) {
+      const r = await run(["card", "new", "--kind", "ci_red", "--project", "alpha", "--title", "x", ...extra, "--json"]);
+      expect(r.code, extra[0]).toBe(1);
+      expect(JSON.parse(r.err).error).toMatch(/yalnız --action-kind ve --repo ile/);
+    }
+    const half = await run(["card", "new", "--kind", "action_request", "--project", "alpha", "--title", "x", "--repo", "o/alpha", "--sha", SHA, "--json"]);
+    expect(half.code).toBe(1);
+    expect(JSON.parse(half.err).error).toMatch(/birlikte/);
+    expect(existsSync(kbPaths().cards) ? readdirSync(kbPaths().cards) : []).toEqual([]);
   }, 60_000);
 });
