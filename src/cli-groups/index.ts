@@ -4,6 +4,7 @@ import { registerExt } from "./ext.js";
 import { registerFinding } from "./finding.js";
 import { registerKb } from "./kb.js";
 import { registerProject } from "./project.js";
+import { registerQuota } from "./quota.js";
 import { registerRole } from "./role.js";
 import { registerStatus } from "./status.js";
 import { registerTask } from "./task.js";
@@ -19,8 +20,9 @@ const groups: ((program: Command) => void)[] = [
   registerTask,
   registerStatus,
   registerKb,
-  registerExt,
+  registerQuota,
   registerAudit,
+  registerExt,
 ];
 
 export function registerAll(program: Command): void {

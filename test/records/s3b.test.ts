@@ -52,6 +52,8 @@ describe("records: audit", () => {
       entry({ extra: 1 }),
       entry({ ts: "yesterday" }),
       entry({ action_id: "" }),
+      entry({ kind: "format_disk" }),
+      entry({ detail: "x".repeat(2001) }),
     ]) {
       expect(() => addAudit(bad)).toThrow(/doğrulama hatası/);
     }
