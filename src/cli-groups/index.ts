@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { registerAudit } from "./audit.js";
 import { registerExt } from "./ext.js";
 import { registerFinding } from "./finding.js";
 import { registerKb } from "./kb.js";
@@ -21,6 +22,7 @@ const groups: ((program: Command) => void)[] = [
   registerStatus,
   registerKb,
   registerQuota,
+  registerAudit,
   registerVault,
   registerExt,
 ];
