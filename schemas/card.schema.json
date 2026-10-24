@@ -2,39 +2,123 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "kind", "project", "task", "state", "title", "options", "answer", "created", "updated"],
+  "required": [
+    "id",
+    "kind",
+    "project",
+    "task",
+    "state",
+    "title",
+    "options",
+    "answer",
+    "created",
+    "updated"
+  ],
   "properties": {
-    "id": { "type": "string", "pattern": "^C-\\d{8}-\\d{2,}$" },
-    "kind": { "enum": ["ci_red", "conflict", "vlad_question", "action_request", "kb_conflict"] },
-    "project": { "type": "string", "pattern": "^[a-z0-9-]+$" },
-    "task": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
-    "state": { "enum": ["open", "resolved", "dismissed"] },
-    "title": { "type": "string", "minLength": 1 },
+    "id": {
+      "type": "string",
+      "pattern": "^C-\\d{8}-\\d{2,}$"
+    },
+    "kind": {
+      "enum": [
+        "ci_red",
+        "conflict",
+        "vlad_question",
+        "action_request",
+        "kb_conflict"
+      ]
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "task": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^T\\d{8}-\\d{2,}$"
+    },
+    "state": {
+      "enum": [
+        "open",
+        "resolved",
+        "dismissed"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]*$"
+    },
     "options": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "label"],
+        "required": [
+          "id",
+          "label"
+        ],
         "properties": {
-          "id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,40}$" },
-          "label": { "type": "string", "minLength": 1 }
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._-]{1,40}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]*$"
+          }
         }
-      }
+      },
+      "maxItems": 8
     },
     "answer": {
       "oneOf": [
-        { "type": "null" },
+        {
+          "type": "null"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["by_device", "at"],
-          "anyOf": [{ "required": ["option"] }, { "required": ["text"] }],
+          "required": [
+            "by_device",
+            "at"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "option"
+              ]
+            },
+            {
+              "required": [
+                "text"
+              ]
+            }
+          ],
           "properties": {
-            "option": { "type": "string" },
-            "text": { "type": "string", "minLength": 1 },
-            "by_device": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,64}$" },
-            "at": { "type": "string", "format": "date-time" }
+            "option": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "pattern": "^[^\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]*$"
+            },
+            "by_device": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:-]{1,64}$"
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
           }
         }
       ]
@@ -42,19 +126,82 @@
     "action": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "repo"],
+      "required": [
+        "kind",
+        "repo",
+        "sha"
+      ],
       "properties": {
-        "kind": { "type": "string", "pattern": "^[a-z_]{1,40}$" },
-        "repo": { "type": "string", "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" },
-        "pr": { "type": "integer", "minimum": 1 },
-        "base": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 }
+        "kind": {
+          "enum": [
+            "merge_phase",
+            "merge_final",
+            "push",
+            "tag"
+          ]
+        },
+        "repo": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"
+        },
+        "pr": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "base": {
+          "type": "string",
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._/-]{1,200}$"
+        },
+        "ref": {
+          "type": "string",
+          "pattern": "^(?!-)(?!.*\\.\\.)[A-Za-z0-9._/-]{1,200}$"
+        },
+        "sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
       }
     },
-    "created": { "type": "string", "format": "date-time" },
-    "updated": { "type": "string", "format": "date-time" }
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time"
+    }
   },
-  "if": { "properties": { "kind": { "const": "action_request" } } },
-  "then": { "required": ["action"] },
-  "else": { "not": { "required": ["action"] } }
+  "if": {
+    "properties": {
+      "kind": {
+        "const": "action_request"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "action"
+    ],
+    "properties": {
+      "options": {
+        "const": [
+          {
+            "id": "approve",
+            "label": "Onayla"
+          },
+          {
+            "id": "reject",
+            "label": "Reddet"
+          }
+        ]
+      }
+    }
+  },
+  "else": {
+    "not": {
+      "required": [
+        "action"
+      ]
+    }
+  }
 }

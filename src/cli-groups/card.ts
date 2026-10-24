@@ -1,5 +1,6 @@
 import type { Command } from "commander";
 import { def, defWrite, out, type Opts } from "../cli-util.js";
+import { CARD_ACTION_KINDS } from "../kb/index.js";
 import { addCard, answerCard, getCard, KINDS, listCardsWithWarnings, parseFilter, resolveCard, STATES, type Card } from "../cards/store.js";
 
 const cardLine = (c: Card) => `${c.data.id}  ${c.data.state.padEnd(9)} ${c.data.kind.padEnd(14)} ${c.data.project}  ${c.data.title}`;
@@ -14,12 +15,16 @@ export function registerCard(program: Command): void {
   const card = program.command("card").description("Karar kartı (mobil: senden beklenenler)");
   defWrite(card, "new", "Kart oluşturur (state open)", (o: Opts) => {
     const hasAction = o.actionKind !== undefined || o.repo !== undefined;
+    const extras = ["pr", "base", "ref", "sha"].filter((k) => o[k] !== undefined);
+    if (!hasAction && extras.length) throw new Error(`--${extras.join("/--")} yalnız --action-kind ve --repo ile verilir`);
+    if (hasAction && (o.actionKind === undefined || o.repo === undefined)) throw new Error("action için --action-kind ve --repo birlikte gerekli");
     const c = addCard({
       kind: o.kind as string, project: o.project as string, title: o.title as string, task: o.task as string | undefined,
       options: o.option as { id: string; label: string }[] | undefined,
       action: hasAction
         ? {
             kind: o.actionKind as string, repo: o.repo as string,
+            ...(o.sha ? { sha: o.sha as string } : {}),
             ...(o.pr !== undefined ? { pr: Number(o.pr) } : {}),
             ...(o.base ? { base: o.base as string } : {}), ...(o.ref ? { ref: o.ref as string } : {}),
           }
@@ -32,7 +37,8 @@ export function registerCard(program: Command): void {
     .requiredOption("--title <başlık>", "kart başlığı")
     .option("--task <id>", "ilgili görev ID'si")
     .option("--option <id=etiket>", "seçenek (tekrarlanabilir)", parseOption)
-    .option("--action-kind <tür>", "yalnız action_request: eylem türü")
+    .option("--action-kind <tür>", `yalnız action_request: ${CARD_ACTION_KINDS.join(" | ")}`)
+    .option("--sha <sha>", "yalnız action_request: 40 haneli hex commit (zorunlu)")
     .option("--repo <owner/ad>", "yalnız action_request: projenin kayıtlı repo'su olmalı")
     .option("--pr <no>", "yalnız action_request: PR numarası")
     .option("--base <branch>", "yalnız action_request: taban branch")

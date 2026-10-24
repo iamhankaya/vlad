@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc, CARD_KINDS } from "../kb/index.js";
+import { ACTION_OPTIONS, CARD_KINDS, kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc } from "../kb/index.js";
 import type { CardData, CardKind, CardState, ProjectCard } from "../kb/index.js";
 
 export type Card = { data: CardData; body: string; file: string };
@@ -12,6 +12,46 @@ const ID = /^C-\d{8}-\d{2,}$/;
 
 function cardFile(id: string): string {
   return join(kbPaths().cards, `${id}.md`);
+}
+
+/** Schema validation plus what a schema cannot say: option ids are unique. */
+function check(data: CardData): void {
+  validate("card", data);
+  const seen = new Set<string>();
+  for (const op of data.options) {
+    if (seen.has(op.id)) throw new Error(`yinelenen seçenek: ${op.id}`);
+    seen.add(op.id);
+  }
+}
+
+const LOCK_STALE_MS = 60_000;
+
+/**
+ * Per-card O_EXCL lock around a read-check-write, so direct callers (not only the CLI, which also holds the kb lock)
+ * cannot interleave. A lock older than LOCK_STALE_MS (crashed holder) is taken over.
+ */
+function withCardLock<T>(id: string, fn: () => T): T {
+  const lock = join(kbPaths().cards, `${id}.lock`);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      closeSync(openSync(lock, "wx"));
+      break;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      let stale = false;
+      try {
+        stale = Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS;
+      } catch { /* vanished: retry */ }
+      if (stale) {
+        try { unlinkSync(lock); } catch { /* someone else took it over */ }
+      } else if (attempt >= 1) throw new Error("kart meşgul");
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    try { unlinkSync(lock); } catch { /* already gone */ }
+  }
 }
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -55,7 +95,7 @@ export interface NewCard {
   title: string;
   task?: string | null;
   options?: { id: string; label: string }[];
-  action?: { kind: string; repo: string; pr?: number; base?: string; ref?: string };
+  action?: { kind: string; repo: string; sha?: string; pr?: number; base?: string; ref?: string };
 }
 
 export function addCard(o: NewCard, now: Date = new Date()): Card {
@@ -66,12 +106,12 @@ export function addCard(o: NewCard, now: Date = new Date()): Card {
     // allowlist: the only repo an action may target is the one registered on the card's project
     if (!repo || o.action.repo !== repo) throw new Error("repo izin listesinde değil");
   }
-  const options = o.options ?? [];
-  const seen = new Set<string>();
-  for (const op of options) {
-    if (seen.has(op.id)) throw new Error(`yinelenen seçenek: ${op.id}`);
-    seen.add(op.id);
+  // an action_request has fixed options; the caller (an agent) cannot supply its own
+  if (o.kind === "action_request") {
+    if (o.options?.length) throw new Error("action_request kartında seçenek verilemez (sabit: approve/reject)");
+    if (!o.action) throw new Error("action_request kartı için action gerekli");
   }
+  const options = o.kind === "action_request" ? ACTION_OPTIONS.map((x) => ({ ...x })) : (o.options ?? []);
   const dir = kbPaths().cards;
   mkdirSync(dir, { recursive: true });
   const prefix = `C-${dayOf(now)}-`;
@@ -81,9 +121,9 @@ export function addCard(o: NewCard, now: Date = new Date()): Card {
     const ts = nowIso(now);
     const data: CardData = {
       id, kind: o.kind as CardKind, project: o.project, task: o.task ?? null, state: "open", title: o.title.trim(),
-      options, answer: null, ...(o.action ? { action: o.action } : {}), created: ts, updated: ts,
+      options, answer: null, ...(o.action ? { action: o.action as CardData["action"] } : {}), created: ts, updated: ts,
     };
-    validate("card", data);
+    check(data);
     const file = cardFile(id);
     try {
       writeFileSync(file, serializeDoc(data, ""), { encoding: "utf8", flag: "wx" });
@@ -102,7 +142,7 @@ export function getCard(id: string): Card {
   const file = ID.test(id) ? cardFile(id) : "";
   if (!file || !existsSync(file)) throw new Error(`kart bulunamadı: ${id}`);
   const { data, body } = readDoc<CardData>(file);
-  validate("card", data);
+  check(data);
   return { data, body, file };
 }
 
@@ -118,7 +158,7 @@ export function listCardsWithWarnings(
     const file = join(dir, name);
     try {
       const { data, body } = readDoc<CardData>(file);
-      validate("card", data);
+      check(data);
       if (f.project && data.project !== f.project) continue;
       if (f.state && !f.state.includes(data.state)) continue;
       if (f.kind && !f.kind.includes(data.kind)) continue;
@@ -136,7 +176,10 @@ export function listCardsWithWarnings(
  * so only a caller holding a verified identity (the API's signed envelope) may pass it; never take it from client input.
  */
 export function answerCard(id: string, a: { option?: string; text?: string; by_device: string }, now: Date = new Date()): Card {
+  return withCardLock(id, () => {
   const c = getCard(id);
+  // an action_request is answered only through the API's approval path (signed challenge), never by a CLI argument
+  if (c.data.kind === "action_request") throw new Error("action_request kartı yalnız onay yolundan cevaplanır");
   if (c.data.answer) throw new Error("zaten cevaplandı");
   if (c.data.state !== "open") throw new Error(`kart açık değil: ${c.data.state}`);
   const text = a.text?.trim();
@@ -150,19 +193,22 @@ export function answerCard(id: string, a: { option?: string; text?: string; by_d
     answer: { ...(a.option !== undefined ? { option: a.option } : {}), ...(text ? { text } : {}), by_device: a.by_device, at: ts },
     updated: ts,
   };
-  validate("card", next);
+  check(next);
   writeDoc(c.file, next, c.body);
   return { ...c, data: next };
+  });
 }
 
 /** Closes an open card as resolved (default) or dismissed. */
 export function resolveCard(id: string, state: "resolved" | "dismissed" = "resolved", now: Date = new Date()): Card {
+  return withCardLock(id, () => {
   const c = getCard(id);
   if (c.data.state !== "open") throw new Error(`kart zaten kapalı: ${c.data.state}`);
   const next: CardData = { ...c.data, state, updated: nowIso(now) };
-  validate("card", next);
+  check(next);
   writeDoc(c.file, next, c.body);
   return { ...c, data: next };
+  });
 }
 
 /** Parses a comma-separated filter, rejecting values outside `allowed`. */

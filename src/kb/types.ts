@@ -110,6 +110,10 @@ export interface FindingData {
 
 export const CARD_KINDS = ["ci_red", "conflict", "vlad_question", "action_request", "kb_conflict"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
+export const CARD_ACTION_KINDS = ["merge_phase", "merge_final", "push", "tag"] as const;
+export type CardActionKind = (typeof CARD_ACTION_KINDS)[number];
+/** The only options an action_request card has; an agent cannot supply its own. */
+export const ACTION_OPTIONS = [{ id: "approve", label: "Onayla" }, { id: "reject", label: "Reddet" }];
 export type CardState = "open" | "resolved" | "dismissed";
 
 /** kb/cards/C-<YYYYMMDD>-<NN>.md frontmatter (mobile plan, kayıt türleri) */
@@ -125,7 +129,7 @@ export interface CardData {
   /** `by_device` is taken from the CLI argument as is: only the API (verified envelope) may be trusted to supply it. */
   answer: { option?: string; text?: string; by_device: string; at: string } | null;
   /** Only for `action_request`; its repo must be the card project's registered repo. */
-  action?: { kind: string; repo: string; pr?: number; base?: string; ref?: string };
+  action?: { kind: CardActionKind; repo: string; sha: string; pr?: number; base?: string; ref?: string };
   created: string;
   updated: string;
 }
