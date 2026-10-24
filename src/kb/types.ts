@@ -159,3 +159,18 @@ export interface VladConfig {
 }
 
 export type MachineConfig = Partial<Pick<VladConfig, "roots" | "launcher" | "maxParallel" | "worktreeDir" | "kbPushBranch">>;
+
+/** One line of kb/audit/YYYY-MM.jsonl (mobile plan, kayıt şemaları). */
+export interface AuditData {
+  ts: string;
+  /** Unique across all months. */
+  action_id: string;
+  kind: string;
+  repo: string;
+  pr: number;
+  head_sha: string;
+  approver: { type: "device" | "grant"; id: string };
+  result: string;
+  merge_sha?: string;
+  detail?: string;
+}

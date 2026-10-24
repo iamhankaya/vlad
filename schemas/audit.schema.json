@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["ts", "action_id", "kind", "repo", "pr", "head_sha", "approver", "result"],
+  "properties": {
+    "ts": { "type": "string", "format": "date-time" },
+    "action_id": { "type": "string", "pattern": "^[A-Za-z0-9._:-]{1,128}$" },
+    "kind": { "type": "string", "minLength": 1 },
+    "repo": { "type": "string", "pattern": "^[\\w.-]+/[\\w.-]+$" },
+    "pr": { "type": "integer", "minimum": 1 },
+    "head_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "approver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "enum": ["device", "grant"] },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "result": { "type": "string", "minLength": 1 },
+    "merge_sha": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "detail": { "type": "string" }
+  }
+}
