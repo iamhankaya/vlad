@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { posix, resolve } from "node:path";
 import type { VladConfig } from "../kb/index.js";
 
 /** Runs git; returns untrimmed stdout, or null on error/timeout. */
@@ -63,9 +63,23 @@ export function changedFiles(cwd: string): string[] {
   return [...set];
 }
 
-export function worktreePath(cfg: VladConfig, repoPath: string, taskId: string): string {
+/**
+ * Worktree folder of a task. `platform` picks the path flavor: win32 keeps the original backslash join;
+ * elsewhere the result is posix, and a Windows-style `worktreeDir` (drive letter, UNC, backslash) is an error
+ * because it would silently create a bogus relative folder.
+ */
+export function worktreePath(
+  cfg: VladConfig, repoPath: string, taskId: string, platform: NodeJS.Platform = process.platform,
+): string {
   const base = cfg.worktreeDir.split("{repo}").join(repoPath);
-  return `${base.replace(/[\\/]+$/, "")}\\${taskId}`;
+  if (platform === "win32") return `${base.replace(/[\\/]+$/, "")}\\${taskId}`;
+  if (/^[A-Za-z]:|\\/.test(cfg.worktreeDir)) {
+    throw new Error(
+      `worktreeDir Windows biçimli (${cfg.worktreeDir}) ama platform ${platform}; ` +
+        `vlad.config.json'da bu makine için machines.<ad>.worktreeDir ver`,
+    );
+  }
+  return posix.join(base, taskId);
 }
 
 function mustGit(cwd: string, args: string[]): void {

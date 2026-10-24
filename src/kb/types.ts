@@ -19,6 +19,8 @@ export interface ProjectCard {
   slug: string;
   name: string;
   path: string;
+  /** Clone path per machine (`VLAD_MACHINE` name -> path); once set, a machine missing here has no clone. */
+  paths?: Record<string, string>;
   stack: string[];
   status: ProjectStatus;
   autonomy: Autonomy;
@@ -63,6 +65,26 @@ export interface TaskData {
   phase?: string | null;
   /** Repo file (relative path) holding this task's full closing report; a long report travels to dependants as summary + this path. */
   report_file?: string | null;
+  /** Machine the worker runs on (`currentMachine()` at launch). */
+  host?: string | null;
+  /** Latest worker progress; `pct` null = no percentage known. */
+  progress?: TaskProgress | null;
+  /** Pull request the task's branch is under. */
+  pr?: TaskPr | null;
+}
+
+export interface TaskProgress {
+  pct: number | null;
+  label: string;
+  at: string;
+}
+
+export interface TaskPr {
+  number: number;
+  /** GitHub `owner/name`. */
+  repo: string;
+  base: string;
+  url?: string;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
@@ -127,5 +149,13 @@ export interface VladConfig {
   maxParallel?: number;
   launcher: Launcher;
   worktreeDir: string;
+  /** Branch `vlad kb commit --push` pushes to when it has no upstream; absent → `origin <current branch>`. */
+  kbPushBranch?: string;
+  /** Per-machine overlay of roots/launcher/maxParallel/worktreeDir/kbPushBranch; applied by loadConfig. */
+  machines?: Record<string, MachineConfig>;
+  /** Oldest CLI version allowed to use this home; older CLIs stop with `VLAD CLI çok eski`. */
+  minCliVersion?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
 }
+
+export type MachineConfig = Partial<Pick<VladConfig, "roots" | "launcher" | "maxParallel" | "worktreeDir" | "kbPushBranch">>;
