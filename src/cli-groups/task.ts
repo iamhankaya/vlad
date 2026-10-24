@@ -8,6 +8,8 @@ import {
   TRANSITIONS, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState,
 } from "../tasks/index.js";
+import type { Task } from "../tasks/index.js";
+import { readQuota } from "../quota/index.js";
 
 export function registerTask(program: Command): void {
   const task = program.command("task").description("Görevler");
@@ -126,14 +128,26 @@ export function registerTask(program: Command): void {
     .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
     .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
   def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
-    const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel);
+    const { quota, warnings } = readQuota();
+    const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel, quota);
+    const why = (t: Task) =>
+      r.held_reasons[t.data.id] === "quota"
+        ? `kota dolu${r.quota.until ? ` (${r.quota.until}'a kadar)` : ""}, bekliyor`
+        : `maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor`;
     const lines = [
       ...r.tasks.map(taskLine),
-      ...r.held_by_limit.map((t) => `${taskLine(t)}  (maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor)`),
+      ...r.held_by_limit.map((t) => `${taskLine(t)}  (${why(t)})`),
+      ...warnings.map((w) => `uyarı: ${w}`),
     ];
     out(
       o,
-      { tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel },
+      {
+        tasks: r.tasks.map((t) => t.data),
+        held_by_limit: r.held_by_limit.map((t) => ({ ...t.data, reason: r.held_reasons[t.data.id] })),
+        running: r.running, maxParallel: r.maxParallel,
+        quota: { limited: r.quota.limited, until: r.quota.until ?? null },
+        warnings,
+      },
       lines.join("\n"),
     );
   }).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
