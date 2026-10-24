@@ -1,4 +1,4 @@
-import { lstatSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { getVladHome } from "../kb/index.js";
 
@@ -15,6 +15,10 @@ export const MAX_QUERY_CHARS = 256;
 export const MAX_PATH_CHARS = 512;
 export const DEFAULT_LIMIT = 20;
 export const MAX_LIMIT = 100;
+export const MAX_LS_ENTRIES = 1000;
+/** Search budget: exceeding any of these ends the walk with a partial result (truncated: true). */
+export const SEARCH_BUDGET = { files: 5000, bytes: 20 * 1024 * 1024, depth: 16, ms: 5000 };
+export type SearchBudget = typeof SEARCH_BUDGET;
 
 export type Zone = "kb" | "docs";
 export const ZONES: Zone[] = ["kb", "docs"];
@@ -26,6 +30,21 @@ export class VaultError extends Error {
     super(message);
     this.name = "VaultError";
   }
+}
+
+/** Any non-VaultError (fs errors carry absolute paths) becomes a fixed message. */
+function safe<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (e) {
+    if (e instanceof VaultError) throw e;
+    throw new VaultError("okunamadı");
+  }
+}
+
+/** Key for allowlist/denylist comparison: NFKC + upper + lower folds ſ, fullwidth forms, ı/İ variants. */
+function denyKey(s: string): string {
+  return s.normalize("NFKC").toUpperCase().toLowerCase();
 }
 
 export interface Heading { level: number; text: string; line: number }
@@ -40,7 +59,7 @@ export function fold(s: string): string {
 
 /** Splits an allowlist-relative path into lower-cased segments, or null when not allowed. */
 function allowedZone(rel: string[]): Zone | null {
-  const low = rel.map((s) => s.toLowerCase());
+  const low = rel.map(denyKey);
   if (low.some((s) => s.startsWith("."))) return null;
   if (low[0] === "kb") {
     if (low.length > 1 && FORBIDDEN_UNDER_KB.includes(low[1])) return null;
@@ -67,7 +86,7 @@ function parseUserPath(input: string): string[] {
 }
 
 function homeReal(): string {
-  return realpathSync(getVladHome());
+  return realpathSync.native(getVladHome());
 }
 
 /** Resolves an allowlisted path to its real file. Throws VaultError on any violation. */
@@ -77,7 +96,7 @@ function resolveAllowed(input: string, want: "file" | "dir"): { rel: string; abs
   const home = homeReal();
   let abs: string;
   try {
-    abs = realpathSync(join(home, ...segs));
+    abs = realpathSync.native(join(home, ...segs));
   } catch {
     throw new VaultError(`bulunamadı: ${segs.join("/")}`);
   }
@@ -92,9 +111,23 @@ function resolveAllowed(input: string, want: "file" | "dir"): { rel: string; abs
 }
 
 function readText(abs: string): string {
-  const st = statSync(abs);
-  if (st.size > MAX_FILE_BYTES) throw new VaultError(`dosya çok büyük (${st.size} bayt > ${MAX_FILE_BYTES})`);
-  const buf = readFileSync(abs);
+  // abs is already a realpath; O_NOFOLLOW + fstat close the swap-for-symlink window.
+  const fd = openSync(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  let buf: Buffer;
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) throw new VaultError("dosya değil");
+    if (st.size > MAX_FILE_BYTES) throw new VaultError(`dosya çok büyük (${st.size} bayt > ${MAX_FILE_BYTES})`);
+    buf = Buffer.alloc(MAX_FILE_BYTES + 1);
+    let n = 0;
+    for (let r = readSync(fd, buf, n, buf.length - n, null); r > 0; r = readSync(fd, buf, n, buf.length - n, null)) {
+      n += r;
+      if (n > MAX_FILE_BYTES) throw new VaultError(`dosya çok büyük (> ${MAX_FILE_BYTES} bayt)`);
+    }
+    buf = buf.subarray(0, n);
+  } finally {
+    closeSync(fd);
+  }
   if (buf.includes(0)) throw new VaultError("ikili dosya okunamaz");
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(buf);
@@ -122,6 +155,10 @@ export function parseHeadings(content: string): Heading[] {
 }
 
 export function readVault(path: string, heading?: string): VaultFile {
+  return safe(() => readVaultUnsafe(path, heading));
+}
+
+function readVaultUnsafe(path: string, heading?: string): VaultFile {
   const { rel, abs } = resolveAllowed(path, "file");
   const full = readText(abs);
   const headings = parseHeadings(full);
@@ -137,18 +174,26 @@ export function readVault(path: string, heading?: string): VaultFile {
   return { path: rel, content, headings };
 }
 
-export function listVault(dir?: string): VaultEntry[] {
-  if (dir === undefined || dir === "") {
-    return ZONES.map((z) => ({ path: ZONE_ROOT[z], type: "dir" as const }));
-  }
-  const { rel, abs } = resolveAllowed(dir, "dir");
-  const entries: VaultEntry[] = [];
-  for (const d of readdirSync(abs, { withFileTypes: true })) {
-    const childRel = `${rel}/${d.name}`;
-    const e = entryFor(childRel, d.name);
-    if (e) entries.push(e);
-  }
-  return entries.sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "dir" ? -1 : 1));
+export function listVault(dir?: string): { entries: VaultEntry[]; truncated: boolean } {
+  return safe(() => {
+    if (dir === undefined || dir === "") {
+      return { entries: ZONES.map((z) => ({ path: ZONE_ROOT[z], type: "dir" as const })), truncated: false };
+    }
+    const { rel, abs } = resolveAllowed(dir, "dir");
+    const entries: VaultEntry[] = [];
+    let truncated = false;
+    for (const d of readdirSync(abs, { withFileTypes: true })) {
+      const e = entryFor(`${rel}/${d.name}`, d.name);
+      if (!e) continue;
+      if (entries.length >= MAX_LS_ENTRIES) {
+        truncated = true;
+        break;
+      }
+      entries.push(e);
+    }
+    entries.sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "dir" ? -1 : 1));
+    return { entries, truncated };
+  });
 }
 
 /** An entry is shown only if it resolves (symlinks included) to an allowlisted .md file or dir. */
@@ -166,18 +211,17 @@ function entryFor(rel: string, name: string): VaultEntry | null {
   return null;
 }
 
-function* walk(relDir: string, absDir: string): Generator<{ rel: string; abs: string }> {
-  for (const d of readdirSync(absDir, { withFileTypes: true })) {
-    const rel = `${relDir}/${d.name}`;
-    if (d.name.startsWith(".") || !allowedZone(rel.split("/"))) continue;
-    const abs = join(absDir, d.name);
-    if (d.isSymbolicLink()) continue; // search never follows links (no loops, no escapes)
-    if (d.isDirectory()) yield* walk(rel, abs);
-    else if (d.isFile() && /\.md$/i.test(d.name)) yield { rel, abs };
-  }
+export function searchVault(
+  query: string,
+  opts: { zone?: string; limit?: number; budget?: Partial<SearchBudget> } = {},
+): { hits: VaultHit[]; truncated: boolean } {
+  return safe(() => searchUnsafe(query, opts));
 }
 
-export function searchVault(query: string, opts: { zone?: string; limit?: number } = {}): VaultHit[] {
+function searchUnsafe(
+  query: string,
+  opts: { zone?: string; limit?: number; budget?: Partial<SearchBudget> },
+): { hits: VaultHit[]; truncated: boolean } {
   const q = typeof query === "string" ? query.trim() : "";
   if (!q) throw new VaultError("sorgu boş");
   if (q.length > MAX_QUERY_CHARS) throw new VaultError(`sorgu çok uzun (en çok ${MAX_QUERY_CHARS} karakter)`);
@@ -185,49 +229,89 @@ export function searchVault(query: string, opts: { zone?: string; limit?: number
   if (opts.zone !== undefined && !ZONES.includes(opts.zone as Zone)) throw new VaultError(`geçersiz bölge: ${opts.zone} (${ZONES.join(" | ")})`);
   const limit = opts.limit ?? DEFAULT_LIMIT;
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_LIMIT) throw new VaultError(`limit 1..${MAX_LIMIT} olmalı`);
+  const budget = { ...SEARCH_BUDGET, ...opts.budget };
+  const started = Date.now();
+  let files = 0;
+  let bytes = 0;
+  let truncated = false;
   const needle = fold(q);
   const home = homeReal();
   const zones = opts.zone ? [opts.zone as Zone] : ZONES;
-  const hits: VaultHit[] = [];
-  for (const z of zones) {
+  let hits: VaultHit[] = [];
+  const rank = (a: VaultHit, b: VaultHit) => b.score - a.score || a.path.localeCompare(b.path);
+
+  // Iterative walk: explicit stack, no recursion depth to blow.
+  const stack: { rel: string; abs: string; depth: number }[] = [];
+  for (const z of [...zones].reverse()) {
     const root = ZONE_ROOT[z];
-    let absRoot: string;
     try {
-      absRoot = join(home, ...root.split("/"));
+      let absRoot = join(home, ...root.split("/"));
       if (lstatSync(absRoot).isSymbolicLink()) absRoot = resolveAllowed(root, "dir").abs;
+      stack.push({ rel: root, abs: absRoot, depth: 0 });
+    } catch {
+      /* zone missing: nothing to search */
+    }
+  }
+  walk: while (stack.length) {
+    const dir = stack.pop()!;
+    let dirents;
+    try {
+      dirents = readdirSync(dir.abs, { withFileTypes: true });
     } catch {
       continue;
     }
-    for (const f of walk(root, absRoot)) {
+    dirents.sort((a, b) => a.name.localeCompare(b.name));
+    for (const d of dirents) {
+      if (Date.now() - started > budget.ms || files >= budget.files || bytes >= budget.bytes) {
+        truncated = true;
+        break walk;
+      }
+      const rel = `${dir.rel}/${d.name}`;
+      if (d.name.startsWith(".") || !allowedZone(rel.split("/"))) continue;
+      if (d.isSymbolicLink()) continue; // search never follows links (no loops, no escapes)
+      const abs = join(dir.abs, d.name);
+      if (d.isDirectory()) {
+        if (dir.depth + 1 > budget.depth) truncated = true;
+        else stack.push({ rel, abs, depth: dir.depth + 1 });
+        continue;
+      }
+      if (!d.isFile() || !/\.md$/i.test(d.name)) continue;
+      files++;
       let text: string;
       try {
-        text = readText(f.abs);
+        bytes += statSync(abs).size;
+        text = readText(abs);
       } catch {
-        continue; // oversize, binary or invalid UTF-8: not searchable
+        continue; // oversize, binary, invalid UTF-8 or unreadable: not searchable
       }
-      const lines = text.split("\n");
-      const headingLines = new Set(parseHeadings(text).map((h) => h.line));
-      let matches = 0;
-      let score = 0;
-      let first = 0;
-      let snippet = "";
-      lines.forEach((line, i) => {
-        const n = occurrences(fold(line), needle);
-        if (n === 0) return;
-        matches += n;
-        score += n + (headingLines.has(i + 1) ? 3 : 0);
-        if (!first) {
-          first = i + 1;
-          snippet = line.trim().slice(0, 200);
-        }
-      });
-      if (fold(f.rel).includes(needle)) score += 5;
-      if (score === 0) continue;
-      hits.push({ path: f.rel, score, line: first, snippet, matches });
+      const hit = scoreFile(rel, text, needle);
+      if (!hit) continue;
+      hits.push(hit);
+      if (hits.length > limit * 2) hits = hits.sort(rank).slice(0, limit);
     }
   }
-  hits.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
-  return hits.slice(0, limit);
+  return { hits: hits.sort(rank).slice(0, limit), truncated };
+}
+
+function scoreFile(rel: string, text: string, needle: string): VaultHit | null {
+  const lines = text.split("\n");
+  const headingLines = new Set(parseHeadings(text).map((h) => h.line));
+  let matches = 0;
+  let score = 0;
+  let first = 0;
+  let snippet = "";
+  lines.forEach((line, i) => {
+    const n = occurrences(fold(line), needle);
+    if (n === 0) return;
+    matches += n;
+    score += n + (headingLines.has(i + 1) ? 3 : 0);
+    if (!first) {
+      first = i + 1;
+      snippet = line.trim().slice(0, 200);
+    }
+  });
+  if (fold(rel).includes(needle)) score += 5;
+  return score === 0 ? null : { path: rel, score, line: first, snippet, matches };
 }
 
 function occurrences(hay: string, needle: string): number {
