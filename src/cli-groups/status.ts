@@ -28,7 +28,7 @@ export function registerStatus(program: Command): void {
     if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
     if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
     out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
-  }).option("--summary", "tek satır özet")
+  }, { guard: (o) => (o.summary ? "off" : "full") }).option("--summary", "tek satır özet")
     .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");
 
   const inbox = program.command("inbox").description("Oturum raporları");
