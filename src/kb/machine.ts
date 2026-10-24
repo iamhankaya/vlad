@@ -18,6 +18,6 @@ export function resolveProjectPath(card: Pick<ProjectCard, "slug" | "path" | "pa
   const paths = card.paths;
   if (!paths || Object.keys(paths).length === 0) return card.path;
   const p = paths[machine];
-  if (!p) throw new Error(`bu makinede klon yok: ${card.slug}`);
+  if (!p) throw new Error(`bu makinede klon yok: ${card.slug}; \`vlad project clone ${card.slug}\` çalıştır`);
   return p;
 }

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import {
   addWorktree, attachWorktree, branchExists, isWorktree, removeWorktree, runGit, worktreePath,
 } from "../git/git.js";
-import { readDoc, kbPaths } from "../kb/index.js";
+import { currentMachine, kbPaths, readDoc, resolveProjectPath } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
@@ -21,7 +21,7 @@ const ACTIVE: TaskState[] = ["running", "blocked", "stalled", "awaiting_approval
 function projectPath(slug: string): string {
   const file = join(kbPaths().projects, `${slug}.md`);
   if (!existsSync(file)) throw new Error(`proje kartı bulunamadı: ${slug}`);
-  return readDoc<ProjectCard>(file).data.path;
+  return resolveProjectPath(readDoc<ProjectCard>(file).data);
 }
 
 /** Persists the last error on a task without touching its state. */
@@ -139,7 +139,7 @@ export async function launchTask(
     throw new Error(failure);
   }
   try {
-    return setState(id, "running", { branch, worktree: wt, error: null });
+    return setState(id, "running", { branch, worktree: wt, host: currentMachine(), error: null });
   } catch (e) {
     const msg = `terminal açıldı ama durum güncellenemedi: ${(e as Error).message}; worktree: ${wt}`;
     try { recordError(id, msg); } catch { /* best effort */ }
