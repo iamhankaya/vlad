@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { def, out, type Opts } from "../cli-util.js";
+import { defWrite, out, type Opts } from "../cli-util.js";
 import { currentMachine, resolveProjectPath } from "../kb/index.js";
 import { cloneProject, getProjectCard, setProjectPath } from "../projects/paths.js";
 import { setPr, setProgress } from "../tasks/progress.js";
@@ -13,7 +13,7 @@ export function registerExt(program: Command): void {
   };
 
   const task = sub("task");
-  def(task, "progress <id>", "Görevin son ilerlemesini yazar (yüzde yoksa belirsiz)", (id: string, o: Opts) => {
+  defWrite(task, "progress <id>", "Görevin son ilerlemesini yazar (yüzde yoksa belirsiz)", (id: string, o: Opts) => {
     let pct: number | null = null;
     if (o.pct !== undefined) {
       if (!/^\d+$/.test(String(o.pct))) throw new Error(`--pct 0-100 arası tam sayı olmalı: ${o.pct}`);
@@ -24,7 +24,7 @@ export function registerExt(program: Command): void {
   })
     .option("--pct <n>", "yüzde, 0-100 tam sayı")
     .requiredOption("--label <metin>", "ne yapıyor");
-  def(task, "pr <id>", "Görevin branch'inin pull request'ini kaydeder", (id: string, o: Opts) => {
+  defWrite(task, "pr <id>", "Görevin branch'inin pull request'ini kaydeder", (id: string, o: Opts) => {
     const number = String(o.number);
     if (!/^\d+$/.test(number) || Number(number) < 1) throw new Error(`--number 1 veya büyük tam sayı olmalı: ${number}`);
     if (!/^[\w.-]+\/[\w.-]+$/.test(o.repo as string)) throw new Error(`--repo owner/name biçiminde olmalı: ${o.repo}`);
@@ -37,7 +37,7 @@ export function registerExt(program: Command): void {
     .option("--url <url>", "PR adresi");
 
   const project = sub("project");
-  def(project, "path <slug> [yol]", "Bu makinedeki klon yolunu gösterir; yol verilirse kaydeder", (slug: string, path: string | undefined, o: Opts) => {
+  defWrite(project, "path <slug> [yol]", "Bu makinedeki klon yolunu gösterir; yol verilirse kaydeder", (slug: string, path: string | undefined, o: Opts) => {
     const machine = (o.machine as string | undefined) ?? currentMachine();
     if (path === undefined) {
       const p = resolveProjectPath(getProjectCard(slug), machine);
@@ -49,7 +49,7 @@ export function registerExt(program: Command): void {
   })
     .option("--machine <ad>", "makine adı (varsayılan: bu makine)")
     .option("--keep <makine>", "ilk kayıtta mevcut `path`'in ait olduğu makine adı");
-  def(project, "clone <slug>", "Projeyi bu makineye klonlar ve yolunu kartın paths alanına yazar", (slug: string, o: Opts) => {
+  defWrite(project, "clone <slug>", "Projeyi bu makineye klonlar ve yolunu kartın paths alanına yazar", (slug: string, o: Opts) => {
     const r = cloneProject(slug, { from: o.from as string | undefined, to: o.to as string | undefined, keep: o.keep as string | undefined });
     out(o, r, `klonlandı: ${slug} -> ${r.path}`);
   })
