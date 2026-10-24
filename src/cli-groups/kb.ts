@@ -2,14 +2,14 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Command } from "commander";
-import { def, out, readInput, type Opts } from "../cli-util.js";
+import { def, defWrite, out, readInput, type Opts } from "../cli-util.js";
 import { installGlobal } from "../install.js";
 import { commitKb } from "../kb/commit.js";
 import { addDecision, appendJournal, getVladHome, kbPaths } from "../kb/index.js";
 
 export function registerKb(program: Command): void {
   const decision = program.command("decision").description("Karar günlüğü");
-  def(decision, "add", "kb/decisions.md'ye karar ekler", (o: Opts) => {
+  defWrite(decision, "add", "kb/decisions.md'ye karar ekler", (o: Opts) => {
     addDecision({
       project: o.project as string,
       title: o.title as string,
@@ -24,13 +24,13 @@ export function registerKb(program: Command): void {
     .option("--source <kaynak>", "session/görev kaynağı");
 
   const journal = program.command("journal").description("Günlük");
-  def(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, o: Opts) => {
+  defWrite(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, o: Opts) => {
     appendJournal(date, readInput(o.file as string));
     out(o, { date }, `günlüğe eklendi: ${date}`);
   }).requiredOption("--file <md>", "içerik (- = stdin)");
 
   const kb = program.command("kb").description("Hafıza deposu");
-  def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)", (msg: string, o: Opts) => {
+  defWrite(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)", (msg: string, o: Opts) => {
     const r = commitKb(msg, { push: !!o.push });
     const lines = [r.committed ? `commit: ${r.sha}` : "kb'de değişiklik yok"];
     if (r.pushed) lines.push("push edildi");
@@ -40,7 +40,7 @@ export function registerKb(program: Command): void {
 
   const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
   const session = program.command("session").description("VLAD oturum adı");
-  def(session, "register <ad>", "Oturum adını kb/vlad-session.txt'ye yazar", (name: string, o: Opts) => {
+  defWrite(session, "register <ad>", "Oturum adını kb/vlad-session.txt'ye yazar", (name: string, o: Opts) => {
     if (!name.trim()) throw new Error("oturum adı boş olamaz");
     const file = sessionFile();
     mkdirSync(dirname(file), { recursive: true });

@@ -6,3 +6,4 @@ kb/logs/
 .remember/
 kb/vlad-session.txt
 .claude/worktrees/
+kb/.vlad.lock

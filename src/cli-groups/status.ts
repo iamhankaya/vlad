@@ -1,11 +1,11 @@
 import type { Command } from "commander";
-import { def, out, taskLine, type Opts } from "../cli-util.js";
+import { def, defWrite, out, taskLine, type Opts } from "../cli-util.js";
 import { listInboxWithWarnings, markDone } from "../inbox/inbox.js";
 import { loadConfig } from "../kb/index.js";
 import { statusSummary } from "../tasks/index.js";
 
 export function registerStatus(program: Command): void {
-  def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
+  defWrite(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
     const s = statusSummary(loadConfig(), new Date());
     if (o.summary) {
       // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
@@ -44,7 +44,7 @@ export function registerStatus(program: Command): void {
     const count = listInboxWithWarnings().items.length;
     out(o, { count }, String(count));
   });
-  def(inbox, "done <dosyalar...>", "Raporları processed/'a taşır", (files: string[], o: Opts) => {
+  defWrite(inbox, "done <dosyalar...>", "Raporları processed/'a taşır", (files: string[], o: Opts) => {
     markDone(files);
     out(o, { moved: files }, `${files.length} rapor taşındı`);
   });
