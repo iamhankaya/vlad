@@ -73,11 +73,11 @@ export function registerTask(program: Command): void {
   defWrite(task, "log <id> <mesaj>", "## İlerleme'ye zaman damgalı satır ekler", (id: string, msg: string, o: Opts) => {
     logTask(id, msg);
     out(o, { id }, "eklendi");
-  });
+  }, { guard: "worker" });
   defWrite(task, "ask <id> <soru>", "Soru ekler, blocked yapar", (id: string, q: string, o: Opts) => {
     const t = askTask(id, q);
     out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
-  });
+  }, { guard: "worker" });
   defWrite(task, "answer <id> <cevap>", "Cevabı ekler, running yapar", (id: string, a: string, o: Opts) => {
     const t = answerTask(id, a);
     out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
@@ -85,7 +85,7 @@ export function registerTask(program: Command): void {
   defWrite(task, "report <id>", "Kapanış raporunu yazar, awaiting_approval yapar", (id: string, o: Opts) => {
     const t = reportTask(id, readInput(o.file as string));
     out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
-  }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
+  }, { guard: "worker" }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
   defWrite(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, state: string, o: Opts) => {
     if (!(state in TRANSITIONS)) throw new Error(`bilinmeyen durum: ${state}; geçerliler: ${Object.keys(TRANSITIONS).join(", ")}`);
     const t = setState(id, state as TaskState);

@@ -46,7 +46,7 @@ export function registerKb(program: Command): void {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, name.trim() + "\n", "utf8");
     out(o, { name: name.trim() }, `kaydedildi: ${name.trim()}`);
-  });
+  }, { guard: "off" });
   def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {
     const file = sessionFile();
     if (!existsSync(file)) throw new Error("oturum kaydı yok; önce `vlad session register <ad>`");
