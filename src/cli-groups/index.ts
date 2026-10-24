@@ -1,4 +1,5 @@
 import type { Command } from "commander";
+import { registerExt } from "./ext.js";
 import { registerFinding } from "./finding.js";
 import { registerKb } from "./kb.js";
 import { registerProject } from "./project.js";
@@ -17,6 +18,7 @@ const groups: ((program: Command) => void)[] = [
   registerTask,
   registerStatus,
   registerKb,
+  registerExt,
 ];
 
 export function registerAll(program: Command): void {
