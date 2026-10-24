@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { MAX_FILE_BYTES, listVault, readVault, searchVault } from "../../src/vault/search.js";
+import { MAX_FILE_BYTES, MAX_LS_ENTRIES, listVault, readVault, searchVault } from "../../src/vault/search.js";
 import { makeHome } from "../helpers.js";
 
 const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
@@ -27,6 +27,9 @@ beforeEach(() => {
   put("vault/docs/plan.md", "# Plan\nsunucu sunucu sunucu\n");
   put("outside.md", "dışarıda\n");
 });
+
+const search = (q: string, o: Parameters<typeof searchVault>[1] = {}) => searchVault(q, o).hits;
+const ls = (d?: string) => listVault(d).entries;
 
 describe("records: vault paths", () => {
   it("records: vault read ../../etc/passwd rejected", () => {
@@ -56,13 +59,13 @@ describe("records: vault paths", () => {
     expect(() => readVault("kb/up/outside.md")).toThrow();
     expect(() => readVault("kb/innocent/secret.md")).toThrow(/izin listesinde değil/);
     expect(() => readVault("kb/projects/s.md")).toThrow(/izin listesinde değil/);
-    const names = listVault("kb").map((e) => e.path);
+    const names = ls("kb").map((e) => e.path);
     expect(names).not.toContain("kb/up");
     expect(names).not.toContain("kb/innocent");
-    expect(listVault("kb/projects").map((e) => e.path)).toEqual(["kb/projects/vlad.md"]);
-    expect(searchVault("gizli").length).toBe(0);
-    expect(searchVault("dışarıda").length).toBe(0);
-    expect(searchVault("uzak").length).toBe(0);
+    expect(ls("kb/projects").map((e) => e.path)).toEqual(["kb/projects/vlad.md"]);
+    expect(search("gizli").length).toBe(0);
+    expect(search("dışarıda").length).toBe(0);
+    expect(search("uzak").length).toBe(0);
   });
 
   it("records: vault kb/inbox and KB/LOGS case variants forbidden", () => {
@@ -70,8 +73,8 @@ describe("records: vault paths", () => {
       "kb/grants/G-001.md", "KB/Audit/2026-10.md", "kb/./inbox/secret.md", "kb//inbox/secret.md", "kb/projects/.hidden.md", "outside.md", "vault/other.md"]) {
       expect(() => readVault(p), p).toThrow();
     }
-    expect(() => listVault("KB/INBOX")).toThrow();
-    expect(() => listVault("kb/logs")).toThrow();
+    expect(() => ls("KB/INBOX")).toThrow();
+    expect(() => ls("kb/logs")).toThrow();
   });
 
   it("records: vault binary and invalid utf8 and size cap", () => {
@@ -87,7 +90,7 @@ describe("records: vault paths", () => {
     expect(() => readVault("kb/projects/pic.png")).toThrow(/\.md/);
     expect(() => readVault("kb/projects")).toThrow(/dosya değil/);
     // unreadable files are skipped by search instead of failing it
-    expect(searchVault("vlad").map((h) => h.path)).toContain("kb/projects/vlad.md");
+    expect(search("vlad").map((h) => h.path)).toContain("kb/projects/vlad.md");
   });
 });
 
@@ -109,61 +112,61 @@ describe("records: vault read", () => {
 
 describe("records: vault search", () => {
   it("records: vault turkish İ/ı search", () => {
-    expect(searchVault("istanbul").map((h) => h.path)).toEqual(["kb/projects/vlad.md"]);
-    expect(searchVault("İSTANBUL")[0].path).toBe("kb/projects/vlad.md");
-    expect(searchVault("ISTANBUL")[0].path).toBe("kb/projects/vlad.md");
-    expect(searchVault("açık konular")[0].path).toBe("kb/projects/vlad.md");
+    expect(search("istanbul").map((h) => h.path)).toEqual(["kb/projects/vlad.md"]);
+    expect(search("İSTANBUL")[0].path).toBe("kb/projects/vlad.md");
+    expect(search("ISTANBUL")[0].path).toBe("kb/projects/vlad.md");
+    expect(search("açık konular")[0].path).toBe("kb/projects/vlad.md");
     put("kb/projects/ik.md", "ılık süt\n");
-    expect(searchVault("ILIK")[0].path).toBe("kb/projects/ik.md");
-    expect(searchVault("ilik")[0].path).toBe("kb/projects/ik.md");
+    expect(search("ILIK")[0].path).toBe("kb/projects/ik.md");
+    expect(search("ilik")[0].path).toBe("kb/projects/ik.md");
   });
 
   it("records: vault empty and 10k-char query bounded", () => {
-    expect(() => searchVault("")).toThrow(/boş/);
-    expect(() => searchVault("   ")).toThrow(/boş/);
-    expect(() => searchVault("a".repeat(10_000))).toThrow(/çok uzun/);
-    expect(() => searchVault("a\0b")).toThrow(/null/);
-    expect(searchVault("a".repeat(256))).toEqual([]);
+    expect(() => search("")).toThrow(/boş/);
+    expect(() => search("   ")).toThrow(/boş/);
+    expect(() => search("a".repeat(10_000))).toThrow(/çok uzun/);
+    expect(() => search("a\0b")).toThrow(/null/);
+    expect(search("a".repeat(256))).toEqual([]);
   });
 
   it("records: vault search treats regex characters literally", () => {
     put("kb/projects/re.md", "a.b (x) [y] c++ $1 \\d\n");
-    expect(searchVault(".*")).toEqual([]);
-    expect(searchVault("(x)")[0].path).toBe("kb/projects/re.md");
-    expect(searchVault("c++")[0].path).toBe("kb/projects/re.md");
-    expect(searchVault("[y]")[0].path).toBe("kb/projects/re.md");
-    expect(searchVault("\\d")[0].path).toBe("kb/projects/re.md");
-    expect(searchVault("a.b")[0].path).toBe("kb/projects/re.md");
-    expect(searchVault("axb").length).toBe(0);
+    expect(search(".*")).toEqual([]);
+    expect(search("(x)")[0].path).toBe("kb/projects/re.md");
+    expect(search("c++")[0].path).toBe("kb/projects/re.md");
+    expect(search("[y]")[0].path).toBe("kb/projects/re.md");
+    expect(search("\\d")[0].path).toBe("kb/projects/re.md");
+    expect(search("a.b")[0].path).toBe("kb/projects/re.md");
+    expect(search("axb").length).toBe(0);
   });
 
   it("records: vault search lists only allowlisted paths (no grants/audit)", () => {
-    const hits = searchVault("gizli");
+    const hits = search("gizli");
     expect(hits).toEqual([]);
-    const all = searchVault("sunucu").map((h) => h.path);
+    const all = search("sunucu").map((h) => h.path);
     expect(all.sort()).toEqual(["kb/projects/vlad.md", "vault/docs/plan.md"]);
-    expect(listVault().map((e) => e.path)).toEqual(["kb", "vault/docs"]);
-    expect(listVault("kb").map((e) => e.path)).toEqual(["kb/journal", "kb/projects", "kb/tasks"]);
+    expect(ls().map((e) => e.path)).toEqual(["kb", "vault/docs"]);
+    expect(ls("kb").map((e) => e.path)).toEqual(["kb/journal", "kb/projects", "kb/tasks"]);
   });
 
   it("records: vault search score order and --zone", () => {
     put("kb/projects/b.md", "sunucu\n");
-    const hits = searchVault("sunucu");
+    const hits = search("sunucu");
     expect(hits[0].path).toBe("vault/docs/plan.md"); // 3 occurrences beat 1
     expect(hits.map((h) => h.score)).toEqual([...hits.map((h) => h.score)].sort((a, b) => b - a));
-    expect(searchVault("sunucu", { zone: "kb" }).every((h) => h.path.startsWith("kb/"))).toBe(true);
-    expect(searchVault("sunucu", { zone: "docs" }).map((h) => h.path)).toEqual(["vault/docs/plan.md"]);
-    expect(() => searchVault("x", { zone: "all" })).toThrow(/bölge/);
-    expect(searchVault("sunucu", { limit: 1 }).length).toBe(1);
-    expect(() => searchVault("x", { limit: 0 })).toThrow(/limit/);
+    expect(search("sunucu", { zone: "kb" }).every((h) => h.path.startsWith("kb/"))).toBe(true);
+    expect(search("sunucu", { zone: "docs" }).map((h) => h.path)).toEqual(["vault/docs/plan.md"]);
+    expect(() => search("x", { zone: "all" })).toThrow(/bölge/);
+    expect(search("sunucu", { limit: 1 }).length).toBe(1);
+    expect(() => search("x", { limit: 0 })).toThrow(/limit/);
     // a heading match outranks a plain body match with the same count
     put("kb/projects/h.md", "# zebra\n");
     put("kb/projects/p.md", "zebra\n");
-    expect(searchVault("zebra").map((h) => h.path)).toEqual(["kb/projects/h.md", "kb/projects/p.md"]);
+    expect(search("zebra").map((h) => h.path)).toEqual(["kb/projects/h.md", "kb/projects/p.md"]);
   });
 
   it("records: every search hit path is readable", () => {
-    for (const h of searchVault("sunucu")) expect(readVault(h.path).path).toBe(h.path);
+    for (const h of search("sunucu")) expect(readVault(h.path).path).toBe(h.path);
   });
 });
 
@@ -183,5 +186,76 @@ describe("records: vault cli", () => {
     expect(r.code).toBe(1);
     expect(JSON.parse(r.err).error).toMatch(/izin listesinde değil/);
     expect(vlad(["vault", "search", "", "--json"]).code).toBe(1);
+  });
+});
+
+describe("records: vault hardening (security review)", () => {
+  it("records: vault unicode and fullwidth case variants of forbidden folders rejected", () => {
+    for (const d of ["logſ", "ＬＯＧＳ", "grantſ", "ＧＲＡＮＴＳ", "ınbox", "ＩＮＢＯＸ", "audıt"]) put(`kb/${d}/x.md`, "gizli-varyant\n");
+    for (const p of ["kb/logſ/x.md", "kb/ＬＯＧＳ/x.md", "kb/grantſ/x.md", "kb/ＧＲＡＮＴＳ/x.md", "kb/ınbox/x.md", "kb/ＩＮＢＯＸ/x.md",
+      "kb/audıt/x.md", "ＫＢ/logſ/x.md", "kb/．hidden.md"]) {
+      expect(() => readVault(p), p).toThrow();
+    }
+    expect(() => ls("kb/logſ")).toThrow(/izin listesinde değil/);
+    expect(ls("kb").map((e) => e.path)).not.toContain("kb/logſ");
+    expect(ls("kb").map((e) => e.path)).not.toContain("kb/ＬＯＧＳ");
+    expect(search("gizli-varyant")).toEqual([]);
+  });
+
+  it("records: vault non-VaultError hides absolute path", () => {
+    const missing = join(home, "yok", "burada");
+    process.env.VLAD_HOME = missing;
+    for (const f of [() => readVault("kb/a.md"), () => search("x"), () => ls("kb")]) {
+      let msg = "";
+      try { f(); } catch (e) { msg = (e as Error).message; }
+      expect(msg).toBe("okunamadı");
+      expect(msg).not.toContain(missing);
+    }
+    const r = spawnSync("node", [cli, "vault", "ls", "kb", "--json"], { encoding: "utf8", env: { ...process.env, VLAD_HOME: missing } });
+    expect(r.stderr).not.toContain(missing);
+  });
+
+  it("records: vault leading-dash query and path after -- are values, not options", () => {
+    put("kb/projects/dash.md", "kullan --help burada\n");
+    const s = vlad(["vault", "search", "--json", "--", "--help"]);
+    expect(s.code).toBe(0);
+    expect(JSON.parse(s.out).hits.map((h: { path: string }) => h.path)).toEqual(["kb/projects/dash.md"]);
+    const r = vlad(["vault", "read", "--json", "--", "-x.md"]);
+    expect(r.code).toBe(1);
+    expect(JSON.parse(r.err).error).toMatch(/izin listesinde değil/);
+    expect(vlad(["vault", "ls", "--json", "--", "-kb"]).code).toBe(1);
+  });
+
+  it("records: vault search budget: files, bytes, depth, time -> truncated", () => {
+    for (let i = 0; i < 30; i++) put(`kb/projects/n${String(i).padStart(2, "0")}.md`, "needle\n");
+    expect(searchVault("needle").truncated).toBe(false);
+    const f = searchVault("needle", { budget: { files: 5 } });
+    expect(f.truncated).toBe(true);
+    expect(f.hits.length).toBeLessThanOrEqual(5);
+    expect(searchVault("needle", { budget: { bytes: 20 } }).truncated).toBe(true);
+    // time budget is forced with a negative value so the test does not depend on the wall clock
+    const t = searchVault("needle", { budget: { ms: -1 } });
+    expect(t.truncated).toBe(true);
+    expect(t.hits).toEqual([]);
+    put("kb/a/b/c/d/deep.md", "needle-derin\n");
+    const d = searchVault("needle-derin", { budget: { depth: 2 } });
+    expect(d.truncated).toBe(true);
+    expect(d.hits).toEqual([]);
+    expect(searchVault("needle-derin").hits.map((h) => h.path)).toEqual(["kb/a/b/c/d/deep.md"]);
+  });
+
+  it("records: vault search keeps only limit hits in best-first order", () => {
+    for (let i = 0; i < 30; i++) put(`kb/projects/m${String(i).padStart(2, "0")}.md`, "zzz ".repeat(i + 1));
+    const r = searchVault("zzz", { limit: 3 });
+    expect(r.truncated).toBe(false);
+    expect(r.hits.map((h) => h.path)).toEqual(["kb/projects/m29.md", "kb/projects/m28.md", "kb/projects/m27.md"]);
+  });
+
+  it("records: vault ls output is bounded", () => {
+    for (let i = 0; i < MAX_LS_ENTRIES + 5; i++) put(`kb/many/f${i}.md`, "x");
+    const r = listVault("kb/many");
+    expect(r.entries.length).toBe(MAX_LS_ENTRIES);
+    expect(r.truncated).toBe(true);
+    expect(listVault("kb/projects").truncated).toBe(false);
   });
 });
