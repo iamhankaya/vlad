@@ -21,6 +21,28 @@
     "parent": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
     "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" } },
     "phase": { "type": ["string", "null"] },
-    "report_file": { "type": ["string", "null"] }
+    "report_file": { "type": ["string", "null"] },
+    "host": { "type": ["string", "null"] },
+    "progress": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["pct", "label", "at"],
+      "properties": {
+        "pct": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "label": { "type": "string" },
+        "at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "pr": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["number", "repo", "base"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "repo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "base": { "type": "string", "minLength": 1 },
+        "url": { "type": "string", "minLength": 1 }
+      }
+    }
   }
 }
