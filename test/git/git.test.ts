@@ -84,8 +84,8 @@ describe("git helpers", () => {
     expect(existsSync(dir)).toBe(false);
   });
 
-  it("worktreePath substitutes {repo}", () => {
+  it("karakterizasyon: worktreePath substitutes {repo} (win32)", () => {
     const cfg = { worktreeDir: "{repo}-wt" } as VladConfig;
-    expect(worktreePath(cfg, "C:\\dev\\watchparty", "T20261015-01")).toBe("C:\\dev\\watchparty-wt\\T20261015-01");
+    expect(worktreePath(cfg, "C:\\dev\\watchparty", "T20261015-01", "win32")).toBe("C:\\dev\\watchparty-wt\\T20261015-01");
   });
 });
