@@ -6,7 +6,7 @@ import { kbPaths } from "./home.js";
 
 const addFormats = ((addFormatsModule as any).default ?? addFormatsModule) as (a: Ajv) => Ajv;
 
-export type SchemaKind = "project" | "task" | "inbox" | "config" | "role" | "finding" | "card";
+export type SchemaKind = "project" | "task" | "inbox" | "config" | "role" | "finding" | "audit" | "card";
 
 export class ValidationError extends Error {
   constructor(public details: string[]) {
