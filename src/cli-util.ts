@@ -3,6 +3,7 @@ import type { Command } from "commander";
 import { TRANSITIONS, TransitionError } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 import { ValidationError, withKbLock } from "./kb/index.js";
+import { activeGuard, type GuardMode } from "./active/index.js";
 
 export interface Opts { json?: boolean; [k: string]: unknown }
 
@@ -45,7 +46,24 @@ export function def(parent: Command, spec: string, desc: string, fn: (...a: any[
   return c;
 }
 
-/** Like def, for commands that write under kb/: the action runs inside withKbLock. */
-export function defWrite(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
-  return def(parent, spec, desc, (...args: any[]) => withKbLock(() => fn(...args)));
+/**
+ * Like def, for commands that write under kb/: the action runs inside withKbLock, after the active-VLAD
+ * write guard (design §13). `guard`: "full" (default), "worker" (a running worker's own log|ask|report may
+ * pass), "off" (local-only files and the `active` commands themselves).
+ */
+export function defWrite(
+  parent: Command,
+  spec: string,
+  desc: string,
+  fn: (...a: any[]) => void | Promise<void>,
+  opts: { guard?: GuardMode | ((o: Opts) => GuardMode) } = {},
+): Command {
+  return def(parent, spec, desc, (...args: any[]) =>
+    withKbLock(() => {
+      const mode = typeof opts.guard === "function" ? opts.guard(args[args.length - 2] ?? {}) : (opts.guard ?? "full");
+      // a worker command's first argument is the task id it writes to
+      for (const w of activeGuard(mode, { taskId: typeof args[0] === "string" ? args[0] : undefined })) process.stderr.write(`uyarı: ${w}\n`);
+      return fn(...args);
+    }),
+  );
 }

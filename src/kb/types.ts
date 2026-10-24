@@ -200,3 +200,11 @@ export interface AuditData {
   merge_sha?: string;
   detail?: string;
 }
+
+/** kb/active.md frontmatter: which machine is the active VLAD (design §13). */
+export interface ActiveData {
+  machine: string;
+  since: string;
+  heartbeat: string;
+  takeover_from?: string | null;
+}
