@@ -1,0 +1,12 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["machine", "since", "heartbeat"],
+  "properties": {
+    "machine": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "since": { "type": "string", "format": "date-time" },
+    "heartbeat": { "type": "string", "format": "date-time" },
+    "takeover_from": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9._-]+$" }
+  }
+}
