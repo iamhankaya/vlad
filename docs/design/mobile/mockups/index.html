@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VLAD mobil mockup'ları</title>
+<style>
+/* Token'lar: ../tokens.md ile birebir. Açık/koyu: sistem tercihi + elle anahtar. */
+:root{
+  --md-primary:#0B6E6E;--md-on-primary:#fff;--md-primary-container:#C6EFEC;--md-on-primary-container:#00201F;
+  --md-secondary:#4A6361;--md-tertiary:#7A5200;--md-tertiary-container:#FFDEA8;--md-on-tertiary-container:#271700;
+  --md-error:#B3261E;--md-on-error:#fff;--md-error-container:#F9DEDC;--md-on-error-container:#410E0B;
+  --md-success:#1B6B3A;--md-success-container:#CDEFD6;--md-on-success-container:#00210F;
+  --md-bg:#F6FAF9;--md-on-surface:#161D1C;--md-surface-variant:#DAE5E3;--md-on-surface-variant:#3F4947;
+  --md-container-low:#F0F5F4;--md-container:#EAF0EE;--md-container-high:#E4EAE9;
+  --md-outline:#6F7977;--md-outline-variant:#BEC9C7;--md-scrim:rgba(0,0,0,.32);
+  --md-inverse:#2B3231;--md-on-inverse:#ECF2F0;--md-code:#E4EAE9;
+  --page:#dfe6e4;
+}
+/* koyu değerler iki yerde tanımlı (medya + elle) */
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --md-primary:#5FD3D0;--md-on-primary:#00201F;--md-primary-container:#00504F;--md-on-primary-container:#C6EFEC;
+  --md-secondary:#B1CCC9;--md-tertiary:#F5BC5C;--md-tertiary-container:#5E3F00;--md-on-tertiary-container:#FFDEA8;
+  --md-error:#F2B8B5;--md-on-error:#601410;--md-error-container:#8C1D18;--md-on-error-container:#F9DEDC;
+  --md-success:#7FD99B;--md-success-container:#0F4F29;--md-on-success-container:#CDEFD6;
+  --md-bg:#0E1514;--md-on-surface:#DDE4E2;--md-surface-variant:#3F4947;--md-on-surface-variant:#BEC9C7;
+  --md-container-low:#161D1C;--md-container:#1A2120;--md-container-high:#242B2A;
+  --md-outline:#899391;--md-outline-variant:#3F4947;--md-scrim:rgba(0,0,0,.6);
+  --md-inverse:#DDE4E2;--md-on-inverse:#2B3231;--md-code:#1F2625;--page:#050808}}
+:root[data-theme=dark]{
+  --md-primary:#5FD3D0;--md-on-primary:#00201F;--md-primary-container:#00504F;--md-on-primary-container:#C6EFEC;
+  --md-secondary:#B1CCC9;--md-tertiary:#F5BC5C;--md-tertiary-container:#5E3F00;--md-on-tertiary-container:#FFDEA8;
+  --md-error:#F2B8B5;--md-on-error:#601410;--md-error-container:#8C1D18;--md-on-error-container:#F9DEDC;
+  --md-success:#7FD99B;--md-success-container:#0F4F29;--md-on-success-container:#CDEFD6;
+  --md-bg:#0E1514;--md-on-surface:#DDE4E2;--md-surface-variant:#3F4947;--md-on-surface-variant:#BEC9C7;
+  --md-container-low:#161D1C;--md-container:#1A2120;--md-container-high:#242B2A;
+  --md-outline:#899391;--md-outline-variant:#3F4947;--md-scrim:rgba(0,0,0,.6);
+  --md-inverse:#DDE4E2;--md-on-inverse:#2B3231;--md-code:#1F2625;--page:#050808}
+
+*{box-sizing:border-box}
+.ph button{font-family:inherit;font-size:1em}
+body{margin:0;background:var(--page);color:var(--md-on-surface);font:14px/1.4 Roboto,system-ui,sans-serif}
+header.top{padding:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;position:sticky;top:0;background:var(--page);z-index:5;border-bottom:1px solid var(--md-outline-variant)}
+header.top h1{font-size:18px;margin:0;flex:1 1 220px}
+header.top button{min-height:48px;padding:0 16px;border-radius:24px;border:1px solid var(--md-outline);background:transparent;color:var(--md-on-surface);font:inherit;cursor:pointer}
+header.top button[aria-pressed=true]{background:var(--md-primary-container);color:var(--md-on-primary-container);border-color:transparent}
+.grid{display:flex;flex-wrap:wrap;gap:32px;padding:24px 16px;justify-content:center}
+figure{margin:0;width:360px}
+figcaption{font-size:13px;margin:0 0 8px;color:var(--md-on-surface-variant)}
+figcaption b{color:var(--md-on-surface)}
+
+/* Telefon çerçevesi. Tüm boyutlar em: 200% yazı = çerçeve font-size 28px */
+.ph{--fs:14px;font-size:var(--fs);width:360px;height:740px;background:var(--md-bg);color:var(--md-on-surface);border:1px solid var(--md-outline);border-radius:28px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+body.big .ph{--fs:28px}
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 16px 16px}
+.bar{min-height:64px;display:flex;align-items:center;gap:8px;padding:8px 16px}
+.bar h2{font-size:1.714em;line-height:1.33;font-weight:400;margin:0;flex:1;overflow-wrap:anywhere}
+.bar h2.t{font-size:1.571em}
+.ib{width:48px;height:48px;border-radius:24px;border:0;background:transparent;color:var(--md-on-surface);display:grid;place-items:center;flex:none}
+svg.i{width:24px;height:24px;fill:currentColor;flex:none}
+svg.s{width:20px;height:20px}
+.sec{font-size:1.143em;font-weight:500;margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.cnt{background:var(--md-tertiary);color:var(--md-bg);border-radius:12px;padding:0 8px;font-size:.857em;font-weight:500;min-width:24px;text-align:center}
+.card{background:var(--md-container);border:1px solid var(--md-outline-variant);border-radius:12px;padding:12px 16px;margin-bottom:8px;position:relative}
+.card.dec{border-left:4px solid var(--md-tertiary)}
+.card.err{border-left:4px solid var(--md-error)}
+.card.ok{border-left:4px solid var(--md-success)}
+.meta{font-size:.857em;color:var(--md-on-surface-variant);display:flex;gap:8px;align-items:center;flex-wrap:wrap;overflow-wrap:anywhere}
+.ttl{font-weight:500;font-size:1.143em;line-height:1.4;margin:4px 0;overflow-wrap:anywhere}
+.sum{color:var(--md-on-surface-variant);margin:0 0 8px;overflow-wrap:anywhere}
+.tag{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:12px;font-size:.857em;font-weight:500;white-space:nowrap}
+body.big .tag{height:auto;min-height:24px;white-space:normal}
+.tag.w{background:var(--md-tertiary-container);color:var(--md-on-tertiary-container)}
+.tag.e{background:var(--md-error-container);color:var(--md-on-error-container)}
+.tag.o{background:var(--md-success-container);color:var(--md-on-success-container)}
+.tag.p{background:var(--md-primary-container);color:var(--md-on-primary-container)}
+.tag.n{background:var(--md-surface-variant);color:var(--md-on-surface-variant)}
+.code{font:.929em/1.4 "Roboto Mono",ui-monospace,monospace;background:var(--md-code);border-radius:4px;padding:2px 6px;overflow-wrap:anywhere}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.btn{min-height:48px;min-width:64px;padding:0 20px;border-radius:24px;border:1px solid var(--md-outline);background:transparent;color:var(--md-primary);font-family:inherit;font-size:1em;font-weight:500;line-height:1.2;display:inline-flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;text-align:center}
+.btn.f{background:var(--md-primary);color:var(--md-on-primary);border-color:transparent}
+.btn.t{background:var(--md-primary-container);color:var(--md-on-primary-container);border-color:transparent}
+.btn.d{background:var(--md-error);color:var(--md-on-error);border-color:transparent}
+.btn.x{border-color:transparent}
+.btn.block{width:100%}
+.btn[disabled]{opacity:.38}
+.wr{display:flex;gap:12px;align-items:flex-start;min-height:48px;padding:8px 0;border-bottom:1px solid var(--md-outline-variant)}
+.wr .b{flex:1;min-width:0}
+.wr .n{font-weight:500;overflow-wrap:anywhere}
+.bar2{height:6px;border-radius:3px;background:var(--md-surface-variant);margin-top:6px;overflow:hidden}
+.bar2>i{display:block;height:100%;background:var(--md-primary)}
+.chat{border-top:1px solid var(--md-outline-variant);background:var(--md-bg);padding:8px 16px;box-shadow:0 -1px 3px rgba(0,0,0,.12)}
+.reply{background:var(--md-container-high);border-radius:16px 16px 16px 4px;padding:8px 12px;margin-bottom:8px;max-height:9em;overflow:auto;overflow-wrap:anywhere}
+.reply .who{font-size:.857em;color:var(--md-on-surface-variant)}
+.caret{display:inline-block;width:2px;height:1em;background:var(--md-primary);vertical-align:text-bottom;animation:bl 1s steps(2) infinite}
+@media (prefers-reduced-motion:reduce){.caret{animation:none}}
+@keyframes bl{50%{opacity:0}}
+.in{display:flex;gap:8px;align-items:center}
+.in .field{flex:1;min-height:56px;border:1px solid var(--md-outline);border-radius:28px;padding:0 16px;display:flex;align-items:center;color:var(--md-on-surface-variant);min-width:0}
+.nav{display:flex;border-top:1px solid var(--md-outline-variant);background:var(--md-container)}
+.nav div{flex:1;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.857em;color:var(--md-on-surface-variant);padding:4px 0;text-align:center}
+.nav div svg{padding:4px 16px;box-sizing:content-box;width:24px;height:24px;border-radius:16px}
+.nav .on{color:var(--md-on-surface);font-weight:500}
+.nav .on svg{background:var(--md-primary-container);color:var(--md-on-primary-container)}
+.nav .dot{position:relative}
+.sheetwrap{position:absolute;inset:0;background:var(--md-scrim);display:flex;align-items:flex-end}
+.sheet{background:var(--md-container-high);border-radius:28px 28px 0 0;padding:8px 16px 16px;width:100%;max-height:92%;overflow:auto;box-shadow:0 -3px 8px rgba(0,0,0,.25)}
+.grab{width:32px;height:4px;border-radius:2px;background:var(--md-outline);margin:4px auto 12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:8px 0}
+.kv dt{color:var(--md-on-surface-variant)}.kv dd{margin:0;overflow-wrap:anywhere}
+.banner{display:flex;gap:8px;align-items:center;padding:8px 16px;font-size:.929em;min-height:48px}
+.banner.off{background:var(--md-inverse);color:var(--md-on-inverse)}
+.banner.lim{background:var(--md-tertiary-container);color:var(--md-on-tertiary-container)}
+.empty{text-align:center;padding:32px 16px}
+.empty svg{width:48px;height:48px;color:var(--md-outline)}
+.empty h3{font-size:1.143em;margin:12px 0 4px}
+.empty p{color:var(--md-on-surface-variant);margin:0 0 16px}
+.diff{background:var(--md-code);border-radius:16px;padding:8px 12px;font:.857em/1.5 "Roboto Mono",ui-monospace,monospace}
+.diff .a{color:var(--md-success)}.diff .r{color:var(--md-error)}
+.find{border-top:1px solid var(--md-outline-variant);padding:8px 0}
+.tree{list-style:none;margin:0;padding:0}
+.tree ul{list-style:none;margin:0 0 0 12px;padding:0 0 0 12px;border-left:2px solid var(--md-outline-variant)}
+.tree li{padding:4px 0}
+.row{display:flex;gap:8px;align-items:center;min-height:48px;flex-wrap:wrap}
+.pill{min-height:48px;display:inline-flex;align-items:center}
+.chip{display:inline-flex;align-items:center;min-height:48px}
+.chip span{height:32px;display:inline-flex;align-items:center;padding:0 12px;border-radius:8px;border:1px solid var(--md-outline);font-size:.929em}
+.chip.on span{background:var(--md-secondary);color:var(--md-bg);border-color:transparent}
+.search{min-height:56px;border-radius:28px;background:var(--md-container-high);display:flex;align-items:center;gap:12px;padding:0 16px;margin:8px 0;color:var(--md-on-surface-variant)}
+.hit{padding:8px 0;border-bottom:1px solid var(--md-outline-variant);min-height:48px}
+.hit mark{background:var(--md-tertiary-container);color:var(--md-on-tertiary-container)}
+.qr{width:160px;height:160px;margin:12px auto;border:2px solid var(--md-on-surface);border-radius:12px;display:grid;place-items:center;background:repeating-conic-gradient(var(--md-on-surface) 0 25%,var(--md-bg) 0 50%) 0 0/20px 20px}
+.code6{display:flex;gap:6px;justify-content:center;margin:12px 0}
+.code6 span{width:40px;height:56px;border:1px solid var(--md-outline);border-radius:8px;display:grid;place-items:center;font:1.5em "Roboto Mono",monospace}
+.code6 span.f{border:2px solid var(--md-primary)}
+.notif{background:var(--md-container-high);border-radius:16px;padding:12px 16px;margin-bottom:8px;display:flex;gap:12px;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.notif .nb{flex:1;min-width:0;overflow-wrap:anywhere}
+.notif .nt{font-weight:500}
+.sb{background:var(--md-inverse);color:var(--md-on-inverse);border-radius:8px;padding:12px 16px;margin:8px 16px;display:flex;align-items:center;gap:12px;min-height:48px}
+.sb .btn{color:var(--md-primary-container);min-height:48px}
+.sys{background:var(--md-container-high);border-radius:28px;padding:24px;margin:0 16px;text-align:center;box-shadow:0 3px 8px rgba(0,0,0,.3)}
+.sys svg{width:48px;height:48px;color:var(--md-primary)}
+.note{background:var(--md-container-low);border:1px dashed var(--md-outline);border-radius:12px;padding:8px 12px;font-size:.929em;color:var(--md-on-surface-variant)}
+.flow{max-width:1100px;margin:0 auto;padding:0 16px 32px}
+.flow ol{display:flex;flex-wrap:wrap;gap:8px;list-style:none;padding:0;margin:0}
+.flow li{background:var(--md-container);border:1px solid var(--md-outline-variant);border-radius:12px;padding:8px 12px;flex:1 1 200px}
+.flow h2{font-size:16px}
+:focus-visible{outline:3px solid var(--md-primary);outline-offset:2px}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+<symbol id="home" viewBox="0 0 24 24"><path d="M12 3 3 11h2v9h5v-6h4v6h5v-9h2z"/></symbol>
+<symbol id="folder" viewBox="0 0 24 24"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z"/></symbol>
+<symbol id="book" viewBox="0 0 24 24"><path d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM6 4h5v8l-2.5-1.5L6 12z"/></symbol>
+<symbol id="gear" viewBox="0 0 24 24"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3.2h-4l-.4 2.7a7.600 7.600 0 0 0-1.700 1l-2.500-1-2 3.500L6.600 11a7.500 7.500 0 0 0 0 2l-2.100 1.600 2 3.500 2.500-1a7.600 7.600 0 0 0 1.700 1l.4 2.700h4l.4-2.700a7.600 7.600 0 0 0 1.700-1l2.500 1 2-3.500zM13 15.500a3.500 3.500 0 1 1 0-7 3.500 3.500 0 0 1 0 7z"/></symbol>
+<symbol id="send" viewBox="0 0 24 24"><path d="M2 21 23 12 2 3v7l15 2-15 2z"/></symbol>
+<symbol id="back" viewBox="0 0 24 24"><path d="M20 11H7.800l5.600-5.600L12 4l-8 8 8 8 1.400-1.400L7.800 13H20z"/></symbol>
+<symbol id="help" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 17h-2v-2h2zm2.100-7.700-.9.9c-.7.700-1.200 1.300-1.200 2.800h-2v-.5c0-1.100.5-2.100 1.200-2.800l1.200-1.300a2 2 0 1 0-3.400-1.400H8a4 4 0 1 1 7.100 2.300z"/></symbol>
+<symbol id="gavel" viewBox="0 0 24 24"><path d="m5 20 6-6-2-2-6 6zm5.500-12.500 5 5 2-2-5-5zM14 3l-3 3 7 7 3-3zm4 17H8v2h10z"/></symbol>
+<symbol id="err" viewBox="0 0 24 24"><path d="M12 2 1 21h22zm1 15h-2v-2h2zm0-4h-2V9h2z"/></symbol>
+<symbol id="sync" viewBox="0 0 24 24"><path d="M12 4V1L8 5l4 4V6a6 6 0 0 1 5.700 7.900l1.500 1.500A8 8 0 0 0 12 4zM6.300 10.100l-1.500-1.500A8 8 0 0 0 12 20v3l4-4-4-4v3a6 6 0 0 1-5.700-7.900z"/></symbol>
+<symbol id="clock" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.200 14.200L11 13V7h1.500v5.200l4.500 2.700z"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-2 15-5-5 1.400-1.400L10 14.200l7.600-7.600L19 8z"/></symbol>
+<symbol id="finger" viewBox="0 0 24 24"><path d="M17.800 4.400a.5.500 0 0 1-.2-.7A10 10 0 0 1 22 12a.5.5 0 0 1-1 0 9 9 0 0 0-3.200-7.600zM12 6a6 6 0 0 0-6 6c0 1.500-.4 3-1.200 4.300a.5.500 0 0 0 .9.500A9.500 9.500 0 0 0 7 12a5 5 0 0 1 10 0c0 1.800-.3 3.500-1 5a.5.500 0 0 0 .9.400c.7-1.600 1.100-3.500 1.100-5.400a6 6 0 0 0-6-6zm0 4a2 2 0 0 0-2 2c0 2-.6 4-1.700 5.600a.5.500 0 0 0 .8.600C10.300 16.400 11 14.300 11 12a1 1 0 0 1 2 0c0 2-.4 3.800-1.200 5.300a.5.500 0 1 0 .9.500C13.600 16 14 14 14 12a2 2 0 0 0-2-2z"/></symbol>
+<symbol id="wifi-off" viewBox="0 0 24 24"><path d="M2.800 2.800 1.400 4.200l4 4A15 15 0 0 0 1 10.500l2 2a12 12 0 0 1 3.900-2.600l2.200 2.200A8 8 0 0 0 5 14.500l2 2a5.700 5.700 0 0 1 3.600-1.600l8.200 8.200 1.400-1.400zM12 6c3 0 5.800 1.100 8 3l-2 2.100a9 9 0 0 0-3.100-1.900l-2-2.100zM21 10.500l2-2A15 15 0 0 0 12 4.200l2 2A13 13 0 0 1 21 10.500z"/></symbol>
+<symbol id="branch" viewBox="0 0 24 24"><path d="M6 3a3 3 0 0 0-1 5.800v6.400A3 3 0 1 0 7 15.200V12c1 .7 2.300 1 3.500 1H13a3 3 0 1 0 0-2h-2.500C8.600 11 7 10.200 7 8.800A3 3 0 0 0 6 3z"/></symbol>
+<symbol id="lock" viewBox="0 0 24 24"><path d="M18 8h-1V6a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2zM9 6a3 3 0 0 1 6 0v2H9z"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><path d="M15.500 14h-.8l-.3-.3A6.500 6.500 0 1 0 14 15.500l.3.3v.8l5 5 1.500-1.500zm-6 0a4.500 4.500 0 1 1 0-9 4.500 4.500 0 0 1 0 9z"/></symbol>
+<symbol id="qrc" viewBox="0 0 24 24"><path d="M3 3h8v8H3zm2 2v4h4V5zm8-2h8v8h-8zm2 2v4h4V5zM3 13h8v8H3zm2 2v4h4v-4zm8-2h3v3h-3zm5 0h3v3h-3zm-5 5h3v3h-3zm5 0h3v3h-3z"/></symbol>
+<symbol id="bell" viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.100-1.600-5.600-4.500-6.300V4a1.500 1.500 0 0 0-3 0v.7C7.600 5.400 6 7.900 6 11v5l-2 2v1h16v-1z"/></symbol>
+<symbol id="swap" viewBox="0 0 24 24"><path d="M6.990 11 3 15l3.990 4v-3H14v-2H6.990zM21 9l-3.990-4v3H10v2h7.010v3z"/></symbol>
+<symbol id="more" viewBox="0 0 24 24"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></symbol>
+</defs>
+</svg>
+
+<header class="top">
+  <h1>VLAD mobil — ekran mockup'ları (statik)</h1>
+  <button id="th" aria-pressed="false">Koyu tema</button>
+  <button id="bg" aria-pressed="false">Yazı %200</button>
+</header>
+
+<section class="flow">
+  <h2>Onay akışı (dış eylem): 5 adım</h2>
+  <ol>
+    <li><b>1 Kart</b> — "Merge et" butonu; kart ne olacağını zaten yazar.</li>
+    <li><b>2 Onay sheet'i</b> — hedef branch, PR, head SHA (12 hane), koşullar; "Parmak iziyle onayla".</li>
+    <li><b>3 Sistem biyometrik</b> — BiometricPrompt, <code>BIOMETRIC_STRONG | DEVICE_CREDENTIAL</code>; imza anahtarı Keystore'da kullanıcı doğrulamalı.</li>
+    <li><b>4 Gönderim</b> — imzalı istek: eylem, PR, <code>expectedHeadSha</code>, nonce, zaman. Sunucu SHA'yı yeniden doğrular.</li>
+    <li><b>5 Sonuç</b> — "Merge edildi" ya da (SHA değişti / CI kırmızı / reddedildi) açık hata; kart ona göre güncellenir.</li>
+  </ol>
+</section>
+
+<main class="grid">
+
+<!-- 1 BUGÜN dolu -->
+<figure><figcaption><b>1 · Bugün — dolu</b> (A'nın üstü + C'nin sohbet kutusu)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>Bugün</h2><button class="ib" aria-label="Bildirim geçmişi"><svg class="i"><use href="#bell"/></svg></button></div>
+  <div class="scroll">
+    <div class="sec">Senden bekleniyor <span class="cnt" aria-label="4 öğe">4</span></div>
+    <div class="card dec">
+      <div class="meta"><span class="tag w"><svg class="i s"><use href="#gavel"/></svg>Onay bekliyor</span><span>ashen-bastion · tasarım</span></div>
+      <div class="ttl">Faz PR'ı #52 merge kapısında</div>
+      <p class="sum">Tasarım fazı bitti, CI yeşil. Hedef <span class="code">vlad/T…-94</span>, head <span class="code">a3f9c21</span>.</p>
+      <div class="acts"><button class="btn f">Merge et</button><button class="btn">Rapor</button><button class="btn x">Değişiklik iste</button></div>
+    </div>
+    <div class="card dec">
+      <div class="meta"><span class="tag w"><svg class="i s"><use href="#help"/></svg>Test itirazı</span><span>medialog · uygulama</span></div>
+      <div class="ttl">Kabul testi 3 yanlış görünüyor</div>
+      <p class="sum">Developer: "sıralama kararlı değil, test sabit sıra bekliyor."</p>
+      <div class="acts"><button class="btn t">Cevapla</button><button class="btn">Ayrıntı</button></div>
+    </div>
+    <div class="card err">
+      <div class="meta"><span class="tag e"><svg class="i s"><use href="#err"/></svg>Kırmızı CI</span><span>vlad · sunucu</span></div>
+      <div class="ttl">PR #57: test:api başarısız</div>
+      <p class="sum">2 test kırmızı; çalışan düzeltiyor.</p>
+      <div class="acts"><button class="btn">Ayrıntı</button><button class="btn">VLAD'a sor</button></div>
+    </div>
+    <div class="card dec">
+      <div class="meta"><span class="tag w"><svg class="i s"><use href="#help"/></svg>VLAD soruyor</span></div>
+      <div class="ttl">v2.0.1 etiketini şimdi atayım mı?</div>
+      <div class="acts"><button class="btn t">Cevapla</button></div>
+    </div>
+
+    <div class="sec">Çalışanlar <span class="tag n">3</span></div>
+    <div class="wr"><svg class="i" style="color:var(--md-primary)"><use href="#sync"/></svg><div class="b"><div class="n">T…-97 · uygulama</div><div class="meta"><span class="tag p">Çalışıyor</span><span>14 dk</span></div><div class="meta">Son: testler yazılıyor</div><div class="bar2" role="progressbar" aria-valuenow="38" aria-valuemin="0" aria-valuemax="100" aria-label="İlerleme yüzde 38"><i style="width:38%"></i></div></div></div>
+    <div class="wr"><svg class="i" style="color:var(--md-tertiary)"><use href="#clock"/></svg><div class="b"><div class="n">T…-98 · denetim</div><div class="meta"><span class="tag w">Sınır nedeniyle bekliyor</span></div><div class="meta">Kullanım sınırı yakın; yeni faz başlamadı.</div></div></div>
+    <div class="wr"><svg class="i" style="color:var(--md-success)"><use href="#check"/></svg><div class="b"><div class="n">T…-95 · plan</div><div class="meta"><span class="tag o">Bitti</span><span>rapor geldi</span></div></div></div>
+  </div>
+  <div class="chat" role="region" aria-label="VLAD sohbet">
+    <div class="reply" aria-live="polite"><div class="who">VLAD</div>Medialog'da son kalınan yer: T…-81 raporu bekleniyor, karar yok<span class="caret"></span></div>
+    <div class="in"><div class="field">VLAD'a yaz…</div><button class="ib" style="background:var(--md-primary);color:var(--md-on-primary)" aria-label="Gönder"><svg class="i"><use href="#send"/></svg></button></div>
+  </div>
+  <nav class="nav" aria-label="Ana gezinme"><div class="on"><svg class="i"><use href="#home"/></svg>Bugün</div><div><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<!-- 2 BUGÜN boş -->
+<figure><figcaption><b>2 · Bugün — boş</b> (her şey sakin)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>Bugün</h2><button class="ib" aria-label="Bildirim geçmişi"><svg class="i"><use href="#bell"/></svg></button></div>
+  <div class="scroll">
+    <div class="empty"><svg class="i"><use href="#check"/></svg><h3>Senden bekleyen yok</h3><p>Karar gerektiğinde bildirim alırsın.</p></div>
+    <div class="sec">Çalışanlar</div>
+    <div class="note">Şu an çalışan yok. VLAD'a "X projesinde Y'yi yap" yazarak başlat.</div>
+  </div>
+  <div class="chat"><div class="in"><div class="field">VLAD'a yaz…</div><button class="ib" style="background:var(--md-primary);color:var(--md-on-primary)" aria-label="Gönder"><svg class="i"><use href="#send"/></svg></button></div></div>
+  <nav class="nav"><div class="on"><svg class="i"><use href="#home"/></svg>Bugün</div><div><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<!-- 3 Çevrimdışı / hata / yükleniyor -->
+<figure><figcaption><b>3 · Bugün — çevrimdışı</b> (önbellekten, eylemler kapalı)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>Bugün</h2></div>
+  <div class="banner off" role="status"><svg class="i s"><use href="#wifi-off"/></svg>Sunucuya ulaşılamıyor. Son güncelleme 14:02.<button class="btn x" style="color:var(--md-primary-container)">Yeniden dene</button></div>
+  <div class="scroll">
+    <div class="sec">Senden bekleniyor <span class="cnt">1</span></div>
+    <div class="card dec">
+      <div class="meta"><span class="tag w"><svg class="i s"><use href="#gavel"/></svg>Onay bekliyor</span><span>ashen-bastion</span></div>
+      <div class="ttl">Faz PR'ı #52 merge kapısında</div>
+      <p class="sum">Eylemler çevrimdışıyken kapalı: onay yalnız güncel SHA'yla verilir.</p>
+      <div class="acts"><button class="btn f" disabled>Merge et</button><button class="btn">Rapor (önbellek)</button></div>
+    </div>
+  </div>
+  <div class="chat"><div class="in"><div class="field">Çevrimdışı — yazılamaz</div><button class="ib" disabled style="opacity:.38" aria-label="Gönder, kapalı"><svg class="i"><use href="#send"/></svg></button></div></div>
+  <nav class="nav"><div class="on"><svg class="i"><use href="#home"/></svg>Bugün</div><div><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<figure><figcaption><b>4 · Bugün — hata ve yükleniyor</b> (sunucu 5xx; iskelet)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>Bugün</h2></div>
+  <div class="scroll">
+    <div class="card err"><div class="meta"><span class="tag e"><svg class="i s"><use href="#err"/></svg>Hata</span></div>
+      <div class="ttl">Durum alınamadı</div><p class="sum">Sunucu 503 döndü. VLAD oturumu yeniden başlıyor olabilir. Hiçbir şey kaybolmadı: durum <span class="code">kb/</span>'de.</p>
+      <div class="acts"><button class="btn t">Yeniden dene</button></div></div>
+    <div class="note" aria-hidden="true">Yükleniyor iskeleti (2 saniyeden uzunsa):</div>
+    <div class="card" style="height:110px;margin-top:8px;opacity:.6"></div>
+    <div class="card" style="height:110px;opacity:.6"></div>
+    <div class="card" style="height:56px;opacity:.6"></div>
+  </div>
+  <div class="chat"><div class="in"><div class="field">VLAD'a yaz…</div><button class="ib" style="background:var(--md-primary);color:var(--md-on-primary)" aria-label="Gönder"><svg class="i"><use href="#send"/></svg></button></div></div>
+  <nav class="nav"><div class="on"><svg class="i"><use href="#home"/></svg>Bugün</div><div><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<!-- 5 Kart ayrıntısı merge -->
+<figure><figcaption><b>5 · Kart ayrıntısı — merge kapısı</b></figcaption>
+<div class="ph">
+  <div class="bar"><button class="ib" aria-label="Geri"><svg class="i"><use href="#back"/></svg></button><h2 class="t">Faz PR'ı #52</h2></div>
+  <div class="scroll">
+    <div class="meta"><span class="tag w">Onay bekliyor</span><span>ashen-bastion · tasarım fazı</span></div>
+    <div class="card" style="margin-top:12px;border-color:var(--md-tertiary)">
+      <div class="ttl">Onaylarsan ne olacak</div>
+      <dl class="kv"><dt>Eylem</dt><dd>PR #52'yi <b>merge et</b></dd><dt>Hedef</dt><dd><span class="code">vlad/T20261024-94</span></dd><dt>Kaynak</dt><dd><span class="code">vlad/T20261024-96</span></dd><dt>Head SHA</dt><dd><span class="code">a3f9c21e8b04</span></dd><dt>Koşul</dt><dd>CI yeşil · Codex incelemesi yapıldı</dd></dl>
+      <div class="note">SHA değişirse işlem yapılmaz; yeniden onay istenir.</div>
+    </div>
+    <div class="sec">Rapor özeti</div>
+    <p style="margin:0">9 ekran + token tablosu eklendi. 2 açık nokta. Test: lint, gate yeşil.</p>
+    <div class="row"><button class="btn x">Tam raporu oku</button></div>
+    <div class="sec">Diff özeti <span class="tag n">6 dosya · +412 −3</span></div>
+    <div class="diff"><div class="a">+ docs/design/mobile/DESIGN.md</div><div class="a">+ docs/design/mobile/tokens.md</div><div class="a">+ docs/design/mobile/mockups/…</div></div>
+    <div class="sec">İkinci göz bulguları</div>
+    <div class="find"><div class="meta"><span class="tag n">Claude</span><span class="tag w">orta</span></div><div>Boş durum metni "bekleyen yok" ile "yüklenemedi" ayırt edilmeli.</div></div>
+    <div class="find"><div class="meta"><span class="tag n">Codex</span><span class="tag o">temiz</span></div><div>Kritik/yüksek bulgu yok.</div></div>
+    <div class="note" style="margin-top:8px">Codex erişilemezse burada "Codex incelemesi yapılamadı" yazar; kapı kilitlenmez.</div>
+  </div>
+  <div class="chat"><div class="acts" style="margin:0"><button class="btn f" style="flex:1">Merge et…</button><button class="btn">Değişiklik iste</button></div></div>
+</div></figure>
+
+<!-- 6 Onay sheet -->
+<figure><figcaption><b>6 · Onay sheet'i</b> (adım 2)</figcaption>
+<div class="ph">
+  <div class="bar"><button class="ib"><svg class="i"><use href="#back"/></svg></button><h2 class="t">Faz PR'ı #52</h2></div>
+  <div class="scroll" style="opacity:.5"><div class="card" style="height:200px"></div></div>
+  <div class="sheetwrap"><div class="sheet" role="dialog" aria-modal="true" aria-label="Merge onayı">
+    <div class="grab"></div>
+    <div class="ttl" style="margin:0">PR #52'yi merge etmeyi onayla</div>
+    <dl class="kv"><dt>Hedef</dt><dd><span class="code">vlad/T20261024-94</span></dd><dt>PR</dt><dd>#52 · iamhankaya/vlad</dd><dt>Head SHA</dt><dd><span class="code">a3f9c21e8b04</span></dd><dt>Etki</dt><dd>Geri alınması commit gerektirir.</dd></dl>
+    <button class="btn f block"><svg class="i"><use href="#finger"/></svg>Parmak iziyle onayla</button>
+    <button class="btn x block" style="margin-top:8px">Vazgeç</button>
+  </div></div>
+</div></figure>
+
+<figure><figcaption><b>7 · Sistem biyometrik + sonuçlar</b> (adım 3–5)</figcaption>
+<div class="ph" style="justify-content:center;gap:12px">
+  <div class="sys" role="dialog" aria-label="Kimlik doğrula"><svg class="i"><use href="#finger"/></svg><div class="ttl">VLAD'ı onayla</div><p class="sum">PR #52 · a3f9c21e8b04 → vlad/T20261024-94</p><button class="btn x">Parolayla onayla</button> <button class="btn x">İptal</button></div>
+  <div class="sb" role="status"><svg class="i s"><use href="#check"/></svg><span style="flex:1">Merge edildi · a3f9c21</span></div>
+  <div class="card err" style="margin:0 16px"><div class="meta"><span class="tag e"><svg class="i s"><use href="#err"/></svg>Merge yapılmadı</span></div><div class="ttl">PR'a yeni commit düştü</div><p class="sum">Onayladığın SHA <span class="code">a3f9c21</span>, güncel <span class="code">e07b1d4</span>. Hiçbir şey merge edilmedi.</p><div class="acts"><button class="btn t">Güncel haliyle gözden geçir</button></div></div>
+  <div class="note" style="margin:0 16px">Diğer hatalar aynı biçim: "CI kırmızı", "Devir/onay reddedildi", "Cihaz iptal edilmiş", "Biyometrik 3 kez başarısız: 30 sn bekle". Parmak izi geri çekilirse eylem yapılmaz, kart olduğu gibi kalır.</div>
+</div></figure>
+
+<!-- 8 Soru cevapla -->
+<figure><figcaption><b>8 · Soru / test itirazı — cevapla</b></figcaption>
+<div class="ph">
+  <div class="bar"><button class="ib" aria-label="Geri"><svg class="i"><use href="#back"/></svg></button><h2 class="t">Test itirazı</h2></div>
+  <div class="scroll">
+    <div class="meta"><span class="tag w">Soru</span><span>medialog · uygulama · T…-81</span></div>
+    <div class="card" style="margin-top:12px"><div class="ttl">Kabul testi 3</div><p class="sum">Sıralama kararlı değil; test sabit sıra bekliyor. Seçenekler: (a) testi sıralamadan bağımsız yap, (b) kararlı sıralama ekle.</p></div>
+    <div class="sec">Hızlı cevap</div>
+    <div class="row"><button class="chip on" style="background:none;border:0;padding:0"><span>(a) Testi düzelt</span></button><button class="chip" style="background:none;border:0;padding:0"><span>(b) Sıralama ekle</span></button></div>
+    <div class="sec">Kendi cevabın</div>
+    <div class="search" style="border-radius:12px;align-items:flex-start;padding:12px;min-height:96px">Cevabını yaz…</div>
+    <div class="note">Cevap çalışana iletilir; dış etkisi yok, parmak izi gerekmez.</div>
+  </div>
+  <div class="chat"><button class="btn f block">Cevabı gönder</button></div>
+</div></figure>
+
+<!-- 9 Projeler -->
+<figure><figcaption><b>9 · Projeler</b> (liste)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>Projeler</h2></div>
+  <div class="scroll">
+    <div class="card"><div class="ttl">ashen-bastion</div><p class="sum">Tasarım fazı bitti; merge kapısı açık.</p><div class="meta"><span class="tag e"><svg class="i s"><use href="#err"/></svg>2 yüksek bulgu</span><span class="tag p">1 aktif pipeline</span></div></div>
+    <div class="card"><div class="ttl">medialog</div><p class="sum">T…-81 raporu bekleniyor.</p><div class="meta"><span class="tag w">1 orta bulgu</span></div></div>
+    <div class="card"><div class="ttl">vlad</div><p class="sum">Mobil/sunucu pipeline'ı: 2/5 faz.</p><div class="meta"><span class="tag p">1 aktif pipeline</span><span class="tag n">bulgu yok</span></div></div>
+    <div class="card"><div class="ttl">zyfen</div><p class="sum">Son aktivite 9 gün önce.</p></div>
+  </div>
+  <nav class="nav"><div><svg class="i"><use href="#home"/></svg>Bugün</div><div class="on"><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<figure><figcaption><b>10 · Proje ayrıntı</b> — kart, bulgular, pipeline ağacı</figcaption>
+<div class="ph">
+  <div class="bar"><button class="ib" aria-label="Geri"><svg class="i"><use href="#back"/></svg></button><h2 class="t">vlad</h2></div>
+  <div class="scroll">
+    <div class="row"><button class="chip on" style="background:none;border:0;padding:0"><span>Özet</span></button><button class="chip" style="background:none;border:0;padding:0"><span>Bulgular 0</span></button><button class="chip" style="background:none;border:0;padding:0"><span>Pipeline</span></button></div>
+    <div class="sec">Pipeline · T…-94</div>
+    <ul class="tree" role="tree"><li role="treeitem"><b>T…-94 çatı</b> <span class="tag p">çalışıyor</span>
+      <ul><li><span class="tag o">Bitti</span> T…-95 plan</li><li><span class="tag w">Onay bekliyor</span> T…-96 tasarım</li><li><span class="tag n">Bekliyor</span> T…-97 sözleşme<ul><li><span class="tag n">Bekliyor</span> T…-98 uygulama</li></ul></li></ul></li></ul>
+    <div class="sec">Açık bulgular</div>
+    <div class="note">Açık bulgu yok.</div>
+    <div class="sec">Son aktivite</div>
+    <p class="sum">2026-10-24: tasarım belgesi onaylandı (karar günlüğü).</p>
+    <div class="note">Bu sekmeler salt okunur; eylem Bugün ekranındaki kartlardan yapılır.</div>
+  </div>
+  <nav class="nav"><div><svg class="i"><use href="#home"/></svg>Bugün</div><div class="on"><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<!-- 11 Hafıza -->
+<figure><figcaption><b>11 · Hafıza — arama</b></figcaption>
+<div class="ph">
+  <div class="bar"><h2>Hafıza</h2></div>
+  <div class="scroll">
+    <div class="search"><svg class="i"><use href="#search"/></svg>sıkı kapı</div>
+    <div class="row"><button class="chip on" style="background:none;border:0;padding:0"><span>Tümü</span></button><button class="chip" style="background:none;border:0;padding:0"><span>Karar</span></button><button class="chip" style="background:none;border:0;padding:0"><span>Günlük</span></button><button class="chip" style="background:none;border:0;padding:0"><span>Görev</span></button></div>
+    <div class="hit"><div class="meta">kb/decisions.md · 2026-10-24</div><div>VLAD sunucusu: <mark>sıkı kapı</mark> ve abonelik sınırı</div></div>
+    <div class="hit"><div class="meta">vault/docs/…/mobile-design.md · §12</div><div><mark>Sıkı kapı</mark> (güvenlik kararı, kullanıcı onaylı)</div></div>
+    <div class="empty" style="padding:16px"><p style="margin:0">Aramanın dışında: sonuç yoksa "Sonuç bulunamadı. Başka kelime dene." gösterilir.</p></div>
+  </div>
+  <nav class="nav"><div><svg class="i"><use href="#home"/></svg>Bugün</div><div><svg class="i"><use href="#folder"/></svg>Projeler</div><div class="on"><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<figure><figcaption><b>12 · Hafıza — okuma</b> (salt okunur)</figcaption>
+<div class="ph">
+  <div class="bar"><button class="ib" aria-label="Geri"><svg class="i"><use href="#back"/></svg></button><h2 class="t">Karar günlüğü</h2></div>
+  <div class="scroll">
+    <div class="meta"><span class="code">kb/decisions.md</span><span class="tag n">salt okunur</span></div>
+    <h3 style="font-size:1.143em;margin:16px 0 4px">2026-10-24 · Sıkı kapı</h3>
+    <p style="margin:0 0 8px;line-height:1.6">Sunucudaki oturum ve çalışanlar yalnız kendi <span class="code">vlad/&lt;id&gt;</span> branch'lerine push eder. Ana branch'e merge yalnız onay yolundan yürür…</p>
+    <div class="note">Uzun satırlar kaydırılmadan kırılır; kod blokları yatay kaydırılır (kutunun içinde). Yazı büyüklüğü sistemi izler.</div>
+  </div>
+</div></figure>
+
+<!-- 13 Eşleştirme -->
+<figure><figcaption><b>13 · Eşleştirme</b> (ilk kurulum)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>VLAD'a bağlan</h2></div>
+  <div class="scroll">
+    <p>Sunucuda <span class="code">vlad pair</span> çalıştır; ekrandaki kodu gir ya da QR'ı tara.</p>
+    <div class="qr" role="img" aria-label="QR kodu alanı (kamera)"></div>
+    <button class="btn t block"><svg class="i"><use href="#qrc"/></svg>QR tara</button>
+    <div class="sec" style="justify-content:center">ya da kodu yaz</div>
+    <div class="code6" aria-label="6 haneli kod"><span>4</span><span>8</span><span class="f">1</span><span></span><span></span><span></span></div>
+    <div class="search" style="margin:0">Sunucu adresi: <span class="code">vlad.tailnet.ts.net</span></div>
+    <div class="note" style="margin-top:12px">Telefon kendi anahtarını üretir (Keystore); parola yok. Cihaz sunucudan iptal edilebilir.</div>
+    <div class="card err" style="margin-top:12px"><div class="meta"><span class="tag e"><svg class="i s"><use href="#err"/></svg>Kod geçersiz</span></div><div class="sum" style="margin:4px 0 0">Kod süresi doldu ya da kullanıldı. Sunucuda yeni kod üret.</div></div>
+  </div>
+  <div class="chat"><button class="btn f block">Eşleştir</button></div>
+</div></figure>
+
+<!-- 14 Devralma -->
+<figure><figcaption><b>14 · Etkin VLAD devralma kartı</b> (Bugün'ün en üstünde)</figcaption>
+<div class="ph">
+  <div class="bar"><h2>Bugün</h2></div>
+  <div class="scroll">
+    <div class="card dec"><div class="meta"><span class="tag w"><svg class="i s"><use href="#swap"/></svg>Etkin VLAD başka makinede</span></div>
+      <div class="ttl">Windows VLAD etkin</div>
+      <p class="sum">Son nabız 2 dk önce (14:08). İkisi aynı anda yazmasın diye bu VLAD salt okunur.</p>
+      <div class="acts"><button class="btn f">Devral</button><button class="btn">Salt okunur kal</button></div>
+      <div class="note" style="margin-top:8px">Devralınca Windows VLAD bir sonraki yazmasında salt okunur olur. Çalışanlar durmaz.</div></div>
+    <div class="card"><div class="meta"><span class="tag n"><svg class="i s"><use href="#lock"/></svg>Salt okunur</span></div><p class="sum" style="margin:4px 0 0">Eylem düğmeleri ve sohbet, devralana kadar kapalı.</p></div>
+  </div>
+  <nav class="nav"><div class="on"><svg class="i"><use href="#home"/></svg>Bugün</div><div><svg class="i"><use href="#folder"/></svg>Projeler</div><div><svg class="i"><use href="#book"/></svg>Hafıza</div><div><svg class="i"><use href="#gear"/></svg>Ayarlar</div></nav>
+</div></figure>
+
+<!-- 15 Bildirimler -->
+<figure><figcaption><b>15 · Bildirimler</b> (sistem gölgesi)</figcaption>
+<div class="ph" style="background:var(--md-container-low);padding-top:16px">
+  <div class="scroll">
+    <div class="notif"><svg class="i"><use href="#gavel"/></svg><div class="nb"><div class="nt">Onayın gerekiyor</div><div>ashen-bastion · tasarım: PR #52 merge kapısında</div><div class="acts"><button class="btn x">Aç</button></div></div></div>
+    <div class="notif"><svg class="i"><use href="#help"/></svg><div class="nb"><div class="nt">Çalışan soruyor</div><div>medialog · uygulama: Kabul testi 3 yanlış görünüyor</div></div></div>
+    <div class="notif"><svg class="i"><use href="#err"/></svg><div class="nb"><div class="nt">CI kırmızı</div><div>vlad · PR #57: test:api başarısız</div></div></div>
+    <div class="notif"><svg class="i"><use href="#check"/></svg><div class="nb"><div class="nt">Faz bitti</div><div>vlad · plan: rapor geldi</div></div></div>
+    <div class="notif"><svg class="i"><use href="#check"/></svg><div class="nb"><div class="nt">Otomatik merge edildi</div><div>vlad · PR #55, devir "faz PR'ları, CI yeşil" ile</div></div></div>
+    <div class="note">Bir olay = bir bildirim (olay kimliğiyle tekilleştirilir). Metinler: DESIGN.md §Bildirim metinleri.</div>
+  </div>
+</div></figure>
+
+</main>
+
+<script>
+(function(){
+  var r=document.documentElement,th=document.getElementById('th'),bg=document.getElementById('bg');
+  th.onclick=function(){var d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark');th.setAttribute('aria-pressed',String(!d))};
+  bg.onclick=function(){var on=document.body.classList.toggle('big');bg.setAttribute('aria-pressed',String(on))};
+})();
+</script>
+</body>
+</html>
