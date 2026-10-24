@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import type { Command } from "commander";
 import { TRANSITIONS, TransitionError } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
-import { ValidationError } from "./kb/index.js";
+import { ValidationError, withKbLock } from "./kb/index.js";
 
 export interface Opts { json?: boolean; [k: string]: unknown }
 
@@ -43,4 +43,9 @@ export function def(parent: Command, spec: string, desc: string, fn: (...a: any[
     }
   });
   return c;
+}
+
+/** Like def, for commands that write under kb/: the action runs inside withKbLock. */
+export function defWrite(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
+  return def(parent, spec, desc, (...args: any[]) => withKbLock(() => fn(...args)));
 }
