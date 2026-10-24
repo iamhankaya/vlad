@@ -173,17 +173,29 @@ export function readyTasks(f: { parent?: string } = {}): Task[] {
 }
 
 /**
- * `readyTasks` split by the `maxParallel` limit (pipeline spec §9a): running dev tasks (all projects)
- * use up slots; the ready tasks beyond the free slots are held. No limit → everything starts.
+ * `readyTasks` split by the quota and the `maxParallel` limit (pipeline spec §9a): while the quota is
+ * limited nothing starts and every ready task is held with reason `quota` (this beats `maxParallel`);
+ * otherwise running dev tasks (all projects) use up slots and the ready tasks beyond the free slots are
+ * held with reason `limit`. No limit → everything starts. Pure: the caller reads quota.json.
  */
 export function readyWithLimit(
-  f: { parent?: string } = {}, maxParallel?: number,
-): { tasks: Task[]; held_by_limit: Task[]; running: number; maxParallel: number | null } {
+  f: { parent?: string } = {}, maxParallel?: number, quota?: { limited: boolean; until?: string },
+): {
+  tasks: Task[]; held_by_limit: Task[]; held_reasons: Record<string, "limit" | "quota">;
+  running: number; maxParallel: number | null; quota: { limited: boolean; until?: string };
+} {
   const ready = readyTasks(f);
   const running = listTasks({ state: ["running"] }).filter((t) => t.data.kind === "dev").length;
-  if (maxParallel === undefined) return { tasks: ready, held_by_limit: [], running, maxParallel: null };
+  const q = quota?.limited ? { limited: true, ...(quota.until ? { until: quota.until } : {}) } : { limited: false };
+  const hold = (held: Task[], reason: "limit" | "quota") =>
+    Object.fromEntries(held.map((t) => [t.data.id, reason])) as Record<string, "limit" | "quota">;
+  if (q.limited) {
+    return { tasks: [], held_by_limit: ready, held_reasons: hold(ready, "quota"), running, maxParallel: maxParallel ?? null, quota: q };
+  }
+  if (maxParallel === undefined) return { tasks: ready, held_by_limit: [], held_reasons: {}, running, maxParallel: null, quota: q };
   const free = Math.max(0, maxParallel - running);
-  return { tasks: ready.slice(0, free), held_by_limit: ready.slice(free), running, maxParallel };
+  const held = ready.slice(free);
+  return { tasks: ready.slice(0, free), held_by_limit: held, held_reasons: hold(held, "limit"), running, maxParallel, quota: q };
 }
 
 export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {}): Task {
