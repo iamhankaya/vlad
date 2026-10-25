@@ -14,9 +14,9 @@ export type PullFacts = {
   head: { sha: string; ref: string; repo: string | null };
   base: { ref: string; repo: string | null };
   /** Set once merged: the merge commit. */
-  merge_commit_sha: string | null;
+  merge_commit_sha?: string | null;
   /** Login of whoever merged it (`null` while open). */
-  merged_by: string | null;
+  merged_by?: string | null;
 };
 
 /** `app_id`: the GitHub App that wrote the run, when the response says (the `vlad/approved` run only counts if it is ours). */

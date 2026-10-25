@@ -209,10 +209,14 @@ export class ActionService {
     const card = await this.read(() => this.d.projects(task.project));
     if (!card?.repo) throw new ActionError(409, "bad_request", "project_has_no_repo");
     if (task.pr.repo !== card.repo) throw new ActionError(409, "not_mergeable", "repo_not_registered");
-    const kind = task.parent ? "merge_phase" : "merge_final";
-    const expectedBase = task.parent ? `vlad/${task.parent}` : (card.default_branch ?? "master");
+    const { kind, base: expectedBase } = this.derive(task, card);
     if (task.pr.base !== expectedBase) throw new ActionError(409, "not_mergeable", "kind_base_mismatch");
     return { task, repo: card.repo, prNo: task.pr.number, base: expectedBase, kind };
+  }
+
+  /** The kind and base a task's merge must have: a phase goes into `vlad/<parent>`, a root/single task into the card's default branch. Used at prepare and again at approve. */
+  private derive(task: TaskInfo, card: ProjectInfo) {
+    return { kind: task.parent ? "merge_phase" : "merge_final", base: task.parent ? `vlad/${task.parent}` : (card.default_branch ?? "master") };
   }
 
   private checkOrigin(pull: PullFacts, repo: string, taskId: string, base: string) {
@@ -390,6 +394,9 @@ export class ActionService {
       if (!t || t.state !== "awaiting_approval" || !t.pr || t.pr.repo !== f.repo || t.pr.number !== pr || t.pr.base !== f.base) throw new ActionError(409, "bad_request", "task_changed");
       const card = await this.read(() => this.d.projects(t.project));
       if (card?.repo !== f.repo) throw new ActionError(409, "not_mergeable", "repo_not_registered");
+      // Kind and base follow from the task and the card as they are NOW (a changed default branch or parent kills the challenge).
+      const want = this.derive(t, card);
+      if (want.kind !== f.kind || want.base !== f.base) throw new ActionError(409, "not_mergeable", "base_mismatch");
 
       let pull: PullFacts | null = null;
       for (let attempt = 1; attempt <= MERGEABLE_ATTEMPTS; attempt++) {
