@@ -129,6 +129,16 @@ describe("prepareCloudLaunch", () => {
     expect(prepareCloudLaunch(b.data.id, probe("missing")).integration?.needs_remote_create).toBe(true);
   });
 
+  it("cross-project phase: the remote probe and base look at the phase's repo, not the pipeline's (F-vlad-044)", () => {
+    writeProject("beta", card("beta", "repo: owner/beta\ndefault_branch: develop\n"));
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
+    const a = createTask({ project: "beta", title: "a", kind: "dev", body, role: "developer", parent: pipe.data.id });
+    const seen: string[] = [];
+    const r = prepareCloudLaunch(a.data.id, { remoteBranch: (repo) => { seen.push(repo); return "missing"; } });
+    expect(seen).toEqual(["owner/beta"]);
+    expect(r).toMatchObject({ repo: "owner/beta", integration: { needs_remote_create: true, from: "develop" } });
+  });
+
   describe("long dependency reports", () => {
     const setup = (reportBody: string, extra: object = {}) => {
       const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });

@@ -1,7 +1,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
-  addWorktree, attachWorktree, branchExists, isWorktree, removeWorktree, runGit, worktreePath,
+  addWorktree, attachWorktree, branchExists, isWorktree, remoteBranchExists, removeWorktree, runGit, worktreeBranch,
+  worktreePath,
 } from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
@@ -18,11 +19,14 @@ const ALL_STATES: TaskState[] = [
 ];
 const ACTIVE: TaskState[] = ["running", "blocked", "stalled", "awaiting_approval"];
 
-function projectPath(slug: string): string {
+function projectCard(slug: string): ProjectCard {
   const file = join(kbPaths().projects, `${slug}.md`);
   if (!existsSync(file)) throw new Error(`proje kartı bulunamadı: ${slug}`);
-  return readDoc<ProjectCard>(file).data.path;
+  return readDoc<ProjectCard>(file).data;
 }
+
+const projectPath = (slug: string): string => projectCard(slug).path;
+const projectDefaultBranch = (slug: string): string | undefined => projectCard(slug).default_branch ?? undefined;
 
 /** Persists the last error on a task without touching its state. */
 function recordError(id: string, msg: string): void {
@@ -51,23 +55,35 @@ export function buildPrompt(
 const CLOSED: TaskState[] = ["done", "cancelled", "failed"];
 
 /**
- * Pipeline spec §6: makes sure the integration branch `vlad/<parent>` (from the repo's HEAD) and
- * its worktree exist and records them on the pipeline task. The pipeline itself moves to `running`
- * only when its phase does (setState), so a failed launch leaves it queued.
+ * Pipeline spec §6: makes sure the integration branch `vlad/<parent>` and its worktree exist in the
+ * repo of `project` (the phase's project; default: the pipeline's own). A missing local branch is
+ * tracked from `origin/vlad/<parent>` if that exists, else cut from the card's default branch (HEAD
+ * when unset). Only a phase of the pipeline's own project records branch/worktree on the pipeline
+ * task: in another project's repo the worktree path is derived (`worktreePath(cfg, repo, parent)`).
+ * The pipeline itself moves to `running` only when its phase does (setState), so a failed launch
+ * leaves it queued.
  */
-export function ensureIntegration(parentId: string, cfg: VladConfig): { repo: string; branch: string; worktree: string } {
+export function ensureIntegration(
+  parentId: string, cfg: VladConfig, project?: string,
+): { repo: string; branch: string; worktree: string } {
   const p = getTask(parentId);
   if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parentId} ${p.data.state}; fazı başlatılamaz`);
-  const repo = projectPath(p.data.project);
+  const slug = project ?? p.data.project;
+  const repo = projectPath(slug);
   const branch = `vlad/${parentId}`;
   const worktree = worktreePath(cfg, repo, parentId);
-  if (!branchExists(repo, branch)) addWorktree(repo, worktree, branch);
-  else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
+  if (!branchExists(repo, branch)) {
+    if (remoteBranchExists(repo, branch)) addWorktree(repo, worktree, branch, `origin/${branch}`);
+    else {
+      const def = projectDefaultBranch(slug);
+      addWorktree(repo, worktree, branch, def && branchExists(repo, def) ? def : undefined);
+    }
+  } else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
   else if (!isWorktree(repo, worktree)) {
     // a merge into it at the gate would fail or, inside the repo, hit the wrong branch
     throw new Error(`entegrasyon klasörü bir git worktree'si değil: ${worktree}; klasörü kaldırıp tekrar dene`);
   }
-  if (p.data.branch !== branch || p.data.worktree !== worktree) {
+  if (slug === p.data.project && (p.data.branch !== branch || p.data.worktree !== worktree)) {
     Object.assign(p.data, { branch, worktree });
     saveTask(p);
   }
@@ -77,7 +93,7 @@ export function ensureIntegration(parentId: string, cfg: VladConfig): { repo: st
 /** Opens worktree + branch, starts the launcher and moves the task to `running`. */
 export async function launchTask(
   id: string,
-  o: { launcher: Launcher; cfg: VladConfig; now?: Date },
+  o: { launcher: Launcher; cfg: VladConfig; now?: Date; branchOf?: (worktree: string) => string | null },
 ): Promise<Task> {
   const task = getTask(id);
   if (task.data.state !== "queued") throw new Error(`görev queued değil (${task.data.state}): ${id}`);
@@ -93,8 +109,16 @@ export async function launchTask(
     repo = projectPath(task.data.project);
     wt = worktreePath(o.cfg, repo, id);
     // a pipeline phase branches from the pipeline's integration branch; the rollback below leaves it alone
-    const base = task.data.parent ? ensureIntegration(task.data.parent, o.cfg).branch : undefined;
+    const base = task.data.parent ? ensureIntegration(task.data.parent, o.cfg, task.data.project).branch : undefined;
     addWorktree(repo, wt, branch, base);
+    // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
+    const actual = (o.branchOf ?? worktreeBranch)(wt);
+    if (actual !== branch) {
+      try { removeWorktree(repo, wt); } catch { /* the branch cleanup and the error below still matter */ }
+      // addWorktree refuses an existing branch, so `branch` (if present) was created just now; keep the name free for a retry
+      if (branchExists(repo, branch)) runGit(repo, ["branch", "-D", branch]);
+      throw new Error(`worktree beklenen faz dalında değil (beklenen ${branch}, bulunan ${actual ?? "yok"}): ${wt}`);
+    }
     created = runGit(repo, ["rev-parse", branch]);
   } catch (e) {
     const msg = (e as Error).message;
