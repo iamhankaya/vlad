@@ -114,7 +114,7 @@ export async function launchTask(
     // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
     const actual = (o.branchOf ?? worktreeBranch)(wt);
     if (actual !== branch) {
-      removeWorktree(repo, wt);
+      try { removeWorktree(repo, wt); } catch { /* the branch cleanup and the error below still matter */ }
       // addWorktree refuses an existing branch, so `branch` (if present) was created just now; keep the name free for a retry
       if (branchExists(repo, branch)) runGit(repo, ["branch", "-D", branch]);
       throw new Error(`worktree beklenen faz dalında değil (beklenen ${branch}, bulunan ${actual ?? "yok"}): ${wt}`);
