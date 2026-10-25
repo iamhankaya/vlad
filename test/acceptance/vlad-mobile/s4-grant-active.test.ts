@@ -3,6 +3,8 @@
 // Gövdeler plan arayüzünden yazıldı; uygulama gelince `describe.skip` -> `describe` yapılır ve (gerekirse) Test itirazı ile düzeltilir.
 // Varsayımlar (planda belirtilmemiş, uygulama gelince doğrulanacak): `grant add --file` JSON'u `id` taşır ve `G-<NNN>` biçimindedir;
 // imza yalnız biçim olarak doğrulanır (b64url); `grant list --json` {grants, warnings} döner.
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { fail, newHome, ok, run, runAsync, writeConfig, writeProjectCard } from "./helpers.js";
 
@@ -60,18 +62,18 @@ describe.skip("records: S4a — grant (uygulanmadı; güvenlik kararı bekliyor)
   });
 });
 
-describe.skip("records: S4b — active (uygulanmadı)", () => {
+describe("records: S4b — active", () => {
   const other = { VLAD_MACHINE: "baska-vlad" };
   it("active show/claim/heartbeat/release round trip", () => {
     ok(home, ["active", "claim"]);
-    expect(ok<any>(home, ["active", "show"]).machine).toBe("t1box");
+    expect(ok<any>(home, ["active", "show"]).active.machine).toBe("t1box");
     ok(home, ["active", "heartbeat"]);
     ok(home, ["active", "release"]);
   });
   it("records: active other machine fresh -> error active_elsewhere on writing commands", () => {
     ok(home, ["active", "claim"], { env: other });
     const e = fail(home, ["card", "new", "--kind", "ci_red", "--project", "alpha", "--title", "x"]);
-    expect(e.error).toBe("active_elsewhere");
+    expect(e.error).toMatch(/^active_elsewhere/);
     fail(home, ["quota", "set", "--until", iso(Date.now() + day), "--reason", "r"]);
     ok(home, ["card", "list"]); // okuma serbest
   });
@@ -79,16 +81,23 @@ describe.skip("records: S4b — active (uygulanmadı)", () => {
     ok(home, ["active", "claim"], { env: other });
     ok(home, ["active", "claim", "--takeover"]);
     const a = ok<any>(home, ["active", "show"]);
-    expect(a).toMatchObject({ machine: "t1box", takeover_from: "baska-vlad" });
+    expect(a.active).toMatchObject({ machine: "t1box", takeover_from: "baska-vlad" });
     ok(home, ["card", "new", "--kind", "ci_red", "--project", "alpha", "--title", "x"]);
   });
   it("records: stale warns and continues (threshold 2 h, ±1 s)", () => {
-    // bayatlık eşiği 2 saat; kaydı eşiğin 1 sn altında/üstünde üretmek için active.md'ye doğrudan yazılır (gitignored değil: yalnız test)
-    expect.fail("S4b gelince: heartbeat = now-2h+1s -> yazma durur (active_elsewhere); now-2h-1s -> uyarı + devam");
+    const setHeartbeat = (ms: number) => {
+      const f = join(home, "kb", "active.md");
+      writeFileSync(f, readFileSync(f, "utf8").replace(/heartbeat: .*/, `heartbeat: "${iso(ms)}"`));
+    };
+    ok(home, ["active", "claim"], { env: other });
+    setHeartbeat(Date.now() - 2 * 3_600_000 + 5000); // eşiğin altında: taze, yazma durur
+    expect(fail(home, ["card", "new", "--kind", "ci_red", "--project", "alpha", "--title", "x"]).error).toMatch(/^active_elsewhere/);
+    setHeartbeat(Date.now() - 2 * 3_600_000 - 5000); // eşiğin üstünde: bayat, yazma sürer
+    ok(home, ["card", "new", "--kind", "ci_red", "--project", "alpha", "--title", "x"]);
   });
   it("records: worker exemption requires running task file (fake env var alone not enough)", async () => {
-    ok(home, ["active", "claim"], { env: other });
     const id = ok<any>(home, ["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev"]).id;
+    ok(home, ["active", "claim"], { env: other });
     // sahte ortam değişkeni, queued görev: muaf değil
     expect(run(home, ["task", "log", id, "x", "--json"], { env: { VLAD_TASK_ID: id } }).code).toBe(1);
     // yok olan görev kimliği: muaf değil
