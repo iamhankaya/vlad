@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { def, defWrite, out, readInput, taskLine, type Opts } from "../cli-util.js";
-import { loadConfig } from "../kb/index.js";
+import { getSection, loadConfig } from "../kb/index.js";
 import type { TaskKind, TaskState } from "../kb/index.js";
 import { ProcessLauncher, TerminalLauncher, resolveLaunchMode } from "../launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../launcher/index.js";
@@ -136,6 +136,11 @@ export function registerTask(program: Command): void {
     .option("--project <slug>", "proje slug'ı")
     .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
     .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
+  def(task, "show <id>", "Tek görev: frontmatter ve kapanış raporu", (id: string, o: Opts) => {
+    const t = getTask(id);
+    const report = getSection(t.body, "## Kapanış raporu") || null;
+    out(o, { task: t.data, report }, `${taskLine(t)}${report ? `\n\n${report}` : ""}`);
+  });
   def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
     const { quota, warnings } = readQuota();
     const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel, quota);

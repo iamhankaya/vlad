@@ -25,7 +25,8 @@ describe("envelope vectors over HTTP", () => {
         headers: { "x-vlad-device": "dev1", "x-vlad-ts": String(i.ts_ms), "x-vlad-nonce": i.nonce, "x-vlad-sig": v.signature_b64u, "content-type": "application/octet-stream" },
         payload: Buffer.from(i.body_b64u ?? "", "base64url"),
       });
-      if (v.expect_valid) expect([404, 501]).toContain(res.statusCode);
+      // a valid signature reaches the handler: 501/404, or the S6c read handler's own answer (no VLAD_HOME here: 503; bad id: 400)
+      if (v.expect_valid) expect([404, 501, 503, 400]).toContain(res.statusCode);
       else expect([400, 401]).toContain(res.statusCode);
     });
   }
@@ -57,7 +58,7 @@ describe("extra acceptance", () => {
     const r = rig();
     const d = await pairDevice(r);
     for (const nonce of ["A".repeat(21), "A".repeat(23)]) {
-      const res = await r.app.inject({ method: "GET", url: "/v1/home", headers: { "x-vlad-device": d.id, "x-vlad-ts": String(r.clock.t), "x-vlad-nonce": nonce, "x-vlad-sig": "MEUCIQC" } });
+      const res = await r.app.inject({ method: "GET", url: "/v1/findings", headers: { "x-vlad-device": d.id, "x-vlad-ts": String(r.clock.t), "x-vlad-nonce": nonce, "x-vlad-sig": "MEUCIQC" } });
       expect(res.statusCode).toBe(401);
     }
   });
@@ -65,14 +66,14 @@ describe("extra acceptance", () => {
   it("skew 119 s passes, 121 s fails", async () => {
     const r = rig();
     const d = await pairDevice(r);
-    expect((await signedCall(r, d, "GET", "/v1/home", undefined, { ts: r.clock.t - 119_000 })).statusCode).toBe(501);
-    expect((await signedCall(r, d, "GET", "/v1/home", undefined, { ts: r.clock.t + 121_000 })).statusCode).toBe(401);
+    expect((await signedCall(r, d, "GET", "/v1/findings", undefined, { ts: r.clock.t - 119_000 })).statusCode).toBe(501);
+    expect((await signedCall(r, d, "GET", "/v1/findings", undefined, { ts: r.clock.t + 121_000 })).statusCode).toBe(401);
   });
 
   it("bad signatures and replays never reach the replay log", async () => {
     const r = rig();
     const d = await pairDevice(r);
-    for (let i = 0; i < 5; i++) await r.app.inject({ method: "GET", url: "/v1/home", headers: { ...d.headers(r.clock, "GET", "/v1/home"), "x-vlad-sig": "MEUCIQC" } });
+    for (let i = 0; i < 5; i++) await r.app.inject({ method: "GET", url: "/v1/findings", headers: { ...d.headers(r.clock, "GET", "/v1/findings"), "x-vlad-sig": "MEUCIQC" } });
     expect((await import("node:fs")).readFileSync(join(r.dir, "replay.log"), "utf8")).toBe("");
   });
 
@@ -85,7 +86,7 @@ describe("extra acceptance", () => {
     const res = await signedCall(r, b, "POST", `/v1/devices/${a.id}/revoke`, b.revokeBody(a.id, r.clock.t));
     expect(res.statusCode).toBe(401);
     expect(res.json().error.code).toBe("device_revoked");
-    expect((await signedCall(r, a, "GET", "/v1/home")).statusCode).toBe(501);
+    expect((await signedCall(r, a, "GET", "/v1/findings")).statusCode).toBe(501);
   });
 
   it("two codes pair two devices; one code redeemed concurrently pairs exactly one", async () => {
