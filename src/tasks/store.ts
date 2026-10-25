@@ -72,6 +72,12 @@ function taskFile(id: string): string {
   return join(kbPaths().tasks, `${id}.md`);
 }
 
+/** Task ids mentioned in `body` that have no task file (a typo or a made-up id; reported as a warning, not an error). */
+export function unknownTaskRefs(body: string): string[] {
+  const ids = new Set(body.match(/T\d{8}-\d+/g));
+  return [...ids].filter((id) => !existsSync(taskFile(id)));
+}
+
 /** Next free `T<YYYYMMDD>-<NN>` for the given day. */
 export function nextTaskId(tasksDir: string, date: Date): string {
   const prefix = dayPrefix(date);

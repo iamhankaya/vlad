@@ -129,6 +129,8 @@ export interface VladConfig {
   ignore: string[];
   defaultAutonomy: Autonomy;
   staleAfterHours: number;
+  /** Minutes without a task-file update or transcript write before a local worker counts as silent (default 15). */
+  workerSilentMinutes?: number;
   /** Max simultaneously `running` dev workers (all projects); absent → unlimited. */
   maxParallel?: number;
   launcher: Launcher;
