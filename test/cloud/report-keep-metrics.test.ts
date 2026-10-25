@@ -107,3 +107,18 @@ describe("ingest ölçümü", () => {
     expect(r.processed).toEqual([{ seq: 1, kind: "LOG" }]);
   });
 });
+
+describe("rapor uyarısı: yanlış pozitif ve tekrar", () => {
+  it("kod değişikliği anlatan meşru cümleler uyarı üretmez", () => {
+    for (const t of ["eski helper'ın yerine geçen yeni sınıf", "dosyanın üstüne eklendi", "#3 geçerli olmayan durum"]) {
+      expect(reportReferencesPrior(t), t).toBe(false);
+    }
+  });
+
+  it("aynı rapor metni tekrar gönderilirse Önceki rapor birikmez", () => {
+    reportTask(id, "- bir");
+    setState(id, "running");
+    reportTask(id, "- bir");
+    expect(getSection(getTask(id).body, "## Önceki raporlar")).toBeNull();
+  });
+});

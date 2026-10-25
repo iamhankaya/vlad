@@ -252,7 +252,7 @@ export function answerTask(id: string, a: string): Task {
 }
 
 /** A change-round report must be the full text; "replaces / adds to the earlier one" leaves the reader with a hole. */
-const PRIOR_REF = /yerine\s+geç|üst(?:ü|ün)e\s+ekle|üzerine\s+ekle|aynen\s+geçerli|#\d+\s+(?:raporu\s+)?geçerli/i;
+const PRIOR_REF = /rapor\S*\s+(?:yerine\s+geç|(?:üst|üzer)\S*\s+ekle)|aynen\s+geçerli|#\d+\s+(?:raporu\s+)?geçerlidir/i;
 export const reportReferencesPrior = (md: string): boolean => PRIOR_REF.test(md);
 
 const PRIOR = "## Önceki raporlar";
@@ -261,7 +261,8 @@ const PRIOR = "## Önceki raporlar";
 export function reportTask(id: string, md: string): Task {
   return transitionWith(id, "awaiting_approval", (b) => {
     const old = getSection(b, "## Kapanış raporu");
-    if (old) {
+    // the same text re-sent (CLI retry) is not a new round
+    if (old && old !== md.trim()) {
       const n = (getSection(b, PRIOR)?.match(/^### Önceki rapor #\d+/gm)?.length ?? 0) + 1;
       b = appendToSection(b, PRIOR, `### Önceki rapor #${n}\n${old}`);
     }
