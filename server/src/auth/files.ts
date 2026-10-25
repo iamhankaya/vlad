@@ -1,4 +1,4 @@
-import { chmodSync, closeSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, fdatasyncSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomBytes } from "node:crypto";
 
@@ -9,6 +9,27 @@ import { randomBytes } from "node:crypto";
 export function ensureDir(dir: string): void {
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   if ((statSync(dir).mode & 0o077) !== 0) chmodSync(dir, 0o700);
+}
+
+/** Makes a rename/create durable: the directory entry itself must reach the disk, not only the file contents. */
+export function fsyncDir(dir: string): void {
+  const fd = openSync(dir, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Appends and flushes before returning: a claimed key must survive a crash right after the response. */
+export function appendDurable(path: string, line: string): void {
+  const fd = openSync(path, "a", 0o600);
+  try {
+    writeSync(fd, line);
+    fdatasyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export function readJsonFile<T>(path: string): T | undefined {
@@ -31,4 +52,5 @@ export function writeJsonAtomic(path: string, value: unknown): void {
     closeSync(fd);
   }
   renameSync(tmp, path);
+  fsyncDir(dirname(path));
 }

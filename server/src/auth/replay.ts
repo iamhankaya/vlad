@@ -1,6 +1,6 @@
-import { appendFileSync, closeSync, existsSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { ensureDir } from "./files.ts";
+import { closeSync, existsSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { appendDurable, ensureDir, fsyncDir } from "./files.ts";
 
 export const REPLAY_TTL_MS = 5 * 60_000;
 
@@ -35,7 +35,7 @@ export class ReplayCache {
     if (exp !== undefined && exp > t) return false;
     const until = t + REPLAY_TTL_MS;
     this.seen.set(key, until);
-    appendFileSync(this.file, `${key}\t${until}\n`, { mode: 0o600 });
+    appendDurable(this.file, `${key}\t${until}\n`);
     if (++this.appended > 2000) this.compact();
     return true;
   }
@@ -46,6 +46,7 @@ export class ReplayCache {
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, [...this.seen].map(([k, e]) => `${k}\t${e}\n`).join(""), { mode: 0o600 });
     renameSync(tmp, this.file);
+    fsyncDir(dirname(this.file));
     this.appended = 0;
   }
 }

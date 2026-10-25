@@ -1,4 +1,5 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -355,6 +356,34 @@ describe("device revocation", () => {
     const a = await pairDevice(r, "Phone A");
     for (const body of ["{}", '{"ts_ms":1}', JSON.stringify({ ts_ms: r.clock.t, signature: "x", device_id: "d" }), "["]) {
       expect((await signedCall(r, a, "POST", "/v1/devices/d-x/revoke", body)).statusCode, body).toBe(400);
+    }
+  });
+});
+
+describe("trustProxy", () => {
+  const hit = (port: number, xff: string) =>
+    new Promise<number>((resolve, reject) => {
+      const q = httpRequest({ host: "127.0.0.1", port, path: "/v1/home", headers: { "x-forwarded-for": xff } }, (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.statusCode!));
+      });
+      q.on("error", reject);
+      q.end();
+    });
+
+  it('"loopback": a client-written leftmost X-Forwarded-For entry cannot dodge the unpaired bucket; the proxy-appended one counts', async () => {
+    const r = rig({ trustProxy: "loopback" });
+    await r.app.listen({ host: "127.0.0.1", port: 0 });
+    try {
+      const port = (r.app.server.address() as { port: number }).port;
+      const codes: number[] = [];
+      for (let i = 0; i < 11; i++) codes.push(await hit(port, `10.0.${i}.${i}, 203.0.113.9`)); // "<spoofed>, <appended by the proxy>"
+      expect(codes.slice(0, 10).every((c) => c === 401)).toBe(true);
+      expect(codes[10]).toBe(429);
+      // a different real client (rightmost) has its own bucket
+      expect(await hit(port, "10.9.9.9, 203.0.113.10")).toBe(401);
+    } finally {
+      await r.app.close();
     }
   });
 });

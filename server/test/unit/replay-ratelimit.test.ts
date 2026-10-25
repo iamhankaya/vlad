@@ -52,3 +52,14 @@ describe("RateLimiter", () => {
     expect([r.take("a"), r.take("a"), r.take("a"), r.take("a")]).toEqual([true, true, true, false]);
   });
 });
+
+describe("RateLimiter bounds", () => {
+  it("50,000 distinct keys never exceed the hard cap", () => {
+    const clock = new Clock();
+    const r = new RateLimiter(clock.now, 1, 0.001, 1000);
+    for (let i = 0; i < 50_000; i++) {
+      r.take(`k${i}`);
+      expect(r.size).toBeLessThanOrEqual(1000);
+    }
+  });
+});

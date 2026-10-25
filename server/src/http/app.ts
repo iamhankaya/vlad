@@ -15,8 +15,11 @@ export type AppConfig = {
   stateDir: string;
   version: string;
   now?: () => number;
-  /** Trust `X-Forwarded-For` (set when running behind Tailscale Funnel); off by default so the socket address is the client. */
-  trustProxy?: boolean;
+  /**
+   * Fastify `trustProxy`. Off by default (the socket address is the client). Behind Tailscale Funnel use `"loopback"`: only the
+   * local proxy is trusted, so `req.ip` is the rightmost `X-Forwarded-For` entry the proxy appended, never the client-written leftmost one.
+   */
+  trustProxy?: boolean | string;
   logger?: boolean;
   limits?: { unpaired?: [capacity: number, perSec: number]; paired?: [number, number]; public?: [number, number] };
 };

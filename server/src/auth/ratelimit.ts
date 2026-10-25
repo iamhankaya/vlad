@@ -6,8 +6,11 @@ export class RateLimiter {
   readonly capacity: number;
   /** tokens regained per second */
   readonly refillPerSec: number;
+  private readonly maxKeys: number;
+  private lastSweep = 0;
 
-  constructor(now: () => number, capacity: number, refillPerSec: number) {
+  constructor(now: () => number, capacity: number, refillPerSec: number, maxKeys = 10_000) {
+    this.maxKeys = maxKeys;
     this.now = now;
     this.capacity = capacity;
     this.refillPerSec = refillPerSec;
@@ -17,7 +20,7 @@ export class RateLimiter {
     const t = this.now();
     let b = this.buckets.get(key);
     if (!b) {
-      if (this.buckets.size > 10_000) this.sweep(t);
+      if (this.buckets.size >= this.maxKeys) this.makeRoom(t);
       b = { tokens: this.capacity, at: t };
       this.buckets.set(key, b);
     }
@@ -40,7 +43,16 @@ export class RateLimiter {
     return b.tokens >= 1 ? 0 : Math.ceil((1 - b.tokens) / this.refillPerSec);
   }
 
-  private sweep(t: number): void {
-    for (const [k, b] of this.buckets) if (b.tokens + ((t - b.at) / 1000) * this.refillPerSec >= this.capacity) this.buckets.delete(k);
+  get size(): number {
+    return this.buckets.size;
+  }
+
+  /** Full sweep at most once a second (it is O(n)); the map then has a hard bound: the oldest-created entry goes first. */
+  private makeRoom(t: number): void {
+    if (t - this.lastSweep >= 1000) {
+      this.lastSweep = t;
+      for (const [k, b] of this.buckets) if (b.tokens + ((t - b.at) / 1000) * this.refillPerSec >= this.capacity) this.buckets.delete(k);
+    }
+    while (this.buckets.size >= this.maxKeys) this.buckets.delete(this.buckets.keys().next().value!);
   }
 }
