@@ -56,6 +56,8 @@ export function readHandlers(deps: ReadDeps = {}): Record<"getHome" | "getCard" 
   }
 
   const getHome: ReadHandler = async (_req, reply) => {
+    // Position first, data after: whatever happens in between is a replayed event at worst, never a missed one.
+    const seq = deps.seq?.() ?? 0;
     try {
       const [tasks, cards, quota, active] = await Promise.all([
         list<{ tasks: TaskData[]; warnings: string[] }>(["task", "list"]),
@@ -64,7 +66,7 @@ export function readHandlers(deps: ReadDeps = {}): Record<"getHome" | "getCard" 
         list<{ active: { machine: string; since: string; heartbeat: string } | null; mine: boolean; warnings: string[] }>(["active", "show"]),
       ]);
       return {
-        seq: deps.seq?.() ?? 0,
+        seq,
         asks: [...(await gates(tasks.tasks)), ...cards.cards.map(toCard)],
         workers: tasks.tasks.filter(isWorker).map(toWorker),
         quota: { limited: quota.limited, ...(quota.until ? { until: quota.until } : {}) },

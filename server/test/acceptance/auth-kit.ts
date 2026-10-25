@@ -174,3 +174,19 @@ export const errCode = (body: string): string | undefined => {
     return undefined;
   }
 };
+
+/** Akış (SSE) uçları için: gerçek soketle bağlanır, yalnız durum satırı ve başlıkları okur, bağlantıyı keser (gövde beklenmez). */
+export async function headersOnly(app: FastifyInstance, target: string, headers: Record<string, string>): Promise<{ status: number; headers: http.IncomingHttpHeaders }> {
+  if (!app.server.listening) await app.listen({ port: 0, host: "127.0.0.1" });
+  const { port } = app.server.address() as AddressInfo;
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port, method: "GET", path: target, headers }, (res) => {
+      const out = { status: res.statusCode ?? 0, headers: res.headers };
+      res.destroy();
+      req.destroy();
+      resolve(out);
+    });
+    req.on("error", (e) => (req.destroyed ? undefined : reject(e)));
+    req.end();
+  });
+}

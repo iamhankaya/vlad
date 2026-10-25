@@ -6,6 +6,10 @@ import { isP256Spki } from "../auth/keys.ts";
 import { PairingCodes } from "../auth/pairing.ts";
 import { RateLimiter } from "../auth/ratelimit.ts";
 import { ReplayCache } from "../auth/replay.ts";
+import { EventLedger } from "../events/ledger.ts";
+import { SseHub, type HubDeps } from "../events/hub.ts";
+import { eventHandlers } from "../events/routes.ts";
+import { ReadCache } from "../read/cache.ts";
 import { readHandlers, type ReadDeps } from "../read/routes.ts";
 import { ROUTES, type RouteSpec } from "./routes.generated.ts";
 
@@ -24,10 +28,18 @@ export type AppConfig = {
   logger?: boolean;
   /** Read endpoints (S6c): event seq, gate provider, cache. */
   read?: ReadDeps;
+  /** Event ledger and SSE (S6d). Defaults: ledger in `stateDir`, 64 streams (3 per device), `setInterval` keepalive. */
+  events?: { ledger?: EventLedger; maxStreams?: number; maxPerDevice?: number; every?: HubDeps["every"] };
+  /** Extra revocation listener (S9a: pending challenges, S10a: grants). Runs after the device's SSE streams are closed. */
+  onRevoke?: (deviceId: string) => void;
   limits?: { unpaired?: [capacity: number, perSec: number]; paired?: [number, number]; public?: [number, number] };
 };
 
 declare module "fastify" {
+  interface FastifyInstance {
+    /** Event ledger and stream hub: other slices append events (`vladEvents.ledger.append`); main starts the kb watcher on it. */
+    vladEvents: { ledger: EventLedger; hub: SseHub; cache: ReadCache };
+  }
   interface FastifyContextConfig {
     spec?: RouteSpec;
   }
@@ -78,6 +90,28 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   const paired = new RateLimiter(now, pCap, pRate);
   const publicBucket = new RateLimiter(now, hCap, hRate);
 
+  const ledger = cfg.events?.ledger ?? new EventLedger(cfg.stateDir);
+  const cache = cfg.read?.cache ?? new ReadCache();
+  // A new event means the kb changed: drop the 2 s read cache first, so a client reacting to the event never reads older data.
+  ledger.onAppend(() => cache.clear());
+  const hub = new SseHub({
+    ledger,
+    isActive: (id) => {
+      const d = devices.get(id);
+      return !!d && !d.revoked_at;
+    },
+    every: cfg.events?.every ?? ((ms, fn) => {
+      const t = setInterval(fn, ms);
+      t.unref();
+      return () => clearInterval(t);
+    }),
+    maxStreams: cfg.events?.maxStreams,
+    maxPerDevice: cfg.events?.maxPerDevice,
+  });
+  // Revocation closes the device's open streams before anything else reacts to it.
+  devices.onRevoke((id) => hub.closeDevice(id));
+  if (cfg.onRevoke) devices.onRevoke(cfg.onRevoke);
+
   const app = Fastify({
     logger: cfg.logger ?? false,
     bodyLimit: BODY_LIMIT,
@@ -86,6 +120,8 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   });
 
   // Every body is kept as raw bytes: the envelope hashes bytes, and nothing is parsed before the signature is checked.
+  app.decorate("vladEvents", { ledger, hub, cache });
+  app.addHook("onClose", async () => hub.closeAll());
   app.removeAllContentTypeParsers();
   app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: BODY_LIMIT }, (_req, body, done) => done(null, body));
 
@@ -121,7 +157,8 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
 
   type Handler = (req: FastifyRequest, reply: FastifyReply) => unknown;
   const handlers: Record<string, Handler> = {
-    ...readHandlers(cfg.read),
+    ...readHandlers({ ...cfg.read, cache, seq: cfg.read?.seq ?? (() => ledger.lastSeq) }),
+    ...eventHandlers(ledger, hub),
     getHealth: () => ({ ok: true, version: cfg.version }),
 
     pairDevice: (req, reply) => {

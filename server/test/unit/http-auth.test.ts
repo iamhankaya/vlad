@@ -156,8 +156,8 @@ describe("pairing over HTTP", () => {
   });
 });
 
-// implemented by S6c (tested in read-routes.test.ts); the rest still answer 501
-const READ_OPS = ["getHome", "getCard", "getTask", "listPipelines"];
+// implemented by S6c (read-routes.test.ts) and S6d (events.test.ts); the rest still answer 501
+const READ_OPS = ["getHome", "getCard", "getTask", "listPipelines", "listEvents", "streamEvents"];
 
 describe("signed requests", () => {
   it("a paired device passes the preHandler; unimplemented routes answer 501, never data", async () => {
