@@ -107,3 +107,5 @@ Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad t
 ## Bulut modu (`create_session` ile açılan çalışan)
 
 Bulut çalışanı bu skill'i kullanmaz: `kb/`, `vlad` CLI'ı ve görev dosyası yoktur; `kb/`'ye yalnızca VLAD yazar. Çalışan, prompt'unun sonundaki **"VLAD bulut protokolü"** bölümünü uygular (rol gövdesindeki "vlad-worker protokolünü uygula" ve Yetki'deki `kb/`/CLI/worktree adımları yerine geçer). İşaretler (`LOG`/`ASK`/`REPORT`/`FAIL`), `ANSWER` mesajı, push kuralı ve "son tur mesajında tüm işaretleri tekrar et" kuralı orada tanımlıdır; VLAD bunları `vlad task ingest` ile işler (tasarım: `docs/superpowers/specs/2026-10-20-vlad-cloud-design.md` §5).
+
+**kb salt okuma (bulut):** prompt kb'yi okumanı söylüyorsa `add_repo` ile vlad-kb'yi `access: "read"` klonlarsın. Klon salt okunurdur: kb'ye commit/push yok (platform engellemez, kural engeller; VLAD yabancı commit'leri `vlad kb check` ile izler). `git pull --ff-only` yalnız VLAD istediğinde. İki denemede klonlayamazsan `[VLAD:LOG] kb erişimi yok` yaz. Yerel çalışan akışı değişmez.
