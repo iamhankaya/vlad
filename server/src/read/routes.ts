@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply, preHandlerHookHandler } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { runVladJson, VladError } from "../vlad/cli.ts";
 import { ReadCache } from "./cache.ts";
 import { gateCard, isWorker, toCard, toPipelines, toTask, toWorker } from "./map.ts";
@@ -32,11 +32,10 @@ function vladFailure(reply: FastifyReply, e: unknown) {
   throw e;
 }
 
-/**
- * Registers the read endpoints (`/v1/home`, `/v1/cards/:id`, `/v1/tasks/:id`, `/v1/pipelines`). `preHandler` is the
- * signature check (S6b); every route gets it, none is registered without.
- */
-export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerHookHandler, deps: ReadDeps = {}): void {
+export type ReadHandler = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+
+/** Handlers of the read endpoints by `operationId`; the app mounts them behind its signature preHandler (`http/app.ts`). */
+export function readHandlers(deps: ReadDeps = {}): Record<"getHome" | "getCard" | "getTask" | "listPipelines", ReadHandler> {
   const cache = deps.cache ?? new ReadCache();
   const opts = { timeoutMs: deps.timeoutMs };
   const list = <T>(args: string[]) => cache.get(args.join(" "), () => runVladJson<T>(args, opts));
@@ -56,7 +55,7 @@ export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerH
     return out;
   }
 
-  app.get("/v1/home", { preHandler }, async (_req, reply) => {
+  const getHome: ReadHandler = async (_req, reply) => {
     try {
       const [tasks, cards, quota, active] = await Promise.all([
         list<{ tasks: TaskData[]; warnings: string[] }>(["task", "list"]),
@@ -78,10 +77,10 @@ export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerH
     } catch (e) {
       return vladFailure(reply, e);
     }
-  });
+  };
 
-  app.get<{ Params: { id: string } }>("/v1/cards/:id", { preHandler }, async (req, reply) => {
-    const { id } = req.params;
+  const getCard: ReadHandler = async (req, reply) => {
+    const { id } = req.params as { id: string };
     if (!CARD_ID.test(id)) return err(reply, 400, "bad_request", "Geçersiz kart kimliği.", { field: "id" });
     try {
       if (id.startsWith("gate-")) {
@@ -94,10 +93,10 @@ export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerH
       if (e instanceof VladError && e.kind === "not_found") return notFound(reply, "Kart");
       return vladFailure(reply, e);
     }
-  });
+  };
 
-  app.get<{ Params: { id: string } }>("/v1/tasks/:id", { preHandler }, async (req, reply) => {
-    const { id } = req.params;
+  const getTask: ReadHandler = async (req, reply) => {
+    const { id } = req.params as { id: string };
     if (!TASK_ID.test(id)) return err(reply, 400, "bad_request", "Geçersiz görev kimliği.", { field: "id" });
     try {
       const { task, report } = await readTask(id);
@@ -106,14 +105,24 @@ export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerH
       if (e instanceof VladError && e.kind === "not_found") return notFound(reply, "Görev");
       return vladFailure(reply, e);
     }
-  });
+  };
 
-  app.get("/v1/pipelines", { preHandler }, async (_req, reply) => {
+  const listPipelines: ReadHandler = async (_req, reply) => {
     try {
       const tasks = await list<{ tasks: TaskData[]; warnings: string[] }>(["task", "list"]);
       return { pipelines: toPipelines(tasks.tasks), warnings: tasks.warnings };
     } catch (e) {
       return vladFailure(reply, e);
     }
-  });
+  };
+
+  return { getHome, getCard, getTask, listPipelines };
+}
+
+const PATHS = { getHome: "/v1/home", getCard: "/v1/cards/:id", getTask: "/v1/tasks/:id", listPipelines: "/v1/pipelines" } as const;
+
+/** Standalone registration (unit tests with a stand-in preHandler); the app itself uses {@link readHandlers}. */
+export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerHookHandler, deps: ReadDeps = {}): void {
+  const h = readHandlers(deps);
+  for (const [op, url] of Object.entries(PATHS)) app.get(url, { preHandler }, h[op as keyof typeof PATHS]);
 }

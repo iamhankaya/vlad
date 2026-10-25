@@ -4,7 +4,13 @@ export const CACHE_TTL_MS = 2000;
 export class ReadCache {
   private entries = new Map<string, { at: number; value: Promise<unknown> }>();
 
-  constructor(private now: () => number = Date.now, private ttlMs = CACHE_TTL_MS) {}
+  private now: () => number;
+  private ttlMs: number;
+
+  constructor(now: () => number = Date.now, ttlMs = CACHE_TTL_MS) {
+    this.now = now;
+    this.ttlMs = ttlMs;
+  }
 
   /** Failures are not cached: a rejected load is dropped so the next call retries. */
   get<T>(key: string, load: () => Promise<T>): Promise<T> {

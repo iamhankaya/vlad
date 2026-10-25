@@ -6,6 +6,7 @@ import { isP256Spki } from "../auth/keys.ts";
 import { PairingCodes } from "../auth/pairing.ts";
 import { RateLimiter } from "../auth/ratelimit.ts";
 import { ReplayCache } from "../auth/replay.ts";
+import { readHandlers, type ReadDeps } from "../read/routes.ts";
 import { ROUTES, type RouteSpec } from "./routes.generated.ts";
 
 export const BODY_LIMIT = 1024 * 1024;
@@ -21,6 +22,8 @@ export type AppConfig = {
    */
   trustProxy?: boolean | string;
   logger?: boolean;
+  /** Read endpoints (S6c): event seq, gate provider, cache. */
+  read?: ReadDeps;
   limits?: { unpaired?: [capacity: number, perSec: number]; paired?: [number, number]; public?: [number, number] };
 };
 
@@ -118,6 +121,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
 
   type Handler = (req: FastifyRequest, reply: FastifyReply) => unknown;
   const handlers: Record<string, Handler> = {
+    ...readHandlers(cfg.read),
     getHealth: () => ({ ok: true, version: cfg.version }),
 
     pairDevice: (req, reply) => {
@@ -155,7 +159,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     },
   };
 
-  // Routes that are not implemented yet (S6c reads, S6d events, S9 actions...) still pass the signature preHandler first.
+  // Routes that are not implemented yet (S6d events, S9 actions...) still pass the signature preHandler first.
   const notImplemented: Handler = (_req, reply) => send(reply, 501, "bad_request", { reason: "not_implemented" }, "Henüz uygulanmadı.");
 
   for (const spec of ROUTES) {

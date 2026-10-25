@@ -10,9 +10,14 @@ export type VladErrorKind = "timeout" | "aborted" | "active_elsewhere" | "index_
 
 /** A failed `vlad` run. `kind` is the stable key callers branch on; `stderr` text is never shown to clients. */
 export class VladError extends Error {
-  constructor(readonly kind: VladErrorKind, message: string, readonly details: string[] = []) {
+  readonly kind: VladErrorKind;
+  readonly details: string[];
+
+  constructor(kind: VladErrorKind, message: string, details: string[] = []) {
     super(message);
     this.name = "VladError";
+    this.kind = kind;
+    this.details = details;
   }
 }
 

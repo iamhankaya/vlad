@@ -8,6 +8,7 @@ import { ReadCache } from "../../src/read/cache.ts";
 import { registerReadRoutes } from "../../src/read/routes.ts";
 import type { GateProvider } from "../../src/read/types.ts";
 import { runVlad } from "../../src/vlad/cli.ts";
+import { pairDevice, rig, signedCall } from "../helpers/client.ts";
 import { readJson } from "../helpers/contract.ts";
 import { doc, jsonSchema, validator } from "../helpers/openapi.ts";
 
@@ -251,5 +252,30 @@ describe("server: read routes (real vlad CLI, temp VLAD_HOME)", () => {
     expect(res.statusCode).toBe(503);
     expect(res.json()).toMatchObject({ error: { code: "bad_request", details: { reason: "vlad_failed", kind: "timeout" } } });
     expect(JSON.stringify(res.json())).not.toContain(tmp);
+  });
+
+  it("end to end on the real app: a paired device's signed reads are 200 and schema-valid; unsigned is 401", async () => {
+    const r = rig({ read: { cache: new ReadCache(() => nowMs), seq: () => 5 } });
+    const d = await pairDevice(r);
+    nowMs += 10_000;
+    const home = await signedCall(r, d, "GET", "/v1/home");
+    expect(home.statusCode).toBe(200);
+    check("getHome", 200, home.json());
+    expect(home.json().seq).toBe(5);
+    const pipes = await signedCall(r, d, "GET", "/v1/pipelines");
+    expect(pipes.statusCode).toBe(200);
+    check("listPipelines", 200, pipes.json());
+    const { tasks } = JSON.parse(await runVlad(["task", "list", "--json"]));
+    const task = await signedCall(r, d, "GET", `/v1/tasks/${tasks[0].id}`);
+    expect(task.statusCode).toBe(200);
+    check("getTask", 200, task.json());
+    const miss = await signedCall(r, d, "GET", "/v1/cards/C-20250101-99");
+    expect(miss.statusCode).toBe(404);
+    check("getCard", 404, miss.json());
+    for (const url of ["/v1/home", "/v1/pipelines", `/v1/tasks/${tasks[0].id}`, "/v1/cards/C-20250101-99"]) {
+      const bare = await r.app.inject({ method: "GET", url });
+      expect(bare.statusCode, url).toBe(401);
+      expect(bare.json()).toEqual({ error: { code: "unauthorized", message_tr: "Yetkisiz." } });
+    }
   });
 });
