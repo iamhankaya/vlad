@@ -17,6 +17,9 @@ S13a K7 kararı: vlad reposu public, `vault/docs` içeriği private projelere ai
 - Yalnız `.md` dosyalar, en çok 1 MiB, UTF-8, ikili değil. Promote kuralı (`bad_extension`, `too_large`) ile aynı.
 - Yol kuralları (yeni kökte de): mutlak yol, `..`, `\`, `%xx` (çift kodlama dahil), null/kontrol karakteri, sondaki nokta/boşluk, `:`, `~n`, nokta ile başlayan ad, büyük/küçük harf ve Unicode varyantları.
 
+- Dizin yarışı: arama her dizini listelemeden önce ve sonra, her dosyayı açtıktan sonra yolun hâlâ kendi gerçek yolu olduğunu, izin bölgesinde kaldığını ve açılan dosyayla (dev/ino; Linux'ta `/proc/self/fd`) aynı olduğunu doğrular. Biri araya symlink sokarsa o dal atlanır.
+- `vlad status` (ve `--summary`) yedek kök kullanılıyorsa ya da `<kb>/docs` yanında eski `vault/docs` duruyorsa uyarı verir: `docs kökü: kb/docs (eski vault/docs artık okunmuyor)`. Tam `vlad status` kök değişimini bir kez `<kb>/logs/docs-root.log`'a yazar. Eski `vault/docs` silinince uyarı kalkar.
+
 ## Taşıma adımları (Windows, kullanıcı)
 
 1. `vlad kb pull` ve `git -C C:\dev\vlad-kb status` ile kb deposunun temiz olduğunu doğrula.

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -137,5 +137,42 @@ describe("records: vault docs root in a separate kb (S5x)", () => {
     expect(JSON.parse(vlad(["vault", "ls", "vault/docs", "--json"]).out).entries.map((e: { path: string }) => e.path)).toEqual(["vault/docs/alt", "vault/docs/plan.md"]);
     expect(vlad(["vault", "read", "kb/docs/plan.md", "--json"]).code).toBe(1);
     expect(vlad(["vault", "read", "vault/docs/../projects/vlad.md", "--json"]).code).toBe(1);
+  });
+});
+
+describe("records: vault docs root notice (S5x B2)", () => {
+  const summary = () => JSON.parse(vlad(["status", "--summary", "--json"]).out).summary as string;
+  const logFile = () => join(kb, "logs", "docs-root.log");
+
+  it("records: vault status warns while a stale vault/docs sits next to kb/docs, and logs the change once", () => {
+    expect(summary()).toContain("uyarı: docs kökü: kb/docs (eski vault/docs artık okunmuyor)");
+    expect(existsSync(logFile())).toBe(false); // --summary never writes
+    for (let i = 0; i < 2; i++) {
+      const r = vlad(["status", "--json"]);
+      expect(r.code, r.err).toBe(0);
+      expect(JSON.parse(r.out).warnings).toEqual(["docs kökü: kb/docs (eski vault/docs artık okunmuyor)"]);
+    }
+    const lines = readFileSync(logFile(), "utf8").trim().split("\n");
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toMatch(/^\d{4}-\d\d-\d\dT\S+ docs kökü: kb\/docs \(eski vault\/docs artık okunmuyor\)$/);
+  });
+
+  it("records: vault status warns on the fallback root and logs the switch to kb/docs", () => {
+    rmSync(join(kb, "docs"), { recursive: true });
+    expect(summary()).toContain("uyarı: docs kökü: vault/docs (yedek: kb/docs yok, taşıma bekliyor)");
+    vlad(["status"]);
+    mkdirSync(join(kb, "docs"));
+    vlad(["status"]);
+    const lines = readFileSync(logFile(), "utf8").trim().split("\n");
+    expect(lines.map((l) => l.replace(/^\S+ /, ""))).toEqual(["docs kökü: vault/docs (yedek: kb/docs yok, taşıma bekliyor)", "docs kökü: kb/docs (eski vault/docs artık okunmuyor)"]);
+  });
+
+  it("records: vault status has no docs warning once the old copy is gone, and none in the legacy layout", () => {
+    rmSync(join(home, "vault"), { recursive: true });
+    expect(summary()).not.toContain("uyarı");
+    const legacy = makeHome();
+    put(legacy, "vault/docs/x.md", "# x\n");
+    const r = spawnSync("node", [cli, "status", "--summary", "--json"], { encoding: "utf8", env: { ...process.env, VLAD_HOME: legacy, VLAD_KB_DIR: "" } });
+    expect(JSON.parse(r.stdout).summary).not.toContain("docs kökü");
   });
 });

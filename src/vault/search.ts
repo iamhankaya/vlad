@@ -1,4 +1,4 @@
-import { closeSync, constants, fstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync, readdirSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { getVladHome, isSeparateKb, kbPaths } from "../kb/index.js";
 
@@ -127,6 +127,22 @@ function layout(): Layout {
   return { home, kb, docs: plainDir(home, ["vault", "docs"]), docsInKb: false };
 }
 
+/**
+ * Which docs root is live, for `vlad status`. null in the legacy layout (nothing moved). `warn` is set while the move is
+ * unfinished or leaves a stale copy: the fallback root is in use, or `<kb>/docs` exists next to a `<home>/vault/docs` that is no longer read.
+ */
+export function docsRootNotice(): { message: string; warn: boolean } | null {
+  if (!isSeparateKb()) return null;
+  const l = layout();
+  const leftover = plainDir(l.home, ["vault", "docs"]) !== null;
+  if (l.docsInKb) {
+    return leftover
+      ? { message: "docs kökü: kb/docs (eski vault/docs artık okunmuyor)", warn: true }
+      : { message: "docs kökü: kb/docs", warn: false };
+  }
+  return leftover ? { message: "docs kökü: vault/docs (yedek: kb/docs yok, taşıma bekliyor)", warn: true } : null;
+}
+
 const within = (root: string, abs: string) => abs === root || abs.startsWith(root + sep);
 
 /** Virtual path of a real path, or null when it is in neither root. The more specific docs root wins over the kb root. */
@@ -171,11 +187,45 @@ function resolveAllowed(input: string, want: "file" | "dir", l: Layout = layout(
   return { rel: segs.join("/"), abs };
 }
 
-function readText(abs: string): string {
-  // abs is already a realpath; O_NOFOLLOW + fstat close the swap-for-symlink window.
+/**
+ * The directory tree can change under a running walk (the docs root lives in a repo agents write to). So nothing is trusted
+ * from an earlier check: after a file is opened, the path must still be its own realpath, still land in the allowlist,
+ * and name the very file that was opened (dev/ino); on Linux the kernel's own record of the open file is compared too.
+ */
+function verifyOpened(l: Layout, abs: string, fd: number): void {
+  const real = realpathSync.native(abs);
+  if (real !== abs) throw new VaultError("yol değişti");
+  const v = virtualOf(l, real);
+  if (!v || !allowedZone(v, l.docsInKb)) throw new VaultError("yol izin listesinde değil");
+  const a = fstatSync(fd);
+  const b = statSync(real);
+  if (a.dev !== b.dev || a.ino !== b.ino) throw new VaultError("yol değişti");
+  let opened: string | null = null;
+  try {
+    opened = readlinkSync(`/proc/self/fd/${fd}`);
+  } catch {
+    /* no procfs (Windows, macOS): the realpath and dev/ino checks above stand */
+  }
+  if (opened !== null && opened !== abs) throw new VaultError("yol değişti");
+}
+
+/** A directory about to be listed must still be its own realpath and map to the virtual path it was reached under. */
+function dirStable(l: Layout, abs: string, rel: string): boolean {
+  try {
+    if (realpathSync.native(abs) !== abs) return false;
+    const v = virtualOf(l, abs);
+    return !!v && v.join("/") === rel && !!allowedZone(v, l.docsInKb);
+  } catch {
+    return false;
+  }
+}
+
+function readText(l: Layout, abs: string): string {
+  // abs is already a realpath; O_NOFOLLOW only guards the last component, verifyOpened covers the rest.
   const fd = openSync(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   let buf: Buffer;
   try {
+    verifyOpened(l, abs, fd);
     const st = fstatSync(fd);
     if (!st.isFile()) throw new VaultError("dosya değil");
     if (st.size > MAX_FILE_BYTES) throw new VaultError(`dosya çok büyük (${st.size} bayt > ${MAX_FILE_BYTES})`);
@@ -232,8 +282,9 @@ export function readVault(path: string, heading?: string, opts: { stripFrontMatt
 }
 
 function readVaultUnsafe(path: string, heading: string | undefined, opts: { stripFrontMatter?: boolean }): VaultFile {
-  const { rel, abs } = resolveAllowed(path, "file");
-  const raw = readText(abs);
+  const l = layout();
+  const { rel, abs } = resolveAllowed(path, "file", l);
+  const raw = readText(l, abs);
   const full = opts.stripFrontMatter ? stripFrontMatter(raw) : raw;
   const headings = parseHeadings(full);
   if (heading === undefined) return { path: rel, content: full, headings };
@@ -325,7 +376,9 @@ function searchUnsafe(
     const dir = stack.pop()!;
     let dirents;
     try {
+      if (!dirStable(l, dir.abs, dir.rel)) continue; // swapped for a link since it was queued
       dirents = readdirSync(dir.abs, { withFileTypes: true });
+      if (!dirStable(l, dir.abs, dir.rel)) continue; // swapped while it was listed: the listing may be another folder's
     } catch {
       continue;
     }
@@ -349,7 +402,7 @@ function searchUnsafe(
       let text: string;
       try {
         bytes += statSync(abs).size;
-        text = readText(abs);
+        text = readText(l, abs);
       } catch {
         continue; // oversize, binary, invalid UTF-8 or unreadable: not searchable
       }
