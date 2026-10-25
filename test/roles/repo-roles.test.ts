@@ -9,12 +9,12 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the eight roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
+  it("the eleven roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
-      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory", pazarlama: "advisory",
-      tester: "executor",
+      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory",
+      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", tester: "executor",
     });
     for (const r of roles) {
       expect(Array.isArray(r.skills), `${r.slug} skills`).toBe(true);
@@ -174,3 +174,47 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
   });
 });
 
+
+describe("game/mobile roles and short-writing rule", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+
+  it("game-developer covers the Godot toolchain and defers project lessons to the card", () => {
+    const body = read("roles/game-developer.md");
+    for (const w of ["Godot 4", "GDScript", "gdlint", "gdformat", "GUT", "headless", "baseline", "Android export", "`## Çalışma notları`"]) expect(body, w).toContain(w);
+  });
+
+  it("game-director is read-only for production code, writes docs/review and asks for play notes", () => {
+    const body = read("roles/game-director.md");
+    for (const w of ["docs/review/", "--write-movie", "vlad task ask", "oynanış notu", "roadmap", "şimdi", "kaynak URL"]) expect(body, w).toContain(w);
+  });
+
+  it("game roles generate visuals/icons with Codex, short video with Gemini, show the user first and note source/model", () => {
+    for (const r of ["game-developer", "game-director"]) {
+      const body = read(`roles/${r}.md`);
+      for (const w of ["codex exec", "Gemini", "kullanıcıya göster", "model notu"]) expect(body, `${r}: ${w}`).toContain(w);
+    }
+  });
+
+  it("growth only drafts: no accounts, posts or contact", () => {
+    const body = read("roles/growth.md");
+    for (const w of ["ASO", "SEO", "Discord", "TikTok", "haftalık", "hesap açmaz", "paylaşım yapmaz", "iletişime geçmez"]) expect(body, w).toContain(w);
+  });
+
+  it("designer keeps the web rules and gains a mobile section; pazarlama gains a game section split with growth", () => {
+    const d = read("roles/designer.md");
+    for (const w of ["docs/design/", "`tasarım`", "`denetim`", "Jetpack Compose", "Material 3", "48dp", "edge-to-edge", "TalkBack", "Roborazzi", "Paparazzi", ".claude/skills"]) expect(d, w).toContain(w);
+    const p = read("roles/pazarlama.md");
+    for (const w of ["konumlandırma", "lansman", "monetizasyon", "`growth`"]) expect(p, w).toContain(w);
+  });
+
+  it("vlad-worker carries the short-writing rule without changing the report template; CLAUDE.md lists the new roles", () => {
+    const w = read("global/skills/vlad-worker/SKILL.md");
+    expect(w).toContain("Kısa yazım");
+    expect(w).toContain("kararların gerekçesi");
+    for (const h of ["### Yapılanlar", "### Test sonuçları", "### Kabul kriterleri", "### Açık noktalar"]) expect(w, h).toContain(h);
+    expect(read("src/tasks/cloud.ts")).toContain("Kısa yaz");
+    const c = read("CLAUDE.md");
+    for (const r of ["game-developer", "game-director", "growth"]) expect(c, r).toContain(r);
+  });
+});
