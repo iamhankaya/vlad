@@ -14,6 +14,8 @@ export interface PromoteState {
   takeover?: TakeoverStatus;
   /** last time promote ended up at `up_to_date` or landed something */
   lastOk?: string;
+  /** when promote opened its kb_conflict cards (ms), newest last: an hourly cap keeps a hostile branch from flooding the phone */
+  cardLog?: number[];
 }
 
 const MAX_SEEN = 1000;
@@ -94,10 +96,16 @@ export async function acquireLock(dir: string, o: { waitMs: number; now: () => n
   const start = o.now();
   for (;;) {
     try {
+      const token = `${process.pid}.${randomBytes(8).toString("hex")}`;
       const fd = openSync(file, "wx", 0o600);
-      writeFileSync(fd, `${process.pid} ${o.now()}\n`);
+      writeFileSync(fd, token);
       closeSync(fd);
-      return () => { try { unlinkSync(file); } catch { /* already gone */ } };
+      // released only if the file is still ours: a lock judged stale and taken over by another run is not deleted by us (review Y5)
+      return () => {
+        try {
+          if (readFileSync(file, "utf8") === token) unlinkSync(file);
+        } catch { /* already gone */ }
+      };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     }

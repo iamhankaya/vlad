@@ -29,7 +29,7 @@ export function requestSync(kbDir: string, reason: string, now: () => number = D
   const seq = (Number.isSafeInteger(prev) && prev > 0 ? prev : 0) + 1;
   // temp file with an unpredictable name opened O_EXCL|O_NOFOLLOW, then rename: a symlink planted at the request name or at a guessed temp name
   // is replaced or ignored, never written through (the agent controls this directory)
-  writeFileAtomicNoFollow(join(dir, "kbsync.request"), JSON.stringify({ seq, at: new Date(now()).toISOString(), reason }) + "\n");
+  writeFileAtomicNoFollow(join(dir, "kbsync.request"), JSON.stringify({ seq, at: new Date(now()).toISOString(), reason }) + "\n", kbDir);
   return seq;
 }
 

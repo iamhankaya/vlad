@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -32,8 +32,35 @@ describe("records: kb writes do not follow planted symlinks (S13c security findi
     const outside = tmp();
     mkdirSync(join(outside, "real"));
     symlinkSync(join(outside, "real"), join(d, "cards"));
-    expect(() => safeWriteFile(join(d, "cards", "C-1.md"), "x")).toThrow(/symlink üst klasör/);
+    expect(() => safeWriteFile(join(d, "cards", "C-1.md"), "x")).toThrow(); // O_NOFOLLOW on the directory itself
     expect(existsSync(join(outside, "real", "C-1.md"))).toBe(false);
+  });
+
+  it("records: a symlinked ancestor anywhere between the kb root and the file is refused (finding 1 / Y3)", () => {
+    const root = tmp(), outside = tmp();
+    mkdirSync(join(outside, "deep"));
+    symlinkSync(outside, join(root, "cards"));
+    expect(() => safeWriteFile(join(root, "cards", "deep", "C-1.md"), "x", { root })).toThrow(/symlink üst klasör/);
+    expect(() => safeAppendFile(join(root, "cards", "deep", "a.jsonl"), "x", { root })).toThrow(/symlink üst klasör/);
+    expect(readdirSync(join(outside, "deep"))).toEqual([]);
+    // a real nested directory is fine
+    mkdirSync(join(root, "a", "b"), { recursive: true });
+    safeWriteFile(join(root, "a", "b", "f.md"), "ok\n", { root });
+    expect(readFileSync(join(root, "a", "b", "f.md"), "utf8")).toBe("ok\n");
+  });
+
+  it.runIf(process.platform === "linux")("records: swapping the directory for a symlink after it was opened does not redirect the write (Y3 race)", () => {
+    const root = tmp(), outside = tmp();
+    mkdirSync(join(root, "cards"));
+    safeWriteFile(join(root, "cards", "C-1.md"), "eski\n", {
+      root,
+      afterOpen: () => { // the attacker's move between the check and the write
+        renameSync(join(root, "cards"), join(root, "cards.moved"));
+        symlinkSync(outside, join(root, "cards"));
+      },
+    });
+    expect(readdirSync(outside)).toEqual([]); // nothing landed in the symlink's target
+    expect(readFileSync(join(root, "cards.moved", "C-1.md"), "utf8")).toBe("eski\n"); // it went where the opened directory is
   });
 
   it("records: appends refuse a symlinked file and a symlinked parent", () => {

@@ -37,7 +37,9 @@ export class GithubWriter {
   /**
    * Publishes `commit` as the new tip of the kb repository's main branch, without force. The repository and the ref are the
    * ones given at construction; the caller names only the commit and the main it validated against. The commit's first parent must be
-   * exactly that main (else this throws before any network call); GitHub refuses the update when main moved meanwhile (`main_moved`).
+   * exactly that main (else this throws before any network call), and the push is leased on that same main: it only goes through while main still
+   * IS `expectedMain`, so the update is a fast-forward of it by construction. The fast-forward property rests on those two checks, not on the remote
+   * refusing a non-fast-forward (a leased push is a force-style push). A main that moved meanwhile makes the lease fail (`main_moved`).
    * The token is `{contents: write}` on the kb repository alone.
    */
   async pushKbMain(commit: string, expectedMain: string): Promise<{ kind: "pushed" } | { kind: "main_moved" }> {

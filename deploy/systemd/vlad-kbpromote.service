@@ -18,8 +18,8 @@ TasksMax=128
 # promote reads the kb (VLAD_KB_DIR, group read; `vlad card` writes cards there) and writes its own state; nothing else
 NoNewPrivileges=yes
 ProtectSystem=strict
-# the kb directory (cards are written there through `vlad card`) is added by the installer as a drop-in: ReadWritePaths=<VLAD_KB_DIR>
-ReadWritePaths=/var/lib/vladapi
+# the installer replaces @KB_DIR@ with the kb checkout (VLAD_KB_DIR): cards are written there through `vlad card`; nothing else outside the state dir is writable
+ReadWritePaths=/var/lib/vladapi @KB_DIR@
 ProtectHome=read-only
 PrivateTmp=yes
 PrivateDevices=yes

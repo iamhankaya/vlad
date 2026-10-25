@@ -134,7 +134,7 @@ export function strictFrontmatter(text: string): Record<string, unknown> | null 
   }
 }
 
-const EXEC_FIELDS = ["gate", "repo", "default_branch", "path", "local_only"] as const;
+const EXEC_FIELDS = ["slug", "gate", "repo", "default_branch", "path", "local_only"] as const;
 
 /** `owner/name` of a GitHub repository however it is written (URL, ssh form, `.git`, case); anything else comes back lower-cased as it was. */
 export function normalizeRepo(v: unknown): string {
@@ -152,7 +152,7 @@ export interface SensitiveContext {
 
 /**
  * K5 `sensitive_field`: a server-side change to what a project card makes VLAD run or open (`gate`, `repo`, `default_branch`,
- * `path`, `local_only`, another machine's `paths` entry). The body and the server's own `paths` entry stay free. A NEW card
+ * `path`, `local_only`, `slug`, another machine's `paths` entry; `slug` must also equal the file name). The body and the server's own `paths` entry stay free. A NEW card
  * (`oldText` null) is stricter (finding 4): only the server's own `paths` entry; `path` must equal it; no `gate`, `local_only`
  * or other machine's `paths`; `repo` may not be the kb repository or one an existing card already has. Call for `projects/<slug>.md` only.
  */
@@ -164,6 +164,8 @@ export function checkSensitiveFields(path: string, oldText: string | null, newTe
   const hit = (detail: string) => out.push({ rule: "sensitive_field", path, detail });
   const problems = ctx.validate?.(next) ?? [];
   if (problems.length) hit(`schema: ${problems[0]}`);
+  // `projects/<slug>.md` is the card of project `<slug>`: a card whose slug is another name would shadow that project (review Y1)
+  if (next.slug !== path.replace(/^projects\//, "").replace(/\.md$/, "")) hit("slug");
   const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
   const b = obj(next.paths);
   if (oldText === null) {

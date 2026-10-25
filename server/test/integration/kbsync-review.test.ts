@@ -1,13 +1,13 @@
 // S13c security review (T20261025-91): one describe per finding. Names carry the finding number.
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_TIMEOUT_MS, REPO_TOO_LARGE, RUN_TIMEOUT, spawnRunner } from "../../src/kbsync/gitexec.ts";
 import { promoteKb, type PromoteDeps } from "../../src/kbsync/promote.ts";
-import { readSmallFile } from "../../src/kbsync/safefile.ts";
-import { StateStore } from "../../src/kbsync/state.ts";
+import { readSmallFile, writeFileAtomicNoFollow } from "../../src/kbsync/safefile.ts";
+import { acquireLock, StateStore } from "../../src/kbsync/state.ts";
 import { createTakeover, readSyncStatus, requestSync, settlePendingTakeover, type TakeoverDeps } from "../../src/kbsync/takeover.ts";
 import { makeWorld, SEED_CARD, type World } from "../helpers/kbRepos.ts";
 import { makePromoteEnv, pushToServerBranch, type Change, type PromoteEnv } from "../helpers/kbPromote.ts";
@@ -52,7 +52,7 @@ describe("finding 1 (high): no write through a symlink the agent planted", () =>
   it("F1: a symlinked logs directory is refused outright", () => {
     const kb = tmp(), outside = tmp();
     symlinkSync(outside, join(kb, "logs"));
-    expect(() => requestSync(kb, "takeover")).toThrow(/güvenli olmayan klasör/);
+    expect(() => requestSync(kb, "takeover")).toThrow(/symlink üst klasör/);
     expect(readdirSync(outside)).toEqual([]);
   });
 
@@ -248,7 +248,11 @@ describe("finding 5: what is fetched is bounded", () => {
 
   it("F5: the unit is limited (timeout, memory, tasks) and sandboxed", () => {
     const unit = readFileSync(join(import.meta.dirname, "..", "..", "..", "deploy", "systemd", "vlad-kbpromote.service"), "utf8");
-    for (const line of ["TimeoutStartSec=300", "MemoryMax=512M", "NoNewPrivileges=yes", "ProtectSystem=strict", "ReadWritePaths=/var/lib/vladapi", "PrivateTmp=yes"]) expect(unit).toContain(line);
+    for (const line of ["TimeoutStartSec=300", "MemoryMax=512M", "NoNewPrivileges=yes", "ProtectSystem=strict", "ReadWritePaths=/var/lib/vladapi @KB_DIR@", "PrivateTmp=yes"]) expect(unit).toContain(line);
+    // the same template the kbsync units use, so one installer substitution covers both (review Y2)
+    const sync = readFileSync(join(import.meta.dirname, "..", "..", "..", "deploy", "systemd", "vlad-kbsync.service"), "utf8");
+    expect(sync).toContain("@KB_DIR@");
+    expect(unit).toMatch(/installer replaces @KB_DIR@/);
   });
 });
 
@@ -349,5 +353,120 @@ describe("finding 9: one open promote card, clean text", () => {
     const n = order.length;
     await e.run();
     expect(order).toHaveLength(n);
+  });
+});
+
+describe("re-review round (Y1, Y3, Y4, Y5, card cap)", () => {
+  it("Y1: a card must be named after its slug; renaming a card's slug is refused", async () => {
+    // new card in the wrong file: projects/a-alpha.md claiming slug alpha would shadow the real alpha
+    const w = makeWorld(), e = makePromoteEnv(w);
+    const born = SEED_CARD().replace("slug: alpha", "slug: alpha").replace("repo: acme/alpha", "repo: acme/shadow").replace("path: /nonexistent/alpha", "path: /srv/s").replace("  winbox: C:\\dev\\alpha", "  srvbox: /srv/s");
+    pushToServerBranch(w, [[ok1("projects/a-alpha.md", born)]]);
+    await refused(e, w, "sensitive_field", "projects/a-alpha.md", /^slug$/);
+    // an existing card whose slug changes
+    const w2 = makeWorld(), e2 = makePromoteEnv(w2);
+    pushToServerBranch(w2, [[ok1("projects/alpha.md", SEED_CARD().replace("slug: alpha", "slug: other"))]]);
+    await refused(e2, w2, "sensitive_field", "projects/alpha.md", /^slug$/);
+    // the honest case still passes
+    const w3 = makeWorld(), e3 = makePromoteEnv(w3);
+    pushToServerBranch(w3, [[ok1("projects/gamma.md", born.replace("slug: alpha", "slug: gamma").replace("name: alpha", "name: gamma").replace("repo: acme/shadow", "repo: acme/gamma"))]]);
+    expect(await e3.run()).toMatchObject({ promoted: true });
+  });
+
+  it("Y3: the request file is created relative to the opened directory; a symlink swapped in after the check redirects nothing", () => {
+    if (process.platform !== "linux") return;
+    const kb = tmp(), outside = tmp();
+    mkdirSync(join(kb, "logs"));
+    writeFileAtomicNoFollow(join(kb, "logs", "kbsync.request"), "{\"seq\":1}\n", kb, () => {
+      renameSync(join(kb, "logs"), join(kb, "logs.moved"));
+      symlinkSync(outside, join(kb, "logs"));
+    });
+    expect(readdirSync(outside)).toEqual([]);
+    expect(readFileSync(join(kb, "logs.moved", "kbsync.request"), "utf8")).toBe("{\"seq\":1}\n");
+  });
+
+  it("Y3: a symlink anywhere between the kb root and the request file is refused", () => {
+    const kb = tmp(), outside = tmp();
+    mkdirSync(join(outside, "logs"));
+    symlinkSync(outside, join(kb, "state"));
+    expect(() => writeFileAtomicNoFollow(join(kb, "state", "logs", "kbsync.request"), "x", kb)).toThrow(/symlink üst klasör/);
+    expect(readdirSync(join(outside, "logs"))).toEqual([]);
+    expect(() => writeFileAtomicNoFollow(join(outside, "logs", "kbsync.request"), "x", kb)).toThrow(/kb dışında/);
+  });
+
+  it("Y4: the leased push is a fast-forward only because the first parent is the expected main; a stale expectation is refused by the remote", async () => {
+    const w = makeWorld();
+    const stateDir = tmp();
+    // the real port over a runner that only adds permission for the local file:// remote
+    const { createGitExec, createKbGitPort, ensureBareRepo } = await import("../../src/kbsync/gitexec.ts");
+    const { GithubWriter } = await import("../../src/github/writer.ts");
+    const run = (file: string, args: string[], o: { cwd: string; env: Record<string, string>; input?: string }) => {
+      const r = spawnSync(file, ["-c", "protocol.file.allow=always", ...args], { cwd: o.cwd, env: { ...o.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } as NodeJS.ProcessEnv, input: o.input, encoding: "utf8" });
+      return Promise.resolve({ code: r.status ?? 1, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
+    };
+    await ensureBareRepo(stateDir, run);
+    const git = createGitExec({ stateDir, run });
+    const out = async (...a: string[]) => (await git(a)).stdout.trim();
+    await out("fetch", "-q", w.url, "+refs/heads/main:refs/remotes/origin/main");
+    const m0 = await out("rev-parse", "refs/remotes/origin/main");
+    const tree = await out("rev-parse", `${m0}^{tree}`);
+    const mk = async (parent: string, msg: string) => out("commit-tree", tree, "-p", parent, "-m", msg);
+    const writer = new GithubWriter({ request: async () => { throw new Error("no"); } }, { repo: "acme/vlad-kb", main: "main", tokens: { token: async () => "t" }, git: createKbGitPort(git, w.url) });
+
+    const c1 = await mk(m0, "one");
+    expect(await writer.pushKbMain(c1, m0)).toEqual({ kind: "pushed" });
+    expect(w.remoteHead("main")).toBe(c1);
+    // a fast-forward of the old main that is NOT of the current main: the remote moved on, the lease refuses, main is untouched
+    const stale = await mk(m0, "stale");
+    expect(await writer.pushKbMain(stale, m0)).toEqual({ kind: "main_moved" });
+    expect(w.remoteHead("main")).toBe(c1);
+    // the property the writer itself guarantees: a commit that does not descend from the expected main never reaches the remote
+    const unrelated = await mk(c1, "other parent");
+    await expect(writer.pushKbMain(unrelated, m0)).rejects.toThrow(/ilk ebeveyni/);
+    expect(w.remoteHead("main")).toBe(c1);
+    // and the push is not a plain force: a non-descendant under a MATCHING lease would rewrite history, which firstParent forbids
+    const orphan = await out("commit-tree", tree, "-m", "orphan");
+    await expect(writer.pushKbMain(orphan, c1)).rejects.toThrow(/ilk ebeveyni|ebeveyni okunamadı/);
+    expect(w.remoteHead("main")).toBe(c1);
+  });
+
+  it("Y5: promote.lock is released only by its owner, and a stale one is taken over", async () => {
+    const dir = tmp();
+    const lock = join(dir, "promote.lock");
+    const sleep = async () => {};
+    const a = (await acquireLock(dir, { waitMs: 0, now: Date.now, sleep }))!;
+    expect(a).toBeTypeOf("function");
+    expect(await acquireLock(dir, { waitMs: 0, now: Date.now, sleep })).toBeNull(); // held
+    // someone judged ours stale and took the file over: our release must leave their lock alone
+    writeFileSync(lock, "9999.someone-else");
+    a();
+    expect(readFileSync(lock, "utf8")).toBe("9999.someone-else");
+    // a stale lock (older than 10 minutes) is taken over, and the new owner's release removes it
+    const old = new Date(Date.now() - 11 * 60_000);
+    utimesSync(lock, old, old);
+    const b = (await acquireLock(dir, { waitMs: 0, now: Date.now, sleep }))!;
+    expect(b).toBeTypeOf("function");
+    b();
+    expect(existsSync(lock)).toBe(false);
+  });
+
+  it("card cap: at most 5 promote cards an hour; beyond that the open card stays and no new one is raised, until the hour has passed", async () => {
+    const w = makeWorld();
+    let t = Date.parse("2026-10-25T12:00:00Z");
+    const e = makePromoteEnv(w, { now: () => t });
+    for (let i = 1; i <= 8; i++) {
+      pushToServerBranch(w, [[ok1(`logs/bad-${i}.md`)]]);
+      t += 60_000;
+      const r = await e.run();
+      expect(r.reason).toBe("rejected");
+      if (i > 5) expect(r.card).toBe("C-005"); // the fifth card is still the one shown
+    }
+    expect(e.cards).toHaveLength(5);
+    expect(new StateStore(e.stateDir).read().blocked).toMatchObject({ card: "C-005" });
+    // an hour after the first card the cap has room again
+    t += 60 * 60_000;
+    pushToServerBranch(w, [[ok1("logs/bad-9.md")]]);
+    expect((await e.run()).reason).toBe("rejected");
+    expect(e.cards).toHaveLength(6);
   });
 });

@@ -34,6 +34,8 @@ export interface PromoteDeps {
 
 /** A takeover started this recently (and has not failed) is what lets a new `active.md` through. */
 const TAKEOVER_WINDOW_MS = 30 * 60_000;
+/** At most this many kb_conflict cards from promote per hour (finding 9). */
+export const MAX_CARDS_PER_HOUR = 5;
 const takeoverIsPending = (t: { state: string; at: string } | undefined, now: number): boolean => t?.state === "pending" && now - Date.parse(t.at) < TAKEOVER_WINDOW_MS;
 
 const REPO = /^[\w.-]+\/[\w.-]+$/;
@@ -274,8 +276,13 @@ async function rejected(
     return e ? `${v.rule}\t${e.status}\t${e.newMode}\t${e.newOid}\t${v.path}` : `${v.rule}\t-\t-\t-\t${v.path}`;
   });
   const key = cachedKey ?? conflictKey("rejected", lines);
-  let card = store.read().seen[key];
-  if (!card) {
+  let card: string | undefined = store.read().seen[key];
+  const hourAgo = d.now() - 3_600_000;
+  const recent = (store.read().cardLog ?? []).filter((t) => t > hourAgo);
+  if (!card && recent.length >= MAX_CARDS_PER_HOUR) {
+    // over the cap: no new card; the card that is already open stays the one the phone shows (kb_sync.state is `blocked` regardless)
+    card = store.read().blocked?.card;
+  } else if (!card) {
     try {
       // one open promote card at a time: a new refusal replaces the old one
       await d.cards.resolveOpen("promote").catch(() => 0);
@@ -285,7 +292,7 @@ async function rejected(
         title: `kb promote reddedildi: ${found.length} ihlal`,
       });
       card = opened.id;
-      store.update((s) => { s.seen[key] = opened.id; });
+      store.update((s) => { s.seen[key] = opened.id; s.cardLog = [...recent, d.now()]; });
     } catch { /* card could not be written (e.g. this machine is not the active VLAD): the next cycle retries; the block is visible regardless */ }
   }
   store.update((s) => {

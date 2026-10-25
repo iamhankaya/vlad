@@ -137,8 +137,9 @@ export function createKbGitPort(git: GitExec, url: string): KbGitPort {
       return r.stdout.trim();
     },
     async push({ token, commit, ref, expectedMain }) {
-      // no `+` refspec and no plain force: GitHub refuses anything that is not a fast-forward, and the lease says "only if main is still the main we
-      // validated against" (finding 8); --atomic makes the one ref update all-or-nothing
+      // `--force-with-lease=<ref>:<expected>` is a force-style push that only goes through while the remote ref still IS <expected>. That is a
+      // fast-forward only because the writer has checked that the commit's first parent is <expected>; the remote is not what refuses a
+      // non-fast-forward here. No `+` refspec and no plain force. --atomic makes the one ref update all-or-nothing (finding 8, review Y4)
       const r = await git(["push", "-q", "--atomic", `--force-with-lease=${ref}:${expectedMain}`, url, `${commit}:${ref}`], { token });
       if (r.code === 0) return "pushed";
       if (/\[(remote )?rejected\]|non-fast-forward|fetch first|stale info/i.test(r.stderr ?? "")) return "rejected";
