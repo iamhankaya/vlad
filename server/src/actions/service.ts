@@ -29,8 +29,24 @@ export type ProjectSource = (slug: string) => Promise<ProjectInfo | null>;
 
 /** What was approved, derived by the server (never taken from a card). */
 export type ActionDescriptor = { action_id: string; kind: string; repo: string; pr: number; base: string; head_sha: string; task: string };
-/** Proof that a device approved exactly these challenge bytes. S10a adds `{ kind: "grant", ... }`. */
-export type ApprovalProof = { kind: "device"; device_id: string; signature: string; signed_bytes_b64: string; approved_at_ms: number };
+/**
+ * Proof that a device approved exactly these challenge bytes, or that a signed grant of a device covers this action
+ * (S10a; the grant was re-verified and one use reserved before the executor is called).
+ */
+export type ApprovalProof =
+  | { kind: "device"; device_id: string; signature: string; signed_bytes_b64: string; approved_at_ms: number }
+  | { kind: "grant"; grant_id: string; device_id: string; approved_at_ms: number };
+
+/** What a grant is judged on; CI is already green and the origin checked when this is built. */
+export type GrantFacts = { task: TaskInfo; kind: string; repo: string; base: string; head_sha: string };
+/** The grant that covers an action. `reserve` takes one use atomically (false = none left); `guard` runs before every outward write and throws when the grant stopped applying. */
+export type GrantPick = {
+  grant_id: string;
+  device_id: string;
+  reserve: (actionId: string) => boolean;
+  release: (actionId: string) => void;
+  guard: (actionId: string, task: TaskInfo, fields: Record<string, string>) => Promise<void>;
+};
 /**
  * The only way out of the approval path (S9b implements it: check-run, merge, audit). Throw an `ActionError` to report a
  * specific refusal (`head_moved`), anything else becomes a generic failure. In S9a nothing here writes to GitHub.
@@ -77,6 +93,9 @@ const RETRYABLE = new Set(["github_unavailable", "bookkeeping_failed"]);
 
 const TASK_ID = /^T[0-9]{8}-[0-9]{2,}$/;
 
+/** The kind and base a task's merge must have: a phase goes into `vlad/<parent>`, a root/single task into the card's default branch. */
+export const gateKindOf = (task: TaskInfo, card: ProjectInfo) => ({ kind: task.parent ? "merge_phase" : "merge_final", base: task.parent ? `vlad/${task.parent}` : (card.default_branch ?? "master") });
+
 /**
  * Rules:
  * - State changes happen only inside `store.withLock(actionId)` (prepare also under a per-task lock). `inspect` and the
@@ -91,6 +110,8 @@ export class ActionService {
   private readonly lastPrepare = new Map<string, number>();
   private readonly badSigs = new Map<string, number>();
   private readonly background = new Set<Promise<unknown>>();
+  /** Grant checks of actions that are running right now (S10a); never persisted. */
+  private readonly grantGuards = new Map<string, GrantPick["guard"]>();
 
   constructor(deps: ActionDeps) {
     this.d = deps;
@@ -224,7 +245,7 @@ export class ActionService {
 
   /** The kind and base a task's merge must have: a phase goes into `vlad/<parent>`, a root/single task into the card's default branch. Used at prepare and again at approve. */
   private derive(task: TaskInfo, card: ProjectInfo) {
-    return { kind: task.parent ? "merge_phase" : "merge_final", base: task.parent ? `vlad/${task.parent}` : (card.default_branch ?? "master") };
+    return gateKindOf(task, card);
   }
 
   private checkOrigin(pull: PullFacts, repo: string, taskId: string, base: string) {
@@ -247,7 +268,7 @@ export class ActionService {
     if (!current || current.revoked_at) throw new ActionError(401, "device_revoked", "device_revoked");
     const rec = this.load(actionId);
     // Not "this device's" challenge looks exactly like an unknown one.
-    if (rec.prepared_by !== current.device_id) throw new ActionError(404, "bad_request", "not_found");
+    if (rec.prepared_by !== current.device_id || rec.grant) throw new ActionError(404, "bad_request", "not_found");
     if (rec.state === "invalid") throw new ActionError(410, "expired", rec.reason ?? "invalid");
     if (rec.state === "failed") throw new ActionError(409, "bad_request", "action_failed", { cause: rec.reason ?? "unknown" });
     if (rec.state !== "merged") {
@@ -340,6 +361,18 @@ export class ActionService {
       throw new ActionError(503, "bad_request", "github_unavailable");
     }
     if (!t || t.state !== "awaiting_approval" || !t.pr || t.pr.repo !== f.repo || t.pr.number !== Number(f.pr) || t.pr.base !== f.base) throw new ActionError(409, "bad_request", "task_changed");
+    if (rec.grant) {
+      // A grant is no signature over these bytes: CI is looked at again right before the write, and the grant must still apply (revoked,
+      // expired, device gone, conditions). No guard in memory (restart, foreign record) = closed.
+      const guard = this.grantGuards.get(id);
+      if (!guard) throw new ActionError(409, "bad_request", "grant_guard_missing");
+      await this.checkCi(f.repo!, f.head_sha!);
+      try {
+        await guard(id, t, f);
+      } catch (e) {
+        throw e instanceof ActionError ? e : new ActionError(503, "bad_request", "github_unavailable");
+      }
+    }
     return true;
   }
 
@@ -377,9 +410,13 @@ export class ActionService {
     if (pull.draft) throw new ActionError(409, "not_mergeable", "draft");
   }
 
-  private async checkCi(repo: string, sha: string) {
+  private async ciOf(repo: string, sha: string) {
     const [runs, status] = await this.read(() => Promise.all([this.d.reader.getCheckRuns(repo, sha), this.d.reader.getCombinedStatus(repo, sha)]));
-    const ci = ciState(runs, status, this.d.policy?.appId);
+    return ciState(runs, status, this.d.policy?.appId);
+  }
+
+  private async checkCi(repo: string, sha: string) {
+    const ci = await this.ciOf(repo, sha);
     if (ci !== "green") throw new ActionError(422, "ci_not_green", "ci_not_green", { ci });
   }
 
@@ -431,6 +468,124 @@ export class ActionService {
       if (e instanceof ActionError && e.status !== 503) this.refuse(rec.action_id, e);
       throw e;
     }
+  }
+
+  // ---- grants (S10a) ---------------------------------------------------------------------------------------------
+
+  /**
+   * A task waiting for its gate, covered by a grant: the same path as an approval (live look, record, checks, the single exit), with a
+   * grant standing in for the signature. Returns null when nothing is done: CI not green, or `pick` finds no grant that applies, or the
+   * last use was taken meanwhile. A refusal of the checks throws an `ActionError` (and gives the reserved use back).
+   * Serialised per task with `prepare`, so a manual challenge and a grant never run the same task at once.
+   */
+  async executeGranted(taskId: string, pick: (facts: GrantFacts) => Promise<GrantPick | null>): Promise<Approved | null> {
+    if (!TASK_ID.test(taskId)) throw new ActionError(400, "bad_request", "task_required");
+    return this.d.store.withLock(`prepare:${taskId}`, async () => {
+      this.observeClock();
+      for (const oid of this.byTask.get(taskId) ?? []) {
+        if (this.d.store.get(oid)?.state === "checked") throw new ActionError(409, "bad_request", "action_in_flight", { action_id: oid });
+      }
+      const { task, repo, prNo, base, kind } = await this.target(taskId);
+      const pull = await this.read(() => this.d.reader.getPull(repo, prNo));
+      if (!pull) throw new ActionError(409, "not_mergeable", "pr_not_found");
+      this.checkOpen(pull);
+      this.checkOrigin(pull, repo, task.id, base);
+      // Not green is no error here: a grant only ever acts on a green PR, and the sweep looks again later.
+      if ((await this.ciOf(repo, pull.head.sha)) !== "green") return null;
+      const sel = await pick({ task, kind, repo, base, head_sha: pull.head.sha });
+      if (!sel) return null;
+
+      const id = newActionId();
+      const nowMs = this.d.now();
+      this.highWater = Math.max(this.highWater, nowMs);
+      const exp = expiryOf(nowMs);
+      let c: ReturnType<typeof buildChallenge>;
+      try {
+        c = buildChallenge({ actionId: id, kind, repo, pr: prNo, base: pull.base.ref, headSha: pull.head.sha, task: task.id, nonce: newNonce(), exp });
+      } catch (e) {
+        if (e instanceof CanonicalError) throw new ActionError(409, "bad_request", "unrepresentable_field");
+        throw e;
+      }
+      const taken = await this.d.store.withLock(id, () => {
+        this.d.store.create({
+          action_id: id, bytes_b64: Buffer.from(c.bytes).toString("base64"), fields: c.fields, task_id: task.id,
+          prepared_by: sel.device_id, created_ms: nowMs, exp, grant: { id: sel.grant_id, device_id: sel.device_id },
+        });
+        this.index(task.id, id);
+        // The use is taken before anything else can happen (synchronous): two tasks racing for the last use cannot both get it.
+        if (!sel.reserve(id)) {
+          this.d.store.transition(id, "invalid", nowMs, { reason: "grant_exhausted" });
+          return false;
+        }
+        this.d.store.transition(id, "approved", nowMs, { approval: { device_id: sel.device_id, signature: `grant:${sel.grant_id}`, at_ms: nowMs } });
+        return true;
+      });
+      return taken ? this.runGranted(id, sel) : null;
+    });
+  }
+
+  /**
+   * Finishes grant actions an earlier run left behind (`approved`: GitHub was unreachable; `checked`: bookkeeping failed after the merge).
+   * `open` gives the grant's pick again; null means the grant is gone from the books and the action ends `failed`.
+   */
+  async resumeGranted(open: (grantId: string) => GrantPick | null): Promise<number> {
+    let n = 0;
+    for (const rec of this.d.store.list()) {
+      if (!rec.grant || (rec.state !== "approved" && rec.state !== "checked")) continue;
+      const sel = open(rec.grant.id);
+      if (!sel) {
+        await this.d.store.withLock(rec.action_id, () => this.settle(rec.action_id, "failed", "grant_missing"));
+        continue;
+      }
+      try {
+        await this.runGranted(rec.action_id, sel);
+        n++;
+      } catch { /* kept for the next round, or failed for good; the reason is on the record */ }
+    }
+    return n;
+  }
+
+  /** `approved|checked -> merged` for a grant record: the tail of {@link approve} with the grant's guard in place of a signature. */
+  private async runGranted(actionId: string, sel: GrantPick): Promise<Approved> {
+    return this.d.store.withLock(actionId, async () => {
+      let cur = this.fresh(actionId);
+      if (!cur.grant || cur.grant.id !== sel.grant_id) throw new ActionError(409, "bad_request", "grant_mismatch");
+      const f = parseChallengeBytes(Buffer.from(cur.bytes_b64, "base64"));
+      const out = (r: ActionResult): Approved => ({
+        status: "executed",
+        result: { kind: f.kind!, repo: f.repo!, pr: Number(f.pr), head_sha: f.head_sha!, ...(r.merge_sha ? { merge_sha: r.merge_sha } : {}) },
+      });
+      if (cur.state === "merged") return out(cur.result ?? {});
+      if (cur.state !== "approved" && cur.state !== "checked") throw new ActionError(409, "bad_request", "action_not_runnable");
+      this.grantGuards.set(actionId, sel.guard);
+      try {
+        await this.liveChecks(cur, f, cur.state === "checked");
+        cur = this.fresh(actionId);
+        if (cur.state === "approved") cur = this.d.store.transition(actionId, "checked", this.d.now());
+        cur = this.fresh(actionId);
+        if (this.d.devices.get(cur.prepared_by)?.revoked_at) {
+          this.d.store.transition(actionId, "invalid", this.d.now(), { reason: "revoked" });
+          throw new ActionError(410, "expired", "revoked");
+        }
+        const result = await this.d.execute(
+          { action_id: actionId, kind: f.kind!, repo: f.repo!, pr: Number(f.pr), base: f.base!, head_sha: f.head_sha!, task: f.task! },
+          { kind: "grant", grant_id: sel.grant_id, device_id: sel.device_id, approved_at_ms: cur.approval!.at_ms },
+          { stillAuthorized: () => this.stillAuthorized(actionId, f) },
+        );
+        this.d.store.transition(actionId, "merged", this.d.now(), { result });
+        return out(result);
+      } catch (e) {
+        const err = e instanceof ActionError ? e : new ActionError(502, "bad_request", "execute_failed");
+        // Nothing merged and nothing will: the use goes back. An unreachable GitHub/kb (or bookkeeping after the merge) keeps both the use and the record.
+        if (!RETRYABLE.has(String(err.details?.reason)) && err.status !== 503) {
+          this.settle(actionId, "failed", err.message);
+          sel.release(actionId);
+        }
+        throw err;
+      } finally {
+        this.grantGuards.delete(actionId);
+      }
+    });
   }
 
   // ---- revocation and clock -----------------------------------------------------------------------------------

@@ -408,6 +408,8 @@ paths:
       summary: Yetki devri oluştur (telefondan, `approval` imzalı)
       description: |
         Yalnız `merge_phase` ve `merge_final` devredilebilir (kullanıcı kararı: `merge_final` devredilebilir).
+        `created` sunucu saatinden en çok 5 dk ayrık olmalı (eski bir imzalı istek yeniden oynatılamaz); aynı `id` ya da imza ikinci kez kabul edilmez.
+        Devir sunucu defterine (`grants.json`) yazılır, `kb/grants/` yalnız yansımadır ve kb'deki bir dosya devir sayılmaz.
         `tag_release`, `publish`, `delete`, `security`, `scope_change` şemada enum dışıdır ve ayrıca kodda
         `not_delegable` ile reddedilir. `signature`, `approval` anahtarıyla `grantSigningPayload()` baytları
         (`src/grants/store.ts`; vektör: `signing-vectors.json` `grant`) üzerindedir. Süre en çok 30 gün.
@@ -425,12 +427,22 @@ paths:
               schema: { $ref: "#/components/schemas/GrantCreated" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: 'Devir kimliği ya da imzası daha önce kullanılmış (`bad_request`; `details.reason`: `id_taken`, `signature_reused`, `too_many_grants`).'
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "422": { $ref: "#/components/responses/NotDelegable" }
+        "503":
+          description: 'kb''ye yazılamadı (`bad_request`; `details.reason`: `kb_unavailable`); devir kaydedilmedi.'
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /grants/{id}:
     delete:
       operationId: revokeGrant
       tags: [grants]
-      summary: Devri iptal et (yalnız azaltır)
+      summary: Devri iptal et (yalnız azaltır; kalıcı, sunucu defterinde)
       x-vlad-auth: session
       parameters:
         - name: id
@@ -439,6 +451,7 @@ paths:
           schema: { $ref: "#/components/schemas/GrantId" }
       responses:
         "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
   /active/takeover:
