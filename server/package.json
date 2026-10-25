@@ -2,18 +2,24 @@
   "name": "vlad-server",
   "version": "0.1.0",
   "private": true,
-  "description": "VLAD mobile API server (sozlesme fazi: kanonik fonksiyonlar ve sozlesme testleri)",
+  "description": "VLAD mobile API server (S6b: auth, pairing, envelope verification)",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint:openapi": "redocly lint ../contract/openapi.yaml",
     "test": "vitest run",
-    "gate": "npm run typecheck && npm run lint:openapi && npm test"
+    "gate": "npm run typecheck && npm run lint:openapi && node scripts/gen-routes.ts --check && npm test",
+    "gen:routes": "node scripts/gen-routes.ts",
+    "start": "node src/main.ts",
+    "pair": "node src/cli.ts pair"
   },
   "dependencies": {
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "fastify": "5.12.7",
     "yaml": "2.9.1"
   },
   "devDependencies": {
@@ -21,5 +27,8 @@
     "@types/node": "26.6.5",
     "typescript": "7.0.2",
     "vitest": "5.0.5"
+  },
+  "bin": {
+    "vlad-server": "./src/cli.ts"
   }
 }
