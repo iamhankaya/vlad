@@ -10,7 +10,7 @@ beforeEach(() => { home = newHome(); writeProjectCard(home); });
 // Plan sapması: action_request kartı `--option` kabul etmez (sabit approve/reject); diğer türler seçenek alır.
 const newCard = (extra: string[] = [], kind = "vlad_question", title = "Soru") =>
   ok<{ id: string }>(home, ["card", "new", "--kind", kind, "--project", "alpha", "--title", title,
-    ...(kind === "action_request" ? [] : ["--option", "a=Evet", "--option", "b=Hayır"]), ...extra]).id;
+    ...(kind === "action_request" || kind === "kb_conflict" ? [] : ["--option", "a=Evet", "--option", "b=Hayır"]), ...extra]).id;
 const ACTION = (repo = "acme/alpha") => ["--action-kind", "merge_phase", "--sha", sha40(), "--repo", repo, "--pr", "42", "--base", "vlad/T20261024-94"];
 const show = (id: string) => ok<any>(home, ["card", "show", id]);
 
@@ -69,7 +69,10 @@ describe("records: card new/list/show/answer/resolve (S3a)", () => {
   it("records: card invalid kind rejected (all five valid kinds accepted)", () => {
     const e = fail(home, ["card", "new", "--kind", "bogus", "--project", "alpha", "--title", "x"]);
     expect(e.error).toContain("bogus");
-    for (const k of ["ci_red", "conflict", "vlad_question", "kb_conflict"]) newCard([], k);
+    for (const k of ["ci_red", "conflict", "vlad_question"]) newCard([], k);
+    // kb_conflict: seçenekler sabit (S13a K6); --option reddedilir, --conflict-* alanları zorunludur
+    const key = "a".repeat(64), sha = "b".repeat(40);
+    newCard(["--conflict-key", key, "--conflict-reason", "merge_conflict", "--conflict-source", "kbsync", "--conflict-head", sha, "--conflict-base", sha, "--conflict-path", "tasks/x.md"], "kb_conflict", "kb çakışması");
     newCard(ACTION(), "action_request");
     expect(ok<any>(home, ["card", "list"]).cards).toHaveLength(5);
   });
