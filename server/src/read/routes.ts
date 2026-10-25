@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { runVladJson, VladError } from "../vlad/cli.ts";
 import { ReadCache } from "./cache.ts";
+import { catalogHandlers, cleanWarnings } from "./catalog.ts";
 import { gateCard, isWorker, toCard, toPipelines, toTask, toWorker } from "./map.ts";
 import type { CardData, GateProvider, TaskData } from "./types.ts";
 
@@ -34,10 +35,11 @@ function vladFailure(reply: FastifyReply, e: unknown) {
   throw e;
 }
 
+export type ReadOp = "getHome" | "getCard" | "getTask" | "listPipelines" | "listProjects" | "getProject" | "listFindings" | "searchVault" | "readVaultFile";
 export type ReadHandler = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 /** Handlers of the read endpoints by `operationId`; the app mounts them behind its signature preHandler (`http/app.ts`). */
-export function readHandlers(deps: ReadDeps = {}): Record<"getHome" | "getCard" | "getTask" | "listPipelines", ReadHandler> {
+export function readHandlers(deps: ReadDeps = {}): Record<ReadOp, ReadHandler> {
   const cache = deps.cache ?? new ReadCache();
   const opts = { timeoutMs: deps.timeoutMs };
   const list = <T>(args: string[]) => cache.get(args.join(" "), () => runVladJson<T>(args, opts));
@@ -76,7 +78,7 @@ export function readHandlers(deps: ReadDeps = {}): Record<"getHome" | "getCard" 
         active_vlad: active.active
           ? { machine: active.active.machine, since: active.active.since, heartbeat: active.active.heartbeat, mine: active.mine }
           : { machine: "", since: EPOCH, heartbeat: EPOCH, mine: false },
-        warnings: [...tasks.warnings, ...cards.warnings, ...quota.warnings, ...active.warnings, ...(deps.warnings?.() ?? [])],
+        warnings: [...cleanWarnings([...tasks.warnings, ...cards.warnings, ...quota.warnings, ...active.warnings]), ...(deps.warnings?.() ?? [])],
       };
     } catch (e) {
       return vladFailure(reply, e);
@@ -114,16 +116,19 @@ export function readHandlers(deps: ReadDeps = {}): Record<"getHome" | "getCard" 
   const listPipelines: ReadHandler = async (_req, reply) => {
     try {
       const tasks = await list<{ tasks: TaskData[]; warnings: string[] }>(["task", "list"]);
-      return { pipelines: toPipelines(tasks.tasks), warnings: tasks.warnings };
+      return { pipelines: toPipelines(tasks.tasks), warnings: cleanWarnings(tasks.warnings) };
     } catch (e) {
       return vladFailure(reply, e);
     }
   };
 
-  return { getHome, getCard, getTask, listPipelines };
+  return { getHome, getCard, getTask, listPipelines, ...catalogHandlers(deps, cache) };
 }
 
-const PATHS = { getHome: "/v1/home", getCard: "/v1/cards/:id", getTask: "/v1/tasks/:id", listPipelines: "/v1/pipelines" } as const;
+const PATHS = {
+  getHome: "/v1/home", getCard: "/v1/cards/:id", getTask: "/v1/tasks/:id", listPipelines: "/v1/pipelines",
+  listProjects: "/v1/projects", getProject: "/v1/projects/:slug", listFindings: "/v1/findings", searchVault: "/v1/vault/search", readVaultFile: "/v1/vault/file",
+} as const;
 
 /** Standalone registration (unit tests with a stand-in preHandler); the app itself uses {@link readHandlers}. */
 export function registerReadRoutes(app: FastifyInstance, preHandler: preHandlerHookHandler, deps: ReadDeps = {}): void {
