@@ -52,11 +52,13 @@ describe("cloud CLI", () => {
     expect(vlad(["task", "list", "--state", "running", "--json"]).out).toContain(id);
   });
 
-  it("launch outside the cloud on a non-Windows host fails with a clear error and stays queued", () => {
+  // S2a: auto on Linux outside the cloud now means the systemd process launcher instead of a "bulut algılanmadı"
+  // error. This card's path is a Windows path, so the launch still fails (before any launcher runs) and stays queued.
+  it("launch outside the cloud on a non-Windows host no longer reports a missing cloud and stays queued on failure", () => {
     const id = newTask();
     const r = vlad(["task", "launch", id, "--json"]);
     expect(r.code).toBe(1);
-    expect(JSON.parse(r.err).error).toMatch(/bulut algılanmadı/);
+    expect(JSON.parse(r.err).error).not.toMatch(/bulut algılanmadı/);
     expect(vlad(["task", "list", "--state", "queued", "--json"]).out).toContain(id);
   });
 

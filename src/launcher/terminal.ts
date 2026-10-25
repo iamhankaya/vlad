@@ -8,7 +8,7 @@ import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 const SQ = /['‘’‚‛]/g;
 const q = (s: string) => `'${s.replace(SQ, (m) => m + m)}'`;
 // Same as the role schema's `model` pattern; checked again here because the value lands in a script.
-const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
+export const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
 export function buildScript(req: LaunchRequest): string {
   const lines: string[] = [];
