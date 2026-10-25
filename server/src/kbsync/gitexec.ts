@@ -12,6 +12,7 @@ export type Runner = (file: string, args: string[], o: { cwd: string; env: Recor
 /** Config passed with `-c` on every call: no hooks, https only, objects checked on fetch, no helper that could hold or leak credentials. */
 export const HARDENED_CONFIG: readonly string[] = [
   "core.hooksPath=/dev/null",
+  "core.fsmonitor=false",
   "protocol.allow=never",
   "protocol.https.allow=always",
   "transfer.fsckObjects=true",

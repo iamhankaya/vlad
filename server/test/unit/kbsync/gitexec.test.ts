@@ -40,7 +40,7 @@ describe("server: promote git env hardened and token absent from argv", () => {
       expect(c.env).toMatchObject({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", HOME: dir });
       expect(JSON.stringify(c.args)).not.toContain(TOKEN);
     }
-    expect(HARDENED_CONFIG).toEqual(expect.arrayContaining(["core.hooksPath=/dev/null", "protocol.allow=never", "protocol.https.allow=always", "transfer.fsckObjects=true", "fetch.fsckObjects=true", "submodule.recurse=false", "credential.helper="]));
+    expect(HARDENED_CONFIG).toEqual(expect.arrayContaining(["core.hooksPath=/dev/null", "core.fsmonitor=false", "protocol.allow=never", "protocol.https.allow=always", "transfer.fsckObjects=true", "fetch.fsckObjects=true", "submodule.recurse=false", "credential.helper="]));
     expect(f!.env.VLAD_GIT_TOKEN).toBe(TOKEN);
     expect(f!.env.GIT_ASKPASS).toBe(join(dir, "askpass.sh"));
     expect(p!.env.VLAD_GIT_TOKEN).toBeUndefined();
