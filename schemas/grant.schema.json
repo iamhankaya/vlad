@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "scope", "action", "conditions", "created", "expires", "max_uses", "revoked", "device_id", "signature", "payload_version"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^G-\\d{3,}$" },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "ref"],
+      "properties": {
+        "type": { "enum": ["project", "pipeline"] },
+        "ref": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" }
+      }
+    },
+    "action": { "enum": ["merge_phase", "merge_final"] },
+    "conditions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["ci_green", "no_severe_findings", "codex_clear"] },
+      "contains": { "const": "ci_green" }
+    },
+    "created": { "type": "string", "format": "date-time" },
+    "expires": { "type": "string", "format": "date-time" },
+    "max_uses": { "type": "integer", "minimum": 1 },
+    "revoked": { "type": "boolean" },
+    "device_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
+    "signature": { "type": "string", "pattern": "^[A-Za-z0-9+/_=-]+$" },
+    "payload_version": { "const": "v1" }
+  }
+}

@@ -4,6 +4,7 @@ import { registerAudit } from "./audit.js";
 import { registerCard } from "./card.js";
 import { registerExt } from "./ext.js";
 import { registerFinding } from "./finding.js";
+import { registerGrant } from "./grant.js";
 import { registerKb } from "./kb.js";
 import { registerProject } from "./project.js";
 import { registerQuota } from "./quota.js";
@@ -26,6 +27,7 @@ const groups: ((program: Command) => void)[] = [
   registerKb,
   registerQuota,
   registerAudit,
+  registerGrant,
   registerActive,
   registerVault,
   registerExt,

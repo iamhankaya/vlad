@@ -43,6 +43,7 @@ export interface KbPaths {
   tasks: string;
   findings: string;
   cards: string;
+  grants: string;
   inbox: string;
   processed: string;
   logs: string;
@@ -65,6 +66,7 @@ export function kbPaths(home: string = getVladHome()): KbPaths {
     tasks: join(kb, "tasks"),
     findings: join(kb, "findings"),
     cards: join(kb, "cards"),
+    grants: join(kb, "grants"),
     inbox,
     processed: join(inbox, "processed"),
     logs: join(kb, "logs"),
