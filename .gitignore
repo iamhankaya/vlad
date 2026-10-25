@@ -5,3 +5,4 @@ dist/
 .claude/worktrees/
 kb/.vlad.lock
 kb/
+.cli-build-*/

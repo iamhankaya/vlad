@@ -4,7 +4,9 @@
   "private": true,
   "description": "VLAD mobile API server (sozlesme fazi: kanonik fonksiyonlar ve sozlesme testleri)",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint:openapi": "redocly lint ../contract/openapi.yaml",
@@ -14,6 +16,7 @@
   "dependencies": {
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
+    "fastify": "5.12.7",
     "yaml": "2.9.1"
   },
   "devDependencies": {
