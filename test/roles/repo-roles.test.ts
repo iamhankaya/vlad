@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { listRolesWithWarnings } from "../../src/roles/store.js";
@@ -226,13 +226,17 @@ describe("ponytail (vendored, developer + game-developer only)", () => {
   const SOURCE_BLOB = "d64edd32265ba21cbf5270158f04e97d96925f27"; // DietrichGebert/ponytail@09c434a skills/ponytail/SKILL.md
 
   it("SKILL.md is byte-identical to the source blob; only SOURCE.md and LICENSE sit beside it", () => {
-    const body = Buffer.from(read(".claude/skills/ponytail/SKILL.md").replace(/\r\n/g, "\n"), "utf8");
+    const body = Buffer.from(read("vendor/skills/ponytail/SKILL.md").replace(/\r\n/g, "\n"), "utf8");
     const sha = createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
     expect(sha).toBe(SOURCE_BLOB);
-    expect(readdirSync(resolve(root, ".claude/skills/ponytail")).sort()).toEqual(["LICENSE", "SKILL.md", "SOURCE.md"]);
-    const source = read(".claude/skills/ponytail/SOURCE.md");
+    expect(readdirSync(resolve(root, "vendor/skills/ponytail")).sort()).toEqual(["LICENSE", "SKILL.md", "SOURCE.md"]);
+    const source = read("vendor/skills/ponytail/SOURCE.md");
     for (const w of ["github.com/DietrichGebert/ponytail", "09c434ab73ca43761c5d8b0c5d341926c2fba710", SOURCE_BLOB, "MIT"]) expect(source, w).toContain(w);
-    expect(read(".claude/skills/ponytail/LICENSE")).toContain("MIT License");
+    expect(read("vendor/skills/ponytail/LICENSE")).toContain("MIT License");
+  });
+
+  it("is not under .claude/skills (it would be listed in every session of the repo; F-vlad-065)", () => {
+    expect(existsSync(resolve(root, ".claude/skills/ponytail"))).toBe(false);
   });
 
   it("only developer and game-developer list ponytail in skills", () => {
