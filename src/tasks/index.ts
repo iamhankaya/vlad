@@ -5,3 +5,5 @@ export * from "./cloud.js";
 export * from "./ingest.js";
 export * from "./resume.js";
 export * from "./progress.js";
+export * from "./relaunch.js";
+export * from "./tap.js";

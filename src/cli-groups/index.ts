@@ -11,6 +11,7 @@ import { registerRole } from "./role.js";
 import { registerStatus } from "./status.js";
 import { registerTask } from "./task.js";
 import { registerVault } from "./vault.js";
+import { registerWorker } from "./worker.js";
 
 /**
  * Command groups in help order. Each slice adds only its own import and its own array line
@@ -28,6 +29,7 @@ const groups: ((program: Command) => void)[] = [
   registerAudit,
   registerActive,
   registerVault,
+  registerWorker,
   registerExt,
 ];
 

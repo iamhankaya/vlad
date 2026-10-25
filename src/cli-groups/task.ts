@@ -6,7 +6,7 @@ import { ProcessLauncher, TerminalLauncher, resolveLaunchMode } from "../launche
 import type { LaunchMode, LaunchResult, Launcher } from "../launcher/index.js";
 import {
   TRANSITIONS, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, relaunchTask, reportTask, resumeInfo, saveTask, setState,
 } from "../tasks/index.js";
 import type { Task } from "../tasks/index.js";
 import { readQuota } from "../quota/index.js";
@@ -99,6 +99,13 @@ export function registerTask(program: Command): void {
       ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
       : `send_message session_id=${r.session_id}\n${r.message}`);
   });
+  defWrite(task, "relaunch <id>", "Cevaplanmış/takılmış görevin çalışanını `claude --resume <session_id>` ile yeniden başlatır (yalnız bu makinede başlatılmış görev)", async (id: string, o: Opts) => {
+    const launcher = new ProcessLauncher({ dryRun: !!o.dryRun });
+    let last: LaunchResult | undefined;
+    const t = await relaunchTask(id, { launcher: { launch: async (req) => (last = await launcher.launch(req)) } });
+    out(o, { id, state: t.data.state, session_id: t.data.session_id, method: last?.method, detail: last?.detail },
+      `${id} yeniden başlatıldı (${last?.method}, --resume ${t.data.session_id})${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}`);
+  }).option("--dry-run", "çalışanı başlatmadan systemd-run komutunu göster");
   defWrite(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
     cleanupTask(id);
     out(o, { id }, `${id} worktree kaldırıldı`);

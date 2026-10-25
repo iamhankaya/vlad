@@ -3,6 +3,7 @@ import { closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readF
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentMachine } from "../kb/machine.js";
+import { SESSION_ID } from "./stream.js";
 import { MODEL } from "./terminal.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
@@ -50,7 +51,15 @@ export function buildShellScript(
   const claude = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto",
     "--setting-sources", "user", "--strict-mcp-config", "--settings", shq(settingsPath)];
   if (req.model !== undefined) claude.push("--model", shq(req.model));
-  return ["#!/bin/sh", `cd ${shq(req.cwd)} || exit 1`, `exec env -i ${vars.join(" ")} ${claude.join(" ")} < ${shq(promptPath)}`].join("\n") + "\n";
+  if (req.resumeSessionId !== undefined) {
+    if (!SESSION_ID.test(req.resumeSessionId)) throw new Error(`geçersiz session_id: ${JSON.stringify(req.resumeSessionId)}`);
+    claude.push("--resume", shq(req.resumeSessionId));
+  }
+  const run = `env -i ${vars.join(" ")} ${claude.join(" ")} < ${shq(promptPath)}`;
+  const head = ["#!/bin/sh", `cd ${shq(req.cwd)} || exit 1`];
+  if (!req.tap) return [...head, `exec ${run}`].join("\n") + "\n";
+  // the pipe replaces exec: claude's exit code goes to the journal, the tap (outside env -i) keeps PATH/VLAD_HOME from the unit
+  return [...head, `{ ${run}; echo "claude exit $?" >&2; } | vlad worker tap ${shq(req.taskId)}`].join("\n") + "\n";
 }
 
 /** Per-user state dir for scripts, prompts and settings copies: $XDG_RUNTIME_DIR/vlad or ~/.local/state/vlad. */
