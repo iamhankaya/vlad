@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import { def, defWrite, out, readInput, taskLine, type Opts } from "../cli-util.js";
 import { loadConfig } from "../kb/index.js";
 import type { TaskKind, TaskState } from "../kb/index.js";
-import { TerminalLauncher, resolveLaunchMode } from "../launcher/index.js";
+import { ProcessLauncher, TerminalLauncher, resolveLaunchMode } from "../launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../launcher/index.js";
 import {
   TRANSITIONS, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
@@ -48,7 +48,9 @@ export function registerTask(program: Command): void {
       return;
     }
     let last: LaunchResult | undefined;
-    const real = new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+    const real: Launcher = mode === "process"
+      ? new ProcessLauncher({ dryRun: !!o.dryRun })
+      : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
     const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
     const t = await launchTask(id, { launcher, cfg });
     out(
