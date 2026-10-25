@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildChallenge, expiryOf, isExpired, newActionId } from "../../src/actions/challenge.ts";
 import { ciState, toPullFacts } from "../../src/actions/github.ts";
-import { ActionError } from "../../src/actions/service.ts";
+import { ActionError, type ActionPolicy } from "../../src/actions/service.ts";
 import { ActionStore, StateError, type ActionRecord } from "../../src/actions/state.ts";
 import type { DeviceRecord } from "../../src/auth/devices.ts";
 import { challengeBytes, parseChallengeBytes } from "../../src/auth/canonical.ts";
@@ -20,8 +20,8 @@ const PARENT = "T20261024-94";
 const REPO = "iamhankaya/vlad";
 const MERGE_SHA = "f".repeat(40);
 
-type Tasks = Record<string, { id: string; state: string; parent?: string | null; pr?: { number: number; repo: string; base: string } | null }>;
-const task = (over: Partial<Tasks[string]> = {}) => ({ id: TASK, state: "awaiting_approval", parent: PARENT, pr: { number: 42, repo: REPO, base: `vlad/${PARENT}` }, ...over });
+type Tasks = Record<string, { id: string; project: string; state: string; parent?: string | null; pr?: { number: number; repo: string; base: string } | null }>;
+const task = (over: Partial<Tasks[string]> = {}) => ({ id: TASK, project: "vlad", state: "awaiting_approval", parent: PARENT, pr: { number: 42, repo: REPO, base: `vlad/${PARENT}` }, ...over });
 
 const rigs: Rig[] = [];
 afterEach(async () => {
@@ -29,15 +29,19 @@ afterEach(async () => {
 });
 
 /** A server with the approval path wired to the recorded-GitHub fake and a counting executor. */
-async function setup(over: { tasks?: Tasks; policy?: { allowBlocked?: boolean }; execute?: (a: any, p: any) => Promise<any> } = {}) {
+async function setup(over: { tasks?: Tasks; policy?: ActionPolicy; projects?: Record<string, { repo?: string; default_branch?: string }>; execute?: (a: any, p: any) => Promise<any> } = {}) {
   const gh = new FakeGithub();
   const sleeps: number[] = [];
   const execute = vi.fn(over.execute ?? (async () => ({ merge_sha: MERGE_SHA })));
   const tasks: Tasks = over.tasks ?? { [TASK]: task() };
+  const projects = over.projects ?? { vlad: { repo: REPO, default_branch: "master" } };
   const r = rig({
     limits: { unpaired: [100000, 1000], paired: [100000, 1000], public: [100000, 1000] },
     events: { every: () => () => {} },
-    actions: { reader: gh, tasks: async (id) => tasks[id] ?? null, execute, sleep: async (ms) => void sleeps.push(ms), policy: over.policy },
+    actions: {
+      reader: gh, tasks: async (id) => tasks[id] ?? null, projects: async (slug) => projects[slug] ?? null, execute,
+      sleep: async (ms) => void sleeps.push(ms), policy: { prepareIntervalMs: 0, ...over.policy },
+    },
   });
   rigs.push(r);
   const d = await pairDevice(r);
@@ -51,7 +55,7 @@ async function setup(over: { tasks?: Tasks; policy?: { allowBlocked?: boolean };
   const approve = async (id: string, signature: string, dev: TestDevice = d) =>
     signedCall(r, dev, "POST", `/v1/actions/${id}/approve`, JSON.stringify({ signature }));
   const store = () => new ActionStore(join(r.dir, "challenges"));
-  return { r, d, gh, execute, sleeps, tasks, prepare, prepared, sign, approve, store };
+  return { r, d, gh, execute, sleeps, tasks, projects, prepare, prepared, sign, approve, store };
 }
 
 const deferred = () => {
@@ -161,6 +165,8 @@ describe("GitHub read mapping (recorded responses)", () => {
     expect(ciState([], { state: "failure", total_count: 1 })).toBe("red");
     expect(ciState([], { state: "pending", total_count: 1 })).toBe("pending");
     expect(ciState([{ name: "vlad/approved", status: "completed", conclusion: "success" }], { state: "pending", total_count: 0 })).toBe("none");
+    expect(ciState([{ name: "a", status: "completed", conclusion: "skipped" }, { name: "b", status: "completed", conclusion: "neutral" }], { state: "pending", total_count: 0 })).toBe("none"); // nothing but skips proves nothing
+    expect(ciState([{ name: "a", status: "completed", conclusion: "skipped" }, { name: "b", status: "completed", conclusion: "success" }], { state: "pending", total_count: 0 })).toBe("green");
     expect(ciState([{ name: "gate", status: "completed", conclusion: "weird" }], { state: "success", total_count: 1 })).toBe("pending");
   });
 });
@@ -200,7 +206,7 @@ describe("prepare", () => {
     expect(await reasons((s) => { s.tasks[TASK] = task({ state: "running" }); })).toEqual([409, "bad_request", "task_not_awaiting_approval", 0]);
     expect(await reasons((s) => { s.tasks[TASK] = task({ pr: null }); })).toEqual([409, "bad_request", "task_has_no_pr", 0]);
     expect(await reasons(() => {}, { kind: "merge_phase", task_id: "T20261025-77" })).toEqual([404, "bad_request", "not_found", 0]);
-    expect(await reasons(() => {}, { kind: "merge_final", task_id: TASK })).toEqual([409, "not_mergeable", "kind_base_mismatch", 0]); // phase PR into an integration branch is no final merge
+    expect(await reasons(() => {}, { kind: "merge_final", task_id: TASK })).toEqual([409, "bad_request", "kind_mismatch", 0]); // kind follows the task, not the client
     expect(await reasons((s) => { s.tasks[TASK] = task({ parent: null }); })).toEqual([409, "not_mergeable", "kind_base_mismatch", 0]);
     expect(await reasons((s) => { s.gh.missing = true; })).toEqual([409, "not_mergeable", "pr_not_found", 0]);
     expect(await reasons((s) => { s.gh.pull = openPullBody({ state: "closed" }); })).toEqual([409, "not_mergeable", "pr_closed", 0]);
@@ -330,23 +336,23 @@ describe("approve", () => {
   });
 
   it("server: challenge line-injection / reordered / missing / extra field rejected", async () => {
-    const s = await setup();
-    const c = await s.prepared();
-    const lines = Buffer.from(c.bytes_b64, "base64").toString().split("\n");
-    const variants = {
-      reordered: [lines[0], lines[2], lines[1], ...lines.slice(3)],
-      missing: lines.filter((l) => !l.startsWith("task=")),
-      extra: [...lines, "extra=1"],
-      injected: lines.map((l) => (l.startsWith("base=") ? `${l}\nkind=merge_final` : l)),
-      trailingNewline: [...lines, ""],
-      crlf: lines,
-    };
-    for (const [name, v] of Object.entries(variants)) {
-      const text = name === "crlf" ? v.join("\r\n") : v.join("\n");
-      expect((await s.approve(c.action_id, signDer(s.d.approval.priv, Buffer.from(text)))).statusCode, name).toBe(401);
-      expect(() => parseChallengeBytes(Buffer.from(text)), name).toThrow();
+    const names = ["reordered", "missing", "extra", "injected", "trailingNewline", "crlf"];
+    for (const name of names) {
+      const s = await setup();
+      const c = await s.prepared();
+      const lines = Buffer.from(c.bytes_b64, "base64").toString().split("\n");
+      const variants: Record<string, string> = {
+        reordered: [lines[0], lines[2], lines[1], ...lines.slice(3)].join("\n"),
+        missing: lines.filter((l) => !l.startsWith("task=")).join("\n"),
+        extra: [...lines, "extra=1"].join("\n"),
+        injected: lines.map((l) => (l.startsWith("base=") ? `${l}\nkind=merge_final` : l)).join("\n"),
+        trailingNewline: [...lines, ""].join("\n"),
+        crlf: lines.join("\r\n"),
+      };
+      expect((await s.approve(c.action_id, signDer(s.d.approval.priv, Buffer.from(variants[name]!)))).statusCode, name).toBe(401);
+      expect(() => parseChallengeBytes(Buffer.from(variants[name]!)), name).toThrow();
+      expect(s.execute).not.toHaveBeenCalled();
     }
-    expect(s.execute).not.toHaveBeenCalled();
   });
 
   it("a stored challenge that no longer parses (disk tampering) is never signed off", async () => {
@@ -429,7 +435,7 @@ describe("approve", () => {
       ["merged", openPullBody({ state: "closed", merged: true }), 409, "not_mergeable", "pr_merged"],
       ["deleted", "missing", 409, "not_mergeable", "pr_not_found"],
       ["draft", openPullBody({ draft: true }), 409, "not_mergeable", "draft"],
-      ["base changed", openPullBody({ base: "master" }), 409, "not_mergeable", "base_changed"],
+      ["base changed", openPullBody({ base: "master" }), 409, "not_mergeable", "base_mismatch"],
       ["blocked", openPullBody({ mergeable_state: "blocked" }), 409, "not_mergeable", "blocked"],
       ["behind", openPullBody({ mergeable_state: "behind" }), 409, "not_mergeable", "behind"],
       ["dirty", openPullBody({ mergeable: false, mergeable_state: "dirty" }), 409, "not_mergeable", "conflict"],
@@ -604,6 +610,150 @@ describe("approve", () => {
   });
 });
 
+describe("review findings (S9a güvenlik incelemesi)", () => {
+  it("exp limits only prepared -> approved: a second approve during execution, past exp, gets the stored result; executor runs once", async () => {
+    const hold = deferred();
+    const s = await setup({ execute: async () => { await hold.promise; return { merge_sha: MERGE_SHA }; } });
+    const c = await s.prepared();
+    s.r.clock.t += 59_000;
+    const sig = s.sign(c);
+    const first = s.approve(c.action_id, sig);
+    for (let i = 0; i < 30 && s.store().get(c.action_id)!.state !== "checked"; i++) await new Promise((res) => setImmediate(res));
+    expect(s.store().get(c.action_id)!.state).toBe("checked");
+    s.r.clock.t += 5_000; // now past exp while the executor is running
+    const second = s.approve(c.action_id, sig);
+    for (let i = 0; i < 20; i++) await new Promise((res) => setImmediate(res));
+    expect(s.store().get(c.action_id)!.state).toBe("checked"); // the guard did not touch it
+    hold.resolve();
+    const [x, y] = await Promise.all([first, second]);
+    expect([x.statusCode, y.statusCode]).toEqual([200, 200]);
+    expect(y.json()).toEqual(x.json());
+    expect(s.execute).toHaveBeenCalledTimes(1);
+    expect(s.store().get(c.action_id)!.state).toBe("merged");
+  });
+
+  it("an approved (signature on record) action is resumable after exp; a merely prepared one is not", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    s.store().transition(c.action_id, "approved", s.r.clock.t, { approval: { device_id: s.d.id, signature: s.sign(c), at_ms: s.r.clock.t } });
+    s.r.clock.t += 120_000;
+    expect((await s.approve(c.action_id, s.sign(c))).statusCode).toBe(200);
+    const p = await s.prepared();
+    s.r.clock.t += 120_000;
+    expect((await s.approve(p.action_id, s.sign(p))).statusCode).toBe(410);
+  });
+
+  it("repo, kind and base come from the task checked against the project card", async () => {
+    const refused = async (mut: (s: Awaited<ReturnType<typeof setup>>) => void, body: object = { kind: "merge_phase", task_id: TASK }) => {
+      const s = await setup();
+      mut(s);
+      const res = await s.prepare(body);
+      expect(s.gh.writes).toBe(0);
+      expect(s.store().list()).toEqual([]);
+      return [res.statusCode, errOf(res).details?.reason];
+    };
+    // another repo than the card's
+    expect(await refused((s) => { s.projects.vlad = { repo: "someone/else" }; })).toEqual([409, "repo_not_registered"]);
+    expect(await refused((s) => { s.projects.vlad = {}; })).toEqual([409, "project_has_no_repo"]);
+    expect(await refused((s) => { s.tasks[TASK] = task({ project: "ghost" }); })).toEqual([409, "project_has_no_repo"]);
+    // a fork head (same branch name, other repository), a foreign base repo
+    expect(await refused((s) => { const b = openPullBody(); b.head.repo.full_name = "evil/vlad"; s.gh.pull = b; })).toEqual([409, "fork_or_foreign_repo"]);
+    expect(await refused((s) => { const b = openPullBody(); b.head.repo = null; s.gh.pull = b; })).toEqual([409, "fork_or_foreign_repo"]);
+    expect(await refused((s) => { const b = openPullBody(); b.base.repo.full_name = "evil/vlad"; s.gh.pull = b; })).toEqual([409, "fork_or_foreign_repo"]);
+    // merge_final into an arbitrary base: only the card's default branch (here `main`) counts
+    const final = { kind: "merge_final", task_id: TASK };
+    expect(await refused((s) => { s.tasks[TASK] = task({ parent: null, pr: { number: 42, repo: REPO, base: "release" } }); s.gh.pull = openPullBody({ base: "release" }); }, final)).toEqual([409, "kind_base_mismatch"]);
+    expect(await refused((s) => { s.projects.vlad = { repo: REPO, default_branch: "main" }; s.tasks[TASK] = task({ parent: null, pr: { number: 42, repo: REPO, base: "master" } }); s.gh.pull = openPullBody({ base: "master" }); }, final)).toEqual([409, "kind_base_mismatch"]);
+    // a phase task cannot ask for merge_final
+    expect(await refused(() => {}, final)).toEqual([409, "kind_mismatch"]);
+    // ... and a root task cannot ask for merge_phase
+    expect(await refused((s) => { s.tasks[TASK] = task({ parent: null, pr: { number: 42, repo: REPO, base: "master" } }); s.gh.pull = openPullBody({ base: "master" }); })).toEqual([409, "kind_mismatch"]);
+  });
+
+  it("a root task merges into the card's default branch as merge_final (default master when the card names none)", async () => {
+    for (const [branch, card] of [["master", { repo: REPO }], ["main", { repo: REPO, default_branch: "main" }]] as const) {
+      const s = await setup({ projects: { vlad: card }, tasks: { [TASK]: task({ parent: null, pr: { number: 42, repo: REPO, base: branch } }) } });
+      s.gh.pull = openPullBody({ base: branch });
+      const c = await s.prepared({ kind: "merge_final", task_id: TASK });
+      expect(c.fields).toMatchObject({ kind: "merge_final", base: branch });
+      expect((await s.approve(c.action_id, s.sign(c))).statusCode).toBe(200);
+    }
+  });
+
+  it("approve reads the task again: re-pointed PR/repo/base or a task no longer waiting ends the challenge", async () => {
+    const after = async (mut: (s: Awaited<ReturnType<typeof setup>>) => void) => {
+      const s = await setup();
+      const c = await s.prepared();
+      mut(s);
+      const res = await s.approve(c.action_id, s.sign(c));
+      expect(s.execute).not.toHaveBeenCalled();
+      expect(s.gh.writes).toBe(0);
+      return [res.statusCode, errOf(res).details.reason];
+    };
+    expect(await after((s) => { s.tasks[TASK] = task({ state: "running" }); })).toEqual([409, "task_changed"]);
+    expect(await after((s) => { s.tasks[TASK] = task({ pr: { number: 43, repo: REPO, base: `vlad/${PARENT}` } }); })).toEqual([409, "task_changed"]);
+    expect(await after((s) => { s.tasks[TASK] = task({ pr: { number: 42, repo: "evil/x", base: `vlad/${PARENT}` } }); })).toEqual([409, "task_changed"]);
+    expect(await after((s) => { s.projects.vlad = { repo: "someone/else" }; })).toEqual([409, "repo_not_registered"]);
+  });
+
+  it("prepare is limited per device and task (429), other devices and tasks are not affected, and spam does not accumulate files", async () => {
+    const s = await setup({ policy: { prepareIntervalMs: 5000 } });
+    const other = await pairDevice(s.r, "Tablet");
+    const a = await s.prepare();
+    expect(a.statusCode).toBe(200);
+    const again = await s.prepare();
+    expect(again.statusCode).toBe(429);
+    expect(errOf(again)).toMatchObject({ code: "rate_limited", details: { reason: "prepare_too_soon" } });
+    expect(s.gh.count("getPull")).toBe(1); // the refused attempt cost no GitHub read
+    expect((await s.prepare(undefined, other)).statusCode).toBe(200); // the other device is not blocked ...
+    expect(s.store().get(a.json().action_id)!.state).toBe("prepared"); // ... and does not supersede the first device's challenge
+    s.r.clock.t += 5_000;
+    expect((await s.prepare()).statusCode).toBe(200);
+  });
+
+  it("a prepare that is refused does not supersede the challenge in use", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    s.gh.runs = [{ name: "gate", status: "completed", conclusion: "failure" }];
+    expect((await s.prepare()).statusCode).toBe(422);
+    s.gh.runs = [{ name: "gate", status: "completed", conclusion: "success" }];
+    expect((await s.approve(c.action_id, s.sign(c))).statusCode).toBe(200);
+  });
+
+  it("five wrong signatures lock the action; even the right one is then refused (429)", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    for (let i = 0; i < 5; i++) expect((await s.approve(c.action_id, signDer(s.d.session.priv, Buffer.from("x")))).statusCode).toBe(401);
+    const res = await s.approve(c.action_id, s.sign(c));
+    expect([res.statusCode, errOf(res).code]).toEqual([429, "rate_limited"]);
+    expect(s.execute).not.toHaveBeenCalled();
+  });
+
+  it("a record whose fields disagree with its signed bytes is never executed", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    const f = join(s.r.dir, "challenges", `${c.action_id}.json`);
+    const rec = JSON.parse(readFileSync(f, "utf8"));
+    writeFileSync(f, JSON.stringify({ ...rec, fields: { ...rec.fields, base: "master" } }));
+    expect((await s.approve(c.action_id, s.sign(c))).statusCode).toBe(500);
+    expect(s.execute).not.toHaveBeenCalled();
+  });
+
+  it("extra approval guards cannot replace the built-in ones", async () => {
+    const s = await setup();
+    const r = rig({
+      limits: { unpaired: [1000, 1000], paired: [1000, 1000], public: [1000, 1000] },
+      actions: { reader: s.gh, tasks: async () => task(), projects: async () => ({ repo: REPO }), execute: s.execute },
+      approvalGuards: { approveAction: () => ({ ok: true, data: { signature: "x" } }), revokeDevice: () => ({ ok: true }) },
+    });
+    rigs.push(r);
+    const d = await pairDevice(r);
+    const victim = await pairDevice(r, "Victim");
+    expect((await signedCall(r, d, "POST", "/v1/actions/A-NOPE/approve", JSON.stringify({ signature: "AAAA" }))).statusCode).toBe(404);
+    expect((await signedCall(r, d, "POST", `/v1/devices/${victim.id}/revoke`, "{}")).statusCode).toBe(400);
+  });
+});
+
 describe("revocation", () => {
   it("server: revoke closes open SSE and invalidates pending challenges", async () => {
     const s = await setup();
@@ -620,15 +770,16 @@ describe("revocation", () => {
     s.gh.pull = openPullBody();
     const forB = await s.prepared(undefined, b);
     const store = s.store();
-    const mine = await s.prepared({ kind: "merge_phase", task_id: TASK }, a); // supersedes B's (same task)
-    expect(store.get(forB.action_id)!.state).toBe("invalid");
-    const forB2 = await s.prepared(undefined, b); // supersedes A's
-    expect(store.get(mine.action_id)!.state).toBe("invalid");
+    const mine = await s.prepared({ kind: "merge_phase", task_id: TASK }, a); // another device, same task: coexists
+    expect([store.get(forB.action_id)!.state, store.get(mine.action_id)!.state]).toEqual(["prepared", "prepared"]);
+    const forB2 = await s.prepared(undefined, b); // supersedes only B's own earlier one
+    expect([store.get(forB.action_id)!.state, store.get(mine.action_id)!.state]).toEqual(["invalid", "prepared"]);
     store.create({ action_id: "A-APPROVED1", bytes_b64: forB2.bytes_b64, fields: forB2.fields as any, task_id: "T20261025-90", prepared_by: b.id, created_ms: s.r.clock.t, exp: forB2.exp });
     store.transition("A-APPROVED1", "approved", s.r.clock.t);
     store.create({ action_id: "A-OWNEDBYA1", bytes_b64: forB2.bytes_b64, fields: forB2.fields as any, task_id: "T20261025-91", prepared_by: a.id, created_ms: s.r.clock.t, exp: forB2.exp });
 
     expect((await signedCall(s.r, a, "POST", `/v1/devices/${b.id}/revoke`, a.revokeBody(b.id, s.r.clock.t))).statusCode).toBe(200);
+    await s.r.app.vladActions!.settled();
     expect((await ofB).statusCode).toBe(200); // B's stream ended
     expect(s.r.app.vladEvents.hub.countFor(c2.id)).toBe(1); // C's did not
     expect(store.get(forB2.action_id)).toMatchObject({ state: "invalid", reason: "revoked" });
@@ -641,7 +792,7 @@ describe("revocation", () => {
     expect(res.statusCode).toBe(401);
     expect(errOf(res).code).toBe("device_revoked");
     // the service refuses on its own too, whatever device record the caller hands it
-    expect(() => s.r.app.vladActions!.admit({ device_id: b.id } as DeviceRecord, forB2.action_id, s.sign(forB2, b))).toThrow(ActionError);
+    expect(() => s.r.app.vladActions!.inspect({ device_id: b.id } as DeviceRecord, forB2.action_id, s.sign(forB2, b))).toThrow(ActionError);
     expect(s.execute).not.toHaveBeenCalled();
     s.r.app.vladEvents.hub.closeAll();
     await ofC;
@@ -649,18 +800,21 @@ describe("revocation", () => {
 
   it("revocation between the checks and the exit stops the executor", async () => {
     const s = await setup();
+    const admin = await pairDevice(s.r, "Admin");
     const c = await s.prepared();
-    // revoke the approving device while GitHub is being read
+    // the approving device is revoked while GitHub is being read
     const release = deferred();
     s.gh.hold = release.promise;
     const pending = s.approve(c.action_id, s.sign(c));
     for (let i = 0; i < 20; i++) await new Promise((res) => setImmediate(res));
-    s.r.app.vladActions!.onDeviceRevoked(s.d.id); // listener side: approved -> invalid
+    expect((await signedCall(s.r, admin, "POST", `/v1/devices/${s.d.id}/revoke`, admin.revokeBody(s.d.id, s.r.clock.t))).statusCode).toBe(200);
     s.gh.hold = null;
     release.resolve();
     const res = await pending;
-    expect(res.statusCode).toBe(410);
+    expect([res.statusCode, errOf(res).details.reason]).toEqual([410, "revoked"]);
+    await s.r.app.vladActions!.settled();
     expect(s.execute).not.toHaveBeenCalled();
+    expect(s.store().get(c.action_id)!.state).toBe("invalid");
   });
 });
 
@@ -707,7 +861,7 @@ describe("central approval enforcement (F-vlad-016)", () => {
     const hit = vi.fn(() => ({ ok: true }));
     const r = rig({
       limits: { unpaired: [1000, 1000], paired: [1000, 1000], public: [1000, 1000] },
-      actions: { reader: s.gh, tasks: async () => task(), execute: s.execute },
+      actions: { reader: s.gh, tasks: async () => task(), projects: async () => ({ repo: REPO }), execute: s.execute },
       extraHandlers: { approveAction: hit },
     });
     rigs.push(r);
@@ -753,9 +907,10 @@ describe("challenge vectors over HTTP (contract/signing-vectors.json)", () => {
       const gh = new FakeGithub();
       gh.pull = openPullBody({ sha: f.head_sha, base: f.base, ref: `vlad/${f.task}` });
       const execute = vi.fn(async () => ({ merge_sha: MERGE_SHA }));
+      const taskInfo = { id: f.task, project: "vlad", state: "awaiting_approval", parent: "T20261024-94", pr: { number: Number(f.pr), repo: f.repo, base: f.base } };
       const store = new ActionStore(join(dir, "challenges"));
       store.create({ action_id: f.action_id, bytes_b64: text.toString("base64"), fields: f, task_id: f.task, prepared_by: dev.id, created_ms: nowMs - 1000, exp: Number(f.exp) });
-      const r = rig({ actions: { reader: gh, tasks: async () => null, execute, sleep: async () => {} }, limits: { unpaired: [1000, 1000], paired: [1000, 1000], public: [1000, 1000] } }, dir, { t: nowMs, now() { return this.t; } } as any);
+      const r = rig({ actions: { reader: gh, tasks: async () => taskInfo, projects: async () => ({ repo: f.repo }), execute, sleep: async () => {} }, limits: { unpaired: [1000, 1000], paired: [1000, 1000], public: [1000, 1000] } }, dir, { t: nowMs, now() { return this.t; } } as any);
       rigs.push(r);
       const res = await signedCall(r, dev, "POST", `/v1/actions/${f.action_id}/approve`, JSON.stringify({ signature: v.signature_b64u }));
       expect(res.statusCode, res.body).toBe(v.expect_valid ? 200 : 401);

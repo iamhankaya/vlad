@@ -1,6 +1,6 @@
-import { verifySignature } from "../auth/keys.ts";
 import { CanonicalError, parseChallengeBytes } from "../auth/canonical.ts";
 import type { DeviceLedger, DeviceRecord } from "../auth/devices.ts";
+import { verifySignature } from "../auth/keys.ts";
 import type { ErrorCode } from "../http/errors.ts";
 import { buildChallenge, expiryOf, isExpired, newActionId, newNonce, type ChallengeFields } from "./challenge.ts";
 import { ciState, type GithubReader, type PullFacts } from "./github.ts";
@@ -20,9 +20,12 @@ export class ActionError extends Error {
   }
 }
 
-export type TaskInfo = { id: string; state: string; parent?: string | null; pr?: { number: number; repo: string; base: string } | null };
+export type TaskInfo = { id: string; project: string; state: string; parent?: string | null; pr?: { number: number; repo: string; base: string } | null };
 /** Task facts from the kb (`vlad task show`). Null when the task does not exist. */
 export type TaskSource = (id: string) => Promise<TaskInfo | null>;
+/** The project card's registered repo and default branch (`vlad project list`). Null when the project is unknown. */
+export type ProjectInfo = { repo?: string; default_branch?: string };
+export type ProjectSource = (slug: string) => Promise<ProjectInfo | null>;
 
 /** What was approved, derived by the server (never taken from a card). */
 export type ActionDescriptor = { action_id: string; kind: string; repo: string; pr: number; base: string; head_sha: string; task: string };
@@ -37,6 +40,10 @@ export type ExecuteAction = (action: ActionDescriptor, approval: ApprovalProof) 
 export type ActionPolicy = {
   /** Accept `mergeable_state: blocked`. S9b needs it: until `vlad-gate` writes `vlad/approved` a protected branch reports `blocked`. */
   allowBlocked?: boolean;
+  /** Minimum time between two prepares of one task by one device (each costs GitHub reads and a file). Default 5000. */
+  prepareIntervalMs?: number;
+  /** Wrong signatures one action tolerates before it refuses to look at more. Default 5. */
+  maxBadSignatures?: number;
 };
 
 export type ActionDeps = {
@@ -44,6 +51,7 @@ export type ActionDeps = {
   devices: DeviceLedger;
   reader: GithubReader;
   tasks: TaskSource;
+  projects: ProjectSource;
   execute: ExecuteAction;
   now: () => number;
   /** `mergeable: null` retries wait with this (default: real timer). */
@@ -58,29 +66,56 @@ export type Approved = { status: "executed"; result: { kind: string; repo: strin
 
 export const MERGEABLE_ATTEMPTS = 3;
 export const MERGEABLE_WAIT_MS = 2000;
+export const PRUNE_AFTER_MS = 24 * 3600_000;
 
 const TASK_ID = /^T[0-9]{8}-[0-9]{2,}$/;
 
+/**
+ * Rules:
+ * - State changes happen only inside `store.withLock(actionId)` (prepare also under a per-task lock). `inspect` and the
+ *   approval guard never write.
+ * - `exp` limits only `prepared -> approved`; once the signature is on record the action may be resumed after `exp`.
+ */
 export class ActionService {
   private readonly d: ActionDeps;
   /** Latest server time seen. A reading below it means the clock moved back: every pending challenge dies. */
   private highWater = 0;
+  private readonly byTask = new Map<string, Set<string>>();
+  private readonly lastPrepare = new Map<string, number>();
+  private readonly badSigs = new Map<string, number>();
+  private readonly background = new Set<Promise<unknown>>();
 
   constructor(deps: ActionDeps) {
     this.d = deps;
-    deps.store.prune(deps.now(), 24 * 3600_000);
+    for (const r of deps.store.list()) this.index(r.task_id, r.action_id);
+    this.prune();
   }
 
   private sleep = (ms: number) => (this.d.sleep ? this.d.sleep(ms) : new Promise<void>((r) => setTimeout(r, ms)));
+  private index(task: string, id: string) {
+    (this.byTask.get(task) ?? this.byTask.set(task, new Set()).get(task)!).add(id);
+  }
 
-  /** Reads the clock once per operation and handles a rewind. */
-  private tick(): number {
-    const t = this.d.now();
-    if (t < this.highWater) {
-      for (const rec of this.d.store.list()) if (rec.state === "prepared" || rec.state === "approved") this.d.store.transition(rec.action_id, "invalid", t, { reason: "clock_rewind" });
+  /** Resolves when background work (revocation, clock-rewind sweeps) has finished. */
+  async settled(): Promise<void> {
+    while (this.background.size) await Promise.allSettled([...this.background]);
+  }
+  private track(p: Promise<unknown>) {
+    const q = p.catch(() => {}).finally(() => this.background.delete(q));
+    this.background.add(q);
+  }
+
+  /** Drops old records and their index entries; called at start and periodically by the app. */
+  prune(): number {
+    const now = this.d.now();
+    const n = this.d.store.prune(now, PRUNE_AFTER_MS);
+    if (n) for (const [task, ids] of this.byTask) {
+      for (const id of ids) if (!this.d.store.get(id)) ids.delete(id);
+      if (!ids.size) this.byTask.delete(task);
     }
-    this.highWater = Math.max(this.highWater, t);
-    return t;
+    for (const id of this.badSigs.keys()) if (!this.d.store.get(id)) this.badSigs.delete(id);
+    for (const [k, t] of this.lastPrepare) if (now - t > PRUNE_AFTER_MS) this.lastPrepare.delete(k);
+    return n;
   }
 
   private load(id: string): ActionRecord {
@@ -88,6 +123,8 @@ export class ActionService {
     if (!rec) throw new ActionError(404, "bad_request", "not_found");
     return rec;
   }
+
+  private readonly maxBad = () => this.d.policy?.maxBadSignatures ?? 5;
 
   // ---- prepare -------------------------------------------------------------------------------------------------
 
@@ -101,54 +138,94 @@ export class ActionService {
     if (!taskId || !TASK_ID.test(taskId)) throw new ActionError(400, "bad_request", "task_required");
 
     return this.d.store.withLock(`prepare:${taskId}`, async () => {
-      this.tick();
-      // Everything comes from the task (what is waiting) and from GitHub (what is true now); a card contributes nothing.
-      const task = await this.d.tasks(taskId);
-      if (!task) throw new ActionError(404, "bad_request", "not_found");
-      if (task.state !== "awaiting_approval") throw new ActionError(409, "bad_request", "task_not_awaiting_approval");
-      if (!task.pr) throw new ActionError(409, "bad_request", "task_has_no_pr");
-      const { repo, number: prNo, base: taskBase } = task.pr;
-      if (input.kind === "merge_phase" ? !task.parent || taskBase !== `vlad/${task.parent}` : taskBase.startsWith("vlad/")) throw new ActionError(409, "not_mergeable", "kind_base_mismatch");
+      this.observeClock();
+      // One prepare per device and task per interval: every one costs GitHub reads and a state file.
+      const key = `${device.device_id}:${taskId}`;
+      const interval = this.d.policy?.prepareIntervalMs ?? 5000;
+      const last = this.lastPrepare.get(key);
+      const t0 = this.d.now();
+      if (last !== undefined && t0 >= last && t0 - last < interval) {
+        throw new ActionError(429, "rate_limited", "prepare_too_soon", { retry_after_s: Math.max(1, Math.ceil((interval - (t0 - last)) / 1000)) });
+      }
+      this.lastPrepare.set(key, t0);
+
+      // Everything comes from the task, the project card (which repo/branch may be merged) and GitHub (what is true now).
+      const { task, repo, prNo, base, kind } = await this.target(taskId);
+      if (input.kind !== kind) throw new ActionError(409, "bad_request", "kind_mismatch", { expected: kind });
 
       const pull = await this.read(() => this.d.reader.getPull(repo, prNo));
       if (!pull) throw new ActionError(409, "not_mergeable", "pr_not_found");
       this.checkOpen(pull);
-      if (pull.head.ref !== `vlad/${task.id}`) throw new ActionError(409, "not_mergeable", "head_ref_mismatch");
-      if (pull.base.ref !== taskBase) throw new ActionError(409, "not_mergeable", "base_mismatch");
+      this.checkOrigin(pull, repo, task.id, base);
       await this.checkCi(repo, pull.head.sha);
 
       const id = newActionId();
-      const nowMs = this.tick();
+      const nowMs = this.d.now();
+      this.highWater = Math.max(this.highWater, nowMs);
       const exp = expiryOf(nowMs);
       let c: ReturnType<typeof buildChallenge>;
       try {
-        c = buildChallenge({ actionId: id, kind: input.kind, repo, pr: prNo, base: pull.base.ref, headSha: pull.head.sha, task: task.id, nonce: newNonce(), exp });
+        c = buildChallenge({ actionId: id, kind, repo, pr: prNo, base: pull.base.ref, headSha: pull.head.sha, task: task.id, nonce: newNonce(), exp });
       } catch (e) {
         // A branch name or id that cannot be written as a challenge value (newline, `=`, off-alphabet byte) is refused, never escaped.
         if (e instanceof CanonicalError) throw new ActionError(409, "bad_request", "unrepresentable_field");
         throw e;
       }
-      this.d.store.create({
-        action_id: id, bytes_b64: Buffer.from(c.bytes).toString("base64"), fields: c.fields, task_id: task.id, ...(input.card_id ? { card_id: input.card_id } : {}),
-        prepared_by: device.device_id, created_ms: nowMs, exp,
+      const bytes_b64 = Buffer.from(c.bytes).toString("base64");
+      await this.d.store.withLock(id, () => {
+        this.d.store.create({
+          action_id: id, bytes_b64, fields: c.fields, task_id: task.id, ...(input.card_id ? { card_id: input.card_id } : {}),
+          prepared_by: device.device_id, created_ms: nowMs, exp,
+        });
+        this.index(task.id, id);
       });
-      // The newest prepare for a task (or its card) is the only usable one.
-      for (const old of this.d.store.list()) {
-        if (old.action_id !== id && old.task_id === task.id && (old.state === "prepared" || old.state === "approved")) this.d.store.transition(old.action_id, "invalid", nowMs, { reason: "superseded" });
+      // This device's newest prepare for the task is its only usable one (another device's challenges are not touched).
+      for (const oldId of [...(this.byTask.get(task.id) ?? [])]) {
+        if (oldId === id) continue;
+        await this.d.store.withLock(oldId, () => {
+          const old = this.d.store.get(oldId);
+          if (old && old.prepared_by === device.device_id && (old.state === "prepared" || old.state === "approved")) this.d.store.transition(oldId, "invalid", nowMs, { reason: "superseded" });
+        });
       }
-      return { action_id: id, bytes_b64: Buffer.from(c.bytes).toString("base64"), fields: c.fields, exp };
+      return { action_id: id, bytes_b64, fields: c.fields, exp };
     });
+  }
+
+  /**
+   * What the task asks to be merged, checked against the project card: the repo must be the card's registered repo, and
+   * the kind follows from the task (a phase of a pipeline goes into `vlad/<parent>`, a root/single task into the card's default
+   * branch), never from the client.
+   */
+  private async target(taskId: string) {
+    const task = await this.read(() => this.d.tasks(taskId));
+    if (!task) throw new ActionError(404, "bad_request", "not_found");
+    if (task.state !== "awaiting_approval") throw new ActionError(409, "bad_request", "task_not_awaiting_approval");
+    if (!task.pr) throw new ActionError(409, "bad_request", "task_has_no_pr");
+    const card = await this.read(() => this.d.projects(task.project));
+    if (!card?.repo) throw new ActionError(409, "bad_request", "project_has_no_repo");
+    if (task.pr.repo !== card.repo) throw new ActionError(409, "not_mergeable", "repo_not_registered");
+    const kind = task.parent ? "merge_phase" : "merge_final";
+    const expectedBase = task.parent ? `vlad/${task.parent}` : (card.default_branch ?? "master");
+    if (task.pr.base !== expectedBase) throw new ActionError(409, "not_mergeable", "kind_base_mismatch");
+    return { task, repo: card.repo, prNo: task.pr.number, base: expectedBase, kind };
+  }
+
+  private checkOrigin(pull: PullFacts, repo: string, taskId: string, base: string) {
+    if (pull.head.repo !== repo || pull.base.repo !== repo) throw new ActionError(409, "not_mergeable", "fork_or_foreign_repo");
+    if (pull.head.ref !== `vlad/${taskId}`) throw new ActionError(409, "not_mergeable", "head_ref_mismatch");
+    if (pull.base.ref !== base) throw new ActionError(409, "not_mergeable", "base_mismatch");
   }
 
   // ---- approve -------------------------------------------------------------------------------------------------
 
   /**
-   * Steps 1-4 of the approval order that need no GitHub: device not revoked, challenge known/owned/alive/not used up, and the
-   * `approval` signature over the STORED bytes. Used by the central approval guard (before any handler runs) and again
-   * under the action lock by {@link approve}. Throws `ActionError`; returns the record.
+   * Steps 1-4 of the approval order that need no GitHub, WITHOUT writing anything: device not revoked, challenge known/owned,
+   * not dead, not rewound, not expired (only before it was approved), and the `approval` signature over the STORED bytes.
+   * The approval guard runs it before any handler; {@link approve} runs it again under the action lock.
+   * A dead challenge is reported as 410; the transition to `invalid` is queued under the action lock, never done here.
    */
-  admit(device: DeviceRecord, actionId: string, signature: string): ActionRecord {
-    const nowMs = this.tick();
+  inspect(device: DeviceRecord, actionId: string, signature: string): ActionRecord {
+    const nowMs = this.d.now();
     const current = this.d.devices.get(device.device_id);
     if (!current || current.revoked_at) throw new ActionError(401, "device_revoked", "device_revoked");
     const rec = this.load(actionId);
@@ -157,12 +234,12 @@ export class ActionService {
     if (rec.state === "invalid") throw new ActionError(410, "expired", rec.reason ?? "invalid");
     if (rec.state === "failed") throw new ActionError(409, "bad_request", "action_failed", { cause: rec.reason ?? "unknown" });
     if (rec.state !== "merged") {
-      if (nowMs < rec.created_ms) {
-        this.d.store.transition(rec.action_id, "invalid", nowMs, { reason: "clock_rewind" });
+      if (nowMs < this.highWater || nowMs < rec.created_ms) {
+        this.sweepAfterRewind();
         throw new ActionError(410, "expired", "clock_rewind");
       }
-      if (isExpired(nowMs, rec.exp)) {
-        if (!isTerminal(rec.state)) this.d.store.transition(rec.action_id, "invalid", nowMs, { reason: "expired" });
+      if (rec.state === "prepared" && isExpired(nowMs, rec.exp)) {
+        this.invalidateLater(rec.action_id, "expired");
         throw new ActionError(410, "expired", "expired");
       }
     }
@@ -174,40 +251,45 @@ export class ActionService {
     } catch {
       throw new ActionError(500, "bad_request", "stored_challenge_corrupt");
     }
-    if (parsed.action_id !== rec.action_id) throw new ActionError(500, "bad_request", "stored_challenge_corrupt");
-    if (!verifySignature(current.approval_pub, bytes, signature)) throw new ActionError(401, "unauthorized", "bad_approval_signature");
+    if (parsed.action_id !== rec.action_id || Object.keys(parsed).some((k) => parsed[k] !== (rec.fields as Record<string, string>)[k])) throw new ActionError(500, "bad_request", "stored_challenge_corrupt");
+    const bad = this.badSigs.get(rec.action_id) ?? 0;
+    if (bad >= this.maxBad()) throw new ActionError(429, "rate_limited", "too_many_bad_signatures");
+    if (!verifySignature(current.approval_pub, bytes, signature)) {
+      this.badSigs.set(rec.action_id, bad + 1);
+      throw new ActionError(401, "unauthorized", "bad_approval_signature");
+    }
     return rec;
   }
 
   async approve(device: DeviceRecord, actionId: string, signature: string): Promise<Approved> {
     return this.d.store.withLock(actionId, async () => {
-      const rec = this.admit(device, actionId, signature);
-      const f = rec.fields;
+      const rec = this.inspect(device, actionId, signature);
+      const f = parseChallengeBytes(Buffer.from(rec.bytes_b64, "base64")); // what the user's key signed, not what the record says
       const out = (r: ActionResult): Approved => ({
         status: "executed",
-        result: { kind: f.kind, repo: f.repo, pr: Number(f.pr), head_sha: f.head_sha, ...(r.merge_sha ? { merge_sha: r.merge_sha } : {}) },
+        result: { kind: f.kind!, repo: f.repo!, pr: Number(f.pr), head_sha: f.head_sha!, ...(r.merge_sha ? { merge_sha: r.merge_sha } : {}) },
       });
       if (rec.state === "merged") return out(rec.result ?? {});
 
       // prepared -> approved: the signature is on record. `approved`/`checked` here mean an earlier attempt did not finish; carry on from there.
       let cur = rec;
-      if (cur.state === "prepared") cur = this.d.store.transition(cur.action_id, "approved", this.tick(), { approval: { device_id: device.device_id, signature, at_ms: this.d.now() } });
+      if (cur.state === "prepared") cur = this.d.store.transition(cur.action_id, "approved", this.d.now(), { approval: { device_id: device.device_id, signature, at_ms: this.d.now() } });
 
-      await this.liveChecks(cur);
+      await this.liveChecks(cur, f);
 
       cur = this.fresh(cur.action_id);
-      if (cur.state === "approved") cur = this.d.store.transition(cur.action_id, "checked", this.tick());
+      if (cur.state === "approved") cur = this.d.store.transition(cur.action_id, "checked", this.d.now());
       // Last look before the single exit: the device may have been revoked while GitHub was being read.
       cur = this.fresh(cur.action_id);
       if (this.d.devices.get(cur.prepared_by)?.revoked_at) {
-        this.d.store.transition(cur.action_id, "invalid", this.tick(), { reason: "revoked" });
+        this.d.store.transition(cur.action_id, "invalid", this.d.now(), { reason: "revoked" });
         throw new ActionError(410, "expired", "revoked");
       }
       const approval = cur.approval!;
       let result: ActionResult;
       try {
         result = await this.d.execute(
-          { action_id: cur.action_id, kind: f.kind, repo: f.repo, pr: Number(f.pr), base: f.base, head_sha: f.head_sha, task: f.task },
+          { action_id: cur.action_id, kind: f.kind!, repo: f.repo!, pr: Number(f.pr), base: f.base!, head_sha: f.head_sha!, task: f.task! },
           { kind: "device", device_id: approval.device_id, signature: approval.signature, signed_bytes_b64: cur.bytes_b64, approved_at_ms: approval.at_ms },
         );
       } catch (e) {
@@ -215,7 +297,7 @@ export class ActionService {
         this.settle(cur.action_id, "failed", err.message);
         throw err;
       }
-      this.d.store.transition(cur.action_id, "merged", this.tick(), { result });
+      this.d.store.transition(cur.action_id, "merged", this.d.now(), { result });
       return out(result);
     });
   }
@@ -229,7 +311,7 @@ export class ActionService {
 
   private settle(id: string, to: "failed", reason: string) {
     const rec = this.d.store.get(id);
-    if (rec && !isTerminal(rec.state)) this.d.store.transition(id, to, this.tick(), { reason });
+    if (rec && !isTerminal(rec.state)) this.d.store.transition(id, to, this.d.now(), { reason });
   }
 
   /** A refusal that ends the action: recorded as `failed` (a new prepare is the way forward), then thrown. */
@@ -243,7 +325,7 @@ export class ActionService {
       return await fn();
     } catch (e) {
       if (e instanceof ActionError) throw e;
-      // GitHub unreachable or answering something unknown: nothing was decided, the challenge stays usable until `exp`.
+      // GitHub or the kb unreachable, or answering something unknown: nothing was decided, the challenge stays usable.
       throw new ActionError(503, "bad_request", "github_unavailable");
     }
   }
@@ -261,18 +343,23 @@ export class ActionService {
   }
 
   /** Steps 5-8: PR open, head and base unchanged, CI green, mergeable. Every refusal here is final for this challenge. */
-  private async liveChecks(rec: ActionRecord) {
-    const f = rec.fields;
+  private async liveChecks(rec: ActionRecord, f: Record<string, string>) {
     const pr = Number(f.pr);
     try {
+      // The task must still be waiting for exactly this: same repo, PR and base (it could have been re-pointed since prepare).
+      const t = await this.read(() => this.d.tasks(f.task!));
+      if (!t || t.state !== "awaiting_approval" || !t.pr || t.pr.repo !== f.repo || t.pr.number !== pr || t.pr.base !== f.base) throw new ActionError(409, "bad_request", "task_changed");
+      const card = await this.read(() => this.d.projects(t.project));
+      if (card?.repo !== f.repo) throw new ActionError(409, "not_mergeable", "repo_not_registered");
+
       let pull: PullFacts | null = null;
       for (let attempt = 1; attempt <= MERGEABLE_ATTEMPTS; attempt++) {
-        pull = await this.read(() => this.d.reader.getPull(f.repo, pr));
+        pull = await this.read(() => this.d.reader.getPull(f.repo!, pr));
         if (!pull) throw new ActionError(409, "not_mergeable", "pr_not_found");
         this.checkOpen(pull);
         if (pull.head.sha !== f.head_sha) throw new ActionError(409, "head_moved", "head_moved");
-        if (pull.base.ref !== f.base) throw new ActionError(409, "not_mergeable", "base_changed");
-        if (attempt === 1) await this.checkCi(f.repo, f.head_sha);
+        this.checkOrigin(pull, f.repo!, f.task!, f.base!);
+        if (attempt === 1) await this.checkCi(f.repo!, f.head_sha!);
         if (pull.mergeable !== null && pull.mergeable_state !== "unknown") break;
         if (attempt < MERGEABLE_ATTEMPTS) await this.sleep(MERGEABLE_WAIT_MS);
       }
@@ -287,17 +374,55 @@ export class ActionService {
     }
   }
 
-  // ---- revocation ----------------------------------------------------------------------------------------------
+  // ---- revocation and clock -----------------------------------------------------------------------------------
 
   /**
-   * `AppConfig.onRevoke`: every pending challenge the device asked for dies. Synchronous, so nothing can interleave.
-   * A `checked` action may already be inside the executor and is left alone; `approve` looks at the device once more right before the exit.
+   * `AppConfig.onRevoke`: every pending challenge the device asked for dies, each under its own lock (an approval that is
+   * mid-flight finishes first and looks at the device once more right before the exit). `checked` is left to that last look.
+   * Use {@link settled} to wait for it.
    */
   onDeviceRevoked(deviceId: string): void {
-    const t = this.d.now();
     for (const rec of this.d.store.list()) {
-      if (rec.prepared_by === deviceId && (rec.state === "prepared" || rec.state === "approved")) this.d.store.transition(rec.action_id, "invalid", t, { reason: "revoked" });
+      if (rec.prepared_by !== deviceId) continue;
+      this.track(this.d.store.withLock(rec.action_id, () => {
+        const r = this.d.store.get(rec.action_id);
+        if (r && (r.state === "prepared" || r.state === "approved")) this.d.store.transition(r.action_id, "invalid", this.d.now(), { reason: "revoked" });
+      }));
     }
+  }
+
+  private invalidateLater(id: string, reason: string) {
+    this.track(this.d.store.withLock(id, () => {
+      const r = this.d.store.get(id);
+      if (r?.state === "prepared") this.d.store.transition(id, "invalid", this.d.now(), { reason });
+    }));
+  }
+
+  private rewoundAt: number | null = null;
+
+  /** Notes a clock that went back (reads stay blocked by `highWater`); the sweep below kills the pending challenges for good. */
+  private observeClock() {
+    if (this.d.now() < this.highWater) this.sweepAfterRewind();
+    else this.highWater = this.d.now();
+  }
+
+  /** Kills every pending challenge under its lock, and only then lets `highWater` follow the clock again (no revival window). */
+  private sweepAfterRewind() {
+    if (this.rewoundAt !== null) return;
+    this.rewoundAt = this.d.now();
+    this.track((async () => {
+      try {
+        for (const rec of this.d.store.list()) {
+          await this.d.store.withLock(rec.action_id, () => {
+            const r = this.d.store.get(rec.action_id);
+            if (r && (r.state === "prepared" || r.state === "approved")) this.d.store.transition(r.action_id, "invalid", this.d.now(), { reason: "clock_rewind" });
+          });
+        }
+        this.highWater = this.d.now();
+      } finally {
+        this.rewoundAt = null;
+      }
+    })());
   }
 }
 

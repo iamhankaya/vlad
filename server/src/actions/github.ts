@@ -10,8 +10,9 @@ export type PullFacts = {
   /** `null`: GitHub has not computed it yet (first call after a push). */
   mergeable: boolean | null;
   mergeable_state: string;
-  head: { sha: string; ref: string };
-  base: { ref: string };
+  /** `repo`: `owner/name` of the head repository (`null` when a fork was deleted). A head outside the base repo is a fork. */
+  head: { sha: string; ref: string; repo: string | null };
+  base: { ref: string; repo: string | null };
 };
 
 export type CheckRun = { name: string; status: string; conclusion: string | null };
@@ -33,7 +34,8 @@ export function toPullFacts(body: any): PullFacts {
   if (!ok) throw new Error("GitHub PR yanıtı beklenen biçimde değil");
   return {
     number: body.number, state: body.state, merged: body.merged === true, draft: body.draft === true,
-    mergeable: body.mergeable, mergeable_state: body.mergeable_state, head: { sha: body.head.sha, ref: body.head.ref }, base: { ref: body.base.ref },
+    mergeable: body.mergeable, mergeable_state: body.mergeable_state, head: { sha: body.head.sha, ref: body.head.ref, repo: typeof body.head.repo?.full_name === "string" ? body.head.repo.full_name : null },
+    base: { ref: body.base.ref, repo: typeof body.base.repo?.full_name === "string" ? body.base.repo.full_name : null },
   };
 }
 
@@ -57,5 +59,7 @@ export function ciState(runs: CheckRun[], status: CombinedStatus): CiState {
   if (hasStatus && (status.state === "failure" || status.state === "error")) return "red";
   if (relevant.some((r) => r.status !== "completed" || r.conclusion === null || !PASS.has(r.conclusion))) return "pending";
   if (hasStatus && status.state !== "success") return "pending";
+  // All skipped/neutral is no evidence of anything: green needs at least one real success.
+  if (!relevant.some((r) => r.conclusion === "success") && !hasStatus) return "none";
   return "green";
 }

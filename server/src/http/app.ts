@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { actionHandlers, approveGuard } from "../actions/routes.ts";
-import { ActionService, type ActionPolicy, type ExecuteAction, type TaskSource } from "../actions/service.ts";
+import { ActionService, type ActionPolicy, type ExecuteAction, type ProjectSource, type TaskSource } from "../actions/service.ts";
 import { ActionStore } from "../actions/state.ts";
 import type { GithubReader } from "../actions/github.ts";
 import { DeviceLedger, type DeviceRecord } from "../auth/devices.ts";
@@ -43,7 +43,7 @@ export type AppConfig = {
    * Approval path (S9a): live GitHub reads, task facts, the single exit `execute` (S9b). Without it `prepareAction` and
    * `approveAction` stay "not implemented" (they still pass the signature check first).
    */
-  actions?: { reader: GithubReader; tasks: TaskSource; execute: ExecuteAction; /** Default `<stateDir>/challenges`. */ dir?: string; sleep?: (ms: number) => Promise<void>; policy?: ActionPolicy };
+  actions?: { reader: GithubReader; tasks: TaskSource; projects: ProjectSource; execute: ExecuteAction; /** Default `<stateDir>/challenges`. */ dir?: string; sleep?: (ms: number) => Promise<void>; policy?: ActionPolicy };
   /** Handlers of later slices (and tests) by `operationId`. A `session+approval` route with a handler here needs a guard in `approvalGuards`. */
   extraHandlers?: Record<string, (req: FastifyRequest, reply: FastifyReply) => unknown>;
   /** Approval guards by `operationId` (see `http/approval.ts`). */
@@ -120,14 +120,20 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   });
   // Revocation closes the device's open streams before anything else reacts to it.
   devices.onRevoke((id) => hub.closeDevice(id));
+  const onClose: (() => void)[] = [];
   const actions = cfg.actions
     ? new ActionService({
         store: new ActionStore(cfg.actions.dir ?? join(cfg.stateDir, "challenges")),
-        devices, reader: cfg.actions.reader, tasks: cfg.actions.tasks, execute: cfg.actions.execute, now, sleep: cfg.actions.sleep, policy: cfg.actions.policy,
+        devices, reader: cfg.actions.reader, tasks: cfg.actions.tasks, projects: cfg.actions.projects, execute: cfg.actions.execute, now, sleep: cfg.actions.sleep, policy: cfg.actions.policy,
       })
     : undefined;
   // A revoked device's pending challenges die with it (before any external listener runs).
-  if (actions) devices.onRevoke((id) => actions.onDeviceRevoked(id));
+  if (actions) {
+    devices.onRevoke((id) => actions.onDeviceRevoked(id));
+    const t = setInterval(() => actions.prune(), 10 * 60_000);
+    t.unref();
+    onClose.push(() => clearInterval(t));
+  }
   if (cfg.onRevoke) devices.onRevoke(cfg.onRevoke);
 
   const app = Fastify({
@@ -140,7 +146,10 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   // Every body is kept as raw bytes: the envelope hashes bytes, and nothing is parsed before the signature is checked.
   app.decorate("vladEvents", { ledger, hub, cache });
   app.decorate("vladActions", actions);
-  app.addHook("onClose", async () => hub.closeAll());
+  app.addHook("onClose", async () => {
+    hub.closeAll();
+    for (const f of onClose) f();
+  });
   app.removeAllContentTypeParsers();
   app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: BODY_LIMIT }, (_req, body, done) => done(null, body));
 
@@ -220,7 +229,8 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     }
     return { ok: true };
   };
-  const guards: Record<string, ApprovalGuard> = { revokeDevice: revokeGuard, ...(actions ? { approveAction: approveGuard(actions) } : {}), ...cfg.approvalGuards };
+  // Built-in guards come last: nothing passed in can replace the guard of `revokeDevice` or `approveAction`.
+  const guards: Record<string, ApprovalGuard> = { ...cfg.approvalGuards, revokeDevice: revokeGuard, ...(actions ? { approveAction: approveGuard(actions) } : {}) };
 
   app.decorate("vladApprovalGuards", new Set(Object.keys(guards)));
 
@@ -230,7 +240,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   const approvalPreHandler = async (req: FastifyRequest, reply: FastifyReply) => {
     const spec = req.routeOptions.config.spec!;
     const guard = guards[spec.operationId];
-    if (!guard) return; // no handler either (501)
+    if (!guard) return send(reply, 501, "bad_request", { reason: "not_implemented" }, "Henüz uygulanmadı."); // fail closed: never fall through to a handler
     const verdict = await guard(req, req.vladDevice!);
     if (!verdict.ok) {
       if (verdict.charge && !unpaired.take(req.ip)) return limited(reply, unpaired, req.ip);

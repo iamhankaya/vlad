@@ -61,7 +61,7 @@ export function approveGuard(svc: ActionService): ApprovalGuard {
     const b = parseBody(req);
     if (!b || Object.keys(b).some((k) => k !== "signature") || typeof b.signature !== "string") return reject(400, "bad_request");
     try {
-      svc.admit(device, (req.params as { id: string }).id, b.signature);
+      svc.inspect(device, (req.params as { id: string }).id, b.signature);
     } catch (e) {
       if (e instanceof ActionError) return verdictOf(e);
       throw e;
