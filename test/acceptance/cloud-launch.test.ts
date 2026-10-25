@@ -1,12 +1,13 @@
 // Kabul testleri: T20261020-01 bulut (cloud) launcher — spec senaryoları 1-7, 11.
 // Yalnızca arayüzlerden yazıldı: config `launcher: cloud`, kart `repo`/`local_only`,
 // `vlad task launch --json` cloud çıktısı. Uygulama gelmeden kırmızı olması beklenir.
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultConfig } from "../../src/kb/index.js";
 import { loadConfig } from "../../src/kb/config.js";
+import { ProcessLauncher, resolveLaunchMode } from "../../src/launcher/index.js";
 import { launchTask } from "../../src/tasks/launch.js";
 import { createTask } from "../../src/tasks/index.js";
 import { writeProject } from "../../src/projects/store.js";
@@ -81,14 +82,69 @@ describe.runIf(onLinux)("senaryo 3-4: auto seçimi (Linux)", () => {
     expect(r.code, r.err).toBe(0);
     expect(JSON.parse(r.out)).toMatchObject({ id, mode: "cloud", action: "create_session", state: "running" });
   });
+});
 
-  it("senaryo 4: auto + Linux + bulut yok → açık hata, görev queued", () => {
-    const id = newTask(home);
-    const r = launch(id, NO_CLOUD_ENV);
-    expect(r.code).toBe(1);
-    expect(JSON.parse(r.err).error).toMatch(/bulut|cloud|launcher/i);
-    expect(taskState(home, id)).toBe("queued");
-    expect(readTask(home, id)).toMatch(/error: \S/);
+// Senaryo 4 (S2a, T20261025-55): Linux'ta `auto` bulut yokken artık `process` launcher'ı seçer
+// (eski tasarım açık hata veriyordu). Gerçek systemd-run/claude gerekmez; exec sahtedir.
+describe.runIf(onLinux)("senaryo 4: auto + Linux + bulut yok → process launcher", () => {
+  const oneRepo = () => {
+    const base = tmp("vlad-proc-");
+    const repo = join(base, "alpha");
+    mkdirSync(repo);
+    const g = (...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd: repo, stdio: "pipe" });
+    g("init", "-b", "main");
+    writeFileSync(join(repo, "a.txt"), "1");
+    g("add", ".");
+    g("commit", "-m", "first");
+    writeProject("alpha", `---\nslug: alpha\nname: Alpha\npath: ${JSON.stringify(repo)}\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n`);
+    const cfg = defaultConfig();
+    cfg.launcher = "auto";
+    cfg.worktreeDir = join(base, "wt");
+    return cfg;
+  };
+  const realHome = process.env.VLAD_HOME;
+  beforeEach(() => { process.env.VLAD_HOME = home; });
+  afterEach(() => {
+    if (realHome === undefined) delete process.env.VLAD_HOME; else process.env.VLAD_HOME = realHome;
+    vi.unstubAllEnvs();
+  });
+
+  it("mod çözümü: auto + linux + bulut işareti yok → process; bulut işareti varsa cloud", () => {
+    expect(resolveLaunchMode("auto", "linux", {})).toBe("process");
+    expect(resolveLaunchMode("auto", "linux", CLOUD_ENV)).toBe("cloud");
+  });
+
+  it("senaryo 4: sahte exec ile ProcessLauncher seçilir, görev running olur", async () => {
+    const cfg = oneRepo();
+    expect(resolveLaunchMode(cfg.launcher, "linux", {})).toBe("process");
+    const t = createTask({ project: "alpha", title: "P", kind: "dev", body: "## Tanım\nx\n" });
+    const calls: { file: string; args: string[] }[] = [];
+    const launcher = new ProcessLauncher({
+      scriptDir: tmp("vlad-wd-"), env: { PATH: "/usr/bin:/bin", HOME: "/home/vlad", VLAD_MACHINE: "srv" },
+      exec: (file, args) => { calls.push({ file, args }); },
+    });
+    const r = await launchTask(t.data.id, { launcher, cfg });
+    expect(r.data.state).toBe("running");
+    expect(r.data.worktree && existsSync(r.data.worktree)).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].file).toBe("systemd-run");
+    expect(calls[0].args).toContain(`--unit=vlad-worker-${t.data.id}`);
+    expect(calls[0].args).toContain(`--working-directory=${r.data.worktree}`);
+  });
+
+  it("systemd-run yokken sabit `systemd-run bulunamadı` hatası, görev queued kalır", async () => {
+    const cfg = oneRepo();
+    const t = createTask({ project: "alpha", title: "P", kind: "dev", body: "## Tanım\nx\n" });
+    // PATH yalnızca git içerir: gerçek varsayılan exec systemd-run'ı bulamaz (ENOENT)
+    const bin = tmp("vlad-bin-");
+    const gitPath = execFileSync("sh", ["-c", "command -v git"], { encoding: "utf8" }).trim();
+    symlinkSync(gitPath, join(bin, "git"));
+    vi.stubEnv("PATH", bin);
+    const launcher = new ProcessLauncher({ scriptDir: tmp("vlad-wd-"), env: { PATH: bin, HOME: "/home/vlad" } });
+    await expect(launchTask(t.data.id, { launcher, cfg })).rejects.toThrow(/systemd-run bulunamadı/);
+    vi.unstubAllEnvs();
+    expect(taskState(home, t.data.id)).toBe("queued");
+    expect(readTask(home, t.data.id)).toMatch(/error: \S/);
   });
 });
 
