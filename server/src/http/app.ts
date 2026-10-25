@@ -1,4 +1,8 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import { actionHandlers, approveGuard } from "../actions/routes.ts";
+import { ActionService, type ActionPolicy, type ExecuteAction, type TaskSource } from "../actions/service.ts";
+import { ActionStore } from "../actions/state.ts";
+import type { GithubReader } from "../actions/github.ts";
 import { DeviceLedger, type DeviceRecord } from "../auth/devices.ts";
 import { verifyEnvelope, verifyRevokeApproval } from "../auth/envelope.ts";
 import { ensureDir } from "../auth/files.ts";
@@ -11,7 +15,10 @@ import { SseHub, type HubDeps } from "../events/hub.ts";
 import { eventHandlers } from "../events/routes.ts";
 import { ReadCache } from "../read/cache.ts";
 import { readHandlers, type ReadDeps } from "../read/routes.ts";
+import { reject, type ApprovalContext, type ApprovalGuard } from "./approval.ts";
+import { send } from "./errors.ts";
 import { ROUTES, type RouteSpec } from "./routes.generated.ts";
+import { join } from "node:path";
 
 export const BODY_LIMIT = 1024 * 1024;
 
@@ -32,6 +39,15 @@ export type AppConfig = {
   events?: { ledger?: EventLedger; maxStreams?: number; maxPerDevice?: number; every?: HubDeps["every"] };
   /** Extra revocation listener (S9a: pending challenges, S10a: grants). Runs after the device's SSE streams are closed. */
   onRevoke?: (deviceId: string) => void;
+  /**
+   * Approval path (S9a): live GitHub reads, task facts, the single exit `execute` (S9b). Without it `prepareAction` and
+   * `approveAction` stay "not implemented" (they still pass the signature check first).
+   */
+  actions?: { reader: GithubReader; tasks: TaskSource; execute: ExecuteAction; /** Default `<stateDir>/challenges`. */ dir?: string; sleep?: (ms: number) => Promise<void>; policy?: ActionPolicy };
+  /** Handlers of later slices (and tests) by `operationId`. A `session+approval` route with a handler here needs a guard in `approvalGuards`. */
+  extraHandlers?: Record<string, (req: FastifyRequest, reply: FastifyReply) => unknown>;
+  /** Approval guards by `operationId` (see `http/approval.ts`). */
+  approvalGuards?: Record<string, ApprovalGuard>;
   limits?: { unpaired?: [capacity: number, perSec: number]; paired?: [number, number]; public?: [number, number] };
 };
 
@@ -39,6 +55,10 @@ declare module "fastify" {
   interface FastifyInstance {
     /** Event ledger and stream hub: other slices append events (`vladEvents.ledger.append`); main starts the kb watcher on it. */
     vladEvents: { ledger: EventLedger; hub: SseHub; cache: ReadCache };
+    /** Approval path service when `AppConfig.actions` is set. */
+    vladActions?: ActionService;
+    /** `operationId`s that have an approval guard (route inventory test). */
+    vladApprovalGuards: ReadonlySet<string>;
   }
   interface FastifyContextConfig {
     spec?: RouteSpec;
@@ -46,19 +66,9 @@ declare module "fastify" {
   interface FastifyRequest {
     /** Set by the signature preHandler on every route that passed it. */
     vladDevice?: DeviceRecord;
+    /** Set by the central approval guard on `session+approval` routes; handlers read it, they never verify approvals themselves. */
+    vladApproval?: ApprovalContext;
   }
-}
-
-type ErrorCode = "unauthorized" | "device_revoked" | "bad_request" | "rate_limited";
-const MESSAGES: Record<ErrorCode, string> = {
-  unauthorized: "Yetkisiz.",
-  device_revoked: "Cihaz iptal edildi.",
-  bad_request: "Geçersiz istek.",
-  rate_limited: "Çok fazla deneme.",
-};
-
-function send(reply: FastifyReply, status: number, code: ErrorCode, details?: Record<string, unknown>, message?: string) {
-  return reply.code(status).type("application/json").send({ error: { code, message_tr: message ?? MESSAGES[code], ...(details ? { details } : {}) } });
 }
 
 const bodyBytes = (req: FastifyRequest): Buffer => (Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0));
@@ -110,6 +120,14 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   });
   // Revocation closes the device's open streams before anything else reacts to it.
   devices.onRevoke((id) => hub.closeDevice(id));
+  const actions = cfg.actions
+    ? new ActionService({
+        store: new ActionStore(cfg.actions.dir ?? join(cfg.stateDir, "challenges")),
+        devices, reader: cfg.actions.reader, tasks: cfg.actions.tasks, execute: cfg.actions.execute, now, sleep: cfg.actions.sleep, policy: cfg.actions.policy,
+      })
+    : undefined;
+  // A revoked device's pending challenges die with it (before any external listener runs).
+  if (actions) devices.onRevoke((id) => actions.onDeviceRevoked(id));
   if (cfg.onRevoke) devices.onRevoke(cfg.onRevoke);
 
   const app = Fastify({
@@ -121,6 +139,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
 
   // Every body is kept as raw bytes: the envelope hashes bytes, and nothing is parsed before the signature is checked.
   app.decorate("vladEvents", { ledger, hub, cache });
+  app.decorate("vladActions", actions);
   app.addHook("onClose", async () => hub.closeAll());
   app.removeAllContentTypeParsers();
   app.addContentTypeParser("*", { parseAs: "buffer", bodyLimit: BODY_LIMIT }, (_req, body, done) => done(null, body));
@@ -159,6 +178,8 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   const handlers: Record<string, Handler> = {
     ...readHandlers({ ...cfg.read, cache, seq: cfg.read?.seq ?? (() => ledger.lastSeq) }),
     ...eventHandlers(ledger, hub),
+    ...(actions ? actionHandlers(actions) : {}),
+    ...cfg.extraHandlers,
     getHealth: () => ({ ok: true, version: cfg.version }),
 
     pairDevice: (req, reply) => {
@@ -179,21 +200,43 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
       return { device_id, server_time: now() };
     },
 
+    // The approval was verified by the central guard (`revokeGuard`); this only acts on it.
     revokeDevice: (req, reply) => {
-      const caller = req.vladDevice!;
-      const b = jsonBody(req);
-      if (!b || !hasOnly(b, ["ts_ms", "signature"]) || !Number.isSafeInteger(b.ts_ms) || typeof b.signature !== "string") return send(reply, 400, "bad_request");
-      const target = (req.params as { id: string }).id;
-      const headerTs = Number(req.headers["x-vlad-ts"]); // already validated by the envelope check
-      const why = verifyRevokeApproval({ replay }, caller, target, headerTs, b);
-      if (why) {
-        req.log.debug({ reason: why }, "revoke rejected");
-        if (!unpaired.take(req.ip)) return limited(reply, unpaired, req.ip);
-        return send(reply, 401, "unauthorized");
-      }
-      if (!devices.revoke(target, new Date(now()).toISOString())) return send(reply, 404, "bad_request", { reason: "not_found" }, "Kayıt yok.");
+      if (req.vladApproval?.operationId !== "revokeDevice") return send(reply, 500, "bad_request", undefined, "Sunucu hatası.");
+      if (!devices.revoke((req.params as { id: string }).id, new Date(now()).toISOString())) return send(reply, 404, "bad_request", { reason: "not_found" }, "Kayıt yok.");
       return { ok: true };
     },
+  };
+
+  /** The `approval` signature of a device revocation (`vlad-revoke/v1`), see `verifyRevokeApproval`. Failures are charged to the address bucket. */
+  const revokeGuard: ApprovalGuard = (req, caller) => {
+    const b = jsonBody(req);
+    if (!b || !hasOnly(b, ["ts_ms", "signature"]) || !Number.isSafeInteger(b.ts_ms) || typeof b.signature !== "string") return reject(400, "bad_request");
+    const headerTs = Number(req.headers["x-vlad-ts"]); // already validated by the envelope check
+    const why = verifyRevokeApproval({ replay }, caller, (req.params as { id: string }).id, headerTs, b);
+    if (why) {
+      req.log.debug({ reason: why }, "revoke rejected");
+      return reject(401, "unauthorized", undefined, { charge: true });
+    }
+    return { ok: true };
+  };
+  const guards: Record<string, ApprovalGuard> = { revokeDevice: revokeGuard, ...(actions ? { approveAction: approveGuard(actions) } : {}), ...cfg.approvalGuards };
+
+  app.decorate("vladApprovalGuards", new Set(Object.keys(guards)));
+
+  // Fail closed at startup: a `session+approval` route that has a handler must have a guard, or it could be reached without an approval.
+  for (const spec of ROUTES) if (spec.auth === "session+approval" && handlers[spec.operationId] && !guards[spec.operationId]) throw new Error(`approval guard eksik: ${spec.operationId}`);
+
+  const approvalPreHandler = async (req: FastifyRequest, reply: FastifyReply) => {
+    const spec = req.routeOptions.config.spec!;
+    const guard = guards[spec.operationId];
+    if (!guard) return; // no handler either (501)
+    const verdict = await guard(req, req.vladDevice!);
+    if (!verdict.ok) {
+      if (verdict.charge && !unpaired.take(req.ip)) return limited(reply, unpaired, req.ip);
+      return send(reply, verdict.status, verdict.code, verdict.details, verdict.message);
+    }
+    req.vladApproval = { operationId: spec.operationId, device: req.vladDevice!, data: verdict.data };
   };
 
   // Routes that are not implemented yet (S6d events, S9 actions...) still pass the signature preHandler first.
@@ -204,7 +247,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
       method: spec.method as "GET",
       url: spec.path,
       config: { spec },
-      preHandler: authenticate,
+      preHandler: spec.auth === "session+approval" ? [authenticate, approvalPreHandler] : authenticate,
       handler: async (req, reply) => (handlers[spec.operationId] ?? notImplemented)(req, reply),
     });
   }
