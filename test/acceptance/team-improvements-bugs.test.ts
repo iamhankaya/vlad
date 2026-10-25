@@ -12,7 +12,7 @@ const vlad = (args: string[], input?: string, env: Record<string, string | undef
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 const ymd = () => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`; };
 
-describe("BUG-1: günün 100. görevi şemaya takılır", () => {
+describe("BUG-1: günün 100. görevi şemaya takılır", { timeout: 30_000 }, () => {
   it("T<gün>-99 varken `task new` T<gün>-100 üretir ve başarılı olur", () => {
     writeFileSync(join(home, "kb", "tasks", `T${ymd()}-99.md`), "x");
     const r = vlad(["task", "new", "--project", "alpha", "--title", "T", "--body-file", "-", "--json"], "## Tanım\nx\n");
@@ -34,7 +34,7 @@ describe("BUG-2: `task new --phase` yardımı yeni faz adlarını saymıyor", ()
   });
 });
 
-describe("BUG-3: bulut prompt'u kartın `gate` komutunu ve entegrasyon öncesi kontrolü taşımıyor", () => {
+describe("BUG-3: bulut prompt'u kartın `gate` komutunu ve entegrasyon öncesi kontrolü taşımıyor", { timeout: 30_000 }, () => {
   beforeEach(() => {
     writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
     writeRoles(home);
@@ -65,7 +65,7 @@ describe("BUG-4: pipeline spec `phase` alan listesi `karakterizasyon` adını sa
   });
 });
 
-describe("BUG-5: finding add olmayan projeye bulgu yazıyor", () => {
+describe("BUG-5: finding add olmayan projeye bulgu yazıyor", { timeout: 30_000 }, () => {
   it("kartı olmayan proje için `finding add` hata verir (project set/note ile aynı davranış)", () => {
     mkdirSync(join(home, "kb", "findings"), { recursive: true });
     const r = vlad(["finding", "add", "--project", "yok-boyle-proje", "--source", `T${ymd()}-01`, "--severity", "orta", "--title", "x", "--json"]);

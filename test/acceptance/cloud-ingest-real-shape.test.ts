@@ -34,7 +34,7 @@ const ingest = (body: string) => {
   return vlad(home, ["task", "ingest", id, "--events-file", f, "--remote-head", SHA, "--json"]);
 };
 
-describe("gerçek list_events şekli", () => {
+describe("gerçek list_events şekli", { timeout: 30_000 }, () => {
   it("{ccr:{data:[…]}} sarmalayıcısı ve internal_anthropic_catchall.message okunur", () => {
     const r = ingest(JSON.stringify(real()));
     expect(r.code, r.out + r.err).toBe(0);

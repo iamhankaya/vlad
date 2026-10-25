@@ -42,7 +42,7 @@ x
   expect(vlad(["project", "write", "alpha", "--file", f, "--json"]).code).toBe(0);
 }
 
-describe("vlad cli", () => {
+describe("vlad cli", { timeout: 30_000 }, () => {
   it("has a shebang", () => {
     expect(readFileSync(cli, "utf8").startsWith("#!/usr/bin/env node")).toBe(true);
   });

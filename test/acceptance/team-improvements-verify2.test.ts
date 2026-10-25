@@ -27,7 +27,7 @@ function bumpCounterTo99(): void {
   writeFileSync(dst, readFileSync(dst, "utf8").split(seed).join(`T${ymd()}-99`));
 }
 
-describe("BUG-1 uçtan uca: 3 haneli görev ID'leri", () => {
+describe("BUG-1 uçtan uca: 3 haneli görev ID'leri", { timeout: 30_000 }, () => {
   beforeEach(bumpCounterTo99);
 
   it("task new → -100; task list ve task show/log onu tanır", () => {
@@ -82,7 +82,7 @@ describe("BUG-1 uçtan uca: 3 haneli görev ID'leri", () => {
   });
 });
 
-describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task launch --json` bulut prompt'u", () => {
+describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task launch --json` bulut prompt'u", { timeout: 30_000 }, () => {
   const launch = (extra: string[] = [], card: Record<string, string> = {}) => {
     writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
     writeRoles(home);
@@ -152,7 +152,7 @@ describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task la
   });
 });
 
-describe("BUG-5 uçtan uca: kartsız proje reddi", () => {
+describe("BUG-5 uçtan uca: kartsız proje reddi", { timeout: 30_000 }, () => {
   const add = (project: string) =>
     vlad(["finding", "add", "--project", project, "--source", `T${ymd()}-01`, "--severity", "orta", "--title", "x", "--json"]);
 

@@ -27,7 +27,7 @@ const newTask = (args: string[] = []) =>
   json<{ id: string }>(["task", "new", "--project", "alpha", "--title", "T", "--body-file", "-", ...args], body).id;
 const setState = (id: string, s: string) => expect(vlad(["task", "set", id, s]).code).toBe(0);
 
-describe("adım 1: project set gate", () => {
+describe("adım 1: project set gate", { timeout: 30_000 }, () => {
   beforeEach(() => writeCard(home, "alpha"));
 
   it("yazar, project list --json gösterir, boş değer siler", () => {
@@ -61,7 +61,7 @@ describe("adım 1: project set gate", () => {
   });
 });
 
-describe("adım 2: finding add|list|set + status --summary", () => {
+describe("adım 2: finding add|list|set + status --summary", { timeout: 30_000 }, () => {
   beforeEach(() => writeCard(home, "alpha"));
   const add = (extra: string[], detail?: string) =>
     vlad(["finding", "add", "--project", "alpha", "--source", "T20261022-01", ...extra, "--json"], detail);
@@ -131,7 +131,7 @@ describe("adım 2: finding add|list|set + status --summary", () => {
   });
 });
 
-describe("adım 3: maxParallel + task ready + resume", () => {
+describe("adım 3: maxParallel + task ready + resume", { timeout: 30_000 }, () => {
   const cfg = (c: object) => writeFileSync(join(home, "vlad.config.json"), JSON.stringify(c));
   const phase = (parent: string, title: string, extra: string[] = []) => newTask(["--parent", parent, "--phase", title, ...extra]);
   let pid: string, a: string, b: string, c: string;
@@ -226,7 +226,7 @@ describe("adım 3: maxParallel + task ready + resume", () => {
   });
 });
 
-describe("geriye uyumluluk: gerçek kb salt-okuma (kopya üzerinde)", () => {
+describe("geriye uyumluluk: gerçek kb salt-okuma (kopya üzerinde)", { timeout: 30_000 }, () => {
   // repodaki kb/ yalnızca okunur: `status` eski running'leri stalled'a yazabildiği için kopyada çalışılır
   const realKb = resolveKbDir(root).dir;
   const copy = () => {

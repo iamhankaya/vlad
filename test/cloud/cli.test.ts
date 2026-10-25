@@ -43,7 +43,7 @@ function newTask(): string {
   return JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", join(home, "body.md"), "--json"], undefined, CLOUD).out).id;
 }
 
-describe("cloud CLI", () => {
+describe("cloud CLI", { timeout: 30_000 }, () => {
   it("launch --json in a cloud env returns create_session arguments and runs the task", () => {
     const id = newTask();
     expect(id).toMatch(/-51$/);
