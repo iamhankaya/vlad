@@ -459,8 +459,16 @@ paths:
     post:
       operationId: takeoverActive
       tags: [write]
-      summary: Etkin VLAD'ı bu sunucuya devral (senkron, devral, senkron, promote; sonuç main'deki active.md'ye göre)
-      x-vlad-auth: session
+      summary: Etkin VLAD'ı bu sunucuya devral (`approval` imzalı; senkron, devral, senkron, promote; sonuç main'deki active.md'ye göre)
+      description: |
+        `signature`, `approval` anahtarıyla `vlad-takeover/v1\nsigner=<X-Vlad-Device>\nts=<ts_ms>` baytları üzerindedir.
+        Kurallar: `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts_ms)` tek kullanım; ihlal `401 unauthorized` (vektör: `signing-vectors.json` `takeover`).
+      x-vlad-auth: session+approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TakeoverRequest" }
       responses:
         "200":
           description: Devralındı ve main'e indi.
@@ -472,6 +480,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TakeoverResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "409":
           description: Etkin VLAD başka makinede (`active_elsewhere`), devralmadan önceki senkronda kb çakışması var (`kb_conflict`) ya da başka bir devralma sürüyor (`takeover_in_progress`).
@@ -806,6 +815,16 @@ components:
       properties:
         limited: { type: boolean }
         until: { $ref: "#/components/schemas/Timestamp" }
+    TakeoverRequest:
+      type: object
+      description: |
+        İmzalayan cihaz `X-Vlad-Device` başlığıdır (gövdede yoktur). Sunucu kuralları: `ts_ms` == `X-Vlad-Ts`, pencere
+        ±120 sn, `(signer, ts_ms)` tek kullanım, imza `approval` anahtarıyla `vlad-takeover/v1` baytları üzerinde.
+      additionalProperties: false
+      required: [ts_ms, signature]
+      properties:
+        ts_ms: { type: integer, minimum: 0 }
+        signature: { $ref: "#/components/schemas/B64Url" }
     TakeoverResponse:
       type: object
       additionalProperties: false

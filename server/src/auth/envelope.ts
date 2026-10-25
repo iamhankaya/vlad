@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from "node:http";
-import { CanonicalError, canonicalQuery, envelopeString, revokeBytes } from "./canonical.ts";
+import { CanonicalError, canonicalQuery, envelopeString, revokeBytes, takeoverBytes } from "./canonical.ts";
 import type { DeviceLedger, DeviceRecord } from "./devices.ts";
 import { verifySignature } from "./keys.ts";
 import type { ReplayCache } from "./replay.ts";
@@ -90,5 +90,23 @@ export function verifyRevokeApproval(
   }
   if (!verifySignature(caller.approval_pub, bytes, body.signature)) return "bad_approval_signature";
   if (!deps.replay.claim(`r:${caller.device_id}:${headerTsMs}`)) return "revoke_replay";
+  return null;
+}
+
+/**
+ * The `approval` signature of a takeover (`vlad-takeover/v1`): same shape as the device revocation. `ts_ms` in the body equals `X-Vlad-Ts`, the
+ * signer is the verified caller, the signature is by the caller's `approval` key (a `session` key never verifies), `(signer, ts)` is single use.
+ * Returns null when valid, otherwise the internal reason (the HTTP answer is always `401 unauthorized`).
+ */
+export function verifyTakeoverApproval(deps: { replay: ReplayCache }, caller: DeviceRecord, headerTsMs: number, body: { ts_ms?: unknown; signature?: unknown }): string | null {
+  if (body.ts_ms !== headerTsMs) return "ts_mismatch";
+  let bytes: Uint8Array;
+  try {
+    bytes = takeoverBytes({ signer: caller.device_id, tsMs: headerTsMs });
+  } catch {
+    return "bad_takeover_fields";
+  }
+  if (!verifySignature(caller.approval_pub, bytes, body.signature)) return "bad_approval_signature";
+  if (!deps.replay.claim(`t:${caller.device_id}:${headerTsMs}`)) return "takeover_replay";
   return null;
 }

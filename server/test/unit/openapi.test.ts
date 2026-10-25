@@ -17,7 +17,7 @@ const PLAN: Record<string, "none" | "session" | "session+approval"> = {
   "POST /chat": "session", "GET /chat/history": "session",
   "POST /actions/prepare": "session", "POST /actions/{id}/approve": "session+approval", "POST /actions/{id}/reject": "session",
   "GET /grants": "session", "DELETE /grants/{id}": "session", "POST /grants": "session+approval",
-  "POST /active/takeover": "session",
+  "POST /active/takeover": "session+approval",
   "GET /devices": "session", "PUT /devices/me/fcm": "session", "POST /devices/{id}/revoke": "session+approval",
   "GET /events": "session", "GET /stream": "session",
 };

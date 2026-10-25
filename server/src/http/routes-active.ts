@@ -9,10 +9,12 @@ export interface ActiveDeps {
 
 const STATUS = { kb_conflict: 409, takeover_in_progress: 409, kb_sync_unavailable: 503 } as const;
 
-/** `POST /v1/active/takeover` (session). The request carries no input; what happens is decided by the kb and main, not by the caller. */
+/** `POST /v1/active/takeover` (session+approval). The body is only the approval (`ts_ms`, `signature`); no input; what happens is decided by the kb and main, not by the caller. */
 export function activeHandlers(deps: ActiveDeps): Record<string, (req: FastifyRequest, reply: FastifyReply) => unknown> {
   return {
-    takeoverActive: async (_req, reply) => {
+    takeoverActive: async (req, reply) => {
+      // the central approval guard (`takeoverGuard` in app.ts) has verified the `approval` signature; no guard verdict, no takeover
+      if (req.vladApproval?.operationId !== "takeoverActive") return send(reply, 500, "bad_request", undefined, "Sunucu hatası.");
       try {
         const r = await deps.takeover();
         if (r.state === "active") return { ok: true, state: "active" };

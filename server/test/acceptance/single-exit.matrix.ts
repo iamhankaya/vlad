@@ -322,7 +322,7 @@ export const NON_EXIT_REASON: Record<string, string> = {
   postChat: "sohbet metni; kalıcı oturuma gider, GitHub'a yazmaz (T11 ayrı sınar)",
   rejectAction: "challenge'ı düşürür; yalnız azaltır",
   revokeGrant: "devri iptal eder; yalnız azaltır",
-  takeoverActive: "etkin VLAD kaydı; GitHub'a yazmaz",
+  takeoverActive: "etkin VLAD kaydı; GitHub'a yazmaz (session+approval: approval imzası ayrıca kapıda, kbsync-takeover.test.ts sınar)",
   putDeviceFcm: "çağıran cihazın FCM kaydı",
   revokeDevice: "cihaz iptali; yalnız azaltır (session+approval olduğundan ayrıca onay yolunda)",
 };

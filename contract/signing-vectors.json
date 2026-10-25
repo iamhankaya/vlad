@@ -42,6 +42,11 @@
       "id": "session-g2",
       "note": "TEST ONLY: device session key (grant v2 vectors)",
       "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEB469RI24-Za5x62sqVg0pYvQED_ndFqbLmXePDpbRRDPxJt4EJ06voYaokdE8UYk5IUtC88hjZceqvq_8eIjTg"
+    },
+    {
+      "id": "approval-t",
+      "note": "TEST ONLY: device approval key (takeover vectors)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhqY-GfOuor0XL4pUS3ATWbF8xyllgJrNdmjYQPRQQWEEllcXQDejDfKlK068m1ltAaSaqJjsiQZFeTC-GeybwQ"
     }
   ],
   "canonical_query": [
@@ -1004,6 +1009,60 @@
       "id": "revoke-negative-ts",
       "fields": {
         "device": "d-old-phone",
+        "signer": "d-pixel-9",
+        "ts_ms": -1
+      }
+    }
+  ],
+  "takeover": [
+    {
+      "id": "takeover-valid",
+      "description": "approval key of the signing device signs signer+ts",
+      "key_id": "approval-t",
+      "fields": {
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      },
+      "takeover_text": "vlad-takeover/v1\nsigner=d-pixel-9\nts=1761350400000",
+      "signature_b64u": "MEUCIQDCkcrPgC0Wsq5vvzFgR_9w1JbvK-LXLnIBxqKhR8xCogIgPLvR_n8coI2lrxv5pykefjCEY6J9m29SvSdOQJhL0Ls",
+      "expect_valid": true
+    },
+    {
+      "id": "takeover-signer-swapped",
+      "description": "same signature, another signer in the text",
+      "key_id": "approval-t",
+      "fields": {
+        "signer": "d-other",
+        "ts_ms": 1761350400000
+      },
+      "takeover_text": "vlad-takeover/v1\nsigner=d-other\nts=1761350400000",
+      "signature_b64u": "MEUCIQDCkcrPgC0Wsq5vvzFgR_9w1JbvK-LXLnIBxqKhR8xCogIgPLvR_n8coI2lrxv5pykefjCEY6J9m29SvSdOQJhL0Ls",
+      "expect_valid": false
+    },
+    {
+      "id": "takeover-ts-changed",
+      "description": "same signature, ts moved by 1 ms",
+      "key_id": "approval-t",
+      "fields": {
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400001
+      },
+      "takeover_text": "vlad-takeover/v1\nsigner=d-pixel-9\nts=1761350400001",
+      "signature_b64u": "MEUCIQDCkcrPgC0Wsq5vvzFgR_9w1JbvK-LXLnIBxqKhR8xCogIgPLvR_n8coI2lrxv5pykefjCEY6J9m29SvSdOQJhL0Ls",
+      "expect_valid": false
+    }
+  ],
+  "takeover_errors": [
+    {
+      "id": "takeover-bad-signer",
+      "fields": {
+        "signer": "d pixel",
+        "ts_ms": 1761350400000
+      }
+    },
+    {
+      "id": "takeover-negative-ts",
+      "fields": {
         "signer": "d-pixel-9",
         "ts_ms": -1
       }

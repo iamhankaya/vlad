@@ -24,7 +24,7 @@ export const ROUTES: readonly RouteSpec[] = [
   { operationId: "listGrants", method: "GET", path: "/v1/grants", auth: "session" },
   { operationId: "createGrant", method: "POST", path: "/v1/grants", auth: "session+approval" },
   { operationId: "revokeGrant", method: "DELETE", path: "/v1/grants/:id", auth: "session" },
-  { operationId: "takeoverActive", method: "POST", path: "/v1/active/takeover", auth: "session" },
+  { operationId: "takeoverActive", method: "POST", path: "/v1/active/takeover", auth: "session+approval" },
   { operationId: "listDevices", method: "GET", path: "/v1/devices", auth: "session" },
   { operationId: "putDeviceFcm", method: "PUT", path: "/v1/devices/me/fcm", auth: "session" },
   { operationId: "revokeDevice", method: "POST", path: "/v1/devices/:id/revoke", auth: "session+approval" },

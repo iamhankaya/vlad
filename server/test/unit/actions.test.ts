@@ -822,7 +822,7 @@ describe("central approval enforcement (F-vlad-016)", () => {
   const approvalOps = ROUTES.filter((r) => r.auth === "session+approval");
 
   it("the contract has exactly these approval routes, and every one with a handler has a guard", async () => {
-    expect(approvalOps.map((r) => r.operationId).sort()).toEqual(["approveAction", "createGrant", "revokeDevice"]);
+    expect(approvalOps.map((r) => r.operationId).sort()).toEqual(["approveAction", "createGrant", "revokeDevice", "takeoverActive"]);
     const s = await setup();
     expect([...s.r.app.vladApprovalGuards].sort()).toEqual(["approveAction", "createGrant", "revokeDevice"]);
     // createGrant has its guard since S10a: an empty body is refused by the guard (400), never reaches the handler

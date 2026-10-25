@@ -3,12 +3,13 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { activeHandlers } from "../../src/http/routes-active.ts";
+import type { KeyObject } from "node:crypto";
+import { takeoverBytes } from "../../src/auth/canonical.ts";
 import { kbSyncView } from "../../src/kbsync/home.ts";
 import { mainActiveMachine, promoteKb, type PromoteDeps, type PromoteResult } from "../../src/kbsync/promote.ts";
 import { StateStore } from "../../src/kbsync/state.ts";
 import { createTakeover, readSyncStatus, requestSync, settlePendingTakeover, TakeoverError, waitSync, type KbSyncStatus, type TakeoverDeps } from "../../src/kbsync/takeover.ts";
-import { pairDevice, rig, signedCall } from "../helpers/client.ts";
+import { pairDevice, rig, signDer, signedCall, type TestDevice } from "../helpers/client.ts";
 import { validator } from "../helpers/openapi.ts";
 import { git, makeWorld, type Machine, type World } from "../helpers/kbRepos.ts";
 import { makePromoteEnv, pushToServerBranch } from "../helpers/kbPromote.ts";
@@ -205,11 +206,16 @@ describe("server: takeover against real git (kb sync, claim, promote, main)", ()
 describe("server: takeover route", () => {
   const ok = validator({ $ref: "#/components/schemas/TakeoverResponse" });
   const err = validator({ $ref: "#/components/schemas/Error" });
+  const PATH = "/v1/active/takeover";
+
+  /** The body a phone sends: `approval` signature over `vlad-takeover/v1\nsigner=<id>\nts=<ts>`. */
+  const approvalBody = (d: TestDevice, ts: number, key: KeyObject = d.approval.priv, signer = d.id) =>
+    JSON.stringify({ ts_ms: ts, signature: signDer(key, takeoverBytes({ signer, tsMs: ts })) });
 
   async function call(takeover: () => Promise<any>) {
-    const r = rig({ extraHandlers: activeHandlers({ takeover }) });
+    const r = rig({ active: { takeover } });
     const d = await pairDevice(r);
-    return signedCall(r, d, "POST", "/v1/active/takeover");
+    return signedCall(r, d, "POST", PATH, approvalBody(d, r.clock.t));
   }
 
   it("answers 200 active, 202 pending, 409 kb_conflict | takeover_in_progress, 503 kb_sync_unavailable, in the contract's shapes", async () => {
@@ -228,18 +234,95 @@ describe("server: takeover route", () => {
     }
   });
 
-  it("needs a signed session; unsigned gets 401 and never starts a takeover", async () => {
-    let started = 0;
-    const r = rig({ extraHandlers: activeHandlers({ takeover: async () => { started++; return { state: "active" }; } }) });
-    const res = await r.app.inject({ method: "POST", url: "/v1/active/takeover" });
-    expect(res.statusCode).toBe(401);
-    expect(started).toBe(0);
+  it("a takeover handler without the approval guard does not start (fail closed), and the guard is there whenever the gate is configured", () => {
+    expect(() => rig({ extraHandlers: { takeoverActive: () => ({ ok: true }) } })).toThrow(/approval guard eksik: takeoverActive/);
+    expect([...rig({ active: { takeover: async () => ({ state: "active" as const }) } }).app.vladApprovalGuards]).toContain("takeoverActive");
   });
 
-  it("without the gate configured the route answers 501", async () => {
+  it("without the gate configured the route answers 501, with a valid approval too", async () => {
     const r = rig();
     const d = await pairDevice(r);
-    expect((await signedCall(r, d, "POST", "/v1/active/takeover")).statusCode).toBe(501);
+    expect((await signedCall(r, d, "POST", PATH, approvalBody(d, r.clock.t))).statusCode).toBe(501);
+  });
+
+  // ---- session+approval: nothing is claimed unless a device's approval key signed this very request
+  function guarded() {
+    let runs = 0;
+    const r = rig({ active: { takeover: async () => { runs++; return { state: "active" as const }; } } });
+    return { r, runs: () => runs };
+  }
+  const refusal = (res: { statusCode: number; json(): any; body: string }, statuses: number[], codes: string[]) => {
+    expect(statuses, res.body).toContain(res.statusCode);
+    expect(codes, res.body).toContain(res.json().error?.code);
+    expect(err(res.json())).toEqual([]);
+  };
+
+  it("unsigned request -> 401, no takeover", async () => {
+    const g = guarded();
+    const res = await g.r.app.inject({ method: "POST", url: PATH, headers: { "content-type": "application/json" }, payload: "{}" });
+    refusal(res, [401], ["unauthorized"]);
+    expect(g.runs()).toBe(0);
+  });
+
+  it("session signature but no approval in the body -> 400/401, no takeover", async () => {
+    const g = guarded();
+    const d = await pairDevice(g.r);
+    for (const body of ["{}", "", "[]", JSON.stringify({ ts_ms: g.r.clock.t }), JSON.stringify({ signature: "AAAA" }), JSON.stringify({ ts_ms: g.r.clock.t, signature: "AAAA", device: "x" })]) {
+      refusal(await signedCall(g.r, d, "POST", PATH, body), [400, 401], ["bad_request", "unauthorized"]);
+    }
+    expect(g.runs()).toBe(0);
+  });
+
+  it("the session key signing the approval -> 401, no takeover (it must be the approval key)", async () => {
+    const g = guarded();
+    const d = await pairDevice(g.r);
+    refusal(await signedCall(g.r, d, "POST", PATH, approvalBody(d, g.r.clock.t, d.session.priv)), [401], ["unauthorized"]);
+    expect(g.runs()).toBe(0);
+  });
+
+  it("another device's approval key, or text naming another signer -> 401, no takeover", async () => {
+    const g = guarded();
+    const a = await pairDevice(g.r, "Pixel");
+    const b = await pairDevice(g.r, "Tablet");
+    refusal(await signedCall(g.r, a, "POST", PATH, approvalBody(a, g.r.clock.t, b.approval.priv)), [401], ["unauthorized"]);
+    refusal(await signedCall(g.r, a, "POST", PATH, approvalBody(a, g.r.clock.t, a.approval.priv, b.id)), [401], ["unauthorized"]);
+    expect(g.runs()).toBe(0);
+    // each device's own approval does work
+    expect((await signedCall(g.r, b, "POST", PATH, approvalBody(b, g.r.clock.t))).statusCode).toBe(200);
+    expect(g.runs()).toBe(1);
+  });
+
+  it("a revoked device cannot take over, even with a correct approval -> 401 device_revoked, no takeover", async () => {
+    const g = guarded();
+    const d = await pairDevice(g.r);
+    const admin = await pairDevice(g.r, "Admin");
+    const res = await signedCall(g.r, admin, "POST", `/v1/devices/${d.id}/revoke`, admin.revokeBody(d.id, g.r.clock.t));
+    expect(res.statusCode, res.body).toBe(200);
+    g.r.clock.t += 1000;
+    refusal(await signedCall(g.r, d, "POST", PATH, approvalBody(d, g.r.clock.t)), [401], ["device_revoked", "unauthorized"]);
+    expect(g.runs()).toBe(0);
+  });
+
+  it("body ts different from the header, a stale ts, and a replay of the same approval -> 401, one takeover at most", async () => {
+    const g = guarded();
+    const d = await pairDevice(g.r);
+    const t = g.r.clock.t;
+    refusal(await signedCall(g.r, d, "POST", PATH, approvalBody(d, t + 1)), [401], ["unauthorized"]); // body ts != X-Vlad-Ts
+    refusal(await signedCall(g.r, d, "POST", PATH, approvalBody(d, t - 121_000), { ts: t - 121_000 }), [401], ["unauthorized"]); // outside the window
+    expect(g.runs()).toBe(0);
+    const first = await signedCall(g.r, d, "POST", PATH, approvalBody(d, t));
+    expect(first.statusCode, first.body).toBe(200);
+    // the same approval body in a fresh envelope (new nonce, same ts): the (signer, ts) pair is spent
+    refusal(await signedCall(g.r, d, "POST", PATH, approvalBody(d, t)), [401], ["unauthorized"]);
+    expect(g.runs()).toBe(1);
+  });
+
+  it("the approval does not carry over to another operation: a takeover signature is not a device revocation", async () => {
+    const g = guarded();
+    const a = await pairDevice(g.r, "Pixel");
+    const b = await pairDevice(g.r, "Tablet");
+    const res = await signedCall(g.r, a, "POST", `/v1/devices/${b.id}/revoke`, approvalBody(a, g.r.clock.t));
+    refusal(res, [401], ["unauthorized"]);
   });
 
   it("GET /home carries active_vlad.takeover and kb_sync from the server state", async () => {
