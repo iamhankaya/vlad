@@ -3,6 +3,7 @@ dist/
 .superpowers/
 .remember/
 .claude/worktrees/
-kb/.vlad.lock
-kb/
+/kb/.vlad.lock
+/kb/
 .cli-build-*/
+/state/
