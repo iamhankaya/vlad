@@ -3,11 +3,13 @@ import { closeSync, constants, existsSync, lstatSync, mkdirSync, openSync, readF
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { currentMachine } from "../kb/machine.js";
+import { kbPaths } from "../kb/home.js";
+import { SESSION_ID } from "./stream.js";
 import { MODEL } from "./terminal.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
 /** Only these variables reach the worker (F-vlad-007: clean environment); nothing else of ours is inherited. */
-export const WORKER_ENV_KEYS = ["PATH", "HOME", "VLAD_HOME", "VLAD_TASK_ID", "VLAD_MACHINE"] as const;
+export const WORKER_ENV_KEYS = ["PATH", "HOME", "VLAD_HOME", "VLAD_KB_DIR", "VLAD_TASK_ID", "VLAD_MACHINE"] as const;
 /** Same as the task schema's `id`; the id lands in a unit name and file names. */
 const TASK_ID = /^T\d{8}-\d{2,}$/;
 
@@ -24,7 +26,7 @@ export const defaultSettingsPath = (): string =>
 export function workerEnv(req: LaunchRequest, env: NodeJS.ProcessEnv = process.env): [string, string][] {
   if (!TASK_ID.test(req.taskId)) throw new Error(`geçersiz görev kimliği: ${JSON.stringify(req.taskId)}`);
   const vals: Record<string, string | undefined> = {
-    PATH: env.PATH, HOME: env.HOME, VLAD_HOME: env.VLAD_HOME, ...req.env, VLAD_TASK_ID: req.taskId, VLAD_MACHINE: currentMachine(env),
+    PATH: env.PATH, HOME: env.HOME, VLAD_HOME: env.VLAD_HOME, VLAD_KB_DIR: env.VLAD_KB_DIR, ...req.env, VLAD_TASK_ID: req.taskId, VLAD_MACHINE: currentMachine(env),
   };
   const pairs: [string, string][] = [];
   for (const k of WORKER_ENV_KEYS) {
@@ -50,8 +52,21 @@ export function buildShellScript(
   const claude = ["claude", "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "auto",
     "--setting-sources", "user", "--strict-mcp-config", "--settings", shq(settingsPath)];
   if (req.model !== undefined) claude.push("--model", shq(req.model));
-  return ["#!/bin/sh", `cd ${shq(req.cwd)} || exit 1`, `exec env -i ${vars.join(" ")} ${claude.join(" ")} < ${shq(promptPath)}`].join("\n") + "\n";
+  if (req.resumeSessionId !== undefined) {
+    if (!SESSION_ID.test(req.resumeSessionId)) throw new Error(`geçersiz session_id: ${JSON.stringify(req.resumeSessionId)}`);
+    claude.push("--resume", shq(req.resumeSessionId));
+  }
+  const run = `env -i ${vars.join(" ")} ${claude.join(" ")} < ${shq(promptPath)}`;
+  const head = ["#!/bin/sh", `cd ${shq(req.cwd)} || exit 1`];
+  if (!req.tap) return [...head, `exec ${run}`].join("\n") + "\n";
+  // the pipe replaces exec: claude's exit code goes to the journal
+  // the tap runs under the same clean env, called by absolute path (no PATH lookup of `vlad`)
+  const tap = `env -i ${vars.join(" ")} ${shq(process.execPath)} ${shq(cliPath())} worker tap ${shq(req.taskId)}`;
+  return [...head, `{ ${run}; echo "claude exit $?" >&2; } | ${tap}`].join("\n") + "\n";
 }
+
+/** The CLI entry next to the package (src/launcher and dist/launcher are both two levels below the root; built: dist/cli.js). */
+const cliPath = (): string => join(dirname(fileURLToPath(import.meta.url)), "..", "cli.js");
 
 /** Per-user state dir for scripts, prompts and settings copies: $XDG_RUNTIME_DIR/vlad or ~/.local/state/vlad. */
 export function workerDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -79,12 +94,13 @@ export function writeSecureFile(path: string, data: string, mode = 0o600): void 
 
 /**
  * User-owned copy of worker-settings.json for this launch, with the package's deploy dir and the
- * runtime dir added to the Edit/Write deny list (absolute paths need the `//` prefix).
+ * runtime dir added to the Edit/Write deny list (absolute paths need the `//` prefix). `protect` adds more
+ * (VLAD_HOME and its kb/: tasks, quota marker and VLAD's own code are not for a worker to edit).
  */
-export function renderSettings(settingsPath: string, dir: string): string {
+export function renderSettings(settingsPath: string, dir: string, protect: string[] = []): string {
   const s = JSON.parse(readFileSync(settingsPath, "utf8")) as { permissions?: { deny?: string[] } };
   const deny = s.permissions?.deny ?? [];
-  for (const p of [resolve(dirname(settingsPath)), resolve(dir)]) {
+  for (const p of [resolve(dirname(settingsPath)), resolve(dir), ...protect.map((x) => resolve(x))]) {
     for (const tool of ["Edit", "Write"]) deny.push(`${tool}(/${p}/**)`);
   }
   s.permissions = { ...s.permissions, deny };
@@ -134,7 +150,8 @@ export class ProcessLauncher implements Launcher {
       if (this.o.dryRun) return { ok: true, method: "process", detail: JSON.stringify(cmd) };
       // the settings file is the allow/deny net around the worker; refuse to start without it
       if (!existsSync(settingsSrc)) throw new Error(`worker-settings.json bulunamadı: ${settingsSrc}`);
-      const settings = renderSettings(settingsSrc, dir);
+      const home = req.env.VLAD_HOME ?? env.VLAD_HOME ?? kbPaths().home;
+      const settings = renderSettings(settingsSrc, dir, [home, kbPaths(home).kb]);
       ensureWorkerDir(dir);
       writeSecureFile(promptPath, req.prompt);
       writeSecureFile(settingsPath, settings);
