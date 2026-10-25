@@ -15,6 +15,8 @@ import { SseHub, type HubDeps } from "../events/hub.ts";
 import { eventHandlers } from "../events/routes.ts";
 import { ReadCache } from "../read/cache.ts";
 import { readHandlers, type ReadDeps } from "../read/routes.ts";
+import { registerGrantRoutes } from "./routes-grants.ts";
+import type { GrantConfig, GrantEngine } from "../actions/grants.ts";
 import { chatHandlers, type ChatDeps } from "./routes-chat.ts";
 import { reject, type ApprovalContext, type ApprovalGuard } from "./approval.ts";
 import { send } from "./errors.ts";
@@ -45,6 +47,8 @@ export type AppConfig = {
    * `approveAction` stay "not implemented" (they still pass the signature check first).
    */
   actions?: { reader: GithubReader; tasks: TaskSource; projects: ProjectSource; execute: ExecuteAction; /** Default `<stateDir>/challenges`. */ dir?: string; sleep?: (ms: number) => Promise<void>; policy?: ActionPolicy };
+  /** Grant engine (S10a): kb mirror, live checks, sweep. Only active together with `actions`. */
+  grants?: GrantConfig;
   /** Chat, card answers, change requests (S11b). Without it those routes answer 501; without `runner` only the chat routes do. */
   chat?: ChatDeps;
   /** Handlers of later slices (and tests) by `operationId`. A `session+approval` route with a handler here needs a guard in `approvalGuards`. */
@@ -60,6 +64,8 @@ declare module "fastify" {
     vladEvents: { ledger: EventLedger; hub: SseHub; cache: ReadCache };
     /** Approval path service when `AppConfig.actions` is set. */
     vladActions?: ActionService;
+    /** Grant engine when `AppConfig.actions` is set (S10a). */
+    vladGrants?: GrantEngine;
     /** `operationId`s that have an approval guard (route inventory test). */
     vladApprovalGuards: ReadonlySet<string>;
   }
@@ -138,6 +144,8 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     onClose.push(() => clearInterval(t));
   }
   if (cfg.onRevoke) devices.onRevoke(cfg.onRevoke);
+  const grants = registerGrantRoutes({ config: cfg.grants, actions, source: cfg.actions, devices, ledger, stateDir: cfg.stateDir, now });
+  onClose.push(grants.stop);
 
   const app = Fastify({
     logger: cfg.logger ?? false,
@@ -149,6 +157,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
   // Every body is kept as raw bytes: the envelope hashes bytes, and nothing is parsed before the signature is checked.
   app.decorate("vladEvents", { ledger, hub, cache });
   app.decorate("vladActions", actions);
+  app.decorate("vladGrants", grants.engine);
   app.addHook("onClose", async () => {
     hub.closeAll();
     for (const f of onClose) f();
@@ -191,6 +200,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     ...readHandlers({ ...cfg.read, warnings: () => [...(cfg.read?.warnings?.() ?? []), ...(cfg.chat?.runner?.warnings() ?? [])], cache, seq: cfg.read?.seq ?? (() => ledger.lastSeq) }),
     ...eventHandlers(ledger, hub),
     ...(actions ? actionHandlers(actions) : {}),
+    ...grants.handlers,
     ...(cfg.chat ? chatHandlers(cfg.chat) : {}),
     ...cfg.extraHandlers,
     getHealth: () => ({ ok: true, version: cfg.version }),
@@ -234,7 +244,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     return { ok: true };
   };
   // Built-in guards come last: nothing passed in can replace the guard of `revokeDevice` or `approveAction`.
-  const guards: Record<string, ApprovalGuard> = { ...cfg.approvalGuards, revokeDevice: revokeGuard, ...(actions ? { approveAction: approveGuard(actions) } : {}) };
+  const guards: Record<string, ApprovalGuard> = { ...cfg.approvalGuards, revokeDevice: revokeGuard, ...(actions ? { approveAction: approveGuard(actions) } : {}), ...grants.guards };
 
   app.decorate("vladApprovalGuards", new Set(Object.keys(guards)));
 

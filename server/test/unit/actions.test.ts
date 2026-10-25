@@ -824,10 +824,15 @@ describe("central approval enforcement (F-vlad-016)", () => {
   it("the contract has exactly these approval routes, and every one with a handler has a guard", async () => {
     expect(approvalOps.map((r) => r.operationId).sort()).toEqual(["approveAction", "createGrant", "revokeDevice"]);
     const s = await setup();
-    expect([...s.r.app.vladApprovalGuards].sort()).toEqual(["approveAction", "revokeDevice"]);
-    // createGrant has no handler yet (S10a): a valid session still gets 501, never an executed handler
+    expect([...s.r.app.vladApprovalGuards].sort()).toEqual(["approveAction", "createGrant", "revokeDevice"]);
+    // createGrant has its guard since S10a: an empty body is refused by the guard (400), never reaches the handler
     const res = await signedCall(s.r, s.d, "POST", "/v1/grants", "{}");
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(400);
+    // without the approval path nothing is wired: guard and handler are both absent, the route stays "not implemented"
+    const bare = rig();
+    const d = await pairDevice(bare);
+    expect([...bare.app.vladApprovalGuards].sort()).toEqual(["revokeDevice"]);
+    expect((await signedCall(bare, d, "POST", "/v1/grants", "{}")).statusCode).toBe(501);
   });
 
   it("buildApp refuses to start when a session+approval route has a handler but no guard", () => {

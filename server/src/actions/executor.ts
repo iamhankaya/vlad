@@ -153,13 +153,16 @@ export function createExecutor(d: ExecutorDeps): ExecuteAction {
     // ---- bookkeeping: repeatable, never touches GitHub again ----
     const audit = {
       ts: new Date(d.now()).toISOString(), action_id: a.action_id, kind: a.kind, repo: a.repo, pr: a.pr, head_sha: a.head_sha,
-      approver: { type: "device", id: approval.device_id }, result: "merged", merge_sha: mergeSha,
+      approver: approval.kind === "grant" ? { type: "grant", id: approval.grant_id } : { type: "device", id: approval.device_id }, result: "merged", merge_sha: mergeSha,
     };
     await upstream(() => d.ops.addAudit(audit), "bookkeeping_failed");
     const t = await upstream(() => d.tasks(a.task), "bookkeeping_failed");
     if (t?.state !== "done") await upstream(() => d.ops.setDone(a.task), "bookkeeping_failed");
     const adv = await advance(d.ops, t?.parent, d.log);
-    d.appendEvent("action.executed", { action_id: a.action_id, kind: a.kind, task: a.task, repo: a.repo, pr: a.pr, merge_sha: mergeSha, started: adv.started.length }, a.action_id);
+    // One event (and so one notification) per execution: a use of a grant is `grant.used`, an approval by hand `action.executed`.
+    const event = { action_id: a.action_id, kind: a.kind, task: a.task, repo: a.repo, pr: a.pr, merge_sha: mergeSha, started: adv.started.length };
+    if (approval.kind === "grant") d.appendEvent("grant.used", { ...event, grant_id: approval.grant_id }, a.action_id);
+    else d.appendEvent("action.executed", event, a.action_id);
     return { merge_sha: mergeSha };
   };
 }

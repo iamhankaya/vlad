@@ -16,6 +16,8 @@
             "type": "project",
             "ref": "vlad"
           },
+          "project": "vlad",
+          "repo": "iamhankaya/vlad",
           "action": "merge_phase",
           "conditions": [
             "ci_green",

@@ -37,6 +37,8 @@ export type ActionRecord = {
   created_ms: number;
   exp: number;
   approval?: { device_id: string; signature: string; at_ms: number };
+  /** Set when a grant (not a signature over these bytes) stands in for the approval. Such a record can never be approved by a device. */
+  grant?: { id: string; device_id: string };
   result?: ActionResult;
   history: { state: ActionState; at_ms: number; reason?: string }[];
 };

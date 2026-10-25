@@ -94,6 +94,22 @@ class FakeGh implements GithubReader {
 
 export type ExecCall = { action: ActionDescriptor; proof: ApprovalProof };
 
+/** kb tarafı (S10a): `vlad grant add` yerine geçen kayıt defteri; devir kayıtlarını sayar. */
+export class FakeGrantKb {
+  added: { id: string; device_id: string; signature: string }[] = [];
+  async add(rec: { id: string; device_id: string; signature: string }) {
+    this.added.push(structuredClone(rec));
+  }
+  async list() {
+    return { grants: [] as { id: string; revoked: boolean }[], revoked_ids: [] as string[], warnings: [] as string[] };
+  }
+  async revoke() {}
+}
+
+/** Kontrattaki (`signing-vectors.json` `grant`) imzalı bayt dizisi; sunucu koduna bakılmadan yazıldı. */
+export const grantPayload = (g: { id: string; scope: { type: string; ref: string }; project: string; repo: string; action: string; conditions: string[]; created: string; expires: string; max_uses: number }) =>
+  ["vlad-grant/v2", `id=${g.id}`, `scope=${g.scope.type}:${g.scope.ref}`, `project=${g.project}`, `repo=${g.repo}`, `action=${g.action}`, `conditions=${[...g.conditions].sort().join(",")}`, `created=${g.created}`, `expires=${g.expires}`, `max_uses=${g.max_uses}`].join("\n");
+
 export type WorldOpts = { policy?: { allowBlocked?: boolean; prepareIntervalMs?: number; maxBadSignatures?: number } };
 
 export class World {
@@ -104,6 +120,7 @@ export class World {
   readonly tasks = new Map<string, TaskInfo>();
   readonly projects = new Map<string, ProjectInfo>();
   readonly execCalls: ExecCall[] = [];
+  readonly kb = new FakeGrantKb();
   /** Yürütücünün yaptığı tek GitHub yazması: PR'ı birleştirir. */
   readonly mergeWrites: string[] = [];
   execGate: Gate | null = null;
@@ -163,6 +180,7 @@ export class World {
           sleep: async () => {},
           policy: { prepareIntervalMs: 0, ...opts.policy },
         },
+        grants: { kb: this.kb },
       },
     );
   }
@@ -211,6 +229,17 @@ export class World {
   /** Geçerli onay: cihazın approval anahtarıyla imzalı. */
   approveValid(p: Phone, ch: Prepared, o?: Parameters<Phone["headers"]>[4]) {
     return this.approve(p, ch.action_id, { signature: this.sign(p, ch) }, o);
+  }
+  /** `p` cihazı adına imzalı devir gövdesi (varsayılan: onun approval anahtarıyla, kapsam proje `widgets`, şimdi → +1 gün). */
+  grantBody(p: Phone, over: Record<string, unknown> = {}, key: "approval" | "session" = "approval", fn: typeof signLowS = signLowS) {
+    const g: any = {
+      id: "G-001", scope: { type: "project", ref: "widgets" }, project: "widgets", repo: REPO, action: "merge_phase", conditions: ["ci_green"],
+      created: new Date(this.clock.t).toISOString(), expires: new Date(this.clock.t + 86_400_000).toISOString(), max_uses: 3, payload_version: "v2", ...over,
+    };
+    return { ...g, signature: over.signature ?? fn(p[key].priv, grantPayload(g)) };
+  }
+  postGrant(p: Phone, body: unknown) {
+    return call(this.r, p, "POST", "/v1/grants", typeof body === "string" ? body : JSON.stringify(body));
   }
   /** `by` cihazı `target` cihazı iptal eder (iptal imzası `by`'ın approval anahtarıyla). */
   revoke(by: Phone, target: string) {
@@ -273,12 +302,12 @@ export const EXIT_ENDPOINTS: ExitEndpoint[] = [
     fire: (w, a, s: Prepared, o) => send(w, a, "POST", `/v1/actions/${s.action_id}/approve`, o?.body ?? JSON.stringify({ signature: w.sign(a, s) }), o),
   },
   {
-    // S10a gelince `implemented: true` olur ve `setup/fire` gerçek devir gövdesini kurar; o zamana dek uç hiçbir koşulda yürütmemeli.
+    // Devir oluşturmak hiçbir şey yürütmez (validExecutions 0): yürütme yalnız sonradan, kart belirince ve tek çıkıştan olur.
     operationId: "createGrant",
-    implemented: false,
+    implemented: true,
     validExecutions: 0,
     setup: async () => ({}),
-    fire: (w, a, _s, o) => send(w, a, "POST", "/v1/grants", o?.body ?? JSON.stringify({}), o),
+    fire: (w, a, _s, o) => send(w, a, "POST", "/v1/grants", o?.body ?? JSON.stringify(w.grantBody(a)), o),
   },
 ];
 
