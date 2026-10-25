@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
-import { askTask, getTask, logTask, reportTask, setState } from "./store.js";
+import { askTask, getTask, logTask, reportReferencesPrior, reportTask, setState } from "./store.js";
 
 export type Marker =
   | { kind: "LOG" | "ASK" | "FAIL"; seq: number; text: string }
@@ -31,19 +31,30 @@ const catchall = (ev: any, key: string): any => ev?.[key]?.internal_anthropic_ca
  * Text of one `list_events` entry, whatever shape it comes in. `kind` is "assistant" for assistant
  * output (real keyed shape or the older kind/type/role shapes), "result" for a turn-end result event.
  */
-function eventText(ev: any): { kind: "assistant" | "result" | null; text: string } {
+function eventText(ev: any): { kind: "assistant" | "result" | null; text: string; at?: string; result?: any } {
+  const at = [ev?.created_at, ev?.data?.created_at].find((x) => typeof x === "string");
   if (ev?.assistant && typeof ev.assistant === "object") {
     const c = catchall(ev, "assistant");
-    return { kind: "assistant", text: blocksText(c?.message?.content ?? c?.content) };
+    return { kind: "assistant", text: blocksText(c?.message?.content ?? c?.content), at };
   }
   if (ev?.result && typeof ev.result === "object") {
-    const r = catchall(ev, "result")?.result;
-    return { kind: "result", text: typeof r === "string" ? r : "" };
+    const c = catchall(ev, "result");
+    return { kind: "result", text: typeof c?.result === "string" ? c.result : "", at, result: { ...c, uuid: ev.result.uuid } };
   }
   const kind = ev?.kind ?? ev?.type ?? ev?.role ?? ev?.data?.type ?? ev?.data?.role;
   if (kind !== "assistant") return { kind: null, text: "" };
   const content = ev?.message?.content ?? ev?.data?.message?.content ?? ev?.content ?? ev?.data?.content ?? ev?.text ?? ev?.data?.text;
-  return { kind: "assistant", text: blocksText(content) };
+  return { kind: "assistant", text: blocksText(content), at };
+}
+
+/** Per-turn cost/turns/duration of a `result` event as a progress line body; null when it carries none of them. */
+function turnMetrics(r: any): string | null {
+  const parts = [
+    typeof r?.total_cost_usd === "number" && `maliyet=$${r.total_cost_usd}`,
+    typeof r?.num_turns === "number" && `tur=${r.num_turns}`,
+    typeof r?.duration_ms === "number" && `süre=${Math.round(r.duration_ms / 1000)}s`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" ") : null;
 }
 
 /** End index (exclusive) of the balanced JSON object/array starting at `start`, or -1. */
@@ -212,7 +223,7 @@ export function ingestEvents(
   if (!assistants.length) res.warnings.push("assistant olayı bulunamadı; işaret işlenmedi (olay şekli beklenenden farklı olabilir)");
   // result events repeat the last turn's text: only a fallback when no assistant event was recognized
   const used = assistants.length ? assistants : texts.filter((t) => t.kind === "result");
-  const markers = used.flatMap((t) => parseMarkers(t.text, res.warnings));
+  const markers = used.flatMap((t) => parseMarkers(t.text, res.warnings).map((m) => ({ ...m, at: t.at })));
   // a stub REPORT ("yukarıda") takes the full text of the same-numbered REPORT from an earlier event
   for (const m of markers) {
     if (m.kind !== "REPORT" || !isStubReport(m.text)) continue;
@@ -228,10 +239,10 @@ export function ingestEvents(
       res.warnings.push(`REPORT #${m.seq} daha önce işlenmiş #${m.seq} ile çakışıyor; rapor yine de işlendi (işaret sayacı tek olmalı)`);
     }
     try {
-      if (m.kind === "LOG") logTask(id, `${tag} ${m.text}`);
+      if (m.kind === "LOG") logTask(id, `${tag} ${m.text}`, m.at);
       else if (m.kind === "ASK") askTask(id, `${tag} ${m.text}`);
       else if (m.kind === "FAIL") {
-        logTask(id, `${tag} FAIL: ${m.text}`);
+        logTask(id, `${tag} FAIL: ${m.text}`, m.at);
         setState(id, "failed", { error: m.text });
       } else if (m.kind === "REPORT") {
         const branch = `vlad/${id}`;
@@ -243,13 +254,21 @@ export function ingestEvents(
         if (!sameSha(remote, m.head)) {
           throw new Error(`REPORT #${m.seq}: head=${m.head} remote ${branch} ucuyla (${remote}) eşleşmiyor; awaiting_approval yapılmadı`);
         }
+        if (reportReferencesPrior(m.text)) res.warnings.push(`REPORT #${m.seq} önceki rapora atıf içeriyor (yerine geçer / üstüne ekler / aynen geçerli); rapor tam metin olmalı, çalışandan tam metin iste`);
         reportTask(id, m.text);
-        logTask(id, `${tag} kapanış raporu işlendi (head=${m.head})`);
+        logTask(id, `${tag} kapanış raporu işlendi (head=${m.head})`, m.at);
       }
       res.processed.push({ seq: m.seq, kind: m.kind });
     } catch (e) {
       res.warnings.push(`#${m.seq} ${m.kind}: ${(e as Error).message}`);
     }
+  }
+  // the turn's cost/turns/duration; the result event's uuid (else its time or values) keeps a re-run from logging it twice
+  for (const t of texts) {
+    const line = t.kind === "result" ? turnMetrics(t.result) : null;
+    if (!line) continue;
+    const tag = `[ölçüm ${t.result.uuid ?? t.at ?? line}]`;
+    if (!seen(id, tag)) logTask(id, `${tag} ${line}`, t.at);
   }
   return res;
 }
