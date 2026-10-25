@@ -6,7 +6,12 @@ async function logFailure(err: unknown): Promise<void> {
     const { appendFileSync, mkdirSync } = await import("node:fs");
     const { join } = await import("node:path");
     const home = process.env.VLAD_HOME ?? join(import.meta.dirname, "..", "..");
-    const dir = join(home, "kb", "logs");
+    let dir = join(home, "kb", "logs");
+    try {
+      dir = (await import("../kb/home.js")).kbPaths(home).logs;
+    } catch {
+      /* kb checkout missing: log next to the VLAD home instead of losing the failure */
+    }
     mkdirSync(dir, { recursive: true });
     const now = new Date().toISOString();
     const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);

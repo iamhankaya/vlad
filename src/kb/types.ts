@@ -181,6 +181,8 @@ export interface VladConfig {
   machines?: Record<string, MachineConfig>;
   /** Oldest CLI version allowed to use this home; older CLIs stop with `VLAD CLI çok eski`. */
   minCliVersion?: string;
+  /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
+  kbDir?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
 }
 
@@ -207,4 +209,31 @@ export interface ActiveData {
   since: string;
   heartbeat: string;
   takeover_from?: string | null;
+}
+
+export const GRANT_ACTIONS = ["merge_phase", "merge_final"] as const;
+export type GrantAction = (typeof GRANT_ACTIONS)[number];
+/** Never delegable (mobile plan, "Yetki devri"): rejected by the schema enum and again in code. */
+export const NON_DELEGABLE_ACTIONS = ["tag_release", "publish", "delete", "security", "scope_change"] as const;
+export const GRANT_CONDITIONS = ["ci_green", "no_severe_findings", "codex_clear"] as const;
+export type GrantCondition = (typeof GRANT_CONDITIONS)[number];
+/** A grant lives at most this long (created -> expires, inclusive). */
+export const GRANT_MAX_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** kb/grants/G-<NNN>.md frontmatter (mobile plan, kayıt türleri). The file is untrusted: the API re-verifies `signature`. */
+export interface GrantData {
+  /** `G-<NNN>`; widens past 999. */
+  id: string;
+  scope: { type: "project" | "pipeline"; ref: string };
+  action: GrantAction;
+  /** Always includes `ci_green`. */
+  conditions: GrantCondition[];
+  created: string;
+  expires: string;
+  max_uses: number;
+  revoked: boolean;
+  /** Device whose `approval` key signed the grant. */
+  device_id: string;
+  signature: string;
+  payload_version: "v1";
 }
