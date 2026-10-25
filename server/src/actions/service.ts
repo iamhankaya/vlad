@@ -46,6 +46,8 @@ export type ActionPolicy = {
   prepareIntervalMs?: number;
   /** Wrong signatures one action tolerates before it refuses to look at more. Default 5. */
   maxBadSignatures?: number;
+  /** The GitHub App's id: a `vlad/approved` run only counts as ours (and is left out of CI) when this app wrote it. */
+  appId?: number;
 };
 
 export type ActionDeps = {
@@ -153,6 +155,12 @@ export class ActionService {
         throw new ActionError(429, "rate_limited", "prepare_too_soon", { retry_after_s: Math.max(1, Math.ceil((interval - (t0 - last)) / 1000)) });
       }
       this.lastPrepare.set(key, t0);
+
+      // An action of this task that is past the check (`checked`, maybe already merged) must be finished by its own approval first:
+      // a second challenge could merge or audit the same task twice.
+      for (const oid of this.byTask.get(taskId) ?? []) {
+        if (this.d.store.get(oid)?.state === "checked") throw new ActionError(409, "bad_request", "action_in_flight", { action_id: oid });
+      }
 
       // Everything comes from the task, the project card (which repo/branch may be merged) and GitHub (what is true now).
       const { task, repo, prNo, base, kind } = await this.target(taskId);
@@ -371,7 +379,7 @@ export class ActionService {
 
   private async checkCi(repo: string, sha: string) {
     const [runs, status] = await this.read(() => Promise.all([this.d.reader.getCheckRuns(repo, sha), this.d.reader.getCombinedStatus(repo, sha)]));
-    const ci = ciState(runs, status);
+    const ci = ciState(runs, status, this.d.policy?.appId);
     if (ci !== "green") throw new ActionError(422, "ci_not_green", "ci_not_green", { ci });
   }
 
@@ -384,6 +392,11 @@ export class ActionService {
       if (resuming) {
         const p = await this.read(() => this.d.reader.getPull(f.repo!, pr));
         if (p?.merged) {
+          // Still the task this challenge was for (waiting, or already `done` by an earlier attempt) in the registered repo.
+          const t0 = await this.read(() => this.d.tasks(f.task!));
+          if (!t0 || (t0.state !== "awaiting_approval" && t0.state !== "done") || !t0.pr || t0.pr.repo !== f.repo || t0.pr.number !== pr) throw new ActionError(409, "bad_request", "task_changed");
+          const card0 = await this.read(() => this.d.projects(t0.project));
+          if (card0?.repo !== f.repo) throw new ActionError(409, "not_mergeable", "repo_not_registered");
           this.checkOrigin(p, f.repo!, f.task!, f.base!);
           if (p.head.sha !== f.head_sha) throw new ActionError(409, "head_moved", "head_moved");
           return;

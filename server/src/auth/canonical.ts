@@ -102,10 +102,10 @@ export function envelopeString(i: EnvelopeInput): string {
 export const CHALLENGE_FIELDS = ["action_id", "kind", "repo", "pr", "base", "head_sha", "task", "nonce", "exp"] as const;
 export const CHALLENGE_HEADER = "vlad-approve/v1";
 const VALUE = /^[A-Za-z0-9._/#:-]+$/;
-const FIELD_RULES: Record<(typeof CHALLENGE_FIELDS)[number], RegExp> = {
+export const FIELD_RULES: Record<(typeof CHALLENGE_FIELDS)[number], RegExp> = {
   action_id: /^A-[A-Za-z0-9_-]{1,64}$/,
   kind: /^[a-z_]{1,32}$/,
-  repo: /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/,
+  repo: /^(?!\.{1,2}\/)[A-Za-z0-9._-]+\/(?!\.{1,2}$)[A-Za-z0-9._-]+$/, // no `.`/`..` segment: the repo ends up in a URL path
   pr: /^[1-9][0-9]{0,9}$/,
   base: /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,200}$/,
   head_sha: /^[0-9a-f]{40}$/,

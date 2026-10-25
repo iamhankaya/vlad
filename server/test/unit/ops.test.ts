@@ -56,4 +56,14 @@ describe("server: vlad ops", () => {
     expect(calls().filter((c) => c.args[1] === "launch" || c.args[0] === "task" && c.args[1] === "launch").map((c) => c.args)).toEqual([["task", "launch", "T20261025-62"], ["task", "launch", "T20261025-63"]]);
     expect(await advance(vladOps, null)).toEqual({ started: [], failed: [] });
   });
+
+  it("D6: ids that reach the CLI must be task ids; nothing is spawned for anything else", async () => {
+    const before = calls().length;
+    for (const bad of ["--help", "T1", "T20261025-6; rm", "../x", "", "t20261025-61", "T20261025-6\n"]) {
+      await expect(vladOps.setDone(bad)).rejects.toThrow();
+      await expect(vladOps.ready(bad)).rejects.toThrow();
+      await expect(vladOps.launch(bad)).rejects.toThrow();
+    }
+    expect(calls()).toHaveLength(before);
+  });
 });

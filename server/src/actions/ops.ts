@@ -11,6 +11,12 @@ export interface VladOps {
   launch(taskId: string): Promise<void>;
 }
 
+const TASK_ID = /^T[0-9]{8}-[0-9]{2,}$/;
+const id = (v: string): string => {
+  if (!TASK_ID.test(v)) throw new Error("geçersiz görev id");
+  return v;
+};
+
 export const vladOps: VladOps = {
   async addAudit(entry) {
     try {
@@ -21,13 +27,13 @@ export const vladOps: VladOps = {
     }
   },
   async setDone(taskId) {
-    await runVlad(["task", "set", taskId, "done"]);
+    await runVlad(["task", "set", id(taskId), "done"]);
   },
   async ready(parent) {
-    const r = await runVladJson<{ tasks: { id: string }[] }>(["task", "ready", "--parent", parent]);
+    const r = await runVladJson<{ tasks: { id: string }[] }>(["task", "ready", "--parent", id(parent)]);
     return r.tasks.map((t) => t.id);
   },
   async launch(taskId) {
-    await runVlad(["task", "launch", taskId], { timeoutMs: 60_000 });
+    await runVlad(["task", "launch", id(taskId)], { timeoutMs: 60_000 });
   },
 };

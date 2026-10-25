@@ -18,6 +18,8 @@ export type ExecutorDeps = {
   appId?: number;
   /** Login that must have merged an already merged PR for it to count as ours (e.g. `vlad-gate[bot]`). */
   mergerLogin?: string;
+  /** Learns that login when `mergerLogin` is not configured (`GET /app` slug + `[bot]`). Without either, a merged PR is never claimed. */
+  resolveMergerLogin?: () => Promise<string | undefined>;
   /** Longest wait for `blocked` to clear after the check-run is written. Default 10 000 ms. */
   blockedWaitMs?: number;
   pollMs?: number;
@@ -41,7 +43,8 @@ export function createExecutor(d: ExecutorDeps): ExecuteAction {
   const blockedWait = d.blockedWaitMs ?? BLOCKED_WAIT_MS;
   const poll = d.pollMs ?? POLL_MS;
 
-  const ours = (r: CheckRun) => r.name === APPROVED_CHECK && r.conclusion === "success" && r.status === "completed" && (d.appId === undefined || r.app_id === undefined || r.app_id === d.appId);
+  // With an app id known only a run THAT app wrote counts; a run without `app_id` does not.
+  const ours = (r: CheckRun) => r.name === APPROVED_CHECK && r.conclusion === "success" && r.status === "completed" && (d.appId === undefined || r.app_id === d.appId);
 
   async function upstream<T>(fn: () => Promise<T>, reason = "github_unavailable"): Promise<T> {
     try {
@@ -59,10 +62,22 @@ export function createExecutor(d: ExecutorDeps): ExecuteAction {
     return pull;
   }
 
-  /** The PR is merged already (an earlier attempt got that far). It is ours only for the approved head and, when known, our merger. */
-  function adoptMerged(a: ActionDescriptor, pull: PullFacts): string {
+  /**
+   * Repo, base and head must be what the signed challenge says, on every look: a PR re-targeted while we wait (base moved to
+   * the main branch) must never be merged under a `merge_phase` approval.
+   */
+  function checkOrigin(a: ActionDescriptor, pull: PullFacts) {
+    if (pull.base.ref !== a.base || pull.base.repo !== a.repo) throw new ActionError(409, "not_mergeable", "base_mismatch");
+    if (pull.head.ref !== `vlad/${a.task}` || pull.head.repo !== a.repo) throw new ActionError(409, "not_mergeable", "head_ref_mismatch");
+  }
+
+  /** The PR is merged already (an earlier attempt got that far). It is ours only for the approved head, the same origin and OUR merger; unknown merger = not ours. */
+  async function adoptMerged(a: ActionDescriptor, pull: PullFacts): Promise<string> {
+    checkOrigin(a, pull);
     if (pull.head.sha !== a.head_sha || !pull.merge_commit_sha) throw new ActionError(409, "head_moved", "head_moved");
-    if (d.mergerLogin && pull.merged_by !== d.mergerLogin) throw new ActionError(409, "not_mergeable", "merged_by_other");
+    const login = d.mergerLogin ?? (await d.resolveMergerLogin?.().catch(() => undefined));
+    if (!login) throw new ActionError(409, "not_mergeable", "merger_unknown");
+    if (pull.merged_by !== login) throw new ActionError(409, "not_mergeable", "merged_by_other");
     return pull.merge_commit_sha;
   }
 
@@ -81,6 +96,7 @@ export function createExecutor(d: ExecutorDeps): ExecuteAction {
       if (pull.merged) return pull;
       if (pull.state !== "open" || pull.draft) throw new ActionError(409, "not_mergeable", pull.draft ? "draft" : "pr_closed");
       if (pull.head.sha !== a.head_sha) throw new ActionError(409, "head_moved", "head_moved");
+      checkOrigin(a, pull);
       const s = pull.mergeable_state;
       if (pull.mergeable === true && CLEAN.has(s)) return pull;
       if (pull.mergeable === null || s === "unknown") {
@@ -98,20 +114,35 @@ export function createExecutor(d: ExecutorDeps): ExecuteAction {
   }
 
   return async (a: ActionDescriptor, approval: ApprovalProof, ctx?: ExecuteContext) => {
+    // Asked before every outward step, not just the last: a revoked device or a changed task writes nothing, not even the check-run.
+    const authorized = async () => {
+      if (ctx && !(await ctx.stillAuthorized())) throw new ActionError(410, "expired", "revoked");
+    };
     let mergeSha: string;
-    let pull = await livePull(a);
-    if (pull.merged) {
-      mergeSha = adoptMerged(a, pull);
+    const first = await livePull(a);
+    if (first.merged) {
+      mergeSha = await adoptMerged(a, first);
     } else {
-      if (pull.state !== "open" || pull.draft) throw new ActionError(409, "not_mergeable", pull.draft ? "draft" : "pr_closed");
-      if (pull.head.sha !== a.head_sha) throw new ActionError(409, "head_moved", "head_moved");
+      if (first.state !== "open" || first.draft) throw new ActionError(409, "not_mergeable", first.draft ? "draft" : "pr_closed");
+      if (first.head.sha !== a.head_sha) throw new ActionError(409, "head_moved", "head_moved");
+      checkOrigin(a, first);
+      await authorized();
       await ensureApprovedRun(a);
-      pull = await waitMergeable(a);
+      let pull = await waitMergeable(a);
+      if (!pull.merged) {
+        // Order of the last steps: still authorized -> one more look (origin, head, state) -> PUT.
+        await authorized();
+        pull = await livePull(a);
+        if (!pull.merged) {
+          if (pull.state !== "open" || pull.draft) throw new ActionError(409, "not_mergeable", pull.draft ? "draft" : "pr_closed");
+          if (pull.head.sha !== a.head_sha) throw new ActionError(409, "head_moved", "head_moved");
+          checkOrigin(a, pull);
+          if (!(pull.mergeable === true && CLEAN.has(pull.mergeable_state))) throw new ActionError(409, "not_mergeable", `state_${pull.mergeable_state}`);
+        }
+      }
       if (pull.merged) {
-        mergeSha = adoptMerged(a, pull);
+        mergeSha = await adoptMerged(a, pull);
       } else {
-        // The last look before the write: device revoked or task changed while GitHub was being read.
-        if (ctx && !(await ctx.stillAuthorized())) throw new ActionError(410, "expired", "revoked");
         const out = await upstream(() => d.writer.merge(a.repo, a.pr, a.head_sha));
         if (out.kind === "head_moved") throw new ActionError(409, "head_moved", "head_moved");
         if (out.kind === "not_mergeable") throw new ActionError(409, "not_mergeable", "github_refused", { message: out.message });

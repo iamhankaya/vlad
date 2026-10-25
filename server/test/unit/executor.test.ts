@@ -1,13 +1,15 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { generateKeyPairSync, createVerify } from "node:crypto";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ciState } from "../../src/actions/github.ts";
+import { FIELD_RULES } from "../../src/auth/canonical.ts";
 import { createExecutor } from "../../src/actions/executor.ts";
 import type { VladOps } from "../../src/actions/ops.ts";
 import { ActionError, type ApprovalProof, type TaskInfo } from "../../src/actions/service.ts";
 import { ActionStore } from "../../src/actions/state.ts";
-import { AppTokenProvider, appJwt, loadAppKey } from "../../src/github/appToken.ts";
-import { GithubClient, GithubHttpError, observeWrites, WRITE_CAP } from "../../src/github/client.ts";
+import { AppTokenProvider, appJwt, loadAppKey, TOKEN_PERMISSIONS } from "../../src/github/appToken.ts";
+import { GithubClient, GithubHttpError, observeWrites, REPO_RE, WRITE_CAP } from "../../src/github/client.ts";
 import { RestGithubReader } from "../../src/github/reader.ts";
 import { GithubWriter } from "../../src/github/writer.ts";
 import { pairDevice, rig, signDer, signedCall, TestDevice, type Rig } from "../helpers/client.ts";
@@ -531,5 +533,199 @@ describe("server: github write methods only via GithubWriter", () => {
   it("every GitHub client in the server is the guarded one: no raw fetch to api.github.com outside client.ts/appToken.ts", () => {
     const raw = src.filter((s) => /api\.github\.com/.test(s.text)).map((s) => s.f).sort();
     expect(raw).toEqual(["github/appToken.ts", "github/client.ts"]);
+  });
+});
+
+const markChecked = (s: Awaited<ReturnType<typeof setup>>, c: { action_id: string; bytes_b64: string }) => {
+  const store = s.store();
+  store.transition(c.action_id, "approved", s.r.clock.t, { approval: { device_id: s.d.id, signature: s.sign(c), at_ms: s.r.clock.t } });
+  store.transition(c.action_id, "checked", s.r.clock.t);
+};
+const pullGets = (g: FakeGithubHttp) => g.calls.filter((x) => x.method === "GET" && /pulls\/42$/.test(x.path)).length;
+
+describe("server: security review findings (S9b)", () => {
+  it("O1: PR re-targeted to the main branch while waiting -> no PUT, 409 (at the wait and at the last look)", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    s.gh.onRequest = (call) => { if (call.method === "POST") s.gh.pull = { ...s.gh.pull, base: { ...s.gh.pull.base, ref: "master" } }; };
+    const res = await s.approve(c.action_id, s.sign(c));
+    expect([res.statusCode, errOf(res).details.reason]).toEqual([409, "base_mismatch"]);
+    expect(s.gh.merges).toHaveLength(0);
+
+    // only the last look (just before the PUT) sees it: calls are service check, executor's first look, wait, last look
+    const s2 = await setup();
+    const c2 = await s2.prepared();
+    s2.gh.onRequest = (call) => { if (call.method === "GET" && /pulls\/42$/.test(call.path) && pullGets(s2.gh) === 4) s2.gh.pull = { ...s2.gh.pull, base: { ...s2.gh.pull.base, ref: "master" } }; };
+    const r2 = await s2.approve(c2.action_id, s2.sign(c2));
+    expect([r2.statusCode, errOf(r2).details.reason]).toEqual([409, "base_mismatch"]);
+    expect(s2.gh.merges).toHaveLength(0);
+
+    // head repo / head ref are part of the same check
+    const s3 = await setup();
+    const c3 = await s3.prepared();
+    s3.gh.onRequest = (call) => { if (call.method === "POST") s3.gh.pull = { ...s3.gh.pull, head: { ...s3.gh.pull.head, ref: "feature/x" } }; };
+    expect(errOf(await s3.approve(c3.action_id, s3.sign(c3))).details.reason).toBe("head_ref_mismatch");
+    expect(s3.gh.merges).toHaveLength(0);
+
+    // an already merged PR with another base is not adopted either
+    const s4 = await setup();
+    const c4 = await s4.prepared();
+    markChecked(s4, c4);
+    s4.gh.merge();
+    s4.gh.pull = { ...s4.gh.pull, base: { ...s4.gh.pull.base, ref: "master" } };
+    expect((await s4.approve(c4.action_id, s4.sign(c4))).statusCode).toBe(409);
+    expect(s4.ops.audits.size).toBe(0);
+  });
+
+  it("O2: without a configured login the merger is learned from the App slug; unknown = never claimed", async () => {
+    for (const [resolve, want] of [[undefined, 409], [async () => undefined, 409], [async () => "someone[bot]", 409], [async () => "vlad-gate[bot]", 200]] as const) {
+      const s = await setup({ executor: { mergerLogin: undefined, resolveMergerLogin: resolve } });
+      const c = await s.prepared();
+      markChecked(s, c);
+      s.gh.merge();
+      const res = await s.approve(c.action_id, s.sign(c));
+      expect(res.statusCode, res.body).toBe(want);
+      expect(s.ops.audits.size).toBe(want === 200 ? 1 : 0);
+      expect(s.gh.writes).toHaveLength(0);
+    }
+  });
+
+  it("O2: the App's bot login is `<slug>[bot]` from GET /app; a failed lookup is undefined", async () => {
+    const mk = (status: number, body: unknown) => new AppTokenProvider({ appId: "1", privateKey: generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString(), fetch: async () => ({ status, text: async () => JSON.stringify(body) }) });
+    expect(await mk(200, { slug: "vlad-gate" }).botLogin()).toBe("vlad-gate[bot]");
+    expect(await mk(404, {}).botLogin()).toBeUndefined();
+    expect(await mk(200, { slug: "../x" }).botLogin()).toBeUndefined();
+  });
+
+  it("O2: merged-continue also needs the task waiting (or done) and the card's repo", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    markChecked(s, c);
+    s.gh.merge();
+    s.tasks[TASK]!.state = "running";
+    expect(errOf(await s.approve(c.action_id, s.sign(c))).details.reason).toBe("task_changed");
+    expect(s.ops.audits.size).toBe(0);
+  });
+
+  it("O2: a new prepare is refused while an action of the same task is `checked`", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    markChecked(s, c);
+    const again = await signedCall(s.r, s.d, "POST", "/v1/actions/prepare", JSON.stringify({ kind: "merge_phase", task_id: TASK }));
+    expect([again.statusCode, errOf(again).details.reason]).toEqual([409, "action_in_flight"]);
+    // finishing the in-flight one frees the task
+    expect((await s.approve(c.action_id, s.sign(c))).statusCode).toBe(200);
+    expect(s.gh.merges).toHaveLength(1);
+    expect(s.ops.audits.size).toBe(1);
+  });
+
+  it("O3: stillAuthorized is asked before the check-run: a changed task writes nothing at all", async () => {
+    const s = await setup();
+    const c = await s.prepared();
+    s.gh.onRequest = (call) => { if (call.method === "GET" && /pulls\/42$/.test(call.path) && pullGets(s.gh) === 2) s.tasks[TASK]!.state = "running"; };
+    const res = await s.approve(c.action_id, s.sign(c));
+    expect([res.statusCode, errOf(res).details.reason]).toEqual([409, "task_changed"]);
+    expect(s.gh.writes).toHaveLength(0);
+
+    // revoked device: also no check-run
+    const s2 = await setup();
+    const admin = await pairDevice(s2.r, "Admin");
+    const c2 = await s2.prepared();
+    s2.gh.onRequest = async (call) => {
+      if (!(call.method === "GET" && /pulls\/42$/.test(call.path) && pullGets(s2.gh) === 2)) return;
+      s2.gh.onRequest = undefined;
+      expect((await signedCall(s2.r, admin, "POST", `/v1/devices/${s2.d.id}/revoke`, admin.revokeBody(s2.d.id, s2.r.clock.t))).statusCode).toBe(200);
+    };
+    const r2 = await s2.approve(c2.action_id, s2.sign(c2));
+    expect([r2.statusCode, errOf(r2).details.reason]).toEqual([410, "revoked"]);
+    expect(s2.gh.writes).toHaveLength(0);
+  });
+
+  it("D1: a hanging token endpoint times out, clears the in-flight slot and the next call can succeed", async () => {
+    const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    let hang = true;
+    const p = new AppTokenProvider({
+      appId: "1", privateKey: pem, installationId: "5", timeoutMs: 30,
+      fetch: (_u, init) => (hang ? new Promise((_r, rej) => init.signal?.addEventListener("abort", () => rej(new Error("aborted")))) : Promise.resolve({ status: 201, text: async () => JSON.stringify({ token: "ghs_EXAMPLE", expires_at: "2099-01-01T00:00:00Z" }) })),
+    });
+    await expect(p.token(REPO)).rejects.toThrow(/zaman aşımı/);
+    hang = false;
+    expect(await p.token(REPO)).toBe("ghs_EXAMPLE");
+    // the client's timer also covers the token lookup
+    const client = new GithubClient({ timeoutMs: 30, fetch: async () => ({ status: 200, text: async () => "{}" }), tokens: { token: () => new Promise<string>(() => {}) } });
+    await expect(client.request("GET", `/repos/${REPO}/pulls/1`, REPO)).rejects.toBeInstanceOf(GithubHttpError);
+  });
+
+  it("D2: with an app id, a vlad/approved run without app_id (or of another app) does not count", async () => {
+    for (const app of [undefined, { id: 999 }]) {
+      const s = await setup();
+      s.gh.approvedRuns = [{ id: 1, name: "vlad/approved", status: "completed", conclusion: "success", ...(app ? { app } : {}) }];
+      s.gh.blockUntilApproved = false;
+      const c = await s.prepared().catch(() => null);
+      // the foreign run is also CI evidence (D3): prepare may refuse; if it did not, the executor must still write our own run
+      expect(c).not.toBeNull();
+      await s.approve(c!.action_id, s.sign(c!));
+      expect(s.gh.checkRunWrites).toHaveLength(1); // our own run is still written
+    }
+  });
+
+  it("D3: ciState leaves out only OUR vlad/approved run", () => {
+    const ok = { name: "gate", status: "completed", conclusion: "success", app_id: 15368 };
+    const mine = { name: "vlad/approved", status: "completed", conclusion: "success", app_id: 7 };
+    const foreign = { name: "vlad/approved", status: "completed", conclusion: "failure", app_id: 8 };
+    const st = { state: "pending", total_count: 0 };
+    expect(ciState([ok, mine], st, 7)).toBe("green");
+    expect(ciState([ok, foreign], st, 7)).toBe("red");
+    expect(ciState([mine], st, 7)).toBe("none");
+    expect(ciState([ok, foreign], st)).toBe("green"); // app id unknown: by name, as before
+  });
+
+  it("D4: the key is checked on the opened file: foreign owner refused; no getuid (Windows) warns", async () => {
+    const { mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(join(tmpdir(), "vlad-key-"));
+    writeFileSync(join(dir, "github-app.pem"), "KEY", { mode: 0o600 });
+    const uid = process.getuid!();
+    const spy = vi.spyOn(process, "getuid").mockReturnValue(uid + 1);
+    expect(() => loadAppKey({}, dir)).toThrow(/bu kullanıcıya ait/);
+    spy.mockRestore();
+    expect(loadAppKey({}, dir)).toBe("KEY");
+    const warned: string[] = [];
+    const orig = process.getuid;
+    (process as any).getuid = undefined;
+    try {
+      expect(loadAppKey({}, dir, (m) => warned.push(m))).toBe("KEY");
+    } finally {
+      (process as any).getuid = orig;
+    }
+    expect(warned.join()).toMatch(/denetlenemiyor/);
+  });
+
+  it("D5: `.` and `..` segments are not valid repos, in the client and in the challenge rules; paths cannot walk out of the repo", async () => {
+    for (const bad of ["../x", "./x", "a/..", "a/.", "..", "a/b/c", "", "a/"]) {
+      expect(REPO_RE.test(bad), bad).toBe(false);
+      expect(FIELD_RULES.repo.test(bad), bad).toBe(false);
+    }
+    for (const good of ["iamhankaya/vlad", "a.b/c_d-e", "a/.github", "a/b..c"]) {
+      expect(REPO_RE.test(good), good).toBe(true);
+      expect(FIELD_RULES.repo.test(good), good).toBe(true);
+    }
+    const gh = new FakeGithubHttp();
+    const client = new GithubClient({ fetch: gh.fetch, tokens: { token: async () => "t" } });
+    for (const path of [`/repos/${REPO}/../../orgs/x`, `/repos/${REPO}/%2e%2e/x`, `/repos/${REPO}/a%2fb`, `/repos/${REPO}/./pulls/1`]) await expect(client.request("GET", path, REPO)).rejects.toBeInstanceOf(GithubHttpError);
+    expect(gh.calls).toHaveLength(0);
+  });
+
+  it("token scope: one repository and the least permissions the approval path uses", async () => {
+    const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    const bodies: any[] = [];
+    const p = new AppTokenProvider({ appId: "1", privateKey: pem, installationId: "5", fetch: async (_u, init) => { bodies.push(JSON.parse(init.body!)); return { status: 201, text: async () => JSON.stringify({ token: "ghs_EXAMPLE", expires_at: "2099-01-01T00:00:00Z" }) }; } });
+    await p.token(REPO);
+    expect(bodies[0]).toEqual({ repositories: ["vlad"], permissions: TOKEN_PERMISSIONS });
+    expect(TOKEN_PERMISSIONS).toEqual({ checks: "write", contents: "write", pull_requests: "read", statuses: "read" });
+    // another repo gets its own token (a cached one is scoped to its repository)
+    await p.token("iamhankaya/other");
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1].repositories).toEqual(["other"]);
   });
 });

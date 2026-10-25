@@ -23,19 +23,20 @@ const appKey = loadAppKey(process.env, stateDir);
 let actions: NonNullable<Parameters<typeof buildApp>[0]["actions"]> | undefined;
 let logWrite: ((method: string, path: string) => void) | undefined;
 if (appId && appKey) {
+  const tokens = new AppTokenProvider({ appId, privateKey: appKey, installationId: process.env.VLAD_GITHUB_APP_INSTALLATION_ID });
   const client = observeWrites(
-    new GithubClient({ tokens: new AppTokenProvider({ appId, privateKey: appKey, installationId: process.env.VLAD_GITHUB_APP_INSTALLATION_ID }) }),
+    new GithubClient({ tokens }),
     (method, path) => logWrite?.(method, path),
   );
   const reader = new RestGithubReader(client);
   actions = {
     reader, tasks: vladTaskSource, projects: vladProjectSource,
     // `blocked` is expected until `vlad/approved` is written; any other blocker (review, required checks) still stops the merge.
-    policy: { allowBlocked: true },
+    policy: { allowBlocked: true, appId: Number(appId) },
     execute: createExecutor({
       reader, writer: new GithubWriter(client), tasks: vladTaskSource, ops: vladOps, now: Date.now,
       appendEvent: (type, data, key) => ledger.append(type, data, key),
-      appId: Number(appId), mergerLogin: process.env.VLAD_GITHUB_APP_LOGIN,
+      appId: Number(appId), mergerLogin: process.env.VLAD_GITHUB_APP_LOGIN, resolveMergerLogin: () => tokens.botLogin(),
       log: (m) => console.warn(m),
     }),
   };

@@ -28,7 +28,8 @@ export interface GithubClientLike {
   request(method: string, path: string, repo: string, opts?: RequestOptions): Promise<GithubResponse>;
 }
 
-export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
+/** `owner/name`; a `.` or `..` segment is refused (it would walk out of `/repos/<repo>/` in a URL). */
+export const REPO_RE = /^(?!\.{1,2}\/)[\w.-]+\/(?!\.{1,2}$)[\w.-]+$/;
 
 export class GithubClient implements GithubClientLike {
   private readonly f: FetchLike;
@@ -46,12 +47,19 @@ export class GithubClient implements GithubClientLike {
   /** `path` starts with `/repos/<repo>/`; `repo` is the repository the token is for. Non-2xx answers are returned, not thrown. */
   async request(method: string, path: string, repo: string, opts: RequestOptions = {}): Promise<GithubResponse> {
     if (!REPO_RE.test(repo) || !path.startsWith(`/repos/${repo}/`)) throw new GithubHttpError(0, "geçersiz GitHub yolu");
+    // The prefix is checked on the normalized pathname: a dot segment or encoded slash must not lead out of the repo.
+    const rawPath = path.split("?")[0]!;
+    if (new URL(path, "https://x.invalid").pathname !== rawPath || /%2e|%2f|%5c|\\/i.test(rawPath)) throw new GithubHttpError(0, "geçersiz GitHub yolu");
     if (WRITE_METHODS.has(method) && opts.cap !== WRITE_CAP) throw new GithubHttpError(0, `GitHub yazması yalnız GithubWriter'dan: ${method}`);
     if (!WRITE_METHODS.has(method) && method !== "GET") throw new GithubHttpError(0, `desteklenmeyen yöntem: ${method}`);
-    const token = await this.tokens.token(repo);
     const ac = new AbortController();
     const timer = setTimeout(() => ac.abort(), this.timeoutMs);
     try {
+      // The timer covers the token lookup too: a stuck token endpoint must not hang the approval path.
+      const token = await Promise.race([
+        this.tokens.token(repo),
+        new Promise<never>((_, rej) => ac.signal.addEventListener("abort", () => rej(new Error("zaman aşımı")), { once: true })),
+      ]);
       const res = await this.f(`${this.base}${path}`, {
         method,
         headers: {

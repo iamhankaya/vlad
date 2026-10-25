@@ -58,8 +58,9 @@ const PASS = new Set(["success", "neutral", "skipped"]);
  * CI health of a commit from its check-runs and combined status. Any failing signal is `red`; anything unfinished
  * is `pending`; no signal at all is `none` (an unconfigured CI is not "green").
  */
-export function ciState(runs: CheckRun[], status: CombinedStatus): CiState {
-  const relevant = runs.filter((r) => r.name !== APPROVED_CHECK);
+export function ciState(runs: CheckRun[], status: CombinedStatus, appId?: number): CiState {
+  // Our own approval run is not CI. With `appId` known only a run WE wrote is set aside: a `vlad/approved` from anyone else is evidence like any other.
+  const relevant = runs.filter((r) => r.name !== APPROVED_CHECK || (appId !== undefined && r.app_id !== appId));
   const hasStatus = status.total_count > 0;
   if (!relevant.length && !hasStatus) return "none";
   if (relevant.some((r) => r.status === "completed" && r.conclusion !== null && FAIL.has(r.conclusion))) return "red";
