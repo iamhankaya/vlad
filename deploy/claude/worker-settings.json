@@ -104,7 +104,13 @@
       "Bash(git push*&*)",
       "Bash(git push*|*)",
       "Bash(git push*$(*)",
-      "Bash(git push*`*)"
+      "Bash(git push*`*)",
+      "Bash(git -c*)",
+      "Bash(git --*)",
+      "Bash(command git*)",
+      "Bash(git push origin vlad/T* *)",
+      "Bash(git push -u origin vlad/T* *)",
+      "Bash(git push* --tags*)"
     ]
   }
 }

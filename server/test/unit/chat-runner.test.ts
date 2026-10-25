@@ -384,6 +384,7 @@ describe("server: chat turn runner", () => {
     const dis = argv.slice(argv.indexOf("--disallowedTools") + 1, argv.indexOf("--resume") === -1 ? undefined : argv.indexOf("--resume"));
     expect(dis.slice(0, perm.deny.length)).toEqual(perm.deny); // same deny list as a flag: it holds even if settings were lost
     const kbGlob = `/${t.kb}/**`;
+    expect(perm.deny).toContain("Bash(vlad install*)"); // `vlad install` copies skills into ~/.claude
     expect(perm.allow).toEqual([`Read(${kbGlob})`, `Grep(${kbGlob})`, `Glob(${kbGlob})`, "Bash(vlad *)"]);
     // no unscoped read tool: a read of any absolute path outside the kb has no allow rule
     expect(perm.allow.filter((a) => /^(Read|Grep|Glob)$/.test(a))).toEqual([]);

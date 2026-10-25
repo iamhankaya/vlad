@@ -29,13 +29,17 @@ ProtectHome=yes
 # the kb is readable, never writable; the only writable tree is vladchat's own home (claude login, session files)
 ReadOnlyPaths=@KB_DIR@ @VLAD_HOME@
 ReadWritePaths=/var/lib/vladchat
-# user settings and memory files of the chat agent are root-owned empty files, bind-mounted read-only: the agent cannot plant hooks, rules or instructions that persist (install.sh creates them)
-ReadOnlyPaths=/var/lib/vladchat/.claude/settings.json /var/lib/vladchat/.claude/CLAUDE.md /var/lib/vladchat/CLAUDE.md
+# user settings, memory files and the extension directories of the chat agent are root-owned empty placeholders, bind-mounted read-only: nothing the agent writes can persist as instructions, rules, hooks or skills (install.sh creates them).
+# ~/.claude.json holds the login state and stays writable; chat-turn refuses a turn when it carries allowedTools/mcpServers/hooks.
+ReadOnlyPaths=/var/lib/vladchat/CLAUDE.md /var/lib/vladchat/CLAUDE.local.md /var/lib/vladchat/.claude/settings.json /var/lib/vladchat/.claude/settings.local.json /var/lib/vladchat/.claude/CLAUDE.md
+ReadOnlyPaths=/var/lib/vladchat/.claude/agents /var/lib/vladchat/.claude/commands /var/lib/vladchat/.claude/skills /var/lib/vladchat/.claude/rules /var/lib/vladchat/.claude/plugins /var/lib/vladchat/.claude/hooks /var/lib/vladchat/.claude/output-styles
 # nothing the agent writes can be executed; binaries come from the root-owned trees only
 NoExecPaths=/var/lib/vladchat
 ExecPaths=/usr /opt /usr/local
 # the API's state (device ledger, App key, challenges) and the agent's worktrees/credentials do not exist for this unit
 InaccessiblePaths=/var/lib/vladapi -/var/lib/vlad/worktrees /home /root -/run/tailscale -/run/dbus
+# project memory/settings inside the kb (workers write there) are never loaded by the chat turn
+InaccessiblePaths=-@KB_DIR@/.claude -@KB_DIR@/CLAUDE.md -@KB_DIR@/CLAUDE.local.md
 PrivateTmp=yes
 PrivateDevices=yes
 PrivateUsers=no

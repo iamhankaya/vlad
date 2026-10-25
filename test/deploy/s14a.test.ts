@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -35,6 +35,19 @@ describe("deploy: worker push rules (F-vlad-030)", () => {
     "git push origin vlad/T20261025-92; git push origin x:refs/heads/main", "git push origin vlad/T20261025-92 $(echo :main)", "git push -f origin vlad/T20261025-92",
   ])("deploy: worker push/merge denied: %s", (cmd) => {
     expect(verdict(cmd)).toBe("deny");
+  });
+  it.each([
+    "git -c core.sshCommand=evil push origin vlad/T20261025-92", "git --git-dir=/x push origin vlad/T20261025-92", "command git push origin vlad/T20261025-92:main",
+    "git push origin vlad/T20261025-92 other", "git push -u origin vlad/T20261025-92 refs/tags/v1", "git push origin vlad/T20261025-92 --tags",
+  ])("deploy: worker push escape denied (review #3 round 2): %s", (cmd) => {
+    expect(verdict(cmd)).toBe("deny");
+  });
+  it("deploy: KNOWN escapes the rule list cannot close; only the GitHub ruleset does (documented, not hidden)", () => {
+    // arbitrary code can push with the worker's own credentials
+    expect(verdict(`node -e "require('child_process').execSync('git push origin HEAD:main')"`)).toBe("allow");
+    expect(verdict("npx some-package")).toBe("allow");
+    // an alias defined through git config makes the push invisible to the patterns
+    expect(verdict("git config alias.p push")).not.toBe("deny");
   });
   it("deploy: nothing allows a bare push, gh, curl or wget", () => {
     for (const r of settings.permissions.allow) expect(r).not.toMatch(/^Bash\((git push\*|gh |curl|wget|\*)/);
@@ -76,8 +89,14 @@ describe("deploy: systemd units", () => {
     expect(u).toMatch(/^InaccessiblePaths=.*-\/run\/tailscale.*-\/run\/dbus/m);
     expect(u).toMatch(/^NoExecPaths=\/var\/lib\/vladchat$/m);
     expect(u).toMatch(/^ExecPaths=\/usr \/opt \/usr\/local$/m);
-    expect(u).toMatch(/^ReadOnlyPaths=.*\/var\/lib\/vladchat\/\.claude\/settings\.json.*\/var\/lib\/vladchat\/CLAUDE\.md/m);
+    for (const f of ["settings.json", "CLAUDE.md"]) expect(u).toContain(`/var/lib/vladchat/${f.startsWith("C") ? "" : ".claude/"}${f}`);
     expect(u).not.toMatch(/SupplementaryGroups=vlad/m);
+  });
+  it("deploy: chat unit masks project memory in the kb and the extension directories of the home (review round 2 #3-#4)", () => {
+    const u = unit("vlad-chat@.service");
+    expect(u).toMatch(/^InaccessiblePaths=-@KB_DIR@\/\.claude -@KB_DIR@\/CLAUDE\.md -@KB_DIR@\/CLAUDE\.local\.md$/m);
+    for (const d of ["agents", "commands", "skills", "rules", "plugins", "hooks", "output-styles"]) expect(u).toContain(`/var/lib/vladchat/.claude/${d}`);
+    expect(u).toContain("/var/lib/vladchat/.claude/settings.local.json");
   });
   it("deploy: kbpromote carries the api hardening block and no readable home (review S14a bulgu 8)", () => {
     const u = unit("vlad-kbpromote.service");
@@ -115,7 +134,8 @@ describe("deploy: install.sh dry run", () => {
       "install -d -m 0700 -o vlad -g vlad /opt/vlad/state", "npm audit", "npm ci", "unit vlad-kbpromote.service", "unit vlad-kbsync.service", "unit vlad-chat@.service",
       "gen-chat-settings.ts", "@anthropic-ai/claude-code@1.2.3",
       "npm install -g --ignore-scripts", "npm audit --package-lock-only", "setfacl -R -m u:vladchat:rX", "chmod 0700 /home/vlad",
-      "empty root-owned /var/lib/vladchat/.claude/settings.json",
+      "empty root-owned file /var/lib/vladchat/.claude/settings.json", "empty root-owned dir /var/lib/vladchat/.claude/skills",
+      "install -d -m 0755 -o root -g root /etc/vlad-chat", "/etc/vlad-chat/chat-settings.json (root:root 0444)", "/etc/claude-code/managed-settings.json", "systemctl stop vlad-chat.socket",
     ]) expect(r.stdout, need).toContain(need);
     expect(r.stdout).not.toMatch(/usermod -aG vlad vladchat/);
     expect(r.stdout).not.toMatch(/chown -R root:root \/opt\/vlad/); // state/ stays vlad's on a second run
@@ -153,12 +173,93 @@ describe("deploy: chat-turn wrapper (runs without claude; only the guards)", () 
     writeFileSync(f, JSON.stringify({ permissions: { deny: ["Bash(rm *)"] } }));
     expect(go("NEW\nhi", { VLAD_CHAT_SETTINGS: f }).status).toBe(78);
   });
+  describe("guards that refuse a turn (exit 78) before claude is started", () => {
+    const sandbox = (mut: (d: { home: string; kb: string }) => void = () => undefined) => {
+      const base = mkdtempSync(join(tmpdir(), "chat-guard-"));
+      const home = join(base, "home"), kb = join(base, "x", "kb");
+      mkdirSync(join(home, ".claude"), { recursive: true }); mkdirSync(kb, { recursive: true });
+      const settings = join(base, "chat-settings.json");
+      writeFileSync(settings, JSON.stringify({ permissions: { deny: ["Bash(rm *)"] }, disableAllHooks: true }));
+      mut({ home, kb });
+      return go("NEW\nhi", { VLAD_CHAT_SETTINGS: settings, HOME: home, VLAD_KB_DIR: kb, VLAD_HOME: base });
+    };
+    it("deploy: clean tree passes the guards (fails later only because claude is not installed here)", () => {
+      const r = sandbox();
+      expect([78, 64]).not.toContain(r.status);
+    });
+    it("deploy: chat-turn refuses project memory or settings in the kb", () => {
+      expect(sandbox(({ kb }) => writeFileSync(join(kb, "CLAUDE.md"), "do evil")).status).toBe(78);
+      expect(sandbox(({ kb }) => writeFileSync(join(kb, "CLAUDE.local.md"), "x")).status).toBe(78);
+      expect(sandbox(({ kb }) => mkdirSync(join(kb, ".claude", "skills"), { recursive: true })).status).toBe(78);
+      expect(sandbox(({ kb }) => writeFileSync(join(kb, "..", "CLAUDE.md"), "parent memory")).status).toBe(78);
+    });
+    it("deploy: chat-turn refuses persistent extensions in the agent's home", () => {
+      expect(sandbox(({ home }) => writeFileSync(join(home, ".claude", "settings.json"), "{\"permissions\":{\"allow\":[\"Bash(*)\"]}}")).status).toBe(78);
+      expect(sandbox(({ home }) => { mkdirSync(join(home, ".claude", "skills", "s"), { recursive: true }); writeFileSync(join(home, ".claude", "skills", "s", "SKILL.md"), "x"); }).status).toBe(78);
+      expect(sandbox(({ home }) => writeFileSync(join(home, "CLAUDE.md"), "x")).status).toBe(78);
+    });
+    it("deploy: chat-turn refuses ~/.claude.json with allowedTools, mcpServers or hooks, accepts a plain login state", () => {
+      const put = (o: object) => ({ home }: { home: string }) => writeFileSync(join(home, ".claude.json"), JSON.stringify(o));
+      expect(sandbox(put({ allowedTools: ["Bash(*)"] })).status).toBe(78);
+      expect(sandbox(put({ projects: { "/x": { allowedTools: ["Bash(*)"] } } })).status).toBe(78);
+      expect(sandbox(put({ mcpServers: { s: { command: "evil" } } })).status).toBe(78);
+      expect(sandbox(put({ hooks: { PreToolUse: [] } })).status).toBe(78);
+      expect(sandbox(({ home }) => writeFileSync(join(home, ".claude.json"), "not json")).status).toBe(78);
+      expect([78, 64]).not.toContain(sandbox(put({ oauthAccount: { emailAddress: "x" }, numStartups: 3, projects: { "/x": { allowedTools: [] } } })).status);
+    });
+  });
+  it("deploy: chat-turn sets the no-updater, no-telemetry environment", () => {
+    const t = readFileSync(turn, "utf8");
+    expect(t).toContain("DISABLE_AUTOUPDATER=1");
+    expect(t).toContain("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1");
+  });
+  it("deploy: chat settings live in a directory vladchat can traverse, not in /etc/vlad (0750 root:vlad) (review round 2 #1)", () => {
+    expect(readFileSync(turn, "utf8")).toContain("/etc/vlad-chat/chat-settings.json");
+    const plan = spawnSync("bash", [join(deploy, "install.sh")], { env: { PATH: process.env.PATH, VLAD_INSTALL_DRYRUN: "1", CLAUDE_CODE_VERSION: "1.2.3" }, encoding: "utf8" }).stdout;
+    expect(plan).toMatch(/install -d -m 0750 -o root -g vlad \/etc\/vlad\n/); // stays closed to vladchat
+    expect(plan).toMatch(/install -d -m 0755 -o root -g root \/etc\/vlad-chat\n/); // world-traversable
+    expect(plan).toMatch(/> \/etc\/vlad-chat\/chat-settings\.json \(root:root 0444\)/);
+    expect(plan).not.toMatch(/> \/etc\/vlad\/chat-settings\.json/);
+  });
+  it("deploy: RUNBOOK login sandbox uses the unit's network and exec properties verbatim (review round 2 #7)", () => {
+    const rb = readFileSync(join(deploy, "RUNBOOK.md"), "utf8");
+    const u = unit("vlad-chat@.service");
+    const deny = /^IPAddressDeny=(.*)$/m.exec(u)![1]!;
+    expect(rb).toContain(`IPAddressDeny="${deny}"`);
+    for (const p of ["NoExecPaths=/var/lib/vladchat", "ExecPaths=\"/usr /opt /usr/local\"", "CapabilityBoundingSet=", "IPAddressAllow=127.0.0.53", "RestrictAddressFamilies=\"AF_INET AF_INET6\""]) expect(rb, p).toContain(p);
+  });
   it("deploy: chat-client forwards only a valid --resume id", () => {
     const client = join(deploy, "bin", "vlad-chat-client");
     const r = spawnSync("bash", [client, "-p", "--resume", "bad id;x"], { input: "hi", encoding: "utf8", env: { PATH: process.env.PATH } });
     expect(r.status).toBe(64);
     const none = spawnSync("bash", [client, "-p"], { input: "hi", encoding: "utf8", env: { PATH: process.env.PATH, VLAD_CHAT_SOCKET: "/nonexistent/x.sock" } });
     expect(none.status).toBe(69);
+  });
+});
+
+describe("deploy: apt keyrings without network (review round 2 #5)", () => {
+  const have = spawnSync("gpg", ["--version"]).status === 0;
+  const lib = join(deploy, "lib", "keyring.sh");
+  const sh = (script: string, env: Record<string, string>) => spawnSync("bash", ["-c", `. ${lib}; ${script}`], { encoding: "utf8", env: { PATH: process.env.PATH, ...env } });
+  (have ? it : it.skip)("deploy: binary and armored keys both become a keyring with one primary key; fingerprint is checked", () => {
+    const d = mkdtempSync(join(tmpdir(), "keyring-"));
+    const gh = { GNUPGHOME: d };
+    spawnSync("chmod", ["700", d]);
+    const gen = spawnSync("gpg", ["--batch", "--passphrase", "", "--quick-generate-key", "test-only@example.invalid", "default", "default", "never"], { env: { PATH: process.env.PATH, ...gh }, encoding: "utf8" });
+    expect(gen.status, gen.stderr).toBe(0);
+    const fpr = spawnSync("gpg", ["--with-colons", "--list-keys"], { env: { PATH: process.env.PATH, ...gh }, encoding: "utf8" }).stdout.split("\n").find((l) => l.startsWith("fpr:"))!.split(":")[9]!;
+    spawnSync("bash", ["-c", `gpg --export > ${d}/bin.gpg; gpg --armor --export > ${d}/arm.asc`], { env: { PATH: process.env.PATH, ...gh } });
+    for (const f of ["bin.gpg", "arm.asc"]) {
+      const r = sh(`key_to_keyring ${d}/${f} ${d}/${f}.ring && keyring_problem ${d}/${f}.ring ${fpr}`, gh);
+      expect(r.status, `${f}: ${r.stderr}`).toBe(0);
+      expect(r.stdout.trim(), f).toBe("");
+      const bad = sh(`keyring_problem ${d}/${f}.ring 0000000000000000000000000000000000000000`, gh);
+      expect(bad.stdout, f).toMatch(/does not match/);
+    }
+    // two primary keys in one ring are refused
+    spawnSync("gpg", ["--batch", "--passphrase", "", "--quick-generate-key", "second@example.invalid", "default", "default", "never"], { env: { PATH: process.env.PATH, ...gh } });
+    spawnSync("bash", ["-c", `gpg --export > ${d}/two.gpg`], { env: { PATH: process.env.PATH, ...gh } });
+    expect(sh(`key_to_keyring ${d}/two.gpg ${d}/two.ring; keyring_problem ${d}/two.ring ${fpr}`, gh).stdout).toMatch(/holds 2 primary keys/);
   });
 });
 

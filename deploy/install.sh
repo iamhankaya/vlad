@@ -18,6 +18,8 @@ set -euo pipefail
 
 DRY=${VLAD_INSTALL_DRYRUN:-0}
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=lib/keyring.sh
+. "$HERE/lib/keyring.sh"
 REPO=$(cd "$HERE/.." && pwd)
 KB_DIR=${KB_DIR:-/var/lib/vlad/kb}
 VLAD_HOME_DIR=${VLAD_HOME_DIR:-/opt/vlad}
@@ -67,12 +69,10 @@ add_repo() { # add_repo <name> <key url> <list line> <expected fingerprint or em
   if [[ $DRY == 1 ]]; then printf '+ apt repo %s (key %s)\n' "$name" "$url"; return; fi
   local tmp; tmp=$(mktemp)
   curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp"
-  gpg --dearmor <"$tmp" >"$ring.new"
-  local got n
-  n=$(gpg --show-keys --with-colons "$ring.new" | awk -F: '$1=="pub"{c++} END{print c+0}')
-  got=$(gpg --show-keys --with-colons "$ring.new" | awk -F: '$1=="fpr"{print $10; exit}')
-  log "$name signing key fingerprint: $got (primary keys: $n)"
-  if [[ $n != 1 || $got != "$fpr" ]]; then rm -f "$ring.new" "$tmp"; die "$name: keyring must hold exactly one primary key with fingerprint $fpr"; fi
+  key_to_keyring "$tmp" "$ring.new"
+  local why; why=$(keyring_problem "$ring.new" "$fpr")
+  if [[ -n $why ]]; then rm -f "$ring.new" "$tmp"; die "$name: $why"; fi
+  log "$name signing key fingerprint ok: $fpr"
   mv -f "$ring.new" "$ring"; chmod 644 "$ring"; rm -f "$tmp"
   printf '%s\n' "${line//@RING@/$ring}" >"/etc/apt/sources.list.d/$name.list"
 }
@@ -200,19 +200,48 @@ run ln -sfn /opt/claude-code/bin/claude /usr/local/bin/claude
 # --- 6. chat sandbox files (F-vlad-024) ---------------------------------------------------------------------------------------
 run install -m 0755 -o root -g root "$HERE/bin/vlad-chat-turn" "$LIBEXEC/chat-turn"
 run install -m 0755 -o root -g root "$HERE/bin/vlad-chat-client" "$LIBEXEC/chat-client"
-# the chat agent's user settings and memory files: empty, root-owned, bind-mounted read-only by vlad-chat@.service (no persistent hooks/rules/instructions)
-run install -d -m 0700 -o vladchat -g vladchat /var/lib/vladchat/.claude
-for f in /var/lib/vladchat/.claude/settings.json /var/lib/vladchat/.claude/CLAUDE.md /var/lib/vladchat/CLAUDE.md; do
-  if [[ $DRY == 1 ]]; then echo "+ empty root-owned $f (0444)"; else : >"$f"; chown root:root "$f"; chmod 0444 "$f"; fi
+# No chat turn may run while root rewrites things inside vladchat's own tree (a symlink planted between check and use).
+run systemctl stop vlad-chat.socket 'vlad-chat@*.service' || true
+# vladchat's home must be a real directory owned by vladchat, not a link
+CHAT_HOME=/var/lib/vladchat
+if [[ $DRY != 1 && ( -L $CHAT_HOME || -L $CHAT_HOME/.claude ) ]]; then die "$CHAT_HOME or $CHAT_HOME/.claude is a symlink"; fi
+run install -d -m 0700 -o vladchat -g vladchat "$CHAT_HOME/.claude"
+# What the chat agent must not be able to persist (user-level settings, memory files, agents/commands/skills/rules/plugins): root-owned empty
+# placeholders, bind-mounted read-only by vlad-chat@.service. Existing content is removed without following links; no write goes through a path vladchat controls.
+root_empty_file() { # root_empty_file <path>
+  if [[ $DRY == 1 ]]; then echo "+ empty root-owned file $1 (0444)"; return; fi
+  [[ -d $1 && ! -L $1 ]] && find "$1" -mindepth 1 -delete && rmdir "$1"
+  rm -f -- "$1"                         # also removes a symlink itself, never its target
+  install -m 0444 -o root -g root /dev/null "$1"
+}
+root_empty_dir() { # root_empty_dir <path>
+  if [[ $DRY == 1 ]]; then echo "+ empty root-owned dir $1 (0555)"; return; fi
+  if [[ -L $1 || ( -e $1 && ! -d $1 ) ]]; then rm -f -- "$1"; fi
+  [[ -d $1 ]] && find "$1" -mindepth 1 -delete
+  install -d -m 0555 -o root -g root "$1"
+}
+for f in "$CHAT_HOME/CLAUDE.md" "$CHAT_HOME/CLAUDE.local.md" "$CHAT_HOME/.claude/settings.json" "$CHAT_HOME/.claude/settings.local.json" "$CHAT_HOME/.claude/CLAUDE.md"; do
+  root_empty_file "$f"
 done
-# the chat permissions come from the same function the API uses (chatPermissions), rendered once, root-owned
+for d in agents commands skills rules plugins hooks output-styles; do root_empty_dir "$CHAT_HOME/.claude/$d"; done
+# The chat permissions come from the same function the API uses (chatPermissions), rendered once into a root-owned directory that vladchat
+# can traverse (it is not in group vlad): /etc/vlad is 0750 root:vlad and must stay that way.
+CHAT_ETC=/etc/vlad-chat
+run install -d -m 0755 -o root -g root "$CHAT_ETC"
 if [[ $DRY == 1 ]]; then
-  echo "+ node $VLAD_HOME_DIR/server/scripts/gen-chat-settings.ts $KB_DIR /var/lib/vladapi $VLAD_HOME_DIR > $ETC/chat-settings.json (root:root 0644)"
+  echo "+ node $VLAD_HOME_DIR/server/scripts/gen-chat-settings.ts $KB_DIR /var/lib/vladapi $VLAD_HOME_DIR $ETC > $CHAT_ETC/chat-settings.json (root:root 0444)"
 else
   tmp=$(mktemp)
-  node "$VLAD_HOME_DIR/server/scripts/gen-chat-settings.ts" "$KB_DIR" /var/lib/vladapi "$VLAD_HOME_DIR" "$ETC" >"$tmp"
-  install -m 0644 -o root -g root "$tmp" "$ETC/chat-settings.json"; rm -f "$tmp"
+  node "$VLAD_HOME_DIR/server/scripts/gen-chat-settings.ts" "$KB_DIR" /var/lib/vladapi "$VLAD_HOME_DIR" "$ETC" "$CHAT_ETC" >"$tmp"
+  install -m 0444 -o root -g root "$tmp" "$CHAT_ETC/chat-settings.json"; rm -f "$tmp"
 fi
+# Machine-wide managed policy (highest precedence, root-owned): hooks off for every claude on this host. Note: this also applies to workers.
+run install -d -m 0755 -o root -g root /etc/claude-code
+put 0644 root:root /etc/claude-code/managed-settings.json <<'EOS'
+{
+  "disableAllHooks": true
+}
+EOS
 
 # --- 7. environment file (no secrets) ---------------------------------------------------------------------------------------------
 if [[ ! -e $ETC/vlad.env ]]; then

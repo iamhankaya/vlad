@@ -3,7 +3,7 @@
 # First line: "NEW" or "RESUME <session id>"; the rest of stdin is the prompt. Flags are fixed here; nothing from the client reaches argv but the id.
 set -euo pipefail
 
-settings=${VLAD_CHAT_SETTINGS:-/etc/vlad/chat-settings.json}
+settings=${VLAD_CHAT_SETTINGS:-/etc/vlad-chat/chat-settings.json}
 id_re='^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$'
 
 IFS= read -r -t 20 header || { echo "chat-turn: no header" >&2; exit 64; }
@@ -24,13 +24,39 @@ mapfile -t deny < <(jq -r '.permissions.deny[]' "$settings")
 jq -e '.disableAllHooks == true' "$settings" >/dev/null || { echo "chat-turn: disableAllHooks missing in settings, refusing to run" >&2; exit 78; }
 ((${#deny[@]} > 0)) || { echo "chat-turn: empty deny list, refusing to run" >&2; exit 78; }
 
+kb=${VLAD_KB_DIR:?VLAD_KB_DIR missing}
+home=${HOME:?}
+
+# Anything claude would load as instructions, rules, hooks or permissions from places other users (workers) or the agent itself can write:
+# refuse the turn instead of running with it. (The unit also masks the kb-local paths; this check is the fail-closed part.)
+refuse() { echo "chat-turn: refusing to run: $1" >&2; exit 78; }
+for d in "$kb" "$(dirname "$kb")" "$(dirname "$(dirname "$kb")")" /var /; do
+  for n in CLAUDE.md CLAUDE.local.md .claude; do
+    [[ -e $d/$n || -L $d/$n ]] && refuse "$d/$n exists (project memory/settings would be loaded)"
+  done
+done
+if [[ -e $home/.claude.json ]]; then
+  # ~/.claude.json is writable by the agent (it holds the login state, so it cannot be mounted read-only): it must not carry permission grants, servers or hooks
+  jq -e '((.allowedTools // []) | length) == 0 and ((.mcpServers // {}) | length) == 0 and ((.hooks // {}) | length) == 0
+         and (([.projects // {} | .[] | ((.allowedTools // []) | length) + ((.mcpServers // {}) | length) + ((.hooks // {}) | length)] | add // 0) == 0)' \
+    "$home/.claude.json" >/dev/null 2>&1 || refuse "$home/.claude.json carries allowedTools/mcpServers/hooks (or is unreadable)"
+fi
+for f in "$home/.claude/settings.json" "$home/.claude/settings.local.json" "$home/CLAUDE.md" "$home/.claude/CLAUDE.md"; do
+  [[ -s $f ]] && refuse "$f is not empty"
+done
+for d in agents commands skills rules plugins hooks output-styles; do
+  [[ -d $home/.claude/$d ]] && [[ -n $(ls -A "$home/.claude/$d" 2>/dev/null) ]] && refuse "$home/.claude/$d is not empty"
+done
+
 # cwd = kb (read-only mount); a clean environment, no inherited secrets
-cd "${VLAD_KB_DIR:?VLAD_KB_DIR missing}"
+cd "$kb"
 exec env -i \
   PATH=/usr/local/bin:/usr/bin:/bin \
-  HOME="${HOME:?}" \
+  HOME="$home" \
+  DISABLE_AUTOUPDATER=1 \
+  CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
   VLAD_HOME="${VLAD_HOME:?VLAD_HOME missing}" \
-  VLAD_KB_DIR="$VLAD_KB_DIR" \
+  VLAD_KB_DIR="$kb" \
   claude -p --output-format stream-json --verbose --include-partial-messages \
     --permission-mode dontAsk --setting-sources user --strict-mcp-config \
     --settings "$settings" \
