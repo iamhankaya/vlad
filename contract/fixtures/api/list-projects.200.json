@@ -1,0 +1,25 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listProjects 200"
+  },
+  "operationId": "listProjects",
+  "response": {
+    "status": 200,
+    "body": {
+      "projects": [
+        {
+          "slug": "vlad",
+          "name": "VLAD",
+          "exposure": "local",
+          "repo": "iamhankaya/vlad",
+          "open_tasks": 3,
+          "last_activity": "2026-10-25"
+        }
+      ],
+      "warnings": []
+    }
+  }
+}

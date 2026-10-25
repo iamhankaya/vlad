@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getVladHome } from "./home.js";
+import { currentMachine } from "./machine.js";
 import { validate } from "./schema.js";
 import type { Autonomy, VladConfig } from "./types.js";
 
@@ -16,8 +17,13 @@ export function defaultConfig(): VladConfig {
   };
 }
 
-/** Defaults overlaid with <home>/vlad.config.json (shallow), then validated. */
-export function loadConfig(home: string = getVladHome()): VladConfig {
+/** `cfg` with `machines.<machine>` laid over the top-level keys; unlisted machines get `cfg` unchanged. */
+export function machineOverlay(cfg: VladConfig, machine: string): VladConfig {
+  return { ...cfg, ...cfg.machines?.[machine] };
+}
+
+/** Defaults overlaid with <home>/vlad.config.json (shallow), validated, then overlaid with this machine's entry. */
+export function loadConfig(home: string = getVladHome(), machine: string = currentMachine()): VladConfig {
   const file = join(home, "vlad.config.json");
   let user: object = {};
   if (existsSync(file)) {
@@ -29,7 +35,7 @@ export function loadConfig(home: string = getVladHome()): VladConfig {
   }
   const cfg = { ...defaultConfig(), ...user } as VladConfig;
   validate("config", cfg, home);
-  return cfg;
+  return machineOverlay(cfg, machine);
 }
 
 export function autonomyFor(cfg: VladConfig, slug: string): Autonomy {

@@ -1,0 +1,11 @@
+[Unit]
+Description=VLAD kb promote, every 60 s (30 s after vlad-kbsync)
+
+[Timer]
+OnBootSec=60s
+OnUnitActiveSec=60s
+AccuracySec=1s
+Unit=vlad-kbpromote.service
+
+[Install]
+WantedBy=timers.target

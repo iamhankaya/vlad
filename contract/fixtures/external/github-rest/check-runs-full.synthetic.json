@@ -1,0 +1,38 @@
+{
+ "_fixture_header": {
+  "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+  "captured_at": "2026-10-25",
+  "command": "yok (sentetik); gerçek kayıt: gh api repos/<o>/<r>/commits/<sha>/check-runs (CI'lı repo)",
+  "description": "GET check-runs: dolu",
+  "masking": "yok gerekmedi: token yer tutucudur (ghs_EXAMPLE)"
+ },
+ "status": "HTTP/1.1 200 OK",
+ "headers": {
+  "content-type": "application/json; charset=utf-8"
+ },
+ "body": {
+  "total_count": 2,
+  "check_runs": [
+   {
+    "id": 1,
+    "name": "gate",
+    "status": "completed",
+    "conclusion": "success",
+    "app": {
+     "id": 15368,
+     "slug": "github-actions"
+    }
+   },
+   {
+    "id": 4242,
+    "name": "vlad/approved",
+    "status": "completed",
+    "conclusion": "success",
+    "app": {
+     "id": 123456,
+     "slug": "vlad-gate"
+    }
+   }
+  ]
+ }
+}

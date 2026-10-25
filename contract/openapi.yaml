@@ -1,0 +1,1406 @@
+openapi: 3.1.0
+info:
+  title: VLAD mobil API
+  version: 1.0.0
+  description: |
+    VLAD sunucusunun telefon API'si (taban yol `/v1`). Tek kaynak bu dosyadır; sunucu (S6b+), Android `:core` (S7a+) ve
+    testler buna uyar. Tasarım: `docs/plan/vlad-mobile-plan.md` ("Arayüzler", "Eşleştirme ve imza").
+
+    **İmza zarfı.** `x-vlad-auth` her ucun hangi imzayı istediğini söyler:
+    `none` imzasız, `session` zarf imzası (`session` anahtarı), `session+approval` zarf imzası ve ayrıca `approval`
+    anahtarıyla imzalı içerik (challenge ya da devir yükü). Zarf dizesi:
+    `v1\n<METHOD>\n<yol + sıralı sorgu>\n<ts_ms>\n<nonce>\n<sha256hex(ham gövde)>`; başlıklar `X-Vlad-Device`,
+    `X-Vlad-Ts`, `X-Vlad-Nonce`, `X-Vlad-Sig` (ECDSA P-256 SHA-256, DER, base64url). Kanonik sorgu, challenge ve devir
+    baytları `contract/signing-vectors.json` ile sabitlenmiştir (biçim: `contract/README.md`).
+
+    **Zarf hedefi.** Sunucu zarfı yönlendirmeden önce ham istek hedefinden (`req.raw.url`, `?` öncesi ham yol) kurar; yol
+    çözülmez ya da normalleştirilmez (`%2F`, `//`, sondaki `/` ayrı imzalı yollardır). Nonce tam 22 karakter base64url
+    (16 bayt). Sorguda yinelenen anahtar `bad_request`. İmza yalnız minimal DER + low-S kabul edilir.
+
+    **Hatalar.** Gövde her zaman `{error:{code, message_tr, details?}}`. İstemci ve CI `code` anahtarına bakar,
+    Türkçe metne değil. Eşleşmemiş/imzası geçersiz istek `401 unauthorized` alır ve gövde nedeni sızdırmaz.
+  license:
+    name: UNLICENSED
+    identifier: UNLICENSED
+servers:
+  - url: /v1
+    description: Taban yol; konak Funnel/Tailscale ayarından gelir.
+tags:
+  - name: system
+    description: Canlılık
+  - name: pairing
+    description: Cihaz eşleştirme (imzasız)
+  - name: read
+    description: Salt okunur anlık görüntüler
+  - name: write
+    description: kb'ye yazan basit eylemler
+  - name: actions
+    description: "Onay yolu (challenge ve approval imzası)"
+  - name: grants
+    description: Yetki devirleri
+  - name: devices
+    description: Cihaz yönetimi
+  - name: events
+    description: Olay defteri ve SSE
+security:
+  - signedSession: []
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      tags: [system]
+      summary: Canlılık
+      x-vlad-auth: none
+      security: []
+      responses:
+        "200":
+          description: Sunucu ayakta.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /pair:
+    post:
+      operationId: pairDevice
+      tags: [pairing]
+      summary: Eşleştirme kodu ve iki açık anahtarla cihaz kaydı
+      description: |
+        Kod `vlad-server pair` ile üretilir (8 karakter Crockford base32, 10 dk, tek kullanım). Kod 5 yanlışta yanar.
+        P-256 dışı ya da bozuk SPKI `bad_request` döner. Hatalı/yanmış kod `401 unauthorized` (neden sızdırılmaz).
+      x-vlad-auth: none
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PairRequest" }
+      responses:
+        "200":
+          description: Cihaz kaydedildi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PairResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /home:
+    get:
+      operationId: getHome
+      tags: [read]
+      summary: Bugün ekranı verisi
+      x-vlad-auth: session
+      responses:
+        "200":
+          description: Anlık görüntü. Bozuk bir kb kaydı atlanır ve `warnings[]`'a yazılır.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Home" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /cards/{id}:
+    get:
+      operationId: getCard
+      tags: [read]
+      summary: Kart ayrıntısı (kapı kartında PR, head SHA, CI, kapanış raporu)
+      x-vlad-auth: session
+      parameters:
+        - $ref: "#/components/parameters/CardId"
+      responses:
+        "200":
+          description: Kart.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Card" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /cards/{id}/answer:
+    post:
+      operationId: answerCard
+      tags: [write]
+      summary: Karta cevap yaz (`vlad card answer`)
+      description: Ikinci cevap `bad_request` (zaten cevaplandı). `action_request` kartları bu uçtan değil `/actions/*` ile çözülür.
+      x-vlad-auth: session
+      parameters:
+        - $ref: "#/components/parameters/CardId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CardAnswerRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ActiveElsewhere" }
+  /tasks/{id}:
+    get:
+      operationId: getTask
+      tags: [read]
+      summary: Görev ayrıntısı
+      x-vlad-auth: session
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      responses:
+        "200":
+          description: Görev.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Task" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /tasks/{id}/request-changes:
+    post:
+      operationId: requestTaskChanges
+      tags: [write]
+      summary: Onay bekleyen görev için değişiklik iste
+      x-vlad-auth: session
+      parameters:
+        - $ref: "#/components/parameters/TaskId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RequestChangesRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ActiveElsewhere" }
+  /pipelines:
+    get:
+      operationId: listPipelines
+      tags: [read]
+      summary: Pipeline ağaçları
+      x-vlad-auth: session
+      responses:
+        "200":
+          description: Çatı görevler ve faz ağaçları.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PipelineList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [read]
+      summary: Proje kartları
+      x-vlad-auth: session
+      responses:
+        "200":
+          description: Projeler.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /projects/{slug}:
+    get:
+      operationId: getProject
+      tags: [read]
+      summary: Proje kartı ayrıntısı
+      x-vlad-auth: session
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string, pattern: "^[a-z0-9-]+$" }
+      responses:
+        "200":
+          description: Proje.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /findings:
+    get:
+      operationId: listFindings
+      tags: [read]
+      summary: Bulgular
+      x-vlad-auth: session
+      parameters:
+        - name: project
+          in: query
+          schema: { type: string, pattern: "^[a-z0-9-]+$" }
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, deferred, fixed, wontfix] }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [kritik, yüksek, orta, düşük, bilgi] }
+      responses:
+        "200":
+          description: Bulgular.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FindingList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /vault/search:
+    get:
+      operationId: searchVault
+      tags: [read]
+      summary: Hafıza araması (`vlad vault search`)
+      x-vlad-auth: session
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: zone
+          in: query
+          schema: { type: string, enum: [kb, docs] }
+      responses:
+        "200":
+          description: Vuruşlar skor sırasıyla.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VaultSearchResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /vault/file:
+    get:
+      operationId: readVaultFile
+      tags: [read]
+      summary: Hafıza dosyası (`vlad vault read`)
+      description: Yol izin listesinde olmalı (`kb/` hariç inbox ve logs, `vault/docs/`); aksi `bad_request`.
+      x-vlad-auth: session
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 300 }
+      responses:
+        "200":
+          description: Dosya içeriği ve başlıklar.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VaultFile" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /chat:
+    post:
+      operationId: postChat
+      tags: [write]
+      summary: Kalıcı VLAD oturumuna mesaj gönder
+      description: Cevap SSE ile akar (`chat.delta`, `chat.done`). `client_msg_id` tekildir; yinelenen aynı `chat_id` döner.
+      x-vlad-auth: session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChatRequest" }
+      responses:
+        "202":
+          description: Kuyruğa alındı.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatAccepted" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/ActiveElsewhere" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503": { $ref: "#/components/responses/QuotaHold" }
+  /chat/history:
+    get:
+      operationId: getChatHistory
+      tags: [read]
+      summary: Sohbet geçmişi
+      x-vlad-auth: session
+      parameters:
+        - name: before
+          in: query
+          description: Bu `chat_id`'den eski mesajlar.
+          schema: { type: string, minLength: 1, maxLength: 64 }
+      responses:
+        "200":
+          description: En yeniden eskiye en çok 50 mesaj.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChatHistory" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /actions/prepare:
+    post:
+      operationId: prepareAction
+      tags: [actions]
+      summary: Onay eylemini hazırla; challenge üret
+      description: |
+        Sunucu PR'ı canlı okur ve challenge'ı 60 sn saklar. İstemci kartı yalnız dönen `fields` alanından çizer,
+        `bytes_b64` baytlarını `approval` anahtarıyla imzalar. Baytlar `contract/signing-vectors.json`'daki
+        `challenge` biçimindedir.
+      x-vlad-auth: session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PrepareRequest" }
+      responses:
+        "200":
+          description: Challenge.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Challenge" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409": { $ref: "#/components/responses/ActionConflict" }
+        "422": { $ref: "#/components/responses/CiNotGreen" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /actions/{id}/approve:
+    post:
+      operationId: approveAction
+      tags: [actions]
+      summary: Challenge'ı `approval` imzasıyla onayla ve yürüt
+      description: |
+        İmza challenge baytları üzerinde `approval` anahtarıyla atılır (session anahtarı reddedilir). Sunucu sırayla:
+        cihaz iptal değil, zarf, challenge süresi/nonce, imza, PR açık, head SHA ve taban eşit, CI yeşil, mergeable.
+        Biri tutmazsa yazan çağrı yapılmaz. Aynı challenge'a ikinci onay tek merge üretir.
+      x-vlad-auth: session+approval
+      parameters:
+        - $ref: "#/components/parameters/ActionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ApproveRequest" }
+      responses:
+        "200":
+          description: Yürütüldü.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApproveResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/ActionConflict" }
+        "410": { $ref: "#/components/responses/Expired" }
+        "422": { $ref: "#/components/responses/CiNotGreen" }
+  /actions/{id}/reject:
+    post:
+      operationId: rejectAction
+      tags: [actions]
+      summary: Challenge'ı reddet
+      x-vlad-auth: session
+      parameters:
+        - $ref: "#/components/parameters/ActionId"
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /grants:
+    get:
+      operationId: listGrants
+      tags: [grants]
+      summary: Yetki devirleri
+      x-vlad-auth: session
+      responses:
+        "200":
+          description: Devirler (iptal ve süresi dolanlar işaretli).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GrantList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      operationId: createGrant
+      tags: [grants]
+      summary: Yetki devri oluştur (telefondan, `approval` imzalı)
+      description: |
+        Yalnız `merge_phase` ve `merge_final` devredilebilir (kullanıcı kararı: `merge_final` devredilebilir).
+        `created` sunucu saatinden en çok 5 dk ayrık olmalı (eski bir imzalı istek yeniden oynatılamaz); aynı `id` ya da imza ikinci kez kabul edilmez.
+        Devir sunucu defterine (`grants.json`) yazılır, `kb/grants/` yalnız yansımadır ve kb'deki bir dosya devir sayılmaz.
+        `tag_release`, `publish`, `delete`, `security`, `scope_change` şemada enum dışıdır ve ayrıca kodda
+        `not_delegable` ile reddedilir. `signature`, `approval` anahtarıyla `grantSigningPayload()` baytları
+        (`src/grants/store.ts`; vektör: `signing-vectors.json` `grant`, v2 vektörleri `grant-v2-*`) üzerindedir. `payload_version` `v2`:
+        imza `project` ve `repo` alanlarını da kapsar (v1 yalnız eski vektörlerde kalır, sunucu kabul etmez). Süre en çok 30 gün.
+      x-vlad-auth: session+approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GrantCreateRequest" }
+      responses:
+        "200":
+          description: Devir kaydedildi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GrantCreated" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: 'Devir kimliği ya da imzası daha önce kullanılmış (`bad_request`; `details.reason`: `id_taken`, `signature_reused`, `too_many_grants`).'
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422": { $ref: "#/components/responses/NotDelegable" }
+        "503":
+          description: 'kb''ye yazılamadı (`bad_request`; `details.reason`: `kb_unavailable`); devir kaydedilmedi.'
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /grants/{id}:
+    delete:
+      operationId: revokeGrant
+      tags: [grants]
+      summary: Devri iptal et (yalnız azaltır; kalıcı, sunucu defterinde)
+      x-vlad-auth: session
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/GrantId" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /active/takeover:
+    post:
+      operationId: takeoverActive
+      tags: [write]
+      summary: Etkin VLAD'ı bu sunucuya devral (`approval` imzalı; senkron, devral, senkron, promote; sonuç main'deki active.md'ye göre)
+      description: |
+        `signature`, `approval` anahtarıyla `vlad-takeover/v1\nsigner=<X-Vlad-Device>\nts=<ts_ms>` baytları üzerindedir.
+        Kurallar: `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts_ms)` tek kullanım; ihlal `401 unauthorized` (vektör: `signing-vectors.json` `takeover`).
+      x-vlad-auth: session+approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TakeoverRequest" }
+      responses:
+        "200":
+          description: Devralındı ve main'e indi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TakeoverResponse" }
+        "202":
+          description: Devralma yazıldı ama main'e henüz inmedi (`reason` neden); sonraki promote'ta `active` ya da `lost` olur.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TakeoverResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "409":
+          description: Etkin VLAD başka makinede (`active_elsewhere`), devralmadan önceki senkronda kb çakışması var (`kb_conflict`) ya da başka bir devralma sürüyor (`takeover_in_progress`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: kb senkronu yanıt vermedi (`kb_sync_unavailable`); devralma yapılmadı.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /devices:
+    get:
+      operationId: listDevices
+      tags: [devices]
+      summary: Eşleşmiş cihazlar
+      x-vlad-auth: session
+      responses:
+        "200":
+          description: Cihazlar.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /devices/me/fcm:
+    put:
+      operationId: putDeviceFcm
+      tags: [devices]
+      summary: Çağıran cihazın FCM jetonunu güncelle
+      description: Yalnız çağıran cihazın kaydını değiştirir.
+      x-vlad-auth: session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FcmRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /devices/{id}/revoke:
+    post:
+      operationId: revokeDevice
+      tags: [devices]
+      summary: Cihazı iptal et (`approval` imzalı)
+      description: |
+        İptal edilen cihazın açık SSE'leri kapanır, bekleyen challenge'ları geçersiz olur, imzaladığı devirler geçersiz
+        sayılır. `signature`, `approval` anahtarıyla `vlad-revoke/v1\ndevice=<hedef>\nsigner=<X-Vlad-Device>\nts=<ts_ms>`
+        baytları üzerindedir. Kurallar: `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts_ms)` tek kullanım; ihlal `401 unauthorized`
+        (vektör: `signing-vectors.json` `revoke`).
+      x-vlad-auth: session+approval
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/DeviceId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RevokeDeviceRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Ok" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /events:
+    get:
+      operationId: listEvents
+      tags: [events]
+      summary: Olay defterini yokla
+      description: '`after` negatif ya da çok büyükse, `limit` 1..500 dışındaysa `bad_request`.'
+      x-vlad-auth: session
+      parameters:
+        - name: after
+          in: query
+          schema: { type: integer, minimum: 0, maximum: 9007199254740991, default: 0 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: Olaylar `seq` sırasıyla.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EventList" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /stream:
+    get:
+      operationId: streamEvents
+      tags: [events]
+      summary: SSE akışı
+      description: |
+        `text/event-stream`. Her olay `id: <seq>`, `event: <type>`, `data: <Event JSON>`; 20 sn'de bir `: keepalive`
+        yorum satırı. `Last-Event-ID` ile kaldığı yerden sürer. Olay yalnız geçersiz kılma ipucudur: istemci
+        `GET /home` ile yeniler. Funnel SSE taşımazsa istemci `/events` yoklamasına düşer.
+      x-vlad-auth: session
+      parameters:
+        - name: Last-Event-ID
+          in: header
+          schema: { type: string, pattern: "^[0-9]{1,16}$" }
+      responses:
+        "200":
+          description: Olay akışı.
+          content:
+            text/event-stream:
+              schema: { type: string }
+              x-vlad-sse-event-types: [card.opened, task.state, worker.progress, chat.delta, chat.done, action.executed, grant.used, quota.changed]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+components:
+  securitySchemes:
+    signedSession:
+      type: apiKey
+      in: header
+      name: X-Vlad-Sig
+      description: |
+        Zarf imzası; birlikte `X-Vlad-Device`, `X-Vlad-Ts` (ms), `X-Vlad-Nonce` (base64url) gönderilir. Pencere ±120 sn
+        (±120 dahil kabul, ±121 red), nonce 5 dk içinde yeniden kullanılamaz, gövde en çok 1 MB.
+  parameters:
+    CardId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/CardId" }
+    TaskId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/TaskId" }
+    ActionId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/ActionId" }
+  responses:
+    Ok:
+      description: Tamam.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/OkResponse" }
+    BadRequest:
+      description: Geçersiz istek (`bad_request`, `not_delegable`, `grant_invalid` ya da başka hata kodu).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Eşleşmemiş, imzası geçersiz ya da iptal edilmiş cihaz; gövde nedeni sızdırmaz (`unauthorized` | `device_revoked`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Kayıt yok (`bad_request`, `details.reason = not_found`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    RateLimited:
+      description: Hız sınırı (`rate_limited`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ActiveElsewhere:
+      description: Etkin VLAD başka makinede (`active_elsewhere`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    QuotaHold:
+      description: Abonelik kotası dolu (`quota_hold`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ActionConflict:
+      description: |
+        Eylem uygulanamaz. `error.code` yalnız şunlardan biri, ayrıntı `details.reason`:
+        `head_moved` (`head_moved`); `not_mergeable` (`pr_not_found`, `pr_merged`, `pr_closed`, `draft`, `conflict`, `blocked`, `behind`,
+        `mergeable_unknown`, `repo_not_registered`, `kind_base_mismatch`, `base_mismatch`, `fork_or_foreign_repo`, `head_ref_mismatch`,
+        `github_refused`, `merged_by_other`, `state_*`); `bad_request` (görev/kart durumu: `task_changed`, `task_not_awaiting_approval`,
+        `task_has_no_pr`, `project_has_no_repo`, `kind_mismatch`, `unrepresentable_field`; sonlanmış eylem: `action_failed` + `cause`).
+        `github_unavailable` / `bookkeeping_failed` 502/503 döner ve eylemi bitirmez (aynı imza yeniden denenebilir).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    CiNotGreen:
+      description: CI yeşil değil (`ci_not_green`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Expired:
+      description: Challenge süresi doldu ya da iptal edildi (`expired`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotDelegable:
+      description: Eylem devredilemez (`not_delegable`) ya da devir imzası/biçimi geçersiz (`grant_invalid`).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    ErrorCode:
+      type: string
+      description: Hata kodu anahtarı; istemci ve CI yalnız buna bakar.
+      enum: [unauthorized, expired, head_moved, ci_not_green, not_mergeable, not_delegable, grant_invalid, device_revoked, bad_request, rate_limited, quota_hold, active_elsewhere, kb_conflict, takeover_in_progress, kb_sync_unavailable]
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message_tr]
+          properties:
+            code: { $ref: "#/components/schemas/ErrorCode" }
+            message_tr: { type: string, minLength: 1, maxLength: 500 }
+            details:
+              type: object
+              description: Makine okunur ek bilgi (ör. `reason`, `field`); serbest biçim.
+              additionalProperties: true
+    OkResponse:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok: { type: boolean, const: true }
+    Health:
+      type: object
+      additionalProperties: false
+      required: [ok, version]
+      properties:
+        ok: { type: boolean, const: true }
+        version: { type: string, minLength: 1, maxLength: 40 }
+    Timestamp:
+      type: string
+      format: date-time
+    CardId:
+      type: string
+      description: Kb kartı `C-YYYYMMDD-NN` ya da görevden türetilen kapı kartı `gate-<görev id>` (depolanmaz).
+      pattern: "^(C-[0-9]{8}-[0-9]{2,}|gate-T[0-9]{8}-[0-9]{2,})$"
+    TaskId:
+      type: string
+      pattern: "^T[0-9]{8}-[0-9]{2,}$"
+    ActionId:
+      type: string
+      pattern: "^A-[A-Za-z0-9_-]{1,64}$"
+    GrantId:
+      type: string
+      pattern: "^G-([0-9]{3}|[1-9][0-9]{3,})$"
+    DeviceId:
+      type: string
+      pattern: "^[A-Za-z0-9._-]{1,64}$"
+    B64Url:
+      type: string
+      pattern: "^[A-Za-z0-9_-]+$"
+    ProjectSlug:
+      type: string
+      pattern: "^[a-z0-9-]+$"
+    RepoName:
+      type: string
+      pattern: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"
+    HeadSha:
+      type: string
+      pattern: "^[0-9a-f]{40}$"
+    PairRequest:
+      type: object
+      additionalProperties: false
+      required: [code, device_name, session_pub, approval_pub]
+      properties:
+        code:
+          type: string
+          description: Crockford base32, 8 karakter (büyük/küçük harf fark etmez; sunucu normalize eder).
+          pattern: "^[0-9A-Za-z]{8}$"
+        device_name: { type: string, minLength: 1, maxLength: 64 }
+        session_pub:
+          description: '`session` anahtarının SPKI DER açık anahtarı (P-256), base64url.'
+          allOf: [{ $ref: "#/components/schemas/B64Url" }]
+          minLength: 122
+          maxLength: 122
+        approval_pub:
+          description: '`approval` anahtarının SPKI DER açık anahtarı (P-256), base64url.'
+          allOf: [{ $ref: "#/components/schemas/B64Url" }]
+          minLength: 122
+          maxLength: 122
+        fcm_token: { type: string, minLength: 1, maxLength: 4096 }
+    PairResponse:
+      type: object
+      additionalProperties: false
+      required: [device_id, server_time]
+      properties:
+        device_id: { $ref: "#/components/schemas/DeviceId" }
+        server_time:
+          type: integer
+          description: Sunucu saati, unix ms (istemci saat farkını kestirir).
+          minimum: 0
+    Worker:
+      type: object
+      additionalProperties: false
+      required: [task_id, project, title, state, host, progress, updated]
+      properties:
+        task_id: { $ref: "#/components/schemas/TaskId" }
+        project: { $ref: "#/components/schemas/ProjectSlug" }
+        title: { type: string }
+        phase: { type: [string, "null"] }
+        state: { $ref: "#/components/schemas/TaskState" }
+        host: { type: [string, "null"] }
+        progress: { $ref: "#/components/schemas/Progress" }
+        updated: { $ref: "#/components/schemas/Timestamp" }
+    TaskState:
+      type: string
+      enum: [queued, running, blocked, stalled, awaiting_approval, done, failed, cancelled]
+    Progress:
+      type: [object, "null"]
+      additionalProperties: false
+      required: [pct, label, at]
+      properties:
+        pct: { type: [integer, "null"], minimum: 0, maximum: 100 }
+        label: { type: string }
+        at: { $ref: "#/components/schemas/Timestamp" }
+    PullRequestRef:
+      type: [object, "null"]
+      additionalProperties: false
+      required: [number, repo, base]
+      properties:
+        number: { type: integer, minimum: 1 }
+        repo: { $ref: "#/components/schemas/RepoName" }
+        base: { type: string, minLength: 1 }
+        url: { type: string, minLength: 1 }
+    Quota:
+      type: object
+      additionalProperties: false
+      required: [limited]
+      properties:
+        limited: { type: boolean }
+        until: { $ref: "#/components/schemas/Timestamp" }
+    TakeoverRequest:
+      type: object
+      description: |
+        İmzalayan cihaz `X-Vlad-Device` başlığıdır (gövdede yoktur). Sunucu kuralları: `ts_ms` == `X-Vlad-Ts`, pencere
+        ±120 sn, `(signer, ts_ms)` tek kullanım, imza `approval` anahtarıyla `vlad-takeover/v1` baytları üzerinde.
+      additionalProperties: false
+      required: [ts_ms, signature]
+      properties:
+        ts_ms: { type: integer, minimum: 0 }
+        signature: { $ref: "#/components/schemas/B64Url" }
+    TakeoverResponse:
+      type: object
+      additionalProperties: false
+      required: [ok, state]
+      properties:
+        ok: { type: boolean, const: true }
+        state: { type: string, enum: [active, pending] }
+        reason:
+          type: string
+          description: "`pending` iken neden (ör. `main_moved`, `merge_conflict`, `rejected`, `active_elsewhere`, `kb_sync_unavailable`)."
+    ActiveVlad:
+      type: object
+      additionalProperties: false
+      required: [machine, since, heartbeat, mine]
+      properties:
+        machine: { type: string }
+        since: { $ref: "#/components/schemas/Timestamp" }
+        heartbeat: { $ref: "#/components/schemas/Timestamp" }
+        mine:
+          type: boolean
+          description: Etkin VLAD bu sunucu mu.
+        takeover:
+          type: object
+          additionalProperties: false
+          required: [state, at]
+          description: Son devralma isteğinin durumu (sunucu durumundan).
+          properties:
+            state: { type: string, enum: [active, pending, lost] }
+            reason: { type: string }
+            at: { $ref: "#/components/schemas/Timestamp" }
+        kb_sync:
+          type: object
+          additionalProperties: false
+          required: [state, last_ok]
+          description: Sunucu kb'sinin main'e akışı. `blocked`, promote'un bir farkı reddettiği kalıcı durumdur (kart kapatılsa da görünür).
+          properties:
+            state: { type: string, enum: [ok, conflict, blocked, stale] }
+            last_ok:
+              oneOf:
+                - { $ref: "#/components/schemas/Timestamp" }
+                - { type: "null" }
+            card: { $ref: "#/components/schemas/CardId" }
+    Home:
+      type: object
+      additionalProperties: false
+      required: [seq, asks, workers, quota, active_vlad, warnings]
+      properties:
+        seq:
+          type: integer
+          minimum: 0
+          description: Bu görüntünün olay defteri sırası; SSE `Last-Event-ID` için başlangıç.
+        asks:
+          type: array
+          description: Senden beklenenler (açık kartlar + onay bekleyen kapı kartları).
+          items: { $ref: "#/components/schemas/Card" }
+        workers:
+          type: array
+          items: { $ref: "#/components/schemas/Worker" }
+        quota: { $ref: "#/components/schemas/Quota" }
+        active_vlad: { $ref: "#/components/schemas/ActiveVlad" }
+        warnings:
+          type: array
+          description: "Atlanan bozuk kb kayıtları (<dosya>: <neden>)."
+          items: { type: string }
+    CardKind:
+      type: string
+      enum: [ci_red, conflict, vlad_question, action_request, kb_conflict, gate]
+      description: '`gate` görevden türetilir (depolanmaz); diğerleri `kb/cards` kayıt türleridir.'
+    CardOption:
+      type: object
+      additionalProperties: false
+      required: [id, label]
+      properties:
+        id: { type: string, pattern: "^[A-Za-z0-9._-]{1,40}$" }
+        label: { type: string, minLength: 1, maxLength: 80 }
+    CardAnswer:
+      type: [object, "null"]
+      additionalProperties: false
+      required: [by_device, at]
+      properties:
+        option: { type: string, maxLength: 40 }
+        text: { type: string, minLength: 1, maxLength: 2000 }
+        by_device: { type: string, pattern: "^[A-Za-z0-9._:-]{1,64}$" }
+        at: { $ref: "#/components/schemas/Timestamp" }
+    CardAction:
+      type: object
+      additionalProperties: false
+      required: [kind, repo, sha]
+      properties:
+        kind: { type: string, enum: [merge_phase, merge_final, push, tag] }
+        repo: { $ref: "#/components/schemas/RepoName" }
+        pr: { type: integer, minimum: 1 }
+        base: { type: string, minLength: 1, maxLength: 200 }
+        ref: { type: string, minLength: 1, maxLength: 200 }
+        sha: { $ref: "#/components/schemas/HeadSha" }
+    CiState:
+      type: string
+      enum: [green, red, pending, none]
+    GateInfo:
+      type: object
+      description: Yalnız `kind=gate` kartında. Canlı PR görüntüsü; onay yolunda sunucu yine canlı okur.
+      additionalProperties: false
+      required: [task_id, pr, head_sha, ci, mergeable, report_md, reviews]
+      properties:
+        task_id: { $ref: "#/components/schemas/TaskId" }
+        phase: { type: [string, "null"] }
+        pr: { $ref: "#/components/schemas/PullRequestRef" }
+        head_sha: { $ref: "#/components/schemas/HeadSha" }
+        ci: { $ref: "#/components/schemas/CiState" }
+        mergeable: { type: [boolean, "null"] }
+        report_md:
+          type: string
+          description: Çalışanın kapanış raporu (Markdown).
+        merge_kind:
+          type: string
+          enum: [merge_phase, merge_final]
+        reviews:
+          type: array
+          description: Gelecekteki inceleme kancası (Codex vb.); ilk sürümde boş.
+          items:
+            type: object
+            additionalProperties: false
+            required: [source, verdict]
+            properties:
+              source: { type: string }
+              verdict: { type: string, enum: [clear, findings, unknown] }
+              summary: { type: string }
+    Card:
+      type: object
+      additionalProperties: false
+      required: [id, kind, project, task, state, title, options, answer, created, updated]
+      properties:
+        id: { $ref: "#/components/schemas/CardId" }
+        kind: { $ref: "#/components/schemas/CardKind" }
+        project: { $ref: "#/components/schemas/ProjectSlug" }
+        task:
+          oneOf:
+            - { $ref: "#/components/schemas/TaskId" }
+            - { type: "null" }
+        state: { type: string, enum: [open, resolved, dismissed] }
+        title: { type: string, minLength: 1, maxLength: 200 }
+        options:
+          type: array
+          maxItems: 8
+          items: { $ref: "#/components/schemas/CardOption" }
+        answer: { $ref: "#/components/schemas/CardAnswer" }
+        action: { $ref: "#/components/schemas/CardAction" }
+        gate: { $ref: "#/components/schemas/GateInfo" }
+        kb_conflict: { $ref: "#/components/schemas/KbConflict" }
+        created: { $ref: "#/components/schemas/Timestamp" }
+        updated: { $ref: "#/components/schemas/Timestamp" }
+    KbConflict:
+      type: object
+      additionalProperties: false
+      required: [key, reason, source, head, base, paths]
+      description: "Yalnız `kb_conflict` türündeki kartlarda. `key` aynı çakışmanın aynı kartı bulmasını sağlar; seçenekler sabittir."
+      properties:
+        key: { type: string, pattern: "^[0-9a-f]{64}$" }
+        reason: { type: string, enum: [merge_conflict, rejected] }
+        source: { type: string, enum: [kbsync, promote] }
+        head: { type: string, pattern: "^[0-9a-f]{40}$" }
+        base: { type: string, pattern: "^[0-9a-f]{40}$" }
+        paths:
+          type: array
+          maxItems: 50
+          items: { type: string, maxLength: 200 }
+        rules:
+          type: array
+          items: { type: string, enum: [path_not_allowed, dot_entry, bad_segment, windows_reserved, case_collision, path_too_long, bad_extension, symlink, submodule, mode, rename, delete_not_allowed, too_large, too_many_parents, sensitive_field] }
+    CardAnswerRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        option: { type: string, pattern: "^[A-Za-z0-9._-]{1,40}$" }
+        text: { type: string, minLength: 1, maxLength: 2000 }
+    RequestChangesRequest:
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text: { type: string, minLength: 1, maxLength: 2000 }
+    Task:
+      type: object
+      additionalProperties: false
+      required: [id, project, title, kind, state, autonomy, created, updated]
+      properties:
+        id: { $ref: "#/components/schemas/TaskId" }
+        project: { $ref: "#/components/schemas/ProjectSlug" }
+        title: { type: string }
+        kind: { type: string, enum: [dev, research, pipeline] }
+        state: { $ref: "#/components/schemas/TaskState" }
+        autonomy: { type: string, enum: [plan, commit, pr] }
+        role: { type: [string, "null"] }
+        parent:
+          oneOf:
+            - { $ref: "#/components/schemas/TaskId" }
+            - { type: "null" }
+        depends_on:
+          type: array
+          items: { $ref: "#/components/schemas/TaskId" }
+        phase: { type: [string, "null"] }
+        host: { type: [string, "null"] }
+        progress: { $ref: "#/components/schemas/Progress" }
+        pr: { $ref: "#/components/schemas/PullRequestRef" }
+        error: { type: [string, "null"] }
+        report_md:
+          type: [string, "null"]
+          description: Kapanış raporu, varsa.
+        created: { $ref: "#/components/schemas/Timestamp" }
+        updated: { $ref: "#/components/schemas/Timestamp" }
+    PipelineNode:
+      type: object
+      additionalProperties: false
+      required: [task_id, title, state, phase, role, depends_on]
+      properties:
+        task_id: { $ref: "#/components/schemas/TaskId" }
+        title: { type: string }
+        state: { $ref: "#/components/schemas/TaskState" }
+        phase: { type: [string, "null"] }
+        role: { type: [string, "null"] }
+        depends_on:
+          type: array
+          items: { $ref: "#/components/schemas/TaskId" }
+        progress: { $ref: "#/components/schemas/Progress" }
+    Pipeline:
+      type: object
+      additionalProperties: false
+      required: [task_id, project, title, state, phases]
+      properties:
+        task_id: { $ref: "#/components/schemas/TaskId" }
+        project: { $ref: "#/components/schemas/ProjectSlug" }
+        title: { type: string }
+        state: { $ref: "#/components/schemas/TaskState" }
+        phases:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineNode" }
+    PipelineList:
+      type: object
+      additionalProperties: false
+      required: [pipelines, warnings]
+      properties:
+        pipelines:
+          type: array
+          items: { $ref: "#/components/schemas/Pipeline" }
+        warnings:
+          type: array
+          items: { type: string }
+    ProjectSummary:
+      type: object
+      additionalProperties: false
+      required: [slug, name, exposure, open_tasks]
+      properties:
+        slug: { $ref: "#/components/schemas/ProjectSlug" }
+        name: { type: string }
+        exposure: { type: string, enum: [local, internet, none] }
+        repo:
+          oneOf:
+            - { $ref: "#/components/schemas/RepoName" }
+            - { type: "null" }
+        open_tasks: { type: integer, minimum: 0 }
+        last_activity: { type: [string, "null"] }
+    Project:
+      type: object
+      additionalProperties: false
+      required: [slug, name, exposure, open_tasks, card_md]
+      properties:
+        slug: { $ref: "#/components/schemas/ProjectSlug" }
+        name: { type: string }
+        exposure: { type: string, enum: [local, internet, none] }
+        repo:
+          oneOf:
+            - { $ref: "#/components/schemas/RepoName" }
+            - { type: "null" }
+        open_tasks: { type: integer, minimum: 0 }
+        last_activity: { type: [string, "null"] }
+        card_md:
+          type: string
+          description: Proje kartı gövdesi (Markdown).
+    ProjectList:
+      type: object
+      additionalProperties: false
+      required: [projects, warnings]
+      properties:
+        projects:
+          type: array
+          items: { $ref: "#/components/schemas/ProjectSummary" }
+        warnings:
+          type: array
+          items: { type: string }
+    Finding:
+      type: object
+      additionalProperties: false
+      required: [id, project, severity, status, title]
+      properties:
+        id: { type: string, pattern: "^F-[a-z0-9-]+-[0-9]{3,}$" }
+        project: { $ref: "#/components/schemas/ProjectSlug" }
+        severity: { type: string, enum: [kritik, yüksek, orta, düşük, bilgi] }
+        status: { type: string, enum: [open, deferred, fixed, wontfix] }
+        title: { type: string }
+        detail: { type: string }
+    FindingList:
+      type: object
+      additionalProperties: false
+      required: [findings, warnings]
+      properties:
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/Finding" }
+        warnings:
+          type: array
+          items: { type: string }
+    VaultHit:
+      type: object
+      additionalProperties: false
+      required: [path, score, snippet]
+      properties:
+        path: { type: string }
+        score: { type: number }
+        snippet: { type: string }
+        heading: { type: string }
+    VaultSearchResponse:
+      type: object
+      additionalProperties: false
+      required: [hits]
+      properties:
+        hits:
+          type: array
+          items: { $ref: "#/components/schemas/VaultHit" }
+    VaultFile:
+      type: object
+      additionalProperties: false
+      required: [path, content, headings]
+      properties:
+        path: { type: string }
+        content: { type: string }
+        headings:
+          type: array
+          items: { type: string }
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [client_msg_id, text]
+      properties:
+        client_msg_id: { type: string, pattern: "^[A-Za-z0-9._-]{1,64}$" }
+        text: { type: string, minLength: 1, maxLength: 4000 }
+    ChatAccepted:
+      type: object
+      additionalProperties: false
+      required: [chat_id]
+      properties:
+        chat_id: { type: string, minLength: 1, maxLength: 64 }
+    ChatMessage:
+      type: object
+      additionalProperties: false
+      required: [chat_id, role, text, at]
+      properties:
+        chat_id: { type: string, minLength: 1, maxLength: 64 }
+        role: { type: string, enum: [user, assistant] }
+        text: { type: string }
+        at: { $ref: "#/components/schemas/Timestamp" }
+    ChatHistory:
+      type: object
+      additionalProperties: false
+      required: [messages, has_more]
+      properties:
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ChatMessage" }
+        has_more: { type: boolean }
+    ActionKind:
+      type: string
+      description: Telefondan onaylanabilir eylemler. `tag_release` yalnız cihaz onayıyla yürür, devredilemez.
+      enum: [merge_phase, merge_final, tag_release]
+    PrepareRequest:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/ActionKind" }
+        task_id: { $ref: "#/components/schemas/TaskId" }
+        card_id: { $ref: "#/components/schemas/CardId" }
+        params:
+          type: object
+          additionalProperties: { type: string, maxLength: 200 }
+    ChallengeFields:
+      type: object
+      description: Challenge baytlarının alanları, bayt dizisindeki sırayla aynı anahtarlar. Kart yalnız buradan çizilir.
+      additionalProperties: false
+      required: [action_id, kind, repo, pr, base, head_sha, task, nonce, exp]
+      properties:
+        action_id: { $ref: "#/components/schemas/ActionId" }
+        kind: { type: string, pattern: "^[a-z_]{1,32}$" }
+        repo: { $ref: "#/components/schemas/RepoName" }
+        pr: { type: string, pattern: "^[1-9][0-9]{0,9}$" }
+        base: { type: string, pattern: "^[A-Za-z0-9._/-]{1,200}$" }
+        head_sha: { $ref: "#/components/schemas/HeadSha" }
+        task: { $ref: "#/components/schemas/TaskId" }
+        nonce: { type: string, pattern: "^[A-Za-z0-9_-]{22}$" }
+        exp: { type: string, pattern: "^[1-9][0-9]{0,11}$" }
+    Challenge:
+      type: object
+      additionalProperties: false
+      required: [action_id, bytes_b64, fields, exp]
+      properties:
+        action_id: { $ref: "#/components/schemas/ActionId" }
+        bytes_b64:
+          type: string
+          description: İmzalanacak baytlar (`vlad-approve/v1\n...`), base64 (standart alfabe, dolgulu).
+          pattern: "^[A-Za-z0-9+/]+={0,2}$"
+        fields: { $ref: "#/components/schemas/ChallengeFields" }
+        exp:
+          type: integer
+          description: Unix saniye; `now >= exp` reddedilir.
+    ApproveRequest:
+      type: object
+      description: Onaylayan cihaz yalnız `X-Vlad-Device` başlığından bilinir (gövdede cihaz kimliği yoktur).
+      additionalProperties: false
+      required: [signature]
+      properties:
+        signature:
+          description: '`approval` anahtarıyla challenge baytları üzerinde ECDSA P-256 SHA-256 DER (minimal, low-S), base64url.'
+          allOf: [{ $ref: "#/components/schemas/B64Url" }]
+    ApproveResult:
+      type: object
+      additionalProperties: false
+      required: [kind, repo, pr, head_sha]
+      properties:
+        kind: { type: string }
+        repo: { $ref: "#/components/schemas/RepoName" }
+        pr: { type: integer, minimum: 1 }
+        head_sha: { $ref: "#/components/schemas/HeadSha" }
+        merge_sha: { $ref: "#/components/schemas/HeadSha" }
+    ApproveResponse:
+      type: object
+      additionalProperties: false
+      required: [status, result]
+      properties:
+        status: { type: string, const: executed }
+        result: { $ref: "#/components/schemas/ApproveResult" }
+    GrantScope:
+      type: object
+      additionalProperties: false
+      required: [type, ref]
+      properties:
+        type: { type: string, enum: [project, pipeline] }
+        ref: { type: string, pattern: "^[A-Za-z0-9._-]+$" }
+    GrantProject:
+      type: string
+      description: Proje kartı slug'ı. İmzalıdır (payload v2); kullanım anında görevin projesi buna tam eşit olmalı.
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+    GrantRepo:
+      type: string
+      description: Proje kartında kayıtlı repo (`o/r`). İmzalıdır (payload v2); kullanım anında kartın repo'su buna tam eşit olmalı.
+      pattern: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"
+    GrantAction:
+      type: string
+      description: Devredilebilir eylemler (kullanıcı kararı). Başkası enum dışıdır.
+      enum: [merge_phase, merge_final]
+    GrantCondition:
+      type: string
+      enum: [ci_green, no_severe_findings, codex_clear]
+    GrantCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [id, scope, project, repo, action, conditions, created, expires, max_uses, signature, payload_version]
+      properties:
+        id: { $ref: "#/components/schemas/GrantId" }
+        scope: { $ref: "#/components/schemas/GrantScope" }
+        project: { $ref: "#/components/schemas/GrantProject" }
+        repo: { $ref: "#/components/schemas/GrantRepo" }
+        action: { $ref: "#/components/schemas/GrantAction" }
+        conditions:
+          type: array
+          uniqueItems: true
+          contains: { const: ci_green }
+          items: { $ref: "#/components/schemas/GrantCondition" }
+        created: { $ref: "#/components/schemas/Timestamp" }
+        expires: { $ref: "#/components/schemas/Timestamp" }
+        max_uses: { type: integer, minimum: 1, maximum: 1000 }
+        signature:
+          description: '`approval` anahtarıyla `grantSigningPayload()` baytları üzerinde DER imza, base64url.'
+          allOf: [{ $ref: "#/components/schemas/B64Url" }]
+        payload_version: { type: string, const: v2 }
+    GrantCreated:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id: { $ref: "#/components/schemas/GrantId" }
+    Grant:
+      type: object
+      additionalProperties: false
+      required: [id, scope, project, repo, action, conditions, created, expires, max_uses, uses, status, device_id]
+      properties:
+        id: { $ref: "#/components/schemas/GrantId" }
+        scope: { $ref: "#/components/schemas/GrantScope" }
+        project: { $ref: "#/components/schemas/GrantProject" }
+        repo: { $ref: "#/components/schemas/GrantRepo" }
+        action: { $ref: "#/components/schemas/GrantAction" }
+        conditions:
+          type: array
+          items: { $ref: "#/components/schemas/GrantCondition" }
+        created: { $ref: "#/components/schemas/Timestamp" }
+        expires: { $ref: "#/components/schemas/Timestamp" }
+        max_uses: { type: integer, minimum: 1, maximum: 1000 }
+        uses: { type: integer, minimum: 0 }
+        status: { type: string, enum: [active, expired, revoked, device_revoked, exhausted] }
+        device_id: { $ref: "#/components/schemas/DeviceId" }
+    GrantList:
+      type: object
+      additionalProperties: false
+      required: [grants, warnings]
+      properties:
+        grants:
+          type: array
+          items: { $ref: "#/components/schemas/Grant" }
+        warnings:
+          type: array
+          items: { type: string }
+    Device:
+      type: object
+      additionalProperties: false
+      required: [device_id, device_name, created, revoked, has_fcm, me]
+      properties:
+        device_id: { $ref: "#/components/schemas/DeviceId" }
+        device_name: { type: string }
+        created: { $ref: "#/components/schemas/Timestamp" }
+        last_seen: { $ref: "#/components/schemas/Timestamp" }
+        revoked: { type: boolean }
+        has_fcm: { type: boolean }
+        me: { type: boolean }
+    DeviceList:
+      type: object
+      additionalProperties: false
+      required: [devices]
+      properties:
+        devices:
+          type: array
+          items: { $ref: "#/components/schemas/Device" }
+    FcmRequest:
+      type: object
+      additionalProperties: false
+      required: [fcm_token]
+      properties:
+        fcm_token: { type: string, minLength: 1, maxLength: 4096 }
+    RevokeDeviceRequest:
+      type: object
+      description: |
+        İmzalayan cihaz `X-Vlad-Device` başlığıdır (gövdede yoktur). Sunucu kuralları: `ts_ms` == `X-Vlad-Ts`, pencere
+        ±120 sn, `(signer, ts_ms)` tek kullanım, imza `approval` anahtarıyla `vlad-revoke/v1` baytları üzerinde.
+      additionalProperties: false
+      required: [ts_ms, signature]
+      properties:
+        ts_ms: { type: integer, minimum: 0 }
+        signature: { $ref: "#/components/schemas/B64Url" }
+    EventType:
+      type: string
+      enum: [card.opened, task.state, worker.progress, chat.delta, chat.done, action.executed, grant.used, quota.changed]
+    Event:
+      type: object
+      additionalProperties: false
+      required: [seq, type, data]
+      properties:
+        seq: { type: integer, minimum: 1 }
+        type: { $ref: "#/components/schemas/EventType" }
+        data:
+          type: object
+          description: Türe göre ipucu yükü; ayrıntı `contract/README.md`. Kilit ekranında gösterilebilecek ayrıntı içermez.
+          additionalProperties: true
+    EventList:
+      type: object
+      additionalProperties: false
+      required: [events, last_seq]
+      properties:
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/Event" }
+        last_seq: { type: integer, minimum: 0 }

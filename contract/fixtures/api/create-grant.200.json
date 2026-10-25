@@ -1,0 +1,36 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "createGrant 200"
+  },
+  "operationId": "createGrant",
+  "request": {
+    "body": {
+      "id": "G-001",
+      "scope": {
+        "type": "project",
+        "ref": "vlad"
+      },
+      "project": "vlad",
+      "repo": "iamhankaya/vlad",
+      "action": "merge_phase",
+      "conditions": [
+        "ci_green",
+        "no_severe_findings"
+      ],
+      "created": "2026-10-25T12:00:00Z",
+      "expires": "2026-11-24T12:00:00Z",
+      "max_uses": 5,
+      "signature": "MEUCIQDkRiufm9hpwJeirPmKWCFbSmGhLH5JXK3pjQk8cTBkegIgKQdEkQ_gClXthmhf2f_4CRE_F05xMXMIhrro3YqVD1I",
+      "payload_version": "v2"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "G-001"
+    }
+  }
+}

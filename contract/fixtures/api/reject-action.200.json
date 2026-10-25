@@ -1,0 +1,20 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "rejectAction 200"
+  },
+  "operationId": "rejectAction",
+  "request": {
+    "path": {
+      "id": "A-7Q2M9K4X"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  }
+}

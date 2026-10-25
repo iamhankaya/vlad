@@ -1,0 +1,73 @@
+/**
+ * Read side of GitHub as the approval path needs it. Every write (check-run, merge) lives in `github/writer.ts`; the REST
+ * implementation of this reader is `github/reader.ts`. The shapes follow the recorded responses in `contract/fixtures/external/github-rest/`.
+ */
+export type PullFacts = {
+  number: number;
+  state: "open" | "closed";
+  merged: boolean;
+  draft: boolean;
+  /** `null`: GitHub has not computed it yet (first call after a push). */
+  mergeable: boolean | null;
+  mergeable_state: string;
+  /** `repo`: `owner/name` of the head repository (`null` when a fork was deleted). A head outside the base repo is a fork. */
+  head: { sha: string; ref: string; repo: string | null };
+  base: { ref: string; repo: string | null };
+  /** Set once merged: the merge commit. */
+  merge_commit_sha?: string | null;
+  /** Login of whoever merged it (`null` while open). */
+  merged_by?: string | null;
+};
+
+/** `app_id`: the GitHub App that wrote the run, when the response says (the `vlad/approved` run only counts if it is ours). */
+export type CheckRun = { name: string; status: string; conclusion: string | null; app_id?: number };
+export type CombinedStatus = { state: string; total_count: number };
+
+export interface GithubReader {
+  /** `null` when the PR does not exist (404). Any other failure throws. */
+  getPull(repo: string, pr: number): Promise<PullFacts | null>;
+  getCheckRuns(repo: string, sha: string): Promise<CheckRun[]>;
+  getCombinedStatus(repo: string, sha: string): Promise<CombinedStatus>;
+}
+
+/** Maps a `GET /repos/{o}/{r}/pulls/{n}` body; throws on a shape it does not know rather than guessing. */
+export function toPullFacts(body: any): PullFacts {
+  const ok =
+    body && typeof body === "object" && Number.isInteger(body.number) && (body.state === "open" || body.state === "closed") &&
+    typeof body.head?.sha === "string" && typeof body.head?.ref === "string" && typeof body.base?.ref === "string" &&
+    (body.mergeable === null || typeof body.mergeable === "boolean") && typeof body.mergeable_state === "string";
+  if (!ok) throw new Error("GitHub PR yanıtı beklenen biçimde değil");
+  return {
+    number: body.number, state: body.state, merged: body.merged === true, draft: body.draft === true,
+    mergeable: body.mergeable, mergeable_state: body.mergeable_state, head: { sha: body.head.sha, ref: body.head.ref, repo: typeof body.head.repo?.full_name === "string" ? body.head.repo.full_name : null },
+    base: { ref: body.base.ref, repo: typeof body.base.repo?.full_name === "string" ? body.base.repo.full_name : null },
+    merge_commit_sha: typeof body.merge_commit_sha === "string" ? body.merge_commit_sha : null,
+    merged_by: typeof body.merged_by?.login === "string" ? body.merged_by.login : null,
+  };
+}
+
+export type CiState = "green" | "red" | "pending" | "none";
+
+/** The check-run `vlad-gate` writes itself (S9b); it is the result of an approval, never an input to CI health. */
+export const APPROVED_CHECK = "vlad/approved";
+
+const FAIL = new Set(["failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"]);
+const PASS = new Set(["success", "neutral", "skipped"]);
+
+/**
+ * CI health of a commit from its check-runs and combined status. Any failing signal is `red`; anything unfinished
+ * is `pending`; no signal at all is `none` (an unconfigured CI is not "green").
+ */
+export function ciState(runs: CheckRun[], status: CombinedStatus, appId?: number): CiState {
+  // Our own approval run is not CI. With `appId` known only a run WE wrote is set aside: a `vlad/approved` from anyone else is evidence like any other.
+  const relevant = runs.filter((r) => r.name !== APPROVED_CHECK || (appId !== undefined && r.app_id !== appId));
+  const hasStatus = status.total_count > 0;
+  if (!relevant.length && !hasStatus) return "none";
+  if (relevant.some((r) => r.status === "completed" && r.conclusion !== null && FAIL.has(r.conclusion))) return "red";
+  if (hasStatus && (status.state === "failure" || status.state === "error")) return "red";
+  if (relevant.some((r) => r.status !== "completed" || r.conclusion === null || !PASS.has(r.conclusion))) return "pending";
+  if (hasStatus && status.state !== "success") return "pending";
+  // All skipped/neutral is no evidence of anything: green needs at least one real success.
+  if (!relevant.some((r) => r.conclusion === "success") && !hasStatus) return "none";
+  return "green";
+}

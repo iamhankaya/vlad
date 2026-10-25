@@ -1,0 +1,37 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listGrants 200"
+  },
+  "operationId": "listGrants",
+  "response": {
+    "status": 200,
+    "body": {
+      "grants": [
+        {
+          "id": "G-001",
+          "scope": {
+            "type": "project",
+            "ref": "vlad"
+          },
+          "project": "vlad",
+          "repo": "iamhankaya/vlad",
+          "action": "merge_phase",
+          "conditions": [
+            "ci_green",
+            "no_severe_findings"
+          ],
+          "created": "2026-10-25T12:00:00Z",
+          "expires": "2026-11-24T12:00:00Z",
+          "max_uses": 5,
+          "uses": 1,
+          "status": "active",
+          "device_id": "d-pixel-9"
+        }
+      ],
+      "warnings": []
+    }
+  }
+}

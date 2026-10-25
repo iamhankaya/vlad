@@ -1,0 +1,18 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "streamEvents 200"
+  },
+  "operationId": "streamEvents",
+  "request": {
+    "headers": {
+      "Last-Event-ID": "16"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": "id: 17\nevent: task.state\ndata: {\"seq\":17,\"type\":\"task.state\",\"data\":{\"task_id\":\"T20261025-61\",\"state\":\"awaiting_approval\"}}\n\n: keepalive\n\n"
+  }
+}

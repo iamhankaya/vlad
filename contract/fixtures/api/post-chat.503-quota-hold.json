@@ -1,0 +1,27 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "postChat 503"
+  },
+  "operationId": "postChat",
+  "request": {
+    "body": {
+      "client_msg_id": "m-2",
+      "text": "Merhaba"
+    }
+  },
+  "response": {
+    "status": 503,
+    "body": {
+      "error": {
+        "code": "quota_hold",
+        "message_tr": "Abonelik kotası dolu.",
+        "details": {
+          "until": "2026-10-25T17:00:00Z"
+        }
+      }
+    }
+  }
+}

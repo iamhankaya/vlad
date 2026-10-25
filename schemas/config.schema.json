@@ -9,8 +9,25 @@
     "defaultAutonomy": { "enum": ["plan", "commit", "pr"] },
     "staleAfterHours": { "type": "number", "exclusiveMinimum": 0 },
     "maxParallel": { "type": "integer", "minimum": 1 },
-    "launcher": { "enum": ["auto", "wt", "powershell", "cloud"] },
+    "launcher": { "enum": ["auto", "wt", "powershell", "cloud", "process"] },
     "worktreeDir": { "type": "string" },
+    "kbPushBranch": { "type": "string", "minLength": 1 },
+    "minCliVersion": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "machines": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[A-Za-z0-9._-]+$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "roots": { "type": "array", "items": { "type": "string" } },
+          "launcher": { "enum": ["auto", "wt", "powershell", "cloud", "process"] },
+          "maxParallel": { "type": "integer", "minimum": 1 },
+          "worktreeDir": { "type": "string" },
+          "kbPushBranch": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "kbDir": { "type": "string", "minLength": 1 },
     "projects": {
       "type": "object",

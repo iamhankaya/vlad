@@ -7,3 +7,6 @@ export * from "./schema.js";
 export * from "./config.js";
 export * from "./types.js";
 export * from "./journal.js";
+export * from "./machine.js";
+export * from "./version.js";
+export * from "./lock.js";

@@ -1,0 +1,40 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getTask 200"
+  },
+  "operationId": "getTask",
+  "request": {
+    "path": {
+      "id": "T20261025-61"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "T20261025-61",
+      "project": "vlad",
+      "title": "VLAD sunucu + mobil — S6a API sözleşmesi",
+      "kind": "dev",
+      "state": "running",
+      "autonomy": "commit",
+      "role": "developer",
+      "parent": "T20261024-94",
+      "depends_on": [],
+      "phase": "S6a",
+      "host": "sunucu-1",
+      "progress": {
+        "pct": 60,
+        "label": "openapi yazılıyor",
+        "at": "2026-10-25T11:00:00Z"
+      },
+      "pr": null,
+      "error": null,
+      "report_md": null,
+      "created": "2026-10-25T08:30:00Z",
+      "updated": "2026-10-25T11:00:00Z"
+    }
+  }
+}

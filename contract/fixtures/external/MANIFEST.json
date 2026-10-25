@@ -1,0 +1,195 @@
+{
+ "files": [
+  {
+   "file": "github-rest/pr42-merged.json",
+   "kind": "real",
+   "source": "GitHub REST api.github.com (iamhankaya/vlad)",
+   "captured_at": "2026-10-24",
+   "command": "gh api -i repos/iamhankaya/vlad/pulls/42"
+  },
+  {
+   "file": "github-rest/pulls-list.json",
+   "kind": "real",
+   "source": "GitHub REST api.github.com (iamhankaya/vlad)",
+   "captured_at": "2026-10-24",
+   "command": "gh api -i \"repos/iamhankaya/vlad/pulls?state=all&per_page=2\""
+  },
+  {
+   "file": "github-rest/check-runs-empty.json",
+   "kind": "real",
+   "source": "GitHub REST api.github.com (iamhankaya/vlad)",
+   "captured_at": "2026-10-24",
+   "command": "gh api -i repos/iamhankaya/vlad/commits/<head.sha>/check-runs"
+  },
+  {
+   "file": "github-rest/commit-status-empty.json",
+   "kind": "real",
+   "source": "GitHub REST api.github.com (iamhankaya/vlad)",
+   "captured_at": "2026-10-24",
+   "command": "gh api -i repos/iamhankaya/vlad/commits/<head.sha>/status"
+  },
+  {
+   "file": "github-rest/pr-not-found-404.json",
+   "kind": "real",
+   "source": "GitHub REST api.github.com (iamhankaya/vlad)",
+   "captured_at": "2026-10-24",
+   "command": "gh api -i repos/iamhankaya/vlad/pulls/999999"
+  },
+  {
+   "file": "claude-stream-json/answer-turn-allowlist.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"[VLAD:ANSWER #1] B. ... 9 komut\" --resume <session> --output-format stream-json --verbose --max-turns 15 --permission-mode acceptEdits --allowedTools \"Bash(git status:*)\" \"Bash(git log:*)\" \"Bash(git add:*)\" \"Bash(git commit:*)\" \"Bash(node:*)\" \"Bash(npm:*)\" --disallowedTools \"Bash(git push:*)\""
+  },
+  {
+   "file": "claude-stream-json/ask-turn.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"[ASK işaretiyle soru sor, turu bitir]\" --output-format stream-json --verbose --max-turns 3 --permission-mode acceptEdits"
+  },
+  {
+   "file": "claude-stream-json/compact-slash.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"/compact\" --resume <session> --output-format stream-json --verbose --max-turns 2"
+  },
+  {
+   "file": "claude-stream-json/partial-messages.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"Say hi in 3 words.\" --output-format stream-json --verbose --include-partial-messages --max-turns 2"
+  },
+  {
+   "file": "claude-stream-json/persistent-stdin-two-turns.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "printf user-json-lines | claude -p --input-format stream-json --output-format stream-json --verbose (iki kullanıcı satırı, 12 sn arayla; stdin EOF ile çıkış)"
+  },
+  {
+   "file": "claude-stream-json/resume-invalid-session.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p x --resume 00000000-0000-4000-8000-000000000000 --output-format stream-json --verbose (exit 1; stderr: \"No conversation found with session ID: ...\")"
+  },
+  {
+   "file": "claude-stream-json/resume-turn2.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"Az önce ne dedin? Tek kelime.\" --resume <session> --output-format stream-json --verbose --max-turns 2"
+  },
+  {
+   "file": "claude-stream-json/resume-turn3.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"Önceki iki cevabımı say...\" --resume <session> --output-format stream-json --verbose --max-turns 2"
+  },
+  {
+   "file": "claude-stream-json/single-turn.jsonl",
+   "kind": "real",
+   "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
+   "captured_at": "2026-10-24",
+   "command": "claude -p \"Sadece 'merhaba' de.\" --output-format stream-json --verbose --max-turns 2"
+  },
+  {
+   "file": "claude-stream-json/limit-event.synthetic.jsonl",
+   "kind": "synthetic",
+   "source": "elle yazıldı; gerçek sınır olayı yakalanamadı (D0A d0-notlar: 'Limit aşılmış biçim gözlenemedi')",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: sınır dolunca claude -p ... --output-format stream-json --verbose"
+  },
+  {
+   "file": "github-rest/check-run-create-201.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: gh api -X POST repos/<o>/<r>/check-runs (App token gerekir)"
+  },
+  {
+   "file": "github-rest/merge-200.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: gh api -X PUT repos/<o>/<r>/pulls/<n>/merge -f sha=<head>"
+  },
+  {
+   "file": "github-rest/merge-405.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik)"
+  },
+  {
+   "file": "github-rest/merge-409.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik)"
+  },
+  {
+   "file": "github-rest/check-runs-full.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: gh api repos/<o>/<r>/commits/<sha>/check-runs (CI'lı repo)"
+  },
+  {
+   "file": "github-rest/commit-status-full.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik)"
+  },
+  {
+   "file": "github-rest/installation-lookup-200.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: App JWT ile GET /repos/<o>/<r>/installation"
+  },
+  {
+   "file": "github-rest/installation-token-201.synthetic.json",
+   "kind": "synthetic",
+   "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: App JWT ile POST /app/installations/<id>/access_tokens"
+  }
+ ],
+ "not_captured": [
+  {
+   "item": "D0.1 kota/sınır olayı (limit aşıldı biçimi)",
+   "reason": "yapılamadı: kullanım sınırı zorlanamadı; yalnız \"allowed\" durumundaki rate_limit_event kaydedildi (five_hour/seven_day utilization alanları). Ayrıştırıcı bilinmeyen status değerini yok saymalı."
+  },
+  {
+   "item": "D0.1 abonelik koşulu teyidi",
+   "reason": "yapılamadı: koşul metni bu ortamdan doğrulanamaz; kullanıcı teyidi gerekir."
+  },
+  {
+   "item": "D0.5a GET /pulls/{n} ilk çağrıda mergeable:null (taze açık PR)",
+   "reason": "yapılamadı: test PR açma izin sistemince reddedildi ve çalışan protokolü PR açmayı yasaklıyor. Yalnız birleşmiş PR #42 kaydedildi: orada da mergeable:null, mergeable_state:\"unknown\" (null yalnız \"hesaplanıyor\" değil, kapalı/birleşmiş PR için de döner)."
+  },
+  {
+   "item": "D0.5a check-run create/update",
+   "reason": "yapılamadı: yazma eylemi denenmedi (protokol); depoda hiç check-run yok (check-runs-empty.json). Uygulama jetonu (App) gerekir; D0B kapsamı."
+  },
+  {
+   "item": "D0.5a PUT /pulls/{n}/merge 200/405/409/422",
+   "reason": "yapılamadı: açık test PR'ı olmadığı için merge uç noktası çağrılmadı; hiçbir PR birleştirilmedi. Belgedeki beklenen biçim fixture olarak YAZILMADI (uydurma yasak)."
+  },
+  {
+   "item": "D0.5a installation token biçimi",
+   "reason": "yapılamadı: GitHub App yok (D0B)."
+  },
+  {
+   "item": "D0.5b ruleset",
+   "reason": "D0B kapsamı; bilgi: GET /rulesets bu özel depoda 403 \"Upgrade to GitHub Pro or make this repository public\" döner (plan desteği yok)."
+  }
+ ]
+}

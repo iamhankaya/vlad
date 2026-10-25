@@ -17,6 +17,9 @@ export function writeProject(slug: string, md: string): ProjectCard {
 
 export type ProjectSummary = {
   slug: string;
+  /** Only with `{ detail: true }` (the `project list --json` output the API reads). */
+  name?: string;
+  repo?: string;
   path: string;
   status: string;
   last_activity: string | null;
@@ -25,7 +28,7 @@ export type ProjectSummary = {
 };
 
 /** Valid cards in name order; unreadable or invalid cards are skipped and reported as warnings. */
-export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnings: string[] } {
+export function listProjectsWithWarnings(opts: { detail?: boolean } = {}): { projects: ProjectSummary[]; warnings: string[] } {
   const dir = kbPaths().projects;
   const projects: ProjectSummary[] = [];
   const warnings: string[] = [];
@@ -36,6 +39,7 @@ export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnin
       validate("project", data);
       projects.push({
         slug: data.slug,
+        ...(opts.detail ? { name: data.name, ...(data.repo ? { repo: data.repo } : {}) } : {}),
         path: data.path,
         status: data.status,
         last_activity: data.last_activity,

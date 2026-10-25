@@ -1,0 +1,40 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "createGrant 422"
+  },
+  "operationId": "createGrant",
+  "request_invalid": true,
+  "request": {
+    "body": {
+      "id": "G-004",
+      "scope": {
+        "type": "project",
+        "ref": "vlad"
+      },
+      "action": "tag_release",
+      "conditions": [
+        "ci_green"
+      ],
+      "created": "2026-10-25T12:00:00Z",
+      "expires": "2026-11-24T12:00:00Z",
+      "max_uses": 1,
+      "signature": "MEQCIBsuRmx77SzMWI8GER-3dwOYTpf3kY5zcgLD5TEph531AiBlycnHOMMZwsSiioaTQVgeOH2L6aUJQwzp_sL7T7HyPA",
+      "payload_version": "v1"
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "not_delegable",
+        "message_tr": "Bu eylem devredilemez.",
+        "details": {
+          "action": "tag_release"
+        }
+      }
+    }
+  }
+}

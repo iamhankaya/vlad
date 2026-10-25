@@ -1,0 +1,29 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "approveAction 409"
+  },
+  "operationId": "approveAction",
+  "request": {
+    "path": {
+      "id": "A-7Q2M9K4X"
+    },
+    "body": {
+      "signature": "MEUCIQCzM8G5RpqeMM-JFz71aY4lvP4-ecwxvo33k9zRj5g0MAIgD_lbmtryAKR7qszksKCwV_CpNrQhjRJqZzFVJG2zomI"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "head_moved",
+        "message_tr": "PR başlığı değişti; yeniden hazırla.",
+        "details": {
+          "head_sha": "ffffffffffffffffffffffffffffffffffffffff"
+        }
+      }
+    }
+  }
+}

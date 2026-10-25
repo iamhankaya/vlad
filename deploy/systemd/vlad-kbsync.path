@@ -1,0 +1,10 @@
+[Unit]
+Description=VLAD kb sync on request (takeover writes logs/kbsync.request)
+
+[Path]
+# the installer replaces @KB_DIR@ with the kb checkout (VLAD_KB_DIR)
+PathModified=@KB_DIR@/logs/kbsync.request
+Unit=vlad-kbsync.service
+
+[Install]
+WantedBy=multi-user.target

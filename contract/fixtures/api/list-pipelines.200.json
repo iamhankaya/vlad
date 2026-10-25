@@ -1,0 +1,38 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listPipelines 200"
+  },
+  "operationId": "listPipelines",
+  "response": {
+    "status": 200,
+    "body": {
+      "pipelines": [
+        {
+          "task_id": "T20261024-94",
+          "project": "vlad",
+          "title": "VLAD sunucu + mobil",
+          "state": "running",
+          "phases": [
+            {
+              "task_id": "T20261025-61",
+              "title": "S6a",
+              "state": "running",
+              "phase": "sözleşme",
+              "role": "developer",
+              "depends_on": [],
+              "progress": {
+                "pct": 60,
+                "label": "openapi yazılıyor",
+                "at": "2026-10-25T11:00:00Z"
+              }
+            }
+          ]
+        }
+      ],
+      "warnings": []
+    }
+  }
+}

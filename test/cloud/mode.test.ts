@@ -17,9 +17,11 @@ describe("resolveLaunchMode", () => {
   it("auto on Linux picks cloud when CLAUDE_CODE_REMOTE=true", () => {
     expect(resolveLaunchMode("auto", "linux", { CLAUDE_CODE_REMOTE: "true" })).toBe("cloud");
   });
-  it("auto on Linux without the cloud fails clearly", () => {
-    expect(() => resolveLaunchMode("auto", "linux", {})).toThrow(/bulut algılanmadı/);
-    expect(() => resolveLaunchMode("auto", "linux", { CLAUDE_CODE_REMOTE: "false" })).toThrow(/CLAUDE_CODE_REMOTE/);
+  // S2a: Linux without a cloud session used to throw "bulut algılanmadı"; the server runs workers as a process now.
+  it("auto on Linux without the cloud resolves to the process launcher", () => {
+    expect(resolveLaunchMode("auto", "linux", {})).toBe("process");
+    expect(resolveLaunchMode("auto", "linux", { CLAUDE_CODE_REMOTE: "false" })).toBe("process");
+    expect(resolveLaunchMode("process", "linux", {})).toBe("process");
   });
   it("wt and powershell are passed through", () => {
     expect(resolveLaunchMode("wt", "linux", {})).toBe("wt");
@@ -36,6 +38,7 @@ describe("schemas", () => {
   it("config accepts launcher: cloud, still rejects unknown values", () => {
     const home = makeHome();
     validate("config", { ...defaultConfig(), launcher: "cloud" }, home);
+    validate("config", { ...defaultConfig(), launcher: "process" }, home);
     expect(() => validate("config", { ...defaultConfig(), launcher: "tmux" }, home)).toThrow();
   });
   it("project card: exposure is optional, accepts local|network|internet, rejects other values", () => {

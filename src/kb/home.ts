@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /** VLAD root: $VLAD_HOME if set, otherwise the repo root (dist/kb/home.js -> two levels up). */
@@ -15,6 +15,15 @@ export function getVladHome(): string {
  * Read straight from the JSON (not loadConfig) so schema validation can stay out of path lookup.
  */
 export function resolveKbDir(home: string = getVladHome()): { dir: string; explicit: boolean } {
+  const r = resolveKbDirRaw(home);
+  const h = resolve(home);
+  if (r.explicit && (h === r.dir || h.startsWith(r.dir + sep))) {
+    throw new Error(`kbDir VLAD_HOME'a eşit ya da onun atası olamaz: ${r.dir}`);
+  }
+  return r;
+}
+
+function resolveKbDirRaw(home: string): { dir: string; explicit: boolean } {
   const env = process.env.VLAD_KB_DIR;
   if (env) return { dir: resolve(home, env), explicit: true };
   const file = join(home, "vlad.config.json");
@@ -42,6 +51,8 @@ export interface KbPaths {
   projects: string;
   tasks: string;
   findings: string;
+  cards: string;
+  grants: string;
   inbox: string;
   processed: string;
   logs: string;
@@ -63,6 +74,8 @@ export function kbPaths(home: string = getVladHome()): KbPaths {
     projects: join(kb, "projects"),
     tasks: join(kb, "tasks"),
     findings: join(kb, "findings"),
+    cards: join(kb, "cards"),
+    grants: join(kb, "grants"),
     inbox,
     processed: join(inbox, "processed"),
     logs: join(kb, "logs"),

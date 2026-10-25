@@ -1,0 +1,29 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "answerCard 400"
+  },
+  "operationId": "answerCard",
+  "request": {
+    "path": {
+      "id": "C-20261025-01"
+    },
+    "body": {
+      "option": "yes"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "bad_request",
+        "message_tr": "Kart zaten cevaplandı.",
+        "details": {
+          "reason": "already_answered"
+        }
+      }
+    }
+  }
+}

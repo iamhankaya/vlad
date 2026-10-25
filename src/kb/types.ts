@@ -12,13 +12,15 @@ export type TaskState =
 export type ProjectStatus = "active" | "paused" | "archived";
 /** Who can reach the system: sizes the architect's `### Sistem tasarımı`. Unrelated to `local_only`. */
 export type Exposure = "local" | "network" | "internet";
-export type Launcher = "auto" | "wt" | "powershell" | "cloud";
+export type Launcher = "auto" | "wt" | "powershell" | "cloud" | "process";
 
 /** kb/projects/<slug>.md frontmatter (spec 5.1) */
 export interface ProjectCard {
   slug: string;
   name: string;
   path: string;
+  /** Clone path per machine (`VLAD_MACHINE` name -> path); once set, a machine missing here has no clone. */
+  paths?: Record<string, string>;
   stack: string[];
   status: ProjectStatus;
   autonomy: Autonomy;
@@ -63,6 +65,26 @@ export interface TaskData {
   phase?: string | null;
   /** Repo file (relative path) holding this task's full closing report; a long report travels to dependants as summary + this path. */
   report_file?: string | null;
+  /** Machine the worker runs on (`currentMachine()` at launch). */
+  host?: string | null;
+  /** Latest worker progress; `pct` null = no percentage known. */
+  progress?: TaskProgress | null;
+  /** Pull request the task's branch is under. */
+  pr?: TaskPr | null;
+}
+
+export interface TaskProgress {
+  pct: number | null;
+  label: string;
+  at: string;
+}
+
+export interface TaskPr {
+  number: number;
+  /** GitHub `owner/name`. */
+  repo: string;
+  base: string;
+  url?: string;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
@@ -84,6 +106,58 @@ export interface FindingData {
   updated: string;
   /** When the state became `fixed`. */
   fixed?: string | null;
+}
+
+export const CARD_KINDS = ["ci_red", "conflict", "vlad_question", "action_request", "kb_conflict"] as const;
+export type CardKind = (typeof CARD_KINDS)[number];
+export const CARD_ACTION_KINDS = ["merge_phase", "merge_final", "push", "tag"] as const;
+export type CardActionKind = (typeof CARD_ACTION_KINDS)[number];
+/** The only options an action_request card has; an agent cannot supply its own. */
+export const ACTION_OPTIONS = [{ id: "approve", label: "Onayla" }, { id: "reject", label: "Reddet" }];
+export const KB_CONFLICT_REASONS = ["merge_conflict", "rejected"] as const;
+export type KbConflictReason = (typeof KB_CONFLICT_REASONS)[number];
+export const KB_CONFLICT_SOURCES = ["kbsync", "promote"] as const;
+export type KbConflictSource = (typeof KB_CONFLICT_SOURCES)[number];
+/** Promote rule ids a `rejected` kb_conflict card may name (kb topology note, K5). */
+export const KB_CONFLICT_RULES = [
+  "path_not_allowed", "dot_entry", "bad_segment", "windows_reserved", "case_collision", "path_too_long", "bad_extension",
+  "symlink", "submodule", "mode", "rename", "delete_not_allowed", "too_large", "too_many_parents", "sensitive_field",
+] as const;
+/** The only options a kb_conflict card has, by reason; an agent cannot supply its own (K6). */
+export const KB_CONFLICT_OPTIONS: Record<KbConflictReason, { id: string; label: string }[]> = {
+  merge_conflict: [{ id: "take_main", label: "main sürümünü al" }, { id: "manual", label: "Elle çözeceğim" }],
+  rejected: [{ id: "discard", label: "Reddedilenleri at" }, { id: "manual", label: "Elle çözeceğim" }],
+};
+/** `CardData.kb_conflict`: what the conflict is; `key` dedupes the same conflict across cycles. */
+export interface KbConflictData {
+  key: string;
+  reason: KbConflictReason;
+  source: KbConflictSource;
+  head: string;
+  base: string;
+  paths: string[];
+  rules?: string[];
+}
+export type CardState = "open" | "resolved" | "dismissed";
+
+/** kb/cards/C-<YYYYMMDD>-<NN>.md frontmatter (mobile plan, kayıt türleri) */
+export interface CardData {
+  /** `C-<YYYYMMDD>-<NN>`; NN widens to three digits past 99 per day. */
+  id: string;
+  kind: CardKind;
+  project: string;
+  task: string | null;
+  state: CardState;
+  title: string;
+  options: { id: string; label: string }[];
+  /** `by_device` is taken from the CLI argument as is: only the API (verified envelope) may be trusted to supply it. */
+  answer: { option?: string; text?: string; by_device: string; at: string } | null;
+  /** Only for `action_request`; its repo must be the card project's registered repo. */
+  action?: { kind: CardActionKind; repo: string; sha: string; pr?: number; base?: string; ref?: string };
+  /** Only for `kb_conflict` (and required there). */
+  kb_conflict?: KbConflictData;
+  created: string;
+  updated: string;
 }
 
 /** roles/<slug>.md frontmatter (roles spec §4) */
@@ -127,7 +201,72 @@ export interface VladConfig {
   maxParallel?: number;
   launcher: Launcher;
   worktreeDir: string;
+  /**
+   * Server machines only (`machines.<server>.kbPushBranch`): `vlad kb commit --push` and `vlad kb sync` push
+   * `HEAD:refs/heads/<branch>`, never the kb main branch. Absent on a `process`-launcher machine → push refused;
+   * absent elsewhere (Windows, cloud) → upstream (main), unchanged.
+   */
+  kbPushBranch?: string;
+  /** Per-machine overlay of roots/launcher/maxParallel/worktreeDir/kbPushBranch; applied by loadConfig. */
+  machines?: Record<string, MachineConfig>;
+  /** Oldest CLI version allowed to use this home; older CLIs stop with `VLAD CLI çok eski`. */
+  minCliVersion?: string;
   /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
   kbDir?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
+}
+
+export type MachineConfig = Partial<Pick<VladConfig, "roots" | "launcher" | "maxParallel" | "worktreeDir" | "kbPushBranch">>;
+
+/** One line of kb/audit/YYYY-MM.jsonl (mobile plan, kayıt şemaları). */
+export interface AuditData {
+  ts: string;
+  /** Unique across all months. */
+  action_id: string;
+  kind: string;
+  repo: string;
+  pr: number;
+  head_sha: string;
+  approver: { type: "device" | "grant"; id: string };
+  result: string;
+  merge_sha?: string;
+  detail?: string;
+}
+
+/** kb/active.md frontmatter: which machine is the active VLAD (design §13). */
+export interface ActiveData {
+  machine: string;
+  since: string;
+  heartbeat: string;
+  takeover_from?: string | null;
+}
+
+export const GRANT_ACTIONS = ["merge_phase", "merge_final"] as const;
+export type GrantAction = (typeof GRANT_ACTIONS)[number];
+/** Never delegable (mobile plan, "Yetki devri"): rejected by the schema enum and again in code. */
+export const NON_DELEGABLE_ACTIONS = ["tag_release", "publish", "delete", "security", "scope_change"] as const;
+export const GRANT_CONDITIONS = ["ci_green", "no_severe_findings", "codex_clear"] as const;
+export type GrantCondition = (typeof GRANT_CONDITIONS)[number];
+/** A grant lives at most this long (created -> expires, inclusive). */
+export const GRANT_MAX_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** kb/grants/G-<NNN>.md frontmatter (mobile plan, kayıt türleri). The file is untrusted: the API re-verifies `signature`. */
+export interface GrantData {
+  /** `G-<NNN>`; widens past 999. */
+  id: string;
+  scope: { type: "project" | "pipeline"; ref: string };
+  /** Project card slug and its registered repo (`o/r`): signed, and compared for equality at every use (v2). */
+  project: string;
+  repo: string;
+  action: GrantAction;
+  /** Always includes `ci_green`. */
+  conditions: GrantCondition[];
+  created: string;
+  expires: string;
+  max_uses: number;
+  revoked: boolean;
+  /** Device whose `approval` key signed the grant. */
+  device_id: string;
+  signature: string;
+  payload_version: "v2";
 }
