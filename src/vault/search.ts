@@ -82,6 +82,9 @@ function parseUserPath(input: string): string[] {
   const segs = input.split("/").filter((s) => s !== "" && s !== ".");
   if (segs.length === 0) throw new VaultError("yol boş");
   if (segs.some((s) => s === "..")) throw new VaultError("yol üst dizine çıkamaz (..)");
+  // Windows resolves `inbox.`, `logs ` (trailing dot/space), `inbox::$DATA` (stream) and `INBOX~1` (8.3 name) to the real entry:
+  // none of them is a name this vault ever lists, so none is accepted as one.
+  if (segs.some((s) => /[. ]$/.test(s) || s.includes(":") || /~[0-9]/.test(s))) throw new VaultError("yol geçersiz karakter içeriyor (sondaki nokta/boşluk, ':' veya '~n')");
   return segs;
 }
 
@@ -159,6 +162,18 @@ function readText(abs: string): string {
   }
 }
 
+/**
+ * Drops a leading YAML front matter block (`---` ... `---`). Cards and task files keep local paths, worktrees and session ids
+ * there; the API never shows them. An unterminated block is dropped to the end of the file (fail closed).
+ */
+export function stripFrontMatter(text: string): string {
+  const t = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  const lines = t.split("\n");
+  if (lines[0].replace(/\r$/, "").trimEnd() !== "---") return text;
+  const end = lines.findIndex((l, i) => i > 0 && /^(---|\.\.\.)\s*$/.test(l.replace(/\r$/, "")));
+  return end < 0 ? "" : lines.slice(end + 1).join("\n");
+}
+
 export function parseHeadings(content: string): Heading[] {
   const out: Heading[] = [];
   let fence: string | null = null;
@@ -177,13 +192,14 @@ export function parseHeadings(content: string): Heading[] {
   return out;
 }
 
-export function readVault(path: string, heading?: string): VaultFile {
-  return safe(() => readVaultUnsafe(path, heading));
+export function readVault(path: string, heading?: string, opts: { stripFrontMatter?: boolean } = {}): VaultFile {
+  return safe(() => readVaultUnsafe(path, heading, opts));
 }
 
-function readVaultUnsafe(path: string, heading?: string): VaultFile {
+function readVaultUnsafe(path: string, heading: string | undefined, opts: { stripFrontMatter?: boolean }): VaultFile {
   const { rel, abs } = resolveAllowed(path, "file");
-  const full = readText(abs);
+  const raw = readText(abs);
+  const full = opts.stripFrontMatter ? stripFrontMatter(raw) : raw;
   const headings = parseHeadings(full);
   if (heading === undefined) return { path: rel, content: full, headings };
   const want = fold(heading.trim());
@@ -236,14 +252,14 @@ function entryFor(rel: string, name: string): VaultEntry | null {
 
 export function searchVault(
   query: string,
-  opts: { zone?: string; limit?: number; budget?: Partial<SearchBudget> } = {},
+  opts: { zone?: string; limit?: number; budget?: Partial<SearchBudget>; stripFrontMatter?: boolean } = {},
 ): { hits: VaultHit[]; truncated: boolean } {
   return safe(() => searchUnsafe(query, opts));
 }
 
 function searchUnsafe(
   query: string,
-  opts: { zone?: string; limit?: number; budget?: Partial<SearchBudget> },
+  opts: { zone?: string; limit?: number; budget?: Partial<SearchBudget>; stripFrontMatter?: boolean },
 ): { hits: VaultHit[]; truncated: boolean } {
   const q = typeof query === "string" ? query.trim() : "";
   if (!q) throw new VaultError("sorgu boş");
@@ -307,7 +323,7 @@ function searchUnsafe(
       } catch {
         continue; // oversize, binary, invalid UTF-8 or unreadable: not searchable
       }
-      const hit = scoreFile(rel, text, needle);
+      const hit = scoreFile(rel, opts.stripFrontMatter ? stripFrontMatter(text) : text, needle);
       if (!hit) continue;
       hits.push(hit);
       if (hits.length > limit * 2) hits = hits.sort(rank).slice(0, limit);
