@@ -29,7 +29,7 @@ export function registerProject(program: Command): void {
     out(o, { slug, note: line }, `not eklendi: ${slug}`);
   }).option("--file <md>", "not dosyası (- = stdin)");
   def(project, "list", "Kartları listeler", (o: Opts) => {
-    const { projects, warnings } = listProjectsWithWarnings();
+    const { projects, warnings } = listProjectsWithWarnings({ detail: true });
     out(
       o,
       { projects, warnings },
