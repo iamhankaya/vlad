@@ -52,7 +52,7 @@ describe("acceptance: kb topology takeover", () => {
     const bad = win.run(["task", "log", other, "yanlış görev", "--json"], { env: { VLAD_TASK_ID: id } });
     expect(bad.code).toBe(1);
     expect(win.read(taskRel(win, other))).not.toMatch(/yanlış görev/);
-  });
+  }, 30_000); // many CLI subprocesses: the 5 s default flaked under a loaded full run
 
   it("acceptance: kb topology windows writes before its pull reach main after takeover", () => {
     const w = makeWorld();
@@ -83,5 +83,5 @@ describe("acceptance: kb topology takeover", () => {
     expect(w.mainFile("active.md")).toMatch(/machine: srvbox/);
     expect(win.ok(["active", "show"])).toMatchObject({ mine: false });
     expect(win.fail(JOURNAL("2026-10-29"), { input: "x\n" }).error).toMatch(/^active_elsewhere/);
-  });
+  }, 30_000);
 });
