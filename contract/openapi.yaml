@@ -613,7 +613,13 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
     ActionConflict:
-      description: Eylem uygulanamaz (`head_moved` | `not_mergeable`; ayrıntı `details`).
+      description: |
+        Eylem uygulanamaz. `error.code` yalnız şunlardan biri, ayrıntı `details.reason`:
+        `head_moved` (`head_moved`); `not_mergeable` (`pr_not_found`, `pr_merged`, `pr_closed`, `draft`, `conflict`, `blocked`, `behind`,
+        `mergeable_unknown`, `repo_not_registered`, `kind_base_mismatch`, `base_mismatch`, `fork_or_foreign_repo`, `head_ref_mismatch`,
+        `github_refused`, `merged_by_other`, `state_*`); `bad_request` (görev/kart durumu: `task_changed`, `task_not_awaiting_approval`,
+        `task_has_no_pr`, `project_has_no_repo`, `kind_mismatch`, `unrepresentable_field`; sonlanmış eylem: `action_failed` + `cause`).
+        `github_unavailable` / `bookkeeping_failed` 502/503 döner ve eylemi bitirmez (aynı imza yeniden denenebilir).
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }

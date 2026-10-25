@@ -45,6 +45,8 @@ export function classifyVladError(stderr: string): { kind: VladErrorKind; messag
 export interface RunOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Written to the child's stdin (for `--file -`). */
+  input?: string;
 }
 
 /**
@@ -98,7 +100,7 @@ export async function runVlad(args: string[], opts: RunOptions = {}): Promise<st
           reject(new VladError(c.kind, c.message, c.details));
         },
       );
-      child.stdin?.end();
+      child.stdin?.end(opts.input);
     });
   } finally {
     release();
