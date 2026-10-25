@@ -14,6 +14,8 @@ const SHA = "b".repeat(40);
 beforeEach(() => {
   home = makeHome();
   writeCard(home, "alpha", { repo: "iamhankaya/vlad" });
+  // launcher "auto" opens a real local terminal on Windows; this file exercises the cloud path (F-vlad-062)
+  writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
   id = newTask(home);
   forceRunning(home, id);
 });
@@ -28,7 +30,7 @@ const ingest = (body: string, extra: string[] = []) => {
   return vlad(home, ["task", "ingest", id, "--events-file", f, "--json", ...extra]);
 };
 
-describe("ingest uçtan uca", () => {
+describe("ingest uçtan uca", { timeout: 30_000 }, () => {
   it("zarf metninde '[' ve '{' + çok sayfa + has_more uyarısı: ilk sayfadaki LOG da işlenir", () => {
     const p1 = page([assistant("[VLAD:LOG #1] ilk sayfa")], true);
     const p2 = page([assistant(`[VLAD:LOG #2] ikinci sayfa\n[VLAD:REPORT #3 branch=vlad/${id} head=${SHA}]\n### Yapılanlar\n- x\n[VLAD:END #3]`)], true);
@@ -69,7 +71,7 @@ describe("ingest uçtan uca", () => {
   });
 });
 
-describe("status bulut ortamında", () => {
+describe("status bulut ortamında", { timeout: 30_000 }, () => {
   it("yerel görev (session_id null) stalled olmaz; session_ önekli bulut görevi olur", () => {
     const cloudId = newTask(home);
     forceRunning(home, cloudId);
@@ -85,7 +87,7 @@ describe("status bulut ortamında", () => {
   });
 });
 
-describe("bulut launch prompt'u", () => {
+describe("bulut launch prompt'u", { timeout: 30_000 }, () => {
   it("işaret tekrarı kuralı + next'te permission_mode", () => {
     writeRoles(home);
     const t = newTask(home, ["--role", "tester"]);

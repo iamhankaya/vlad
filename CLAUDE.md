@@ -56,7 +56,7 @@ Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set
 
 ## Uzman roller
 
-`roles/<slug>.md` dosyaları uzman rolleri tanımlar: danışmanlar (`finans`, `pazarlama`, `analyst`, `architect`) research görevlerinde arka plan agent'ı olarak, uygulayıcılar (`developer`, `tester`, `designer`, `devops`) dev görevlerinde çalışan persona'sı olarak çalışır. `/delegate` uygun rolü önerir ve `vlad task new --role <slug>` ile göreve yazar. Yeni rol eklemek için `roles/` altına aynı biçimde bir dosya eklemek yeter. Tasarım: `docs/superpowers/specs/2026-10-15-vlad-roles-design.md`.
+`roles/<slug>.md` dosyaları uzman rolleri tanımlar: danışmanlar (`finans`, `pazarlama`, `growth` — ASO/SEO & topluluk, yalnızca taslak —, `analyst`, `architect`) research görevlerinde arka plan agent'ı olarak, uygulayıcılar (`developer`, `tester`, `designer`, `devops`, oyun için `game-developer` ve `game-director`) dev görevlerinde çalışan persona'sı olarak çalışır. `/delegate` uygun rolü önerir ve `vlad task new --role <slug>` ile göreve yazar. Yeni rol eklemek için `roles/` altına aynı biçimde bir dosya eklemek yeter. `ponytail` skill'i (en az değişiklik kuralı) yalnız `developer` ve `game-developer`'da deneme olarak kullanılır; ilk developer pipeline'ında diff boyutu, test sayısı ve review bulgusu karşılaştırılır. Tasarım: `docs/superpowers/specs/2026-10-15-vlad-roles-design.md`.
 
 **Pipeline (yazılım departmanı):** `/delegate` işin boyutuna göre bir döngü seçer (`tam`, `özellik`, `kısa`, `tek`; emin değilse sorar). `tek` dışındakilerde bir çatı görev (`--kind pipeline`) ve altında fazlar (`--parent`, `--depends-on`, `--phase`, `--role`) oluşur; her faz bir sonrakine kapanış raporuyla girdi verir. Dev fazları entegrasyon branch'i `vlad/<çatı-id>`'den açılır ve kapıda oraya merge edilir; `vlad task ready --parent <id>` başlatılabilir fazları verir (`vlad.config.json`'daki opsiyonel `maxParallel` doluysa fazlar `held_by_limit`'te döner; başlatılmaz). Kesilen (`running`/`stalled`) çalışanlar `vlad task resume <id>` ile sürdürülür. Fazları başlatmak için taslak onayı yeter; her merge kapısı ve son kapı (ana branch'e merge/PR) ayrıca onaylanır. Tasarım: `docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md`.
 
@@ -70,3 +70,7 @@ Araştırma, özetleme, kod okuma gibi kısa ve repoda değişiklik gerektirmeye
 3. Sonucu `vlad task report <id> --file <md>` ile görev dosyasına yaz; ardından kullanıcıya özetle.
 
 Sonuç yalnızca sohbette kalmamalı; daima görev dosyasına yazılır.
+
+## Model dağıtımı
+
+Görev modeli sırası: görevin `model` alanı (`haiku|sonnet|opus`, `vlad task new --model`) ?? rolün `model`i ?? varsayılan; yerel launch (`claude --model`), bulut launch (`create_session.model`) ve research arka plan agent'ı aynı sırayı kullanır, `vlad task list --json` görev başına `effective_model`/`role_model` verir. `/delegate` taslağın faz tablosunda Model sütununu gösterir: varsayılan rolün modeli; Haiku yalnızca mekanik fazlarda (belge, eşitleme, arama, özet), kod yazan fazda değil; Opus yalnızca en kritik işte, gerekçesi taslakta yazılı ve kullanıcının açık onayıyla (`--model-reason` olmadan CLI reddeder). `vlad status` rolün modelinden sapan görev modelini gösterir.

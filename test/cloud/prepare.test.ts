@@ -64,6 +64,12 @@ describe("prepareCloudLaunch", () => {
     expect(g.data).toMatchObject({ state: "running", branch: `vlad/${t.data.id}`, worktree: null, error: null });
   });
 
+  it("task model overrides the role's model in create_session; no task model keeps the role's", () => {
+    expect(prepareCloudLaunch(mk("alpha", { model: "haiku" }).data.id).model).toBe("haiku");
+    expect(prepareCloudLaunch(mk("alpha", { model: "opus", modelReason: "kritik" }).data.id).model).toBe("opus");
+    expect(prepareCloudLaunch(mk().data.id).model).toBe("sonnet");
+  });
+
   it("inlines task sections, role file and the [VLAD:*] protocol", () => {
     const t = mk();
     const p = prepareCloudLaunch(t.data.id).prompt;
@@ -121,6 +127,16 @@ describe("prepareCloudLaunch", () => {
     pg.data.branch = int;
     saveTask(pg);
     expect(prepareCloudLaunch(b.data.id, probe("missing")).integration?.needs_remote_create).toBe(true);
+  });
+
+  it("cross-project phase: the remote probe and base look at the phase's repo, not the pipeline's (F-vlad-044)", () => {
+    writeProject("beta", card("beta", "repo: owner/beta\ndefault_branch: develop\n"));
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
+    const a = createTask({ project: "beta", title: "a", kind: "dev", body, role: "developer", parent: pipe.data.id });
+    const seen: string[] = [];
+    const r = prepareCloudLaunch(a.data.id, { remoteBranch: (repo) => { seen.push(repo); return "missing"; } });
+    expect(seen).toEqual(["owner/beta"]);
+    expect(r).toMatchObject({ repo: "owner/beta", integration: { needs_remote_create: true, from: "develop" } });
   });
 
   describe("long dependency reports", () => {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -9,12 +10,12 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the eight roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
+  it("the eleven roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
-      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory", pazarlama: "advisory",
-      tester: "executor",
+      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory",
+      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", tester: "executor",
     });
     for (const r of roles) {
       expect(Array.isArray(r.skills), `${r.slug} skills`).toBe(true);
@@ -174,3 +175,81 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
   });
 });
 
+
+describe("game/mobile roles and short-writing rule", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+
+  it("game-developer covers the Godot toolchain and defers project lessons to the card", () => {
+    const body = read("roles/game-developer.md");
+    for (const w of ["Godot 4", "GDScript", "gdlint", "gdformat", "GUT", "headless", "baseline", "Android export", "`## Çalışma notları`"]) expect(body, w).toContain(w);
+  });
+
+  it("game-director is read-only for production code, writes docs/review and asks for play notes", () => {
+    const body = read("roles/game-director.md");
+    for (const w of ["docs/review/", "--write-movie", "vlad task ask", "oynanış notu", "roadmap", "şimdi", "kaynak URL"]) expect(body, w).toContain(w);
+  });
+
+  it("game roles generate visuals/icons with Codex, short video with Gemini, show the user first and note source/model", () => {
+    for (const r of ["game-developer", "game-director"]) {
+      const body = read(`roles/${r}.md`);
+      for (const w of ["codex exec", "Gemini", "kullanıcıya göster", "model notu"]) expect(body, `${r}: ${w}`).toContain(w);
+    }
+  });
+
+  it("growth only drafts: no accounts, posts or contact", () => {
+    const body = read("roles/growth.md");
+    for (const w of ["ASO", "SEO", "Discord", "TikTok", "haftalık", "hesap açmaz", "paylaşım yapmaz", "iletişime geçmez"]) expect(body, w).toContain(w);
+  });
+
+  it("designer keeps the web rules and gains a mobile section; pazarlama gains a game section split with growth", () => {
+    const d = read("roles/designer.md");
+    for (const w of ["docs/design/", "`tasarım`", "`denetim`", "Jetpack Compose", "Material 3", "48dp", "edge-to-edge", "TalkBack", "Roborazzi", "Paparazzi", ".claude/skills"]) expect(d, w).toContain(w);
+    const p = read("roles/pazarlama.md");
+    for (const w of ["konumlandırma", "lansman", "monetizasyon", "`growth`"]) expect(p, w).toContain(w);
+  });
+
+  it("vlad-worker carries the short-writing rule without changing the report template; CLAUDE.md lists the new roles", () => {
+    const w = read("global/skills/vlad-worker/SKILL.md");
+    expect(w).toContain("Kısa yazım");
+    expect(w).toContain("kararların gerekçesi");
+    for (const h of ["### Yapılanlar", "### Test sonuçları", "### Kabul kriterleri", "### Açık noktalar"]) expect(w, h).toContain(h);
+    expect(read("src/tasks/cloud.ts")).toContain("Kısa yaz");
+    const c = read("CLAUDE.md");
+    for (const r of ["game-developer", "game-director", "growth"]) expect(c, r).toContain(r);
+  });
+});
+
+describe("ponytail (vendored, developer + game-developer only)", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const SOURCE_BLOB = "d64edd32265ba21cbf5270158f04e97d96925f27"; // DietrichGebert/ponytail@09c434a skills/ponytail/SKILL.md
+
+  it("SKILL.md is byte-identical to the source blob; only SOURCE.md and LICENSE sit beside it", () => {
+    const body = Buffer.from(read(".claude/skills/ponytail/SKILL.md").replace(/\r\n/g, "\n"), "utf8");
+    const sha = createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
+    expect(sha).toBe(SOURCE_BLOB);
+    expect(readdirSync(resolve(root, ".claude/skills/ponytail")).sort()).toEqual(["LICENSE", "SKILL.md", "SOURCE.md"]);
+    const source = read(".claude/skills/ponytail/SOURCE.md");
+    for (const w of ["github.com/DietrichGebert/ponytail", "09c434ab73ca43761c5d8b0c5d341926c2fba710", SOURCE_BLOB, "MIT"]) expect(source, w).toContain(w);
+    expect(read(".claude/skills/ponytail/LICENSE")).toContain("MIT License");
+  });
+
+  it("only developer and game-developer list ponytail in skills", () => {
+    const { roles } = listRolesWithWarnings(dir);
+    expect(roles.filter((r) => r.skills.includes("ponytail")).map((r) => r.slug).sort()).toEqual(["developer", "game-developer"]);
+  });
+
+  it("both roles state the priority rules: TDD/gate first, tests for behavior change, full level only, skipped items in Açık noktalar", () => {
+    for (const r of ["developer", "game-developer"]) {
+      const body = read(`roles/${r}.md`);
+      for (const w of ["ponytail", "gate", "davranış değişikliği = test", "yalnız `full`", "vlad task ask", "### Açık noktalar"]) expect(body, `${r}: ${w}`).toContain(w);
+    }
+  });
+
+  it("CLAUDE.md notes the trial in the roles paragraph", () => {
+    const c = read("CLAUDE.md");
+    expect(c).toContain("ponytail");
+    expect(c).toMatch(/ponytail.*deneme/);
+  });
+});

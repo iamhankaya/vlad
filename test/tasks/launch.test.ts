@@ -7,7 +7,7 @@ import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
-import { buildPrompt, cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
+import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { makeHome } from "../helpers.js";
@@ -164,6 +164,17 @@ describe("launchTask", () => {
     expect(l.reqs.map((r) => r.model)).toEqual(["sonnet", undefined, undefined]);
   });
 
+  it("task model overrides the role's model; without a task model the role's model applies", async () => {
+    const file = writeRole("tester");
+    writeFileSync(file, readFileSync(file, "utf8").replace("summary: s\n", "summary: s\nmodel: sonnet\n"));
+    const l = fakeLauncher();
+    const a = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester", model: "haiku" });
+    await launchTask(a.data.id, { launcher: l, cfg });
+    const b = createTask({ project: "alpha", title: "x", kind: "dev", body: "", model: "opus", modelReason: "kritik" });
+    await launchTask(b.data.id, { launcher: l, cfg });
+    expect(l.reqs.map((r) => r.model)).toEqual(["haiku", "opus"]);
+  });
+
   it("prompt lists the role's skills, and has no skill sentence for an empty list", () => {
     const r = { title: "T", file: "r.md" };
     expect(buildPrompt("f.md", "commit", { ...r, skills: ["a:b", "c"] }))
@@ -306,6 +317,143 @@ describe("pipeline launch", () => {
     cleanupTask(p.data.id, { closeWorker: () => {} });
     expect(existsSync(iwt)).toBe(false);
     expect(git(repo, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
+  });
+});
+
+describe("cross-project pipeline launch (F-vlad-044)", () => {
+  let beta: string;
+  let origin: string;
+  beforeEach(() => {
+    const base = join(repo, "..");
+    beta = join(base, "beta");
+    origin = join(base, "beta-origin.git");
+    mkdirSync(beta);
+    git(beta, "init", "-b", "main");
+    writeFileSync(join(beta, "b.txt"), "1");
+    git(beta, "add", ".");
+    git(beta, "commit", "-m", "first");
+    git(base, "init", "--bare", "-b", "main", origin);
+    git(beta, "remote", "add", "origin", origin);
+    git(beta, "push", "origin", "main");
+    writeProject("beta", `---
+slug: beta
+name: Beta
+path: ${JSON.stringify(beta)}
+stack: [ts]
+status: active
+autonomy: commit
+last_activity: null
+last_scanned: null
+---
+
+## Özet
+x
+`);
+  });
+  const pipe = () => createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" });
+  const betaPhase = (parent: string) =>
+    createTask({ project: "beta", title: "faz", kind: "dev", body: "", parent, phase: "uygulama" });
+  /** the integration branch exists only on beta's origin, with one commit of its own */
+  const remoteOnlyIntegration = (parentId: string) => {
+    const b = `vlad/${parentId}`;
+    git(beta, "switch", "-c", b);
+    writeFileSync(join(beta, "remote.txt"), "r");
+    git(beta, "add", ".");
+    git(beta, "commit", "-m", "remote entegrasyon");
+    git(beta, "push", "origin", b);
+    git(beta, "switch", "main");
+    git(beta, "branch", "-D", b);
+  };
+
+  it("phase branch is cut from the integration branch in the phase's repo; the pipeline's repo stays clean", async () => {
+    const p = pipe();
+    remoteOnlyIntegration(p.data.id);
+    const c = betaPhase(p.data.id);
+    const r = await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
+    const wt = r.data.worktree!;
+    expect(wt).toBe(worktreePath(cfg, beta, c.data.id));
+    expect(git(wt, "branch", "--show-current").trim()).toBe(`vlad/${c.data.id}`);
+    expect(existsSync(join(wt, "remote.txt"))).toBe(true);
+    // integration branch is a tracking local branch in beta
+    expect(git(beta, "rev-parse", "--abbrev-ref", `vlad/${p.data.id}@{upstream}`).trim()).toBe(`origin/vlad/${p.data.id}`);
+    // nothing in alpha, and the pipeline record keeps alpha-only fields untouched
+    expect(git(repo, "branch", "--list", `vlad/${p.data.id}`).trim()).toBe("");
+    expect(git(repo, "worktree", "list", "--porcelain")).not.toContain("vlad/");
+    const pd = getTask(p.data.id).data;
+    expect(pd.state).toBe("running");
+    expect(pd.branch).toBeNull();
+    expect(pd.worktree).toBeNull();
+  });
+
+  it("without a remote copy the integration branch is created from the phase repo's default branch", async () => {
+    const p = pipe();
+    const c = betaPhase(p.data.id);
+    await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
+    expect(git(beta, "rev-parse", `vlad/${p.data.id}`).trim()).toBe(git(beta, "rev-parse", "main").trim());
+    expect(git(repo, "branch", "--list", `vlad/${p.data.id}`).trim()).toBe("");
+  });
+
+  it("a worktree that is not on the expected phase branch fails the launch, queued, integration branch kept", async () => {
+    const p = pipe();
+    remoteOnlyIntegration(p.data.id);
+    const c = betaPhase(p.data.id);
+    const launcher = fakeLauncher();
+    await expect(launchTask(c.data.id, { launcher, cfg, branchOf: () => "vlad/baska" })).rejects.toThrow(/beklenen faz dalı/);
+    expect(launcher.reqs).toHaveLength(0);
+    expect(getTask(c.data.id).data.state).toBe("queued");
+    expect(getTask(c.data.id).data.error).toMatch(/beklenen faz dalı/);
+    expect(existsSync(worktreePath(cfg, beta, c.data.id))).toBe(false);
+    expect(git(beta, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
+  });
+
+  it("a same-project phase still records the integration branch on the pipeline", async () => {
+    const p = pipe();
+    const a = createTask({ project: "alpha", title: "faz", kind: "dev", body: "", parent: p.data.id, phase: "uygulama" });
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    expect(getTask(p.data.id).data).toMatchObject({ branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, repo, p.data.id) });
+  });
+
+  it("F-vlad-063: integrationWorktrees derives the integration worktree per phase project", async () => {
+    cfg.worktreeDir = "{repo}-wt"; // per-repo dirs, as in the default config
+    const p = pipe();
+    await launchTask(betaPhase(p.data.id).data.id, { launcher: fakeLauncher(), cfg });
+    await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
+    const w = integrationWorktrees(p.data.id, cfg);
+    expect(w.map((x) => x.project).sort()).toEqual(["alpha", "beta"]);
+    expect(w.find((x) => x.project === "beta")).toMatchObject({
+      repo: beta, branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, beta, p.data.id),
+    });
+    expect(w.find((x) => x.project === "alpha")!.worktree).toBe(worktreePath(cfg, repo, p.data.id));
+  });
+
+  it("F-vlad-063: a phase project whose card is gone is skipped; cleanup still removes the pipeline's own worktree", async () => {
+    cfg.worktreeDir = "{repo}-wt";
+    const p = pipe();
+    await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
+    createTask({ project: "beta", title: "faz", kind: "dev", body: "", parent: p.data.id, phase: "uygulama" });
+    rmSync(join(process.env.VLAD_HOME!, "kb", "projects", "beta.md"));
+    expect(integrationWorktrees(p.data.id, cfg).map((x) => x.project)).toEqual(["alpha"]);
+    const awt = getTask(p.data.id).data.worktree!;
+    setState(p.data.id, "awaiting_approval");
+    setState(p.data.id, "done");
+    cleanupTask(p.data.id, { closeWorker: () => {}, cfg });
+    expect(existsSync(awt)).toBe(false);
+  });
+
+  it("F-vlad-063: cleanup of a done pipeline removes the integration worktree in the phase's project too, keeps branches", async () => {
+    cfg.worktreeDir = "{repo}-wt"; // per-repo dirs, as in the default config
+    const p = pipe();
+    await launchTask(betaPhase(p.data.id).data.id, { launcher: fakeLauncher(), cfg });
+    await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
+    const bwt = worktreePath(cfg, beta, p.data.id);
+    const awt = getTask(p.data.id).data.worktree!;
+    expect(existsSync(bwt)).toBe(true);
+    setState(p.data.id, "awaiting_approval");
+    setState(p.data.id, "done");
+    cleanupTask(p.data.id, { closeWorker: () => {}, cfg });
+    expect(existsSync(bwt)).toBe(false);
+    expect(existsSync(awt)).toBe(false);
+    expect(git(beta, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
   });
 });
 

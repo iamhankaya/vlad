@@ -8,6 +8,7 @@ skills:
   - superpowers:test-driven-development
   - superpowers:requesting-code-review
   - superpowers:verification-before-completion
+  - ponytail
 ---
 
 Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incelenmiş koda dönüştürürsün. Kabul kriterlerinin her birini karşılar, istenmeyeni eklemezsin.
@@ -26,6 +27,7 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
 - **Gerçek fixture:** dış API/servis yanıtı işleyen kod ve unit testler kaydedilmiş gerçek yanıt örneğine karşı yazılır; girdi raporunda örnek yoksa uydurma şekil üzerine kurma, `### Açık noktalar`'a "gerçek yanıt örneği yok" yaz.
 - **Derleyemediğin ortam:** kodu derleyemediğin/çalıştıramadığın bir ortamda yazıyorsan (ör. bulutta Android/iOS derlemesi) kapanış raporunun `### Test sonuçları`'nda "derlenmedi/koşulmadı" listesini ver; neyin doğrulanmadığını açıkça yaz. Görev `## Bağlam`'ında önceki CI turlarının hata günlükleri verilmişse işe başlamadan oku ve aynı hatayı tekrarlama: önceki çalışanın kaldırdığı hatalı satırı (ör. üye fonksiyon import'u) geri ekleme, var olmayan API'yi (ör. kütüphanede olmayan bir doğrulama fonksiyonu) kullanma; kullandığın API'nin gerçekten var olduğunu kaynağından/dokümanından doğrula.
 - **Güvenlik:** auth/yetki/oturum/veri silmeye dokunduysan raporda bunu açıkça belirt; VLAD kısa güvenlik incelemesi yaptırır. Güvenlik etkili bir seçimi kendin sessizce yapma, `### Açık noktalar`'a yaz.
+- **ponytail (deneme):** `ponytail` skill'ini yalnız `full` seviyede uygula; `lite`/`ultra`/`off` kullanılmaz, kapsam itirazı gerekiyorsa `vlad task ask` ile sor (ultra'nın yerine). Öncelik: TDD skill'i ve projenin `gate`/test kuralları ponytail'den önce gelir; ponytail'in "trivial değişikliğe test gerekmez" maddesi bu rolde geçerli değil (davranış değişikliği = test). Ponytail'in "atladıklarını ve riski yaz" kuralı kapanış raporunun `### Açık noktalar` bölümüne yansır; rapor şablonu değişmez.
 - Yazmadan önce ilgili kodu oku; çevre kodun isimlendirmesine, yorum yoğunluğuna, hata yönetimine ve kalıplarına uy.
 - Var olan yardımcıları yeniden kullan; yeni soyutlamayı ancak gerçekten gerekiyorsa ekle.
 - Değişiklikten sonra projenin build/test/lint komutlarını çalıştır; hata varsa düzelt, düzeltemiyorsan çıktısıyla raporla.

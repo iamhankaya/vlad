@@ -4,7 +4,7 @@ import {
   appendToSection, autonomyFor, CLOUD_ID_FLOOR, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
   setSection, validate, writeDoc,
 } from "../kb/index.js";
-import type { TaskData, TaskKind, TaskState } from "../kb/index.js";
+import type { TaskData, TaskKind, TaskModel, TaskState } from "../kb/index.js";
 import { getRole, type Role } from "../roles/store.js";
 import { assertTransition } from "./state.js";
 
@@ -19,6 +19,22 @@ export function roleFor(slug: string, kind: TaskKind): Role {
     throw new Error(`rol ${r.slug} (${r.kind}) ${kind} görevinde kullanılamaz`);
   }
   return r;
+}
+
+export const TASK_MODELS: TaskModel[] = ["haiku", "sonnet", "opus"];
+
+/** Model the task's worker runs on: the task's own, else its role's, else null (claude's default). */
+export function effectiveModel(task: Pick<TaskData, "model">, role?: Pick<Role, "model"> | null): string | null {
+  return task.model ?? role?.model ?? null;
+}
+
+/** The role's model next to the model the task really runs on; a missing/broken role file counts as no role model. */
+export function modelInfo(data: TaskData): { role_model: string | null; effective_model: string | null } {
+  let role: Role | null = null;
+  if (data.role) {
+    try { role = getRole(data.role); } catch { /* role file gone: launch reports it */ }
+  }
+  return { role_model: role?.model ?? null, effective_model: effectiveModel(data, role) };
 }
 
 const CLOSED: TaskState[] = ["done", "cancelled", "failed"];
@@ -83,6 +99,7 @@ export function createTask(
   o: {
     project: string; title: string; kind: TaskKind; body: string; role?: string | null;
     parent?: string | null; dependsOn?: string[]; phase?: string | null;
+    model?: string | null; modelReason?: string | null;
   },
   now: Date = new Date(),
   /** Test seam: supplies the first candidate id (defaults to nextTaskId). */
@@ -92,6 +109,11 @@ export function createTask(
     throw new Error(`geçersiz görev türü: ${o.kind} (dev | research | pipeline)`);
   }
   checkLinks(o);
+  if (o.model !== undefined && o.model !== null && !TASK_MODELS.includes(o.model as TaskModel)) {
+    throw new Error(`geçersiz model: ${o.model} (${TASK_MODELS.join(" | ")})`);
+  }
+  if (o.modelReason && !o.model) throw new Error("--model-reason yalnızca --model ile verilir");
+  if (o.model === "opus" && !o.modelReason?.trim()) throw new Error("opus modeli için --model-reason (gerekçe) zorunlu");
   if (o.role) roleFor(o.role, o.kind);
   const paths = kbPaths();
   mkdirSync(paths.tasks, { recursive: true });
@@ -106,6 +128,7 @@ export function createTask(
       id, project: o.project, title: o.title, kind: o.kind, state: "queued", autonomy,
       branch: null, worktree: null, session_id: null, created: ts, updated: ts, error: null, role: o.role || null,
       parent: o.parent || null, depends_on: o.dependsOn ?? [], phase: o.phase || null,
+      ...(o.model ? { model: o.model as TaskModel, ...(o.modelReason?.trim() ? { model_reason: o.modelReason.trim() } : {}) } : {}),
     };
     validate("task", data);
     const file = taskFile(id);

@@ -23,7 +23,7 @@ git -C <kbDir> pull --ff-only
 vlad inbox list --json
 vlad task list --undigested --json
 ```
-İlki: `{"items":[{ "file": "...", "record": {...} }, ...]}`. İkincisi: `{"tasks":[{ "id", "project", "title", "updated", ... }]}`; her görev için `kb/tasks/<id>.md`'yi oku (`## Tanım` ve `## Kapanış raporu`). İkisi de boşsa "işlenecek rapor yok" de ve bitir.
+İlki: `{"items":[{ "file": "...", "record": {...} }, ...]}`. İkincisi: `{"tasks":[{ "id", "project", "title", "updated", ... }]}`; her görev için `kb/tasks/<id>.md`'yi oku: `## Tanım`, `## İlerleme`, `## Sorular` (cevaplar dahil) ve `## Kapanış raporu`. Pipeline fazında çatının (`parent`) `## İlerleme` bölümünü de oku. Kullanıcı onay/karar/teyitleri çoğunlukla İlerleme ("Kullanıcı teyidi", "[KARAR]") ve Sorular'dadır. İkisi de boşsa "işlenecek rapor yok" de ve bitir.
 
 Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an). Aynı görevin hem inbox raporu (`task_id` eşleşir) hem kapanış raporu varsa bunları **tek** günlük maddesinde birleştir.
 
@@ -58,6 +58,16 @@ Her madde kaynak session/görev ID'si taşır. Geçici dosyaya yaz ve:
 vlad journal append <YYYY-MM-DD> --file <geçici.md> --json
 ```
 
+## 3b. Kullanıcı onayı kontrolü (adım 4 ve 4b'den önce)
+
+Bir açık noktayı **bulgu** (4b) ya da kartta **"kullanıcı kararı bekliyor"** türü açık konu (4) olarak yazmadan önce onay/karar/teyit/düzeltme şu kaynaklarda aranır:
+- görevin ve çatının `## İlerleme` / `## Sorular` bölümleri;
+- projenin kullanıcı listesi görevi (başlığında "Kullanıcıdan beklenenler" geçen açık görev; ör. Ashen için T20261023-96);
+- `kb/decisions.md` (proje + ilgili tarih);
+- sonraki fazların kapanış raporları.
+
+Bulunursa madde açılmaz (bulgu varsa doğrudan `fixed`/`wontfix`: `vlad finding set <id> <durum> --by <görev-id>`) ve günlükte kaynağıyla belirtilir ("kullanıcı teyit etti, kaynak: T…/İlerleme"). Gerekçe: 2026-10-25 digest'inde teyitli Zyfen SFX lisansı (F-ashen-bastion-051) bulgu olarak açıldı ve kartlara bayat "kullanıcı kararı bekliyor" maddeleri yazıldı. Kartın `## Çalışma notları`'ndaki 2026-10-22 digest dersiyle (kapanmış maddeyi açık yazma) aynı çizgidedir; o dersi tekrar yazma, ona atıf yap.
+
 ## 4. Proje kartları
 
 Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamamını** güncellenmiş hâliyle geçici dosyaya yaz:
@@ -66,9 +76,11 @@ Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamam�
 - `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` ve retro yazar). Kartı yeniden yazarken bölümü aynen koru.
 - `last_activity`: en yeni `ended` (mevcuttan yeniyse).
 - Diğer bölümleri ve alanları koru.
+- Yeniden yazmadan önce adım 3b'yi uygula: onaylanmış bir konuyu "kullanıcı kararı bekliyor" diye yazma.
 ```
 vlad project write <slug> --file <geçici.md> --json
 ```
+**Doğrula:** yazdıktan sonra kartı yeniden oku (`vlad project list --json` ya da kart dosyası) ve `## Son aktivite` ile `## Açık konular`'ın gerçekten güncellendiğini, `## Çalışma notları`'nın değişmediğini kontrol et (2026-10-25'te Son aktivite/Açık konular yarım uygulandı). Eksikse kartı tamamlayıp tekrar yaz.
 
 ## 4b. Bulgular
 

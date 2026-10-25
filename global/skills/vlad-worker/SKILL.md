@@ -29,6 +29,10 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 - `autonomy: plan` → Yalnızca plan yaz, kod yazma. Planı `vlad task report` ile onaya sun (adım 6) ve dur.
 - `autonomy: commit` / `pr` → Mevcut iş akışını kullan: brainstorming/plan → TDD → review. Kabul kriterlerinin her birini karşıla.
 
+## Kısa yazım
+
+Düz metinde (ilerleme notları, sorular, rapor gövdesi) kısa ve somut yaz; dolgu, selam ve tekrar yok. Kapanış raporunda ise başlıklar, ID'ler, komutlar, sayılar ve **kararların gerekçesi** olduğu gibi kalır: VLAD `/digest` bunlardan karar ve bulgu çıkarır, kısaltma bunları silmemeli.
+
 ## 3. İlerleme kaydı
 
 Önemli adımlarda (plan hazır, ilk testler geçti, review bitti vb.):

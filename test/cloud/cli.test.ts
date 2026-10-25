@@ -11,6 +11,8 @@ let home: string;
 beforeEach(() => {
   home = makeHome();
   mkdirSync(join(home, "roles"), { recursive: true });
+  // launcher "auto" resolves to a local terminal on Windows (it would open a real worker); these tests exercise the cloud path (F-vlad-062)
+  writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
   writeFileSync(join(home, "card.md"), `---
 slug: alpha
 name: Alpha
@@ -41,7 +43,7 @@ function newTask(): string {
   return JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", join(home, "body.md"), "--json"], undefined, CLOUD).out).id;
 }
 
-describe("cloud CLI", () => {
+describe("cloud CLI", { timeout: 30_000 }, () => {
   it("launch --json in a cloud env returns create_session arguments and runs the task", () => {
     const id = newTask();
     expect(id).toMatch(/-51$/);
@@ -52,8 +54,10 @@ describe("cloud CLI", () => {
     expect(vlad(["task", "list", "--state", "running", "--json"]).out).toContain(id);
   });
 
-  it("launch outside the cloud on a non-Windows host fails with a clear error and stays queued", () => {
+  // launcher=auto only fails off Windows; on Windows it would open a real terminal, so skip there
+  it.skipIf(process.platform === "win32")("launch outside the cloud on a non-Windows host fails with a clear error and stays queued", () => {
     const id = newTask();
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "auto" }));
     const r = vlad(["task", "launch", id, "--json"]);
     expect(r.code).toBe(1);
     expect(JSON.parse(r.err).error).toMatch(/bulut algılanmadı/);

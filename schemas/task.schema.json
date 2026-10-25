@@ -21,6 +21,8 @@
     "parent": { "type": ["string", "null"], "pattern": "^T\\d{8}-\\d{2,}$" },
     "depends_on": { "type": "array", "items": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" } },
     "phase": { "type": ["string", "null"] },
-    "report_file": { "type": ["string", "null"] }
+    "report_file": { "type": ["string", "null"] },
+    "model": { "enum": ["haiku", "sonnet", "opus", null] },
+    "model_reason": { "type": ["string", "null"] }
   }
 }

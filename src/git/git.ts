@@ -81,6 +81,18 @@ export function branchExists(repo: string, branch: string): boolean {
   return runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${branch}`]) !== null;
 }
 
+/** True if `origin/<branch>` is known locally, after a best-effort fetch of that branch. */
+export function remoteBranchExists(repo: string, branch: string): boolean {
+  runGit(repo, ["fetch", "--quiet", "origin", branch], 30000);
+  return runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/remotes/origin/${branch}`]) !== null;
+}
+
+/** Branch checked out in the worktree at `dir`, or null (detached/error). */
+export function worktreeBranch(dir: string): string | null {
+  const b = runGit(dir, ["branch", "--show-current"]);
+  return b ? b : null;
+}
+
 /** New branch + worktree at `dir`, from `base` (default: HEAD). */
 export function addWorktree(repo: string, dir: string, branch: string, base?: string): void {
   if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);

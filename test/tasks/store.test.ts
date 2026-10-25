@@ -16,6 +16,30 @@ beforeEach(() => {
   makeHome();
 });
 
+describe("task model", () => {
+  it("stores a valid model and the opus reason; absent model stays absent", () => {
+    const a = createTask({ project: "p", title: "t", kind: "dev", body: "", model: "haiku" }, D);
+    expect(readDoc<TaskData>(a.file).data).toMatchObject({ model: "haiku" });
+    const b = createTask({ project: "p", title: "t", kind: "dev", body: "", model: "opus", modelReason: "kritik" }, D);
+    expect(readDoc<TaskData>(b.file).data).toMatchObject({ model: "opus", model_reason: "kritik" });
+    expect(readDoc<TaskData>(mk().file).data.model ?? null).toBeNull();
+  });
+  it("rejects opus without a reason and an unknown model", () => {
+    expect(() => createTask({ project: "p", title: "t", kind: "dev", body: "", model: "opus" }, D)).toThrow(/model-reason|gerekçe/);
+    expect(() => createTask({ project: "p", title: "t", kind: "dev", body: "", model: "gpt" }, D)).toThrow(/model/);
+    expect(listTasks()).toEqual([]);
+  });
+  it("rejects an empty model and a reason without a model", () => {
+    expect(() => createTask({ project: "p", title: "t", kind: "dev", body: "", model: "" }, D)).toThrow(/model/);
+    expect(() => createTask({ project: "p", title: "t", kind: "dev", body: "", modelReason: "x" }, D)).toThrow(/model-reason/);
+  });
+  it("schema accepts legacy task files without model and rejects a bad model", () => {
+    const d = readDoc<TaskData>(mk().file).data;
+    expect(() => validate("task", d)).not.toThrow();
+    expect(() => validate("task", { ...d, model: "gpt" })).toThrow();
+  });
+});
+
 describe("task store", () => {
   it("assigns sequential ids", () => {
     expect(mk().data.id).toBe("T20261015-01");

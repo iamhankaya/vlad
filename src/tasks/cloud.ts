@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
-import { roleFor, getTask, saveTask, setState } from "./store.js";
+import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
 /** What VLAD hands to `create_session` for a cloud worker (`vlad task launch --json`, cloud mode). */
@@ -100,6 +100,7 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "- Önce tüm işini push et, ardından kapanış raporunu **son tur mesajında tam metin olarak** yaz; \"rapor yukarıda\" gibi özet ya da atıf yasak (VLAD yalnızca son sayfayı okuyabilir); rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
+  "- Kısa yaz: düz metinde dolgu, selam ve tekrar yok; ama kapanış raporunda başlıklar, ID'ler, komutlar, sayılar ve kararların gerekçesi korunur.",
   "- Bitirirken son tur mesajında tüm işaretlerini (LOG'lar ve tam REPORT dahil) tekrar et; VLAD uzun transcript'te yalnızca son sayfayı okuyabilir.",
   ...(vladSession
     ? [
@@ -230,7 +231,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       repo: c.repo, source_url: `https://github.com/${c.repo}`,
       source_revision: base, base_branch: base, outcome_branch: branch, branch, worktree: null,
       integration,
-      model: role?.model ?? null,
+      model: effectiveModel(task.data, role),
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",
