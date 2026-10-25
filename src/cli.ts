@@ -15,7 +15,7 @@ import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings, modelInfo,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -47,8 +47,13 @@ function out(o: Opts, data: unknown, text: string): void {
 }
 
 const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}`;
+/** Pipeline tasks carry their per-project integration worktrees (F-vlad-063); a missing project card must not break listing. */
+const integrationInfo = (t: Task) => {
+  if (t.data.kind !== "pipeline") return {};
+  try { return { integration_worktrees: integrationWorktrees(t.data.id, loadConfig()) }; } catch { return {}; }
+};
 /** Task data plus the model it runs on (task `model` ?? role `model`), for --json consumers. */
-const withModel = (t: Task) => ({ ...t.data, ...modelInfo(t.data) });
+const withModel = (t: Task) => ({ ...t.data, ...modelInfo(t.data), ...integrationInfo(t) });
 /** Detailed status line: shows the model only when the task's own model deviates from its role's. */
 const statusLine = (t: Task) => {
   const m = t.data.model && t.data.model !== modelInfo(t.data).role_model ? `  [model: ${t.data.model}]` : "";
@@ -245,7 +250,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     : `send_message session_id=${r.session_id}\n${r.message}`);
 });
 def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
-  cleanupTask(id);
+  cleanupTask(id, { cfg: loadConfig() });
   out(o, { id }, `${id} worktree kaldırıldı`);
 });
 def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {

@@ -7,7 +7,7 @@ import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
-import { buildPrompt, cleanupTask, launchTask, statusSummary } from "../../src/tasks/launch.js";
+import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { makeHome } from "../helpers.js";
@@ -411,6 +411,35 @@ x
     const a = createTask({ project: "alpha", title: "faz", kind: "dev", body: "", parent: p.data.id, phase: "uygulama" });
     await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
     expect(getTask(p.data.id).data).toMatchObject({ branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, repo, p.data.id) });
+  });
+
+  it("F-vlad-063: integrationWorktrees derives the integration worktree per phase project", async () => {
+    cfg.worktreeDir = "{repo}-wt"; // per-repo dirs, as in the default config
+    const p = pipe();
+    await launchTask(betaPhase(p.data.id).data.id, { launcher: fakeLauncher(), cfg });
+    await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
+    const w = integrationWorktrees(p.data.id, cfg);
+    expect(w.map((x) => x.project).sort()).toEqual(["alpha", "beta"]);
+    expect(w.find((x) => x.project === "beta")).toMatchObject({
+      repo: beta, branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, beta, p.data.id),
+    });
+    expect(w.find((x) => x.project === "alpha")!.worktree).toBe(worktreePath(cfg, repo, p.data.id));
+  });
+
+  it("F-vlad-063: cleanup of a done pipeline removes the integration worktree in the phase's project too, keeps branches", async () => {
+    cfg.worktreeDir = "{repo}-wt"; // per-repo dirs, as in the default config
+    const p = pipe();
+    await launchTask(betaPhase(p.data.id).data.id, { launcher: fakeLauncher(), cfg });
+    await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
+    const bwt = worktreePath(cfg, beta, p.data.id);
+    const awt = getTask(p.data.id).data.worktree!;
+    expect(existsSync(bwt)).toBe(true);
+    setState(p.data.id, "awaiting_approval");
+    setState(p.data.id, "done");
+    cleanupTask(p.data.id, { closeWorker: () => {}, cfg });
+    expect(existsSync(bwt)).toBe(false);
+    expect(existsSync(awt)).toBe(false);
+    expect(git(beta, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
   });
 });
 
