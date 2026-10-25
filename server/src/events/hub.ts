@@ -77,11 +77,13 @@ export class SseHub {
     this.streams.add(conn);
     conn.send("retry: 3000\n\n");
     if (lastEventId !== null) {
-      if (this.d.ledger.hasGapAfter(lastEventId)) conn.send(`: gap first=${this.d.ledger.firstSeq}\n\n`);
+      // client ahead of the ledger (it was reset or restored): nothing to replay, the client must refresh via GET /home
+      if (lastEventId > this.d.ledger.lastSeq) conn.send(`: reset last_seq=${this.d.ledger.lastSeq}\n\n`);
+      else if (this.d.ledger.hasGapAfter(lastEventId)) conn.send(`: gap first=${this.d.ledger.firstSeq}\n\n`);
       for (const e of this.d.ledger.after(lastEventId, Number.MAX_SAFE_INTEGER)) conn.send(frame(e)); // bounded by the ledger size
     }
-    if (this.d.every) conn.stopTimer = this.d.every(KEEPALIVE_MS, () => this.keepalive(conn));
     this.enforce(conn);
+    if (this.d.every && !conn.closed) conn.stopTimer = this.d.every(KEEPALIVE_MS, () => this.keepalive(conn));
     return { ok: true, stream: conn };
   }
 
@@ -99,12 +101,16 @@ export class SseHub {
   private broadcast(e: LedgerEvent): void {
     const f = frame(e);
     for (const c of [...this.streams]) {
-      c.send(f);
-      this.enforce(c);
+      if (!this.d.isActive(c.deviceId)) c.close(); // a revoked device gets nothing more, not even this event
+      else {
+        c.send(f);
+        this.enforce(c);
+      }
     }
   }
 
   private keepalive(c: Conn): void {
+    if (!this.d.isActive(c.deviceId)) return c.close();
     c.send(": keepalive\n\n");
     this.enforce(c);
   }

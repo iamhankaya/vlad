@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, truncateSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { appendDurable, ensureDir, fsyncDir } from "../auth/files.ts";
 
@@ -33,7 +33,10 @@ export class EventLedger {
     this.file = join(stateDir, "events.jsonl");
     this.max = Math.max(1, max);
     if (existsSync(this.file)) {
-      for (const line of readFileSync(this.file, "utf8").split("\n")) {
+      const raw = readFileSync(this.file, "utf8");
+      // A crash mid-append leaves a partial last line. Cut it off, or the next append would glue onto it and reuse its seq.
+      if (raw !== "" && !raw.endsWith("\n")) truncateSync(this.file, Buffer.byteLength(raw.slice(0, raw.lastIndexOf("\n") + 1)));
+      for (const line of raw.split("\n")) {
         if (!line) continue;
         try {
           const e = JSON.parse(line) as Stored;
@@ -81,7 +84,11 @@ export class EventLedger {
       const old = this.events.shift()!;
       if (old.key) this.keys.delete(old.key);
     }
-    if (this.fileLines > this.max * 2) this.compact();
+    if (this.fileLines > this.max * 2) {
+      try {
+        this.compact();
+      } catch { /* the event is already durable; compaction is retried with the next append */ }
+    }
     const out: LedgerEvent = { seq: rec.seq, type, data };
     for (const cb of this.listeners) {
       try { cb(out); } catch { /* a broken subscriber must not lose the event */ }

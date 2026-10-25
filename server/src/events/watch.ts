@@ -39,20 +39,32 @@ export class EventWatcher {
     try {
       do {
         this.again = false;
-        let next: Snapshot;
         try {
-          next = await this.d.snapshot();
+          const next = await this.d.snapshot();
+          appended += this.apply(next);
         } catch (e) {
-          this.d.onError?.(e);
-          continue;
+          this.d.onError?.(e); // a failed look or a failed append (disk full, EACCES...): the previous look stays, the next poll retries
         }
-        for (const ev of diffSnapshots(this.prev, next)) if (this.d.ledger.append(ev.type, ev.data, ev.key)) appended++;
-        this.prev = next;
       } while (this.again);
     } finally {
       this.running = null;
     }
     return appended;
+  }
+
+  /**
+   * Appends the difference and then adopts `next`. If an append throws, `prev` is not advanced, so the next look re-derives the
+   * rest: keyed events dedup in the ledger. The one keyless event (`quota.changed`) is recorded in `prev` as soon as it is written,
+   * so a retry never writes it twice.
+   */
+  private apply(next: Snapshot): number {
+    let n = 0;
+    for (const ev of diffSnapshots(this.prev, next)) {
+      if (this.d.ledger.append(ev.type, ev.data, ev.key)) n++;
+      if (ev.type === "quota.changed" && this.prev) this.prev = { ...this.prev, quota: next.quota };
+    }
+    this.prev = next;
+    return n;
   }
 }
 
@@ -77,7 +89,7 @@ export function startKbWatch(d: KbWatchDeps): () => void {
     if (stopped || pending !== null) return;
     pending = d.setTimer(() => {
       pending = null;
-      void d.watcher.poll();
+      d.watcher.poll().catch(() => {});
     }, d.debounceMs);
   };
   const handles = d.dirs.map((dir) => d.watch(dir, schedule));
@@ -87,7 +99,7 @@ export function startKbWatch(d: KbWatchDeps): () => void {
     fallback = d.setTimer(tick, d.fallbackMs);
   };
   let fallback: unknown = d.setTimer(tick, d.fallbackMs);
-  void d.watcher.poll(); // seed
+  d.watcher.poll().catch(() => {}); // seed (poll itself reports failures through onError and does not reject)
   return () => {
     stopped = true;
     if (pending !== null) d.clearTimer(pending);

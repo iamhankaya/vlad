@@ -62,6 +62,8 @@ export function eventHandlers(ledger: EventLedger, hub: SseHub): Record<"listEve
       last = Number(h);
     }
     const res = reply.raw;
+    let stream: { close(): void } | null = null;
+    res.on("close", () => stream?.close()); // bound before `open`, so a socket that dies during admission is not missed
     // The sink is the raw response; headers go out with the first write inside `open`, after admission.
     const admitted = hub.open(req.vladDevice!.device_id, {
       write: (c) => res.write(c),
@@ -72,7 +74,8 @@ export function eventHandlers(ledger: EventLedger, hub: SseHub): Record<"listEve
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
     });
     if (!admitted.ok) return err(reply, 429, "rate_limited", "Çok fazla açık bağlantı.", { retry_after_s: 5 });
-    res.on("close", () => admitted.stream.close());
+    stream = admitted.stream;
+    if (res.destroyed) stream.close();
     return reply;
   };
 

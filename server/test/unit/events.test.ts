@@ -1,7 +1,7 @@
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { diffSnapshots, toSnapshot, vladSnapshot, type Snapshot } from "../../src/events/diff.ts";
 import { frame, SseHub, type Sink } from "../../src/events/hub.ts";
 import { EventLedger, EVENT_TYPES } from "../../src/events/ledger.ts";
@@ -95,6 +95,20 @@ describe("server: event ledger", () => {
     expect(b.lastSeq).toBe(2);
     expect(b.append("quota.changed", { limited: true })!.seq).toBe(3);
     expect(b.after(0, 10).map((e) => e.seq)).toEqual([1, 2, 3]);
+  });
+
+  it("a partial last line is cut off at load: the next append neither glues onto it nor reuses its seq", () => {
+    const dir = tmpState();
+    const a = new EventLedger(dir);
+    a.append("quota.changed", { limited: true });
+    a.append("quota.changed", { limited: false });
+    appendFileSync(join(dir, "events.jsonl"), '{"seq":3,"type":"quota.ch');
+    const b = new EventLedger(dir);
+    expect(b.append("card.opened", { card_id: "C-1" })!.seq).toBe(3);
+    const c = new EventLedger(dir);
+    expect(c.after(0, 10).map((e) => [e.seq, e.type])).toEqual([[1, "quota.changed"], [2, "quota.changed"], [3, "card.opened"]]);
+    expect(readFileSync(join(dir, "events.jsonl"), "utf8").split("\n").filter(Boolean)).toHaveLength(3);
+    expect(c.append("quota.changed", { limited: true })!.seq).toBe(4);
   });
 
   it("keys dedup across a restart", () => {
@@ -218,6 +232,39 @@ describe("server: SSE hub", () => {
     expect(hub.open("d-b", new Rec(), null).ok).toBe(false); // an inactive device never gets a stream
   });
 
+  it("a revoked device gets neither a live event nor a keepalive, even before the revoke hook ran", () => {
+    let tick: (() => void) | undefined;
+    const { ledger, hub, active } = mk({ every: (_ms, fn) => { tick = fn; return () => {}; } });
+    const s = new Rec();
+    hub.open("d-a", s, null);
+    active.delete("d-a");
+    tick!();
+    expect(s.text).not.toContain("keepalive");
+    expect(s.ended).toBe(true);
+    const t = new Rec();
+    hub.open("d-b", t, null);
+    active.delete("d-b");
+    ledger.append("quota.changed", { limited: true });
+    expect(t.text).not.toContain("quota.changed");
+    expect(t.ended).toBe(true);
+  });
+
+  it("a client ahead of the ledger is told to reset; no keepalive timer for a stream that is already closed", () => {
+    const { ledger, hub } = mk();
+    ledger.append("quota.changed", { limited: true });
+    const s = new Rec();
+    hub.open("d-a", s, 40);
+    expect(s.text).toContain(": reset last_seq=1");
+    expect(parseFrames(s.text)).toEqual([]);
+    let timers = 0;
+    const full = mk({ every: () => { timers++; return () => {}; }, maxBacklog: 0 });
+    const slow = new Rec();
+    slow.backlog = 1; // over the backlog right at admission
+    full.hub.open("d-a", slow, null);
+    expect(slow.ended).toBe(true);
+    expect(timers).toBe(0);
+  });
+
   it("keepalive comes from the injected timer and stops with the stream", () => {
     let tick: (() => void) | undefined;
     let cancelled = 0;
@@ -247,6 +294,28 @@ describe("server: event watcher", () => {
     expect(await w.poll()).toBe(1);
     expect(await w.poll()).toBe(0);
     expect(ledger.after(0, 10).map((e) => e.type)).toEqual(["task.state"]);
+  });
+
+  it("an append that throws does not reject or crash; the next poll recovers without duplicates", async () => {
+    const ledger = new EventLedger(tmpState());
+    let cur = snap({ tasks: { "T20261025-01": task("running", "a") } });
+    const errors: unknown[] = [];
+    const w = new EventWatcher({ ledger, snapshot: async () => cur, onError: (e) => errors.push(e) });
+    await w.poll(); // seed
+    cur = snap({ tasks: { "T20261025-01": task("done", "b") }, quota: { limited: true } });
+    const real = ledger.append.bind(ledger);
+    let failTask = true;
+    const spy = vi.spyOn(ledger, "append").mockImplementation((type, data, key) => {
+      if (type === "task.state" && failTask) throw new Error("ENOSPC");
+      return real(type, data, key);
+    });
+    await expect(w.poll()).resolves.toBe(0); // task.state fails first (ids sort before quota)
+    expect(errors).toHaveLength(1);
+    failTask = false;
+    await expect(w.poll()).resolves.toBe(2);
+    await w.poll();
+    spy.mockRestore();
+    expect(ledger.after(0, 10).map((e) => e.type).sort()).toEqual(["quota.changed", "task.state"]);
   });
 
   it("polls never overlap: a poll during a look causes exactly one more look", async () => {
