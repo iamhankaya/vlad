@@ -125,7 +125,7 @@ Seçenekler (açık onay):
 3. **Değişiklik iste:** çatı altına yeni faz aç (`/delegate` adım 4); çatıyı `vlad task set <çatı-id> running --json` ile geri al.
 4. **İptal et:** aşağıdaki "pipeline'ı iptal et".
 
-1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır, branch'ler kalır).
+1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
 
 ### Retro (son kapıdan sonra)
 

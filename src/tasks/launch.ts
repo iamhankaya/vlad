@@ -100,10 +100,15 @@ export function integrationWorktrees(
   const projects = new Set([getTask(parentId).data.project]);
   for (const c of listTasks({ parent: parentId })) projects.add(c.data.project);
   const branch = `vlad/${parentId}`;
-  return [...projects].map((project) => {
+  const out: { project: string; repo: string; branch: string; worktree: string }[] = [];
+  for (const project of projects) {
+    // a phase project whose card is gone must not block listing or cleanup of the rest
+    if (!existsSync(join(kbPaths().projects, `${project}.md`))) continue;
     const repo = projectPath(project);
-    return { project, repo, branch, worktree: worktreePath(cfg, repo, parentId) };
-  });
+    const worktree = worktreePath(cfg, repo, parentId);
+    if (!out.some((w) => w.worktree === worktree)) out.push({ project, repo, branch, worktree });
+  }
+  return out;
 }
 
 /** Opens worktree + branch, starts the launcher and moves the task to `running`. */

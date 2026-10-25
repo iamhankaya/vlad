@@ -426,6 +426,20 @@ x
     expect(w.find((x) => x.project === "alpha")!.worktree).toBe(worktreePath(cfg, repo, p.data.id));
   });
 
+  it("F-vlad-063: a phase project whose card is gone is skipped; cleanup still removes the pipeline's own worktree", async () => {
+    cfg.worktreeDir = "{repo}-wt";
+    const p = pipe();
+    await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
+    createTask({ project: "beta", title: "faz", kind: "dev", body: "", parent: p.data.id, phase: "uygulama" });
+    rmSync(join(process.env.VLAD_HOME!, "kb", "projects", "beta.md"));
+    expect(integrationWorktrees(p.data.id, cfg).map((x) => x.project)).toEqual(["alpha"]);
+    const awt = getTask(p.data.id).data.worktree!;
+    setState(p.data.id, "awaiting_approval");
+    setState(p.data.id, "done");
+    cleanupTask(p.data.id, { closeWorker: () => {}, cfg });
+    expect(existsSync(awt)).toBe(false);
+  });
+
   it("F-vlad-063: cleanup of a done pipeline removes the integration worktree in the phase's project too, keeps branches", async () => {
     cfg.worktreeDir = "{repo}-wt"; // per-repo dirs, as in the default config
     const p = pipe();
