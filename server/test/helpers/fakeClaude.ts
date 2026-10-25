@@ -15,6 +15,8 @@ export interface FakeStep {
   stderr?: string;
   /** After printing, never exit (records its pid in `started`). */
   hang?: boolean;
+  /** Leave a background child (same process group) running when the turn ends normally; its pid goes to `bg.pid`. */
+  bg?: boolean;
 }
 
 const SCRIPT = `
@@ -39,6 +41,11 @@ process.stdin.on("end", () => {
   for (const l of step.lines || []) out.push(l);
   if (out.length) process.stdout.write(out.join("\\n") + "\\n");
   if (step.stderr) process.stderr.write(step.stderr);
+  if (step.bg) {
+    const c = require("child_process").spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+    c.unref(); // the turn process may end while it lives on
+    fs.writeFileSync(path.join(dir, "bg.pid"), String(c.pid));
+  }
   if (step.hang) {
     fs.writeFileSync(path.join(dir, "started"), String(process.pid));
     setInterval(() => {}, 1000);
@@ -54,6 +61,7 @@ export interface FakeClaude {
   setSteps(steps: FakeStep[]): void;
   calls(): { argv: string[]; env: string[]; stdin: string; cwd: string }[];
   startedPid(): number | null;
+  bgPid(): number | null;
 }
 
 /** An executable `claude` stand-in in `dir`: replays fixtures, records argv/env/stdin of every call. */
@@ -69,8 +77,10 @@ export function makeFakeClaude(dir: string): FakeClaude {
       writeFileSync(join(dir, "scenario.json"), JSON.stringify(steps));
       rmSync(calls, { force: true });
       rmSync(join(dir, "started"), { force: true });
+      rmSync(join(dir, "bg.pid"), { force: true });
     },
     calls: () => (existsSync(calls) ? readFileSync(calls, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []),
+    bgPid: () => (existsSync(join(dir, "bg.pid")) ? Number(readFileSync(join(dir, "bg.pid"), "utf8")) : null),
     startedPid: () => (existsSync(join(dir, "started")) ? Number(readFileSync(join(dir, "started"), "utf8")) : null),
   };
   api.setSteps([{}]);

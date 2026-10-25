@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { closeSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync } from "node:fs";
+import { dirname, isAbsolute, join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { ensureDir, fsyncDir } from "../auth/files.ts";
 
 /** A line longer than this is dropped whole (same limit as the worker tap, src/launcher/stream.ts). */
 export const MAX_LINE_BYTES = 1024 * 1024;
@@ -16,6 +17,8 @@ export type ChatStreamEvent =
   | { kind: "session"; sessionId: string }
   /** A piece of the assistant's reply text (partial delta, or a whole text block when no partials were streamed). */
   | { kind: "delta"; text: string }
+  /** The model or a tool ran (assistant/stream/tool-result line). Before the first one a failed turn has had no side effects. */
+  | { kind: "activity" }
   /** `limit` is set when the turn ended on the subscription limit. */
   | { kind: "result"; ok: boolean; text: string | null; errors: string[]; limit: { until: string | null } | null }
   | { kind: "limit"; until: string | null };
@@ -44,6 +47,7 @@ export class TurnParser {
     if (typeof sid === "string" && SESSION_ID.test(sid) && (j.type === "result" || (j.type === "system" && j.subtype === "init"))) {
       out.push({ kind: "session", sessionId: sid });
     }
+    if (j.type === "assistant" || j.type === "stream_event" || j.type === "user") out.push({ kind: "activity" });
     if (j.type === "stream_event" && isObj(j.event) && j.event.type === "content_block_delta" && isObj(j.event.delta)) {
       const d = j.event.delta;
       if (d.type === "text_delta" && typeof d.text === "string" && d.text) {
@@ -101,7 +105,7 @@ export class LineSplitter {
   }
 }
 
-/** The chat's `claude` session id on disk (`<kb>/logs/chat-session.txt`, gitignored). Anything that is not a plain id reads as "no session". */
+/** The chat's `claude` session id on disk, in the API state directory (the agent must not be able to write it). Anything that is not a plain id reads as "no session". */
 export class SessionStore {
   readonly path: string;
   constructor(path: string) {
@@ -119,11 +123,12 @@ export class SessionStore {
 
   set(id: string): void {
     if (!SESSION_ID.test(id)) throw new Error("invalid session id");
-    mkdirSync(dirname(this.path), { recursive: true });
+    ensureDir(dirname(this.path));
     const tmp = join(dirname(this.path), `.chat-session.${randomBytes(4).toString("hex")}.tmp`);
     const fd = openSync(tmp, "wx", 0o600);
     try { writeSync(fd, `${id}\n`); } finally { closeSync(fd); }
     renameSync(tmp, this.path);
+    fsyncDir(dirname(this.path));
   }
 
   clear(): void {
@@ -131,7 +136,7 @@ export class SessionStore {
   }
 }
 
-export const sessionFileFor = (kbDir: string) => join(kbDir, "logs", "chat-session.txt");
+export const sessionFileFor = (stateDir: string) => join(stateDir, "chat-session.txt");
 
 export interface TurnRequest {
   /** Resume this session; null starts a new one. Must match {@link SESSION_ID}. */
@@ -152,23 +157,50 @@ export interface TurnClient {
 export interface ClaudeClientOptions {
   /** Executable (default `claude`). Never run through a shell. */
   bin?: string;
-  cwd?: string;
-  /** Worker permission settings (deploy/claude/worker-settings.json): the chat turn runs under the same allow/deny lists. */
-  settingsPath?: string;
+  /** Working directory of every turn (the kb directory): required, absolute, existing. Checked at construction and before each turn. */
+  cwd: string;
+  /** Absolute directories the agent must not read or write (API state dir, ...); added to the fixed deny list. */
+  protect?: string[];
   /** Environment to pick {@link CHILD_ENV_KEYS} from (default `process.env`). */
   env?: NodeJS.ProcessEnv;
 }
 
-/** The argv of a turn (exported for tests). The prompt is not in it: it goes to stdin, so no text can ever be parsed as an option. */
-export function turnArgs(sessionId: string | null, settingsPath?: string): string[] {
+const ALLOW = ["Read", "Grep", "Glob", "Bash(vlad *)"];
+/** The chat agent's fixed deny list, applied twice (`--settings` and `--disallowedTools`): a settings file it could edit would not hold. */
+const DENY = [
+  "Bash(git push*)", "Bash(git -C*push*)", "Bash(gh *)", "WebFetch", "Bash(rm:*)", "Bash(rm *)", "Bash(find * -delete*)",
+  "Bash(python* -c*)", "Bash(node -e*)", "Bash(node *)", "Bash(npx *)", "Bash(curl*)", "Bash(wget*)", "Bash(env *)",
+  "Bash(*/var/lib/vladapi*)", "Bash(*~/.vlad-server*)", "Bash(*~/.claude*)", "Bash(cat *.env*)", "Bash(* .env*)",
+  "Edit(**/deploy/**)", "Write(**/deploy/**)", "Edit(**/worker-settings.json)", "Write(**/worker-settings.json)",
+  "Edit(**/.claude/**)", "Write(**/.claude/**)", "Edit(**/.mcp.json)", "Write(**/.mcp.json)",
+];
+const PROTECTED = ["//var/lib/vladapi/**", "~/.vlad-server/**", "~/.claude/**"];
+
+/** Permission rules of a chat turn: read tools and `vlad *` only; everything that edits, publishes or reaches the network is denied. */
+export function chatPermissions(protect: string[] = []): { allow: string[]; deny: string[] } {
+  const dirs = [...PROTECTED, ...protect.map((d) => `/${d.replace(/\/+$/, "")}/**`)];
+  const deny = [...DENY];
+  for (const d of dirs) for (const t of ["Read", "Edit", "Write"]) deny.push(`${t}(${d})`);
+  return { allow: [...ALLOW], deny };
+}
+
+/**
+ * The argv of a turn (exported for tests). The prompt is not in it: it goes to stdin, so no text can ever be parsed as an option.
+ * Permissions are built here, not read from a file the agent could edit: inline `--settings` JSON plus `--disallowedTools`.
+ */
+export function turnArgs(sessionId: string | null, protect: string[] = []): string[] {
   if (sessionId !== null && !SESSION_ID.test(sessionId)) throw new Error("invalid session id");
+  const perm = chatPermissions(protect);
   return [
     "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
     "--permission-mode", "auto",
-    ...(settingsPath ? ["--settings", settingsPath] : []),
+    "--settings", JSON.stringify({ permissions: perm }),
+    "--disallowedTools", ...perm.deny,
     ...(sessionId ? ["--resume", sessionId] : []),
   ];
 }
+
+const isDir = (p: string) => { try { return statSync(p).isDirectory(); } catch { return false; } };
 
 export function childEnv(src: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
@@ -179,7 +211,9 @@ export function childEnv(src: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEn
 /** `claude -p --resume <id> --output-format stream-json` as a child process without a shell; stdin carries the prompt. */
 export class ClaudeCliClient implements TurnClient {
   private readonly opts: ClaudeClientOptions;
-  constructor(opts: ClaudeClientOptions = {}) {
+  constructor(opts: ClaudeClientOptions) {
+    if (typeof opts.cwd !== "string" || !isAbsolute(opts.cwd) || !isDir(opts.cwd)) throw new Error("chat: cwd must be an absolute, existing directory");
+    for (const d of opts.protect ?? []) if (!isAbsolute(d)) throw new Error("chat: protect paths must be absolute");
     this.opts = opts;
   }
 
@@ -187,7 +221,8 @@ export class ClaudeCliClient implements TurnClient {
     return new Promise((resolve) => {
       if (signal.aborted) return resolve({ kind: "aborted", stderr: "" });
       let argv: string[];
-      try { argv = turnArgs(req.sessionId, this.opts.settingsPath); } catch (e) { return resolve({ kind: "spawn", error: (e as Error).message }); }
+      if (!isDir(this.opts.cwd)) return resolve({ kind: "spawn", error: "cwd" });
+      try { argv = turnArgs(req.sessionId, this.opts.protect); } catch (e) { return resolve({ kind: "spawn", error: (e as Error).message }); }
       const child = spawn(this.opts.bin ?? "claude", argv, {
         cwd: this.opts.cwd, env: childEnv(this.opts.env), stdio: ["pipe", "pipe", "pipe"], detached: true, windowsHide: true,
       });
@@ -197,11 +232,12 @@ export class ClaudeCliClient implements TurnClient {
       let aborted = false;
       let settled = false;
       const done = (o: TurnOutcome) => { if (!settled) { settled = true; signal.removeEventListener("abort", kill); resolve(o); } };
-      const kill = () => {
-        aborted = true;
-        // The whole group: tools the turn started must not outlive it.
-        try { if (child.pid) process.kill(-child.pid, "SIGKILL"); else child.kill("SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch { /* gone */ } }
+      // The whole group: tools the turn started must not outlive it, on abort and on a normal end alike.
+      const killGroup = () => {
+        try { if (child.pid) process.kill(-child.pid, "SIGKILL"); else child.kill("SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch { /* ESRCH: nothing left */ } }
       };
+      const kill = () => { aborted = true; killGroup(); };
+      child.on("exit", killGroup);
       signal.addEventListener("abort", kill, { once: true });
       child.on("error", (e) => done({ kind: "spawn", error: (e as NodeJS.ErrnoException).code ?? e.message }));
       child.stdin.on("error", () => { /* child exited before reading the prompt */ });

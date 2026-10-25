@@ -1,9 +1,9 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import Fastify from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { ClaudeCliClient, childEnv, CHILD_ENV_KEYS, LineSplitter, MAX_LINE_BYTES, SessionStore, TurnParser, turnArgs } from "../../src/chat/sessionClient.ts";
+import { ClaudeCliClient, childEnv, CHILD_ENV_KEYS, LineSplitter, MAX_LINE_BYTES, SessionStore, sessionFileFor, chatPermissions, TurnParser, turnArgs } from "../../src/chat/sessionClient.ts";
 import { BadChatRequest, ChatTurnRunner, type RunnerOptions } from "../../src/chat/turnRunner.ts";
 import { EventLedger } from "../../src/events/ledger.ts";
 import { registerReadRoutes } from "../../src/read/routes.ts";
@@ -56,17 +56,19 @@ function mk(over: Partial<RunnerOptions> = {}, steps: FakeStep[] = [OK], dir = j
   const clock = { t: Date.now() };
   const timers = new FakeTimers(clock);
   const ledger = new EventLedger(join(dir, "state"));
-  const sessions = new SessionStore(join(dir, "kb", "logs", "chat-session.txt"));
+  const kb = join(dir, "kb");
+  mkdirSync(kb, { recursive: true });
+  const sessions = new SessionStore(sessionFileFor(join(dir, "state")));
   const make = () => {
     const r = new ChatTurnRunner({
-      client: new ClaudeCliClient({ bin: claude.bin, cwd: dir }),
+      client: new ClaudeCliClient({ bin: claude.bin, cwd: kb, protect: [join(dir, "state")] }),
       sessions, ledger, stateDir: join(dir, "state"), now: () => clock.t, timers,
       turnTimeoutMs: TURN_TIMEOUT, backoffBaseMs: BASE, backoffMaxMs: MAX, ...over,
     });
     live.push(r);
     return r;
   };
-  return { dir, claude, timers, clock, ledger, sessions, runner: make(), make };
+  return { dir, kb, claude, timers, clock, ledger, sessions, runner: make(), make };
 }
 
 const events = (l: EventLedger, type?: string) => l.after(0, 500).filter((e) => !type || e.type === type);
@@ -169,7 +171,7 @@ describe("server: chat turn runner", () => {
     expect(nores.runner.get(c.chat_id)).toMatchObject({ status: "not_delivered", reason: "no_result" });
 
     const spawnFail = mk({ maxAttempts: 1 });
-    const bad = new ChatTurnRunner({ client: new ClaudeCliClient({ bin: join(spawnFail.dir, "nope") }), sessions: spawnFail.sessions, ledger: spawnFail.ledger, stateDir: join(spawnFail.dir, "s2"), now: () => 1, timers: spawnFail.timers, maxAttempts: 1 });
+    const bad = new ChatTurnRunner({ client: new ClaudeCliClient({ bin: join(spawnFail.dir, "nope"), cwd: spawnFail.kb }), sessions: spawnFail.sessions, ledger: spawnFail.ledger, stateDir: join(spawnFail.dir, "s2"), now: () => 1, timers: spawnFail.timers, maxAttempts: 1 });
     live.push(bad);
     const d = bad.submit({ clientMsgId: "e4", text: "x" });
     await bad.whenIdle();
@@ -351,7 +353,7 @@ describe("server: chat turn runner", () => {
     for (const c of calls) {
       for (const x of texts) expect(c.argv).not.toContain(x);
       expect(c.argv).not.toContain(dangerous);
-      expect(c.argv.filter((a) => a.startsWith("-") || a === SID1).every((a) => a === SID1 || /^--?[a-z][a-z-]*$/.test(a))).toBe(true);
+      expect(c.argv.filter((a) => a.startsWith("-") || a === SID1).every((a) => a === SID1 || /^--?[A-Za-z][A-Za-z-]*$/.test(a))).toBe(true);
       expect(c.env.every((k) => (CHILD_ENV_KEYS as readonly string[]).includes(k))).toBe(true); // no SECRET_TOKEN, no CLAUDE_CODE_*
     }
     expect(existsSync(join(t.dir, "pwned"))).toBe(false);
@@ -364,7 +366,118 @@ describe("server: chat turn runner", () => {
     }
     expect(() => turnArgs("--evil")).toThrow();
     expect(() => turnArgs("abcdefgh; rm -rf /")).toThrow();
-    expect(turnArgs(SID1, "/s.json")).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "auto", "--settings", "/s.json", "--resume", SID1]);
+    const argv = turnArgs(SID1);
+    expect(argv.slice(0, 7)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "auto"]);
+    expect(argv.slice(-2)).toEqual(["--resume", SID1]);
+  });
+
+  it("server: chat permissions are fixed inline, narrow, and passed twice", async () => {
+    const t = mk({}, [OK]);
+    t.runner.submit({ clientMsgId: "s1", text: "x" });
+    await t.runner.whenIdle();
+    const argv = t.claude.calls()[0]!.argv;
+    const settings = JSON.parse(argv[argv.indexOf("--settings") + 1]!);
+    const perm = chatPermissions([join(t.dir, "state")]);
+    expect(settings).toEqual({ permissions: perm }); // inline JSON, no file path
+    expect(argv[argv.indexOf("--settings") + 1]!.startsWith("{")).toBe(true); // JSON text, not a path to a file the agent could edit
+    const dis = argv.slice(argv.indexOf("--disallowedTools") + 1, argv.indexOf("--resume") === -1 ? undefined : argv.indexOf("--resume"));
+    expect(dis.slice(0, perm.deny.length)).toEqual(perm.deny); // same deny list as a flag: it holds even if settings were lost
+    expect(perm.allow).toEqual(["Read", "Grep", "Glob", "Bash(vlad *)"]);
+    for (const r of ["Bash(git push*)", "Bash(gh *)", "WebFetch", "Bash(rm:*)", "Bash(find * -delete*)", "Bash(python* -c*)", "Bash(node -e*)", "Bash(curl*)", "Bash(wget*)",
+      "Edit(**/deploy/**)", "Write(**/deploy/**)", "Write(**/worker-settings.json)", "Read(//var/lib/vladapi/**)", "Edit(~/.vlad-server/**)", "Write(~/.claude/**)", "Read(~/.claude/**)",
+      `Edit(/${join(t.dir, "state")}/**)`, `Read(/${join(t.dir, "state")}/**)`]) {
+      expect(perm.deny, r).toContain(r);
+    }
+    expect(perm.allow.some((a) => /^(node|npx|Edit|Write)/.test(a) || a.startsWith("Bash(node") || a.startsWith("Bash(npx"))).toBe(false);
+    expect(t.claude.calls()[0]!.cwd).toBe(t.kb);
+    expect(existsSync(join(t.dir, "state", "chat-session.txt"))).toBe(true); // state dir, not the kb the agent works in
+    expect(existsSync(join(t.kb, "logs"))).toBe(false);
+  });
+
+  it("server: cwd is required, absolute and existing", async () => {
+    const t = mk();
+    expect(() => new ClaudeCliClient({ cwd: "kb" })).toThrow(/cwd/);
+    expect(() => new ClaudeCliClient({ cwd: join(t.dir, "nope") })).toThrow(/cwd/);
+    expect(() => new ClaudeCliClient({} as never)).toThrow(/cwd/);
+    expect(() => new ClaudeCliClient({ cwd: t.kb, protect: ["rel"] })).toThrow(/protect/);
+    const gone = join(t.dir, "gone");
+    mkdirSync(gone);
+    const c = new ClaudeCliClient({ bin: t.claude.bin, cwd: gone });
+    rmSync(gone, { recursive: true });
+    const out = await c.run({ sessionId: null, text: "x" }, () => {}, new AbortController().signal);
+    expect(out).toEqual({ kind: "spawn", error: "cwd" });
+    expect(t.claude.calls().length).toBe(0);
+  });
+
+  it("server: a turn that already ran is never retried automatically", async () => {
+    // tools/model ran, then the process failed: reported, not repeated
+    const t = mk({ maxAttempts: 3 }, [{ ...OK, exit: 3 }, OK]);
+    const a = t.runner.submit({ clientMsgId: "n1", text: "x" });
+    await t.runner.whenIdle();
+    expect(t.runner.get(a.chat_id)).toMatchObject({ status: "not_delivered", reason: "exit_3" });
+    expect(t.claude.calls().length).toBe(1);
+    expect(t.runner.state()).toMatchObject({ status: "backoff", failures: 1, queued: 0 });
+
+    // a hang after output is the same
+    const h = mk({ maxAttempts: 3 }, [{ fixture: "ask-turn.jsonl", hang: true }, OK]);
+    const b = h.runner.submit({ clientMsgId: "n2", text: "x" });
+    await waitFor(() => h.claude.startedPid() !== null, "started");
+    h.timers.fire(TURN_TIMEOUT);
+    await h.runner.whenIdle();
+    expect(h.runner.get(b.chat_id)).toMatchObject({ status: "not_delivered", reason: "timeout" });
+    expect(h.claude.calls().length).toBe(1);
+
+    // a hang before any model output (only init) is retried
+    const r = mk({ maxAttempts: 3 }, [{ lines: ['{"type":"system","subtype":"init"}'], hang: true }, OK]);
+    const c = r.runner.submit({ clientMsgId: "n3", text: "x" });
+    await waitFor(() => r.claude.startedPid() !== null, "started");
+    r.timers.fire(TURN_TIMEOUT);
+    await r.runner.whenIdle();
+    expect(r.runner.get(c.chat_id)?.status).toBe("queued");
+    r.timers.fire(BASE);
+    await r.runner.whenIdle();
+    expect(r.runner.get(c.chat_id)?.status).toBe("done");
+    expect(r.claude.calls().length).toBe(2);
+  });
+
+  it("server: delta events are capped per turn, the reply is not", async () => {
+    const lines = Array.from({ length: 12 }, (_, i) => JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: `p${i} ` } } }));
+    const t = mk({ maxDeltas: 3, flushChars: 1, deltaText: true }, [{ lines: [...lines, JSON.stringify({ type: "result", subtype: "success", is_error: false, result: null, session_id: SID1 })] }]);
+    const a = t.runner.submit({ clientMsgId: "d1", text: "x" });
+    await t.runner.whenIdle();
+    expect(events(t.ledger, "chat.delta").length).toBe(3);
+    expect(t.runner.get(a.chat_id)?.reply).toBe(Array.from({ length: 12 }, (_, i) => `p${i} `).join(""));
+    // past 64 KB nothing more is kept or announced
+    const big = "z".repeat(40_000);
+    const bl = Array.from({ length: 4 }, () => JSON.stringify({ type: "stream_event", event: { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: big } } }));
+    const u = mk({ flushChars: 1 }, [{ lines: [...bl, JSON.stringify({ type: "result", subtype: "success", is_error: false, result: null })] }]);
+    const b = u.runner.submit({ clientMsgId: "d2", text: "x" });
+    await u.runner.whenIdle();
+    expect(u.runner.get(b.chat_id)?.reply?.length).toBe(64 * 1024);
+    expect(events(u.ledger, "chat.delta").length).toBe(2); // 2 x 40 KB crosses the cap, the rest is dropped
+  });
+
+  it("server: the process group dies when the turn ends normally", async () => {
+    const t = mk({}, [{ ...OK, bg: true }]);
+    t.runner.submit({ clientMsgId: "g1", text: "x" });
+    await t.runner.whenIdle();
+    const pid = t.claude.bgPid()!;
+    expect(pid).toBeGreaterThan(0);
+    await waitFor(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, "background child killed");
+  });
+
+  it("server: log compaction uses a private temp file", () => {
+    const dir = join(root, `t${++n}`);
+    mkdirSync(join(dir, "state"), { recursive: true });
+    const lines: string[] = [];
+    for (let i = 1; i <= 2100; i++) lines.push(JSON.stringify({ t: "msg", chat_id: `chat-${i}`, client_msg_id: `k${i}`, text: "x", at: new Date().toISOString(), status: "done" }));
+    writeFileSync(join(dir, "state", "chat.jsonl"), lines.join("\n") + "\n");
+    const t = mk({}, [OK], dir);
+    expect(readFileSync(join(dir, "state", "chat.jsonl"), "utf8").split("\n").filter(Boolean).length).toBe(500);
+    expect(readdirSync(join(dir, "state")).filter((f) => f.endsWith(".tmp"))).toEqual([]);
+    expect(statSync(join(dir, "state", "chat.jsonl")).mode & 0o777).toBe(0o600);
+    // pruned messages are still deduplicated (in memory)
+    expect(t.runner.submit({ clientMsgId: "k1", text: "x" })).toMatchObject({ chat_id: "chat-1", duplicate: true });
   });
 
   it("server: no skip-permissions flag anywhere in the code", () => {

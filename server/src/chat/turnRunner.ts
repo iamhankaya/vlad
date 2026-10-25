@@ -1,6 +1,7 @@
+import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs";
-import { join } from "node:path";
-import { appendDurable, ensureDir } from "../auth/files.ts";
+import { dirname, join } from "node:path";
+import { appendDurable, ensureDir, fsyncDir } from "../auth/files.ts";
 import { SESSION_ID, type ChatStreamEvent, type SessionStore, type TurnClient, type TurnOutcome } from "./sessionClient.ts";
 
 export type MsgStatus = "queued" | "running" | "done" | "not_delivered";
@@ -62,11 +63,15 @@ export interface RunnerOptions {
    */
   deltaText?: boolean;
   maxQueue?: number;
+  /** `chat.delta` events per turn (each is an fsync'd ledger line); further text still lands in the reply. */
+  maxDeltas?: number;
 }
 
 export const MAX_TEXT = 4000;
 export const MAX_REPLY = 64 * 1024;
 const MAX_KEPT = 500;
+/** `client_msg_id`s remembered for dedup (outlives the message records; not across a restart beyond the retained log). */
+const MAX_DEDUP = 5000;
 const MAX_LOG_LINES = 2000;
 const CLIENT_MSG_ID = /^[A-Za-z0-9._-]{1,64}$/;
 const NO_SESSION = /No conversation found/i;
@@ -122,6 +127,7 @@ export class ChatTurnRunner {
       flushChars: opts.flushChars ?? 160,
       deltaText: opts.deltaText ?? false,
       maxQueue: opts.maxQueue ?? 50,
+      maxDeltas: opts.maxDeltas ?? 100,
     };
     ensureDir(opts.stateDir);
     this.file = join(opts.stateDir, "chat.jsonl");
@@ -223,7 +229,7 @@ export class ChatTurnRunner {
     const rec = this.records.get(this.queue[0]!)!;
     this.running = true;
     this.setStatus(rec, "running");
-    let outcome: "done" | "retry" | "failed" | "limit" | "stopped" = "failed";
+    let outcome: "done" | "failed" | "ran" | "limit" | "stopped" = "failed";
     try {
       outcome = await this.turn(rec);
     } catch (e) {
@@ -235,28 +241,41 @@ export class ChatTurnRunner {
     if (outcome === "stopped") { this.setStatus(rec, "queued"); return this.notifyIdle(); }
     if (outcome === "done" || outcome === "limit") {
       this.queue.shift();
+    } else if (outcome === "ran") {
+      // The turn had started (model or tools ran) and then failed: repeating it would repeat its side effects. Report, never retry.
+      this.failures++;
+      this.queue.shift();
+      this.finish(rec, "not_delivered", this.lastError ?? "failed");
+      this.registerFailure();
     } else {
       this.failures++;
-      this.retryAt = this.opts.now() + Math.min(this.o.backoffBaseMs * 2 ** (this.failures - 1), this.o.backoffMaxMs);
-      if (this.failures >= this.o.downAfter) {
-        this.downSince = this.opts.now();
-        this.retryAt = null;
-        for (const id of this.queue.splice(0)) this.finish(this.records.get(id)!, "not_delivered", "session_down");
-      } else if (this.attempts.get(rec.chat_id)! >= this.o.maxAttempts) {
-        this.queue.shift();
-        this.finish(rec, "not_delivered", this.lastError ?? "failed");
-      } else {
-        this.setStatus(rec, "queued"); // stays at the head, retried after the backoff
+      if (!this.registerFailure()) {
+        if (this.attempts.get(rec.chat_id)! >= this.o.maxAttempts) {
+          this.queue.shift();
+          this.finish(rec, "not_delivered", this.lastError ?? "failed");
+        } else {
+          this.setStatus(rec, "queued"); // stays at the head, retried after the backoff
+        }
       }
     }
     this.trim();
     this.pump();
   }
 
+  /** Sets the next retry time, or opens `session_down` (queue refused) after enough consecutive failures. Returns whether it opened. */
+  private registerFailure(): boolean {
+    this.retryAt = this.opts.now() + Math.min(this.o.backoffBaseMs * 2 ** (this.failures - 1), this.o.backoffMaxMs);
+    if (this.failures < this.o.downAfter) return false;
+    this.downSince = this.opts.now();
+    this.retryAt = null;
+    for (const id of this.queue.splice(0)) this.finish(this.records.get(id)!, "not_delivered", "session_down");
+    return true;
+  }
+
   private readonly attempts = new Map<string, number>();
 
   /** One attempt (plus the fresh-session fallback). Finishes the record itself when it is `done` or hit the limit. */
-  private async turn(rec: ChatRecord): Promise<"done" | "retry" | "failed" | "limit" | "stopped"> {
+  private async turn(rec: ChatRecord): Promise<"done" | "failed" | "ran" | "limit" | "stopped"> {
     this.attempts.set(rec.chat_id, (this.attempts.get(rec.chat_id) ?? 0) + 1);
     for (let pass = 0; pass < 2; pass++) {
       const sessionId = this.opts.sessions.get();
@@ -264,9 +283,11 @@ export class ChatTurnRunner {
       let pending = "";
       let n = 0;
       let seenSession = null as string | null;
-      const st: { result: Extract<ChatStreamEvent, { kind: "result" }> | null; limit: { until: string | null } | null } = { result: null, limit: null };
+      const st: { result: Extract<ChatStreamEvent, { kind: "result" }> | null; limit: { until: string | null } | null; active: boolean } = { result: null, limit: null, active: false };
+      const fail = () => (st.active ? "ran" as const : "failed" as const);
       const flush = () => {
         if (!pending) return;
+        if (n >= this.o.maxDeltas) { pending = ""; return; } // text still reaches the reply; only the events stop
         const data: Record<string, unknown> = { chat_id: rec.chat_id, n: ++n };
         if (this.o.deltaText) data.text = pending.slice(0, 1500);
         pending = "";
@@ -274,8 +295,11 @@ export class ChatTurnRunner {
       };
       const onEvent = (e: ChatStreamEvent) => {
         if (e.kind === "session") seenSession = e.sessionId;
+        else if (e.kind === "activity") st.active = true;
         else if (e.kind === "delta") {
-          if (text.length < MAX_REPLY) text += e.text;
+          st.active = true;
+          if (text.length >= MAX_REPLY) return; // nothing more to keep or announce
+          text += e.text;
           pending += e.text;
           if (pending.length >= this.o.flushChars) flush();
         } else if (e.kind === "limit") st.limit = { until: e.until };
@@ -293,7 +317,7 @@ export class ChatTurnRunner {
       flush();
       if (out.kind === "spawn") { this.lastError = "spawn"; return "failed"; }
       if (out.kind === "aborted") {
-        if (timedOut) { this.lastError = "timeout"; return "failed"; }
+        if (timedOut) { this.lastError = "timeout"; return fail(); }
         return "stopped";
       }
       const res = st.result;
@@ -307,9 +331,9 @@ export class ChatTurnRunner {
         this.opts.sessions.clear(); // the saved session is gone: this turn starts a new one
         continue;
       }
-      if (out.exitCode !== 0) { this.lastError = out.signal ? `signal_${out.signal}` : `exit_${out.exitCode}`; return "failed"; }
-      if (!res) { this.lastError = "no_result"; return "failed"; }
-      if (!res.ok) { this.lastError = "result_error"; return "failed"; }
+      if (out.exitCode !== 0) { this.lastError = out.signal ? `signal_${out.signal}` : `exit_${out.exitCode}`; return fail(); }
+      if (!res) { this.lastError = "no_result"; return fail(); }
+      if (!res.ok) { this.lastError = "result_error"; return fail(); }
       const sid: string | null = seenSession;
       if (sid && SESSION_ID.test(sid) && sid !== this.opts.sessions.get()) this.opts.sessions.set(sid);
       const reply = (res.text ?? text).slice(0, MAX_REPLY);
@@ -378,12 +402,13 @@ export class ChatTurnRunner {
     if (this.records.size > MAX_KEPT) {
       for (const [id, r] of this.records) {
         if (this.records.size <= MAX_KEPT) break;
-        if (r.status === "done" || r.status === "not_delivered") { this.records.delete(id); this.byClientId.delete(r.client_msg_id); }
+        if (r.status === "done" || r.status === "not_delivered") this.records.delete(id);
       }
     }
+    while (this.byClientId.size > MAX_DEDUP) this.byClientId.delete(this.byClientId.keys().next().value!);
     if (this.lines <= MAX_LOG_LINES) return;
-    const tmp = `${this.file}.tmp`;
-    const fd = openSync(tmp, "w", 0o600);
+    const tmp = join(dirname(this.file), `.${randomBytes(6).toString("hex")}.tmp`);
+    const fd = openSync(tmp, "wx", 0o600);
     try {
       let n = 0;
       for (const r of this.records.values()) {
@@ -398,5 +423,6 @@ export class ChatTurnRunner {
       closeSync(fd);
     }
     renameSync(tmp, this.file);
+    fsyncDir(dirname(this.file));
   }
 }
