@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  appendToSection, autonomyFor, CLOUD_ID_FLOOR, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
+  appendToSection, autonomyFor, CLOUD_ID_FLOOR, getSection, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
   setSection, validate, writeDoc,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskModel, TaskState } from "../kb/index.js";
@@ -228,9 +228,11 @@ export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {
   return t;
 }
 
-export function logTask(id: string, msg: string): Task {
+/** `at`: the moment the line describes (e.g. a cloud event's `created_at`); absent or unparsable → now. */
+export function logTask(id: string, msg: string, at?: string): Task {
   const t = getTask(id);
-  t.body = appendToSection(t.body, "## İlerleme", `- ${nowIso()} ${msg}`);
+  const when = at && !Number.isNaN(Date.parse(at)) ? new Date(at) : undefined;
+  t.body = appendToSection(t.body, "## İlerleme", `- ${nowIso(when)} ${msg}`);
   saveTask(t);
   return t;
 }
@@ -255,8 +257,23 @@ export function answerTask(id: string, a: string): Task {
     appendToSection(b, "## Sorular", `- ${nowIso()} **Cevap:** ${a}`));
 }
 
+/** A change-round report must be the full text; "replaces / adds to the earlier one" leaves the reader with a hole. */
+const PRIOR_REF = /rapor\S*\s+(?:yerine\s+geç|(?:üst|üzer)\S*\s+ekle)|aynen\s+geçerli|#\d+\s+(?:raporu\s+)?geçerlidir/i;
+export const reportReferencesPrior = (md: string): boolean => PRIOR_REF.test(md);
+
+const PRIOR = "## Önceki raporlar";
+
+/** The report being replaced is kept as `### Önceki rapor #n` under its own section, so dependants still get only the latest. */
 export function reportTask(id: string, md: string): Task {
-  return transitionWith(id, "awaiting_approval", (b) => setSection(b, "## Kapanış raporu", md));
+  return transitionWith(id, "awaiting_approval", (b) => {
+    const old = getSection(b, "## Kapanış raporu");
+    // the same text re-sent (CLI retry) is not a new round
+    if (old && old !== md.trim()) {
+      const n = (getSection(b, PRIOR)?.match(/^### Önceki rapor #\d+/gm)?.length ?? 0) + 1;
+      b = appendToSection(b, PRIOR, `### Önceki rapor #${n}\n${old}`);
+    }
+    return setSection(b, "## Kapanış raporu", md);
+  });
 }
 
 /** Done tasks whose closing report /digest has not processed yet. */

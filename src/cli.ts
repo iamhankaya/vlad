@@ -16,7 +16,7 @@ import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState, statusSummary, unknownTaskRefs,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setState, statusSummary, unknownTaskRefs,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -239,8 +239,12 @@ def(task, "answer <id> <cevap>", "Cevabı ekler, running yapar", (id: string, a:
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
 });
 def(task, "report <id>", "Kapanış raporunu yazar, awaiting_approval yapar", (id: string, o: Opts) => {
-  const t = reportTask(id, readInput(o.file as string));
-  out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
+  const md = readInput(o.file as string);
+  const t = reportTask(id, md);
+  const warnings = reportReferencesPrior(md)
+    ? ["rapor önceki rapora atıf içeriyor (yerine geçer / üstüne ekler / aynen geçerli); tam metin olmalı. Önceki rapor '## Önceki raporlar'da saklandı"]
+    : [];
+  out(o, { id, state: t.data.state, warnings }, [`${id} -> ${t.data.state}`, ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
 }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
 def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, state: string, o: Opts) => {
   if (!(state in TRANSITIONS)) throw new Error(`bilinmeyen durum: ${state}; geçerliler: ${Object.keys(TRANSITIONS).join(", ")}`);

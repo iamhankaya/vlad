@@ -98,7 +98,7 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "- İlerlemeyi yanıtlarına satır başında şu işaretlerle yaz (kod çitinin dışında). **`#n` tüm işaretlerde (LOG, ASK, REPORT, END, FAIL) ortak tek sayaçtır: 1'den başlar, her işarette bir artar. REPORT ve END aynı numarayı taşır; REPORT'u 1'den başlatma, sayacın devamını kullan.**",
   "  `[VLAD:LOG #n] <kısa adım>`",
   "- Karar gerektiren soru: `[VLAD:ASK #n] <soru, seçenekler>` yaz ve turunu bitir; cevap `[VLAD:ANSWER #n]` ile gelir.",
-  "- Önce tüm işini push et, ardından kapanış raporunu **son tur mesajında tam metin olarak** yaz; \"rapor yukarıda\" gibi özet ya da atıf yasak (VLAD yalnızca son sayfayı okuyabilir); rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
+  "- Önce tüm işini push et, ardından kapanış raporunu **son tur mesajında tam metin olarak** yaz; \"rapor yukarıda\" gibi özet ya da atıf yasak (VLAD yalnızca son sayfayı okuyabilir). Değişiklik turu raporu da tam metindir: \"önceki raporun yerine geçer / üstüne ekler / #N aynen geçerlidir\" yazma, değişmeyen kısımlar dahil tümünü yeniden yaz (VLAD önceki raporu saklar ama atıfı uyarıyla işaretler); rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
   "- Kısa yaz: düz metinde dolgu, selam ve tekrar yok; ama kapanış raporunda başlıklar, ID'ler, komutlar, sayılar ve kararların gerekçesi korunur.",
