@@ -1,0 +1,29 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "pairDevice 429"
+  },
+  "operationId": "pairDevice",
+  "request": {
+    "body": {
+      "code": "ABCDEFGH",
+      "device_name": "Pixel 9",
+      "session_pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZw42La6GlZC2ZpEFJxP3SjKuSYLQ-zH1QNaxTekeMGHD8IWuy9D3CmPMHgc5eoPOh1eXAoYIPO7kBDTedBYzHA",
+      "approval_pub": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEg1ShQgfXbd7EcZUAH11tBKmKBQwuuIxLZLa20dckV7Jtz18_OucdcIgB_i-jZfUejbp2oZ9efRBbqbBBQL-oGQ"
+    }
+  },
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "code": "rate_limited",
+        "message_tr": "Çok fazla deneme.",
+        "details": {
+          "retry_after_s": 60
+        }
+      }
+    }
+  }
+}

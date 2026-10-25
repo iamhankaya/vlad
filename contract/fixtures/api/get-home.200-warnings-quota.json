@@ -1,0 +1,30 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getHome 200"
+  },
+  "operationId": "getHome",
+  "response": {
+    "status": 200,
+    "body": {
+      "seq": 18,
+      "asks": [],
+      "workers": [],
+      "quota": {
+        "limited": true,
+        "until": "2026-10-25T17:00:00Z"
+      },
+      "active_vlad": {
+        "machine": "windows-pc",
+        "since": "2026-10-25T06:00:00Z",
+        "heartbeat": "2026-10-25T11:50:00Z",
+        "mine": false
+      },
+      "warnings": [
+        "C-20261025-02.md: şema geçersiz"
+      ]
+    }
+  }
+}

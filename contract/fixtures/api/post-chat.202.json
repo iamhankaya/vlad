@@ -1,0 +1,21 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "postChat 202"
+  },
+  "operationId": "postChat",
+  "request": {
+    "body": {
+      "client_msg_id": "m-1",
+      "text": "Bugün ne var?"
+    }
+  },
+  "response": {
+    "status": 202,
+    "body": {
+      "chat_id": "ch-0001"
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getCard 200"
+  },
+  "operationId": "getCard",
+  "request": {
+    "path": {
+      "id": "gate-T20261025-61"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "gate-T20261025-61",
+      "kind": "gate",
+      "project": "vlad",
+      "task": "T20261025-61",
+      "state": "open",
+      "title": "S6a sözleşme fazı onay bekliyor",
+      "options": [
+        {
+          "id": "merge",
+          "label": "Merge et"
+        },
+        {
+          "id": "changes",
+          "label": "Değişiklik iste"
+        }
+      ],
+      "answer": null,
+      "gate": {
+        "task_id": "T20261025-61",
+        "phase": "sözleşme",
+        "pr": {
+          "number": 42,
+          "repo": "iamhankaya/vlad",
+          "base": "vlad/T20261024-94",
+          "url": "https://github.com/iamhankaya/vlad/pull/42"
+        },
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "ci": "green",
+        "mergeable": true,
+        "report_md": "### Yapılanlar\n- openapi.yaml ve imza vektörleri",
+        "merge_kind": "merge_phase",
+        "reviews": []
+      },
+      "created": "2026-10-25T09:00:00Z",
+      "updated": "2026-10-25T12:00:00Z"
+    }
+  }
+}

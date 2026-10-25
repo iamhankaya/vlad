@@ -1,0 +1,25 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listDevices 200"
+  },
+  "operationId": "listDevices",
+  "response": {
+    "status": 200,
+    "body": {
+      "devices": [
+        {
+          "device_id": "d-pixel-9",
+          "device_name": "Pixel 9",
+          "created": "2026-10-25T07:00:00Z",
+          "last_seen": "2026-10-25T12:00:00Z",
+          "revoked": false,
+          "has_fcm": true,
+          "me": true
+        }
+      ]
+    }
+  }
+}

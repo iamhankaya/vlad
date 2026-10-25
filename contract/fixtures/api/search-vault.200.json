@@ -1,0 +1,25 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "searchVault 200"
+  },
+  "operationId": "searchVault",
+  "request": {
+    "query": "q=imza&zone=kb"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "hits": [
+        {
+          "path": "kb/decisions.md",
+          "score": 0.82,
+          "snippet": "…imza zarfı kararı…",
+          "heading": "2026-10-24"
+        }
+      ]
+    }
+  }
+}

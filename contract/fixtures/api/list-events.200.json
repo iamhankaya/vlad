@@ -1,0 +1,35 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listEvents 200"
+  },
+  "operationId": "listEvents",
+  "request": {
+    "query": "after=16&limit=100"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "events": [
+        {
+          "seq": 17,
+          "type": "task.state",
+          "data": {
+            "task_id": "T20261025-61",
+            "state": "awaiting_approval"
+          }
+        },
+        {
+          "seq": 18,
+          "type": "quota.changed",
+          "data": {
+            "limited": true
+          }
+        }
+      ],
+      "last_seq": 18
+    }
+  }
+}

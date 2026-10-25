@@ -1,0 +1,23 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "answerCard 200"
+  },
+  "operationId": "answerCard",
+  "request": {
+    "path": {
+      "id": "C-20261025-01"
+    },
+    "body": {
+      "option": "yes"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getChatHistory 200"
+  },
+  "operationId": "getChatHistory",
+  "response": {
+    "status": 200,
+    "body": {
+      "messages": [
+        {
+          "chat_id": "ch-0002",
+          "role": "assistant",
+          "text": "Bir onay bekleyen faz var.",
+          "at": "2026-10-25T12:00:05Z"
+        },
+        {
+          "chat_id": "ch-0001",
+          "role": "user",
+          "text": "Bugün ne var?",
+          "at": "2026-10-25T12:00:00Z"
+        }
+      ],
+      "has_more": false
+    }
+  }
+}
