@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { getSection, kbPaths, readDoc } from "../kb/index.js";
-import type { ProjectCard } from "../kb/index.js";
+import { getSection, kbPaths, loadConfig, readDoc } from "../kb/index.js";
+import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
@@ -26,6 +26,10 @@ export interface CloudLaunch {
   title: string;
   tags: string[];
   permission_mode: "auto";
+  /** `readonly`: the worker clones vlad-kb itself; `inline`: task text travels in the prompt. */
+  kb_access: CloudKb;
+  /** MCP tools to pass as `extra_allowed_tools` (readonly: add_repo + register_repo_root). */
+  extra_allowed_tools: string[];
   prompt: string;
   next: string[];
   warnings: string[];
@@ -50,6 +54,28 @@ export interface CloudLaunchOptions {
   remoteBranch?: (repo: string, branch: string) => RemoteBranchState;
   /** The launching VLAD's own session id (`CLAUDE_CODE_REMOTE_SESSION_ID`); the worker notifies it on finishing. */
   vladSession?: string;
+  /** Overrides `cloudKb` from vlad.config.json (default `readonly`). */
+  cloudKb?: CloudKb;
+}
+
+const KB_TOOLS = ["mcp__claude-code-remote__add_repo", "mcp__claude-code-remote__register_repo_root"];
+
+/** Opening steps of a readonly worker: it clones vlad-kb read-only and reads the task, notes and gate there. */
+function kbOpening(task: Task, parent: Task | undefined): string {
+  const id = task.data.id;
+  const deps = task.data.depends_on ?? [];
+  const sections = "`## Tanım`, `## Kabul kriterleri`, `## Bağlam`";
+  return [
+    "## kb erişimi (salt okuma)",
+    "Görev metni, çatı görev, bağımlı raporlar, proje çalışma notları ve kapı komutu prompt'ta yok; `vlad-kb` reposunda. İşe başlamadan şu adımları uygula:",
+    "1. `mcp__claude-code-remote__add_repo` çağır: owner `iamhankaya`, repo `vlad-kb`, access `read`. Yanıttaki klon komutunu **aynen** ve tek sefer, uzun zaman aşımıyla çalıştır (paralel klon yok; 429 alırsan 5 sn bekle, bir kez tekrar dene). Yanıttaki `workspace` yolu kb yoludur (`<kb>`); ardından `register_repo_root` çağır.",
+    `2. Oku: \`<kb>/tasks/${id}.md\` (${sections})` +
+      (parent ? `; çatı görev \`<kb>/tasks/${parent.data.id}.md\` (${sections}; \`Fazlar\` ve \`Kapılar\` alt başlıklarını yok say)` : "") +
+      (deps.length ? `; girdi olarak bağımlı görevlerin \`## Kapanış raporu\` bölümleri: ${deps.map((d) => `\`<kb>/tasks/${d}.md\``).join(", ")}` : "") +
+      `; \`<kb>/projects/${task.data.project}.md\` içinde \`## Çalışma notları\` (uy) ve frontmatter'daki \`gate\` (kapı komutu; rapordan önce çalıştır, sonucunu \`### Test sonuçları\`'na yaz).`,
+    "3. kb klonu **salt okumadır**: commit/push yok, dosyaları değiştirme; yalnız VLAD mesajla isterse `git -C <kb> pull --ff-only`.",
+    `4. Yedek: add_repo/klon iki denemede (429 beklemesi dahil toplam iki) başarısızsa ya da \`tasks/${id}.md\` klonda yoksa \`[VLAD:LOG #n] kb erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan görev metnini iste ve turunu bitir.`,
+  ].join("\n");
 }
 
 /** `create_trigger` takes `session_…` ids; the env var may carry the `cse_…` form of the same id. */
@@ -87,9 +113,11 @@ function gateRules(gate: string | undefined, parentId: string | undefined): stri
   return out;
 }
 
-const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
+const PROTOCOL = (id: string, autonomy: string, vladSession?: string, readonly = false) => [
   "## VLAD bulut protokolü",
-  "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
+  readonly
+    ? "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `<VLAD_HOME>/kb/` yollarını, `vlad task …` (log|ask|report) ve worktree adımlarını geçersiz kılar; görev dosyası ve kartı yalnızca kb klonundan (`<kb>/…`, salt okuma) okursun. Çelişkide bu protokol geçerlidir."
+    : "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
   `- Görev: ${id}. Çalışma branch'in \`vlad/${id}\`; commit'lerini yalnızca oraya push et (\`git push -u origin vlad/${id}\`).`,
   "- `master`'a veya başka bir branch'e push etme; merge etme; PR açma. `kb/` altına yazma; `vlad` CLI'ı ve `vlad-worker` skill'ini kullanma: rol metnindeki \"vlad-worker protokolünü uygula\" yerine bu protokol geçerlidir (tek doğru kaynak).",
   autonomy === "plan"
@@ -145,16 +173,19 @@ function inlineReport(dep: Task, report: string, base: string): string {
 
 function buildCloudPrompt(
   task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task, gate?: string,
-  base = "master",
+  base = "master", kb: CloudKb = "inline",
 ): string {
+  const readonly = kb === "readonly";
   const parts: string[] = [
-    `Sen bir VLAD çalışanısın (bulut). Görev ${task.data.id}: ${task.data.title}. Görev dosyasına erişimin yok; görev aşağıda satır içi verilmiştir.`,
+    `Sen bir VLAD çalışanısın (bulut). Görev ${task.data.id}: ${task.data.title}. ` +
+      (readonly ? "Görev metni kb'dedir; aşağıdaki açılış adımlarıyla oku." : "Görev dosyasına erişimin yok; görev aşağıda satır içi verilmiştir."),
   ];
-  for (const h of ["## Tanım", "## Kabul kriterleri", "## Bağlam"]) {
+  if (readonly) parts.push(kbOpening(task, parent));
+  for (const h of readonly ? [] : ["## Tanım", "## Kabul kriterleri", "## Bağlam"]) {
     const s = getSection(task.body, h);
     if (s) parts.push(`${h}\n${s}`);
   }
-  if (parent) {
+  if (parent && !readonly) {
     // the worker cannot read kb/, so a phase that says "see the pipeline" needs the pipeline text inline
     const sections = ["## Tanım", "## Kabul kriterleri", "## Bağlam"].flatMap((h) => {
       const s = getSection(parent.body, h);
@@ -163,9 +194,9 @@ function buildCloudPrompt(
     });
     parts.push(`## Çatı görev (${parent.data.id})\n${sections.join("\n\n") || "(çatı görevde Tanım/Kabul kriterleri/Bağlam yok)"}`);
   }
-  const notes = workNotes(task.data.project);
+  const notes = readonly ? null : workNotes(task.data.project);
   if (notes) parts.push(`## Proje çalışma notları (${task.data.project} kartı)\n${notes}`);
-  parts.push(...gateRules(gate, parent?.data.id));
+  parts.push(...gateRules(readonly ? undefined : gate, parent?.data.id));
   if (role) {
     const body = readDoc<unknown>(role.file).body.trim();
     parts.push(`## Rolün: ${role.title}\n${body}`);
@@ -179,7 +210,7 @@ function buildCloudPrompt(
     // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline
     for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
   }
-  for (const d of task.data.depends_on ?? []) {
+  for (const d of readonly ? [] : task.data.depends_on ?? []) {
     let report: string | null = null;
     let dep: Task | undefined;
     try {
@@ -188,7 +219,7 @@ function buildCloudPrompt(
     } catch { /* reported as missing below */ }
     parts.push(`## Girdi: ${d} kapanış raporu\n${report && dep ? inlineReport(dep, report, base) : "(rapor yok)"}`);
   }
-  parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession));
+  parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession, readonly));
   return parts.join("\n\n");
 }
 
@@ -205,9 +236,11 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   const branch = `vlad/${id}`;
   let res: CloudLaunch;
   const warnings: string[] = [];
+  let kb: CloudKb = "readonly";
   const rawSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
   const vladSession = rawSession ? toSessionId(rawSession) : rawSession;
   try {
+    kb = o.cloudKb ?? loadConfig().cloudKb ?? "readonly";
     const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     const c = card(task.data.project);
     if (c.local_only) {
@@ -239,10 +272,13 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",
-      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate, base),
+      kb_access: kb,
+      extra_allowed_tools: kb === "readonly" ? KB_TOOLS : [],
+      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate, base, kb),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
-        "create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt)",
+        ...(kb === "readonly" ? ["create_session'dan önce `vlad kb commit --push` (çalışan güncel kb'yi klonlasın)"] : []),
+        `create_session(source_url, source_revision, outcome_branch, model, title, tags, permission_mode, prompt${kb === "readonly" ? ", extra_allowed_tools" : ""})`,
         `vlad task session ${id} <session_id>`,
         "create_session başarısızsa: vlad task set " + id + " failed",
       ],

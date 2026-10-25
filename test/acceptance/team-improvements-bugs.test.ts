@@ -36,7 +36,7 @@ describe("BUG-2: `task new --phase` yardımı yeni faz adlarını saymıyor", ()
 
 describe("BUG-3: bulut prompt'u kartın `gate` komutunu ve entegrasyon öncesi kontrolü taşımıyor", { timeout: 30_000 }, () => {
   beforeEach(() => {
-    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud", cloudKb: "inline" }));
     writeRoles(home);
     writeCard(home, "alpha", { repo: "iamhankaya/vlad", gate: '"npm run build && npm test"' });
   });
