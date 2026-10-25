@@ -1,0 +1,17 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S13c); gerçek sunucu çıktısı değil, topoloji notu K8 şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "takeoverActive 202"
+  },
+  "operationId": "takeoverActive",
+  "response": {
+    "status": 202,
+    "body": {
+      "ok": true,
+      "state": "pending",
+      "reason": "main_moved"
+    }
+  }
+}

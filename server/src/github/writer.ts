@@ -3,6 +3,14 @@ import { GithubHttpError, REPO_RE, WRITE_CAP, type GithubClientLike } from "./cl
 
 const SHA = /^[0-9a-f]{40}$/;
 
+/** What `pushKbMain` needs besides the client: fixed at construction (repo and branch come from the server's config, never from a call). */
+export interface KbMainTarget {
+  repo: string;
+  main: string;
+  tokens: { token(repo: string, perms: { contents: "write" }): Promise<string> };
+  git: { firstParent(commit: string): Promise<string>; push(o: { token: string; commit: string; ref: string }): Promise<"pushed" | "rejected"> };
+}
+
 export type MergeOutcome =
   | { kind: "merged"; sha: string }
   /** 409: the PR head is not the `sha` we sent. Nothing was merged. */
@@ -11,13 +19,35 @@ export type MergeOutcome =
   | { kind: "not_mergeable"; message: string };
 
 /**
- * Every GitHub write of the server is a method of this class, and nothing else imports `WRITE_CAP`. There are exactly
- * two: the `vlad/approved` check-run and the PR merge. No branch, ref, tag or contents endpoint is reachable from here.
+ * Every GitHub write of the server is a method of this class, and nothing else imports `WRITE_CAP`. There are three: the
+ * `vlad/approved` check-run, the PR merge (both through the guarded client) and `pushKbMain`, the promote gate's one write to
+ * the kb repository's main branch. No branch, ref, tag or contents endpoint is reachable from the client here.
  */
 export class GithubWriter {
   private readonly c: GithubClientLike;
-  constructor(client: GithubClientLike) {
+  private readonly kb?: KbMainTarget;
+  constructor(client: GithubClientLike, kb?: KbMainTarget) {
     this.c = client;
+    if (kb) {
+      if (!REPO_RE.test(kb.repo) || !/^[A-Za-z0-9._/-]{1,100}$/.test(kb.main)) throw new Error("geçersiz kb hedefi");
+      this.kb = kb;
+    }
+  }
+
+  /**
+   * Publishes `commit` as the new tip of the kb repository's main branch, without force. The repository and the ref are the
+   * ones given at construction; the caller names only the commit and the main it validated against. The commit's first parent must be
+   * exactly that main (else this throws before any network call); GitHub refuses the update when main moved meanwhile (`main_moved`).
+   * The token is `{contents: write}` on the kb repository alone.
+   */
+  async pushKbMain(commit: string, expectedMain: string): Promise<{ kind: "pushed" } | { kind: "main_moved" }> {
+    const kb = this.kb;
+    if (!kb) throw new GithubHttpError(0, "kb yazması yapılandırılmadı");
+    if (!SHA.test(commit) || !SHA.test(expectedMain)) throw new GithubHttpError(0, "geçersiz sha");
+    if ((await kb.git.firstParent(commit)) !== expectedMain) throw new GithubHttpError(0, "kb commit'in ilk ebeveyni beklenen main değil");
+    const token = await kb.tokens.token(kb.repo, { contents: "write" });
+    const r = await kb.git.push({ token, commit, ref: `refs/heads/${kb.main}` });
+    return r === "pushed" ? { kind: "pushed" } : { kind: "main_moved" };
   }
 
   /** `POST /repos/{r}/check-runs`: `vlad/approved` = success on exactly this head SHA. Returns the run id. */

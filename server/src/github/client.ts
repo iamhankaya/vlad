@@ -9,7 +9,7 @@ export const WRITE_CAP: unique symbol = Symbol("github-write");
 export type FetchLike = (url: string, init: { method: string; headers: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{ status: number; text(): Promise<string> }>;
 /** Gives the bearer token for a repo (an installation token of the App). */
 export interface TokenProvider {
-  token(repo: string): Promise<string>;
+  token(repo: string, perms?: Readonly<Record<string, "read" | "write">>): Promise<string>;
 }
 
 export class GithubHttpError extends Error {

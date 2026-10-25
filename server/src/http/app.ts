@@ -17,6 +17,7 @@ import { ReadCache } from "../read/cache.ts";
 import { readHandlers, type ReadDeps } from "../read/routes.ts";
 import { registerGrantRoutes } from "./routes-grants.ts";
 import type { GrantConfig, GrantEngine } from "../actions/grants.ts";
+import { activeHandlers, type ActiveDeps } from "./routes-active.ts";
 import { chatHandlers, type ChatDeps } from "./routes-chat.ts";
 import { reject, type ApprovalContext, type ApprovalGuard } from "./approval.ts";
 import { send } from "./errors.ts";
@@ -51,6 +52,8 @@ export type AppConfig = {
   grants?: GrantConfig;
   /** Chat, card answers, change requests (S11b). Without it those routes answer 501; without `runner` only the chat routes do. */
   chat?: ChatDeps;
+  /** Takeover of the active VLAD (S13c). Without it `takeoverActive` answers 501. */
+  active?: ActiveDeps;
   /** Handlers of later slices (and tests) by `operationId`. A `session+approval` route with a handler here needs a guard in `approvalGuards`. */
   extraHandlers?: Record<string, (req: FastifyRequest, reply: FastifyReply) => unknown>;
   /** Approval guards by `operationId` (see `http/approval.ts`). */
@@ -202,6 +205,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     ...(actions ? actionHandlers(actions) : {}),
     ...grants.handlers,
     ...(cfg.chat ? chatHandlers(cfg.chat) : {}),
+    ...(cfg.active ? activeHandlers(cfg.active) : {}),
     ...cfg.extraHandlers,
     getHealth: () => ({ ok: true, version: cfg.version }),
 

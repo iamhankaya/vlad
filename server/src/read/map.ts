@@ -10,6 +10,7 @@ export function toCard(c: CardData): Record<string, unknown> {
     options: c.options.map((o) => ({ id: o.id, label: o.label })),
     answer: c.answer,
     ...(c.action ? { action: pick(c.action, ["kind", "repo", "pr", "base", "ref", "sha"]) } : {}),
+    ...(c.kb_conflict ? { kb_conflict: pick(c.kb_conflict, ["key", "reason", "source", "head", "base", "paths", "rules"]) } : {}),
     created: c.created,
     updated: c.updated,
   };

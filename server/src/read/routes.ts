@@ -13,6 +13,8 @@ export interface ReadDeps {
   gate?: GateProvider;
   /** Extra `Home.warnings` lines from live server state (e.g. a dead chat session, S11a). */
   warnings?: () => string[];
+  /** Extra `active_vlad` fields from the server's own kb-sync state (`takeover`, `kb_sync`, S13c). */
+  activeExtra?: () => Record<string, unknown>;
   /** Per-call timeout for `vlad` runs. */
   timeoutMs?: number;
 }
@@ -59,6 +61,14 @@ export function readHandlers(deps: ReadDeps = {}): Record<ReadOp, ReadHandler> {
     return out;
   }
 
+  const extras = (): Record<string, unknown> => {
+    try {
+      return deps.activeExtra?.() ?? {};
+    } catch {
+      return {}; // an unreadable sync state must not take the home screen down
+    }
+  };
+
   const getHome: ReadHandler = async (_req, reply) => {
     // Position first, data after: whatever happens in between is a replayed event at worst, never a missed one.
     const seq = deps.seq?.() ?? 0;
@@ -75,9 +85,12 @@ export function readHandlers(deps: ReadDeps = {}): Record<ReadOp, ReadHandler> {
         workers: tasks.tasks.filter(isWorker).map(toWorker),
         quota: { limited: quota.limited, ...(quota.until ? { until: quota.until } : {}) },
         // no record = nobody is active; the contract has no null here, so an epoch record that is not "mine" says so
-        active_vlad: active.active
-          ? { machine: active.active.machine, since: active.active.since, heartbeat: active.active.heartbeat, mine: active.mine }
-          : { machine: "", since: EPOCH, heartbeat: EPOCH, mine: false },
+        active_vlad: {
+          ...(active.active
+            ? { machine: active.active.machine, since: active.active.since, heartbeat: active.active.heartbeat, mine: active.mine }
+            : { machine: "", since: EPOCH, heartbeat: EPOCH, mine: false }),
+          ...extras(),
+        },
         warnings: [...cleanWarnings([...tasks.warnings, ...cards.warnings, ...quota.warnings, ...active.warnings]), ...(deps.warnings?.() ?? [])],
       };
     } catch (e) {

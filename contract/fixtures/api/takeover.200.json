@@ -9,7 +9,8 @@
   "response": {
     "status": 200,
     "body": {
-      "ok": true
+      "ok": true,
+      "state": "active"
     }
   }
 }

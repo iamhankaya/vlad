@@ -522,6 +522,21 @@ describe("server: github write methods only via GithubWriter", () => {
     expect([...w.matchAll(/request\("(\w+)", `([^`]+)`/g)].map((m) => `${m[1]} ${m[2].replace(/\$\{[^}]+\}/g, "*")}`).sort()).toEqual(["POST /repos/*/check-runs", "PUT /repos/*/pulls/*/merge"]);
   });
 
+  it("pushKbMain is the third write method; the git push it relies on lives in kbsync/gitexec.ts alone and only the writer reaches it", () => {
+    const w = src.find((s) => s.f === "github/writer.ts")!.text;
+    expect([...w.matchAll(/^  async (\w+)\(/gm)].map((m) => m[1]).sort()).toEqual(["merge", "pushKbMain", "writeApproved"]);
+    // the writer reaches git only through the injected port; it has no process spawning of its own
+    expect(w).not.toMatch(/child_process|execFile|spawn\(/);
+    // only gitexec.ts names the push command; promote, takeover and the routes never push (the single write is the writer's)
+    expect(src.filter((s) => /["'`]push["'`]/.test(s.text)).map((s) => s.f)).toEqual(["kbsync/gitexec.ts"]);
+    // the port's push has no force: no `+` refspec, no force flag anywhere in the module
+    const gx = src.find((s) => s.f === "kbsync/gitexec.ts")!.text;
+    expect(gx).not.toMatch(/--force|"-f"|\+refs/);
+    // and promote.ts is the only caller of pushKbMain
+    expect(src.filter((s) => /\.pushKbMain\(/.test(s.text)).map((s) => s.f)).toEqual(["kbsync/promote.ts"]);
+    expect(src.filter((s) => /createKbGitPort|firstParent/.test(s.text)).map((s) => s.f).sort()).toEqual(["github/writer.ts", "kbsync/config.ts", "kbsync/gitexec.ts"]);
+  });
+
   it("no code path writes a branch, ref, tag, contents or commit as any identity (no vlad-agent token, no git push, no refs API)", () => {
     for (const s of src) {
       expect(s.text, s.f).not.toMatch(/vlad-agent|VLAD_AGENT|GITHUB_PAT|GH_TOKEN|GITHUB_TOKEN/);
