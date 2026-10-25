@@ -84,6 +84,7 @@ Sonra seçenekleri sun:
    `git -C <proje-yolu> merge --no-ff vlad/<id>`
    **Pipeline fazında** hedef ana branch değil entegrasyon branch'idir: hedef olarak `vlad/<çatı-id>`'yi ve çatı görevin `worktree`'sini göster, onaylat; sonra (`git -C <çatı worktree> status` temiz olmalı)
    `git -C <çatı worktree> merge --no-ff vlad/<id>`
+   **Projeler arası fazda** (faz projesi ≠ çatı projesi) çatı görevin `worktree` alanı faz projesinin entegrasyon worktree'si değildir; o yalnızca çatının kendi projesindekidir. Entegrasyon worktree'sini çatı görevin `integration_worktrees` alanından al (`vlad task list --json`, çatı satırında; her öğe `{project, repo, branch, worktree}`, faz projesinin reposuna göre türetilir) ve faz projesinin satırını seç ve `git -C <o projenin worktree'si> merge --no-ff vlad/<id>` çalıştır; hedef olarak o worktree'yi göster. Faz branch'i de faz projesinin reposundadır.
    Çakışma olursa `git -C <çatı worktree> merge --abort`, hatayı göster, görevi `done` yapma; seçenek 3 ile developer'a "`vlad/<çatı-id>` üzerine rebase et, çakışmayı çöz" iste. Research fazında merge yoktur; kabul = seçenek 4.
 2. **Push + PR aç:** onaydan sonra
    `git -C <worktree> push -u origin vlad/<id>` ve `gh pr create --head vlad/<id> --fill` (worktree'de). PR linkini göster. (Pipeline fazında sunulmaz; PR son kapıda açılır.)
@@ -115,6 +116,7 @@ vlad task ready --parent <çatı-id> --json
 - **`prova` fazı varsa** (devops; `### Prova matrisi`, `### Bulunan hatalar`, `### Prova edilemeyenler` bölümlerini göster): kırmızı senaryo veya çözülmemiş bulunan hata varsa canlıya alma/dağıtım önerme; önce düzeltme fazı öner. `Prova edilemeyenler` doluysa kalan riski kullanıcıya açıkça söyle.
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
+- Çatı birden çok projede faz çalıştırdıysa (`integration_worktrees` birden fazla satır) kapı doğrulamasını, diff özetini ve merge/PR'ı **her projenin** entegrasyon worktree'sinde ayrı ayrı yap ve sun; son kapı onayı projeler arası ortak tek karardır.
 - Diff özeti: `git -C <çatı worktree> log --oneline main..HEAD` ve `git -C <çatı worktree> diff --stat main...HEAD`.
 
 Seçenekler (açık onay):
@@ -123,7 +125,7 @@ Seçenekler (açık onay):
 3. **Değişiklik iste:** çatı altına yeni faz aç (`/delegate` adım 4); çatıyı `vlad task set <çatı-id> running --json` ile geri al.
 4. **İptal et:** aşağıdaki "pipeline'ı iptal et".
 
-1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (entegrasyon worktree'si kaldırılır, branch kalır).
+1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır, branch'ler kalır).
 
 ### Retro (son kapıdan sonra)
 
