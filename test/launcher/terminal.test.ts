@@ -133,8 +133,13 @@ describe("closeWorkerWindow", () => {
     const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", join(tmpdir(), "vlad", "T29990101-98.ps1")], { stdio: "ignore" });
     const exited = new Promise((r) => worker.once("exit", r));
     try {
-      await new Promise((r) => setTimeout(r, 300));
-      expect(closeWorkerWindow(id)).toEqual([worker.pid]);
+      // under suite load the stand-ins can take seconds to show up in the process list: retry instead of a fixed wait
+      let killed: number[] = [];
+      for (let i = 0; i < 40 && !killed.length; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        killed = closeWorkerWindow(id);
+      }
+      expect(killed).toEqual([worker.pid]);
       await exited;
       expect(other.exitCode).toBeNull();
     } finally {
