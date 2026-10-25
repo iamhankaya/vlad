@@ -11,6 +11,7 @@
     "maxParallel": { "type": "integer", "minimum": 1 },
     "launcher": { "enum": ["auto", "wt", "powershell", "cloud"] },
     "worktreeDir": { "type": "string" },
+    "kbDir": { "type": "string", "minLength": 1 },
     "projects": {
       "type": "object",
       "additionalProperties": {

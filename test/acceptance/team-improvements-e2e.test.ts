@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
+import { resolveKbDir } from "../../src/kb/home.js";
 import { NO_CLOUD_ENV, root, vlad as run, writeCard } from "./cloud-helpers.js";
 
 let home: string;
@@ -227,13 +228,17 @@ describe("adım 3: maxParallel + task ready + resume", () => {
 
 describe("geriye uyumluluk: gerçek kb salt-okuma (kopya üzerinde)", () => {
   // repodaki kb/ yalnızca okunur: `status` eski running'leri stalled'a yazabildiği için kopyada çalışılır
-  const realKb = join(root, "kb");
+  const realKb = resolveKbDir(root).dir;
   const copy = () => {
     const h = mkdtempSync(join(tmpdir(), "vlad-realkb-"));
     cpSync(realKb, join(h, "kb"), { recursive: true });
     cpSync(join(root, "schemas"), join(h, "schemas"), { recursive: true });
     cpSync(join(root, "roles"), join(h, "roles"), { recursive: true });
-    for (const f of ["vlad.config.json"]) if (existsSync(join(root, f))) cpSync(join(root, f), join(h, f));
+    if (existsSync(join(root, "vlad.config.json"))) {
+      // the copy holds its own kb/, so the committed external kbDir must not apply
+      const { kbDir: _kbDir, ...cfg } = JSON.parse(readFileSync(join(root, "vlad.config.json"), "utf8"));
+      writeFileSync(join(h, "vlad.config.json"), JSON.stringify(cfg));
+    }
     return h;
   };
   const real = (h: string, args: string[]) => run(h, args, { env: NO_CLOUD_ENV });

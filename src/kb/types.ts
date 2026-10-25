@@ -127,5 +127,7 @@ export interface VladConfig {
   maxParallel?: number;
   launcher: Launcher;
   worktreeDir: string;
+  /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
+  kbDir?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
 }

@@ -57,6 +57,20 @@ Push, PR ve merge her zaman açık onayınla yapılır.
 
 **Çalışma notları:** pipeline bittikten sonra `/status` kısa bir retro yapar; dersler `vlad project note <slug> "<ders>"` ile kartın `## Çalışma notları` bölümüne yazılır. Çalışanlar ve roller bu bölümü işe başlarken okur.
 
+## kb deposu (ayrı private repo)
+
+`kb/` ayrı bir private repoda tutulur: `iamhankaya/vlad-kb`. vlad CLI kb'yi şu sırayla bulur: `VLAD_KB_DIR` ortam değişkeni → `vlad.config.json`'daki `kbDir` (VLAD_HOME'a göre göreli ya da mutlak; varsayılan config `"../vlad-kb"`) → geriye uyum için `<VLAD_HOME>/kb`. `schemas/` ve `roles/` VLAD_HOME'da kalır.
+
+Kurulum: Windows'ta `git clone https://github.com/iamhankaya/vlad-kb C:\dev\vlad-kb`; Linux/bulutta `git clone https://github.com/iamhankaya/vlad-kb ~/vlad-kb` (VLAD_HOME `~/vlad` ise aynı göreli yol). Klon yoksa CLI "kb deposu bulunamadı" hatası ve klon komutunu verir.
+
+kb reposunun `.gitignore`'ı şu satırları içermelidir (yoksa `vlad kb commit` uyarır):
+```
+inbox/
+logs/
+vlad-session.txt
+.vlad.lock
+```
+
 ## Geliştirme
 
 ```
