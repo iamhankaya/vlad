@@ -1,6 +1,6 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import { getVladHome, kbPaths } from "../kb/index.js";
+import { getVladHome, isSeparateKb, kbPaths } from "../kb/index.js";
 
 /**
  * Read-only vault access. Allowlist (paths are relative to VLAD_HOME, "/"-separated):
@@ -115,6 +115,8 @@ function resolveAllowed(input: string, want: "file" | "dir"): { rel: string; abs
   let realRel: string[];
   if (within(base)) {
     realRel = [...prefix, ...abs.slice(base.length + 1).split(sep).filter(Boolean)];
+    // docs zone is rooted at VLAD_HOME: with a separate kb, <home>/kb is a stale leftover, never readable through a link
+    if (prefix.length === 0 && denyKey(realRel[0] ?? "") === "kb" && isSeparateKb()) throw new VaultError("yol kök dışına çıkıyor");
   } else if (within(homeReal())) {
     // a link that left the zone's root but stays in VLAD_HOME: judged by its home-relative path, and "kb/" there is
     // never the kb checkout (only vault/docs can qualify), so a stale <home>/kb cannot be read through a link

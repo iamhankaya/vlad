@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, mkdtempSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -20,23 +20,27 @@ const vlad = (args: string[], env: Record<string, string> = {}, input?: string) 
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 
-const CREATED = "2026-10-25T10:00:00+03:00";
+// relative to the real clock (add refuses a `created` in the future); whole seconds, strict UTC form
+const T0 = Math.floor(Date.now() / 1000) * 1000 - 3_600_000;
+const iso = (ms: number) => new Date(ms).toISOString().replace(".000Z", "Z");
+const CREATED = iso(T0);
 const grant = (over: Record<string, unknown> = {}) => ({
   id: "G-001",
   scope: { type: "project", ref: "vlad" },
   action: "merge_phase",
   conditions: ["ci_green", "no_severe_findings"],
   created: CREATED,
-  expires: "2026-11-01T10:00:00+03:00",
+  expires: iso(T0 + 7 * 86_400_000),
   max_uses: 3,
   revoked: false,
   device_id: "D-1",
-  signature: "c2lnbmF0dXJl",
   payload_version: "v1",
   ...over,
+  // one signature per grant, as in life (a revoke tombstones the signature too)
+  signature: (over.signature as string | undefined) ?? `c2ln-${over.id ?? "G-001"}`,
 });
 const grantDir = () => join(home, "kb", "grants");
-const plus = (ms: number) => new Date(Date.parse(CREATED) + ms).toISOString();
+const plus = (ms: number) => iso(T0 + ms);
 const DAY = 86_400_000;
 
 describe("records: grant", () => {
@@ -91,16 +95,16 @@ describe("records: grant", () => {
     expect(after).toEqual({ ...before, revoked: true });
     expect(() => revokeGrant("G-404")).toThrow(/bulunamadı/);
     expect(() => revokeGrant("../x")).toThrow(/geçersiz/);
-    expect(() => addGrant(grant({ revoked: false }))).toThrow(/zaten var/); // no way to re-create/un-revoke
+    expect(() => addGrant(grant({ revoked: false }))).toThrow(/zaten var|iptal/); // no way to re-create/un-revoke
   });
 
   it("records: grant list --active hides revoked and expired; corrupt file is a warning", () => {
     addGrant(grant({ id: "G-001" }));
     addGrant(grant({ id: "G-002" }));
-    addGrant(grant({ id: "G-003", expires: "2026-10-26T10:00:00+03:00" }));
+    addGrant(grant({ id: "G-003", expires: plus(DAY) }));
     revokeGrant("G-002");
     writeFileSync(join(grantDir(), "G-004.md"), "---\nid: G-004\n---\n");
-    const now = new Date("2026-10-27T00:00:00+03:00");
+    const now = new Date(T0 + 2 * DAY);
     expect(listGrants({ now }).grants.map((g) => g.data.id)).toEqual(["G-001", "G-002", "G-003"]);
     const act = listGrants({ active: true, now });
     expect(act.grants.map((g) => g.data.id)).toEqual(["G-001"]);
@@ -113,7 +117,7 @@ describe("records: grant", () => {
     expect(grantSigningPayload(g)).toBe(
       [
         "vlad-grant/v1", "id=G-001", "scope=project:vlad", "action=merge_phase", "conditions=ci_green,no_severe_findings",
-        `created=${CREATED}`, "expires=2026-11-01T10:00:00+03:00", "max_uses=3",
+        `created=${CREATED}`, `expires=${plus(7 * DAY)}`, "max_uses=3",
       ].join("\n"),
     );
     // unsigned/untouched fields do not change the bytes; signed ones do
@@ -122,6 +126,53 @@ describe("records: grant", () => {
       expect(grantSigningPayload({ ...(g as object), ...change } as never)).not.toBe(grantSigningPayload(g));
     }
     expect(grantSigningPayload(g).endsWith("\n")).toBe(false);
+  });
+
+  it("records: grant created in the future rejected; list --active needs created <= now", () => {
+    expect(() => addGrant(grant({ created: plus(2 * 3_600_000 + 3_600_000), expires: plus(10 * DAY) }))).toThrow(/gelecekte/);
+    expect(() => addGrant(grant({ id: "G-002", created: iso(Date.now() + 10 * 60_000), expires: iso(Date.now() + 20 * 60_000) }))).toThrow(/gelecekte/);
+    // within the 5 min skew it is accepted, but not active until `created`
+    const soon = Math.floor(Date.now() / 1000) * 1000 + 3 * 60_000;
+    addGrant(grant({ id: "G-003", created: iso(soon), expires: iso(soon + DAY) }));
+    expect(listGrants({ active: true }).grants.map((g) => g.data.id)).toEqual([]);
+    expect(listGrants({ active: true, now: new Date(soon + 1000) }).grants.map((g) => g.data.id)).toEqual(["G-003"]);
+  });
+
+  it("records: grant revoke survives delete and re-add of the signed JSON (tombstone)", () => {
+    addGrant(grant());
+    revokeGrant("G-001");
+    expect(readFileSync(join(grantDir(), ".revoked"), "utf8")).toMatch(/"id":"G-001","sig_sha256":"[0-9a-f]{64}"/);
+    rmSync(join(grantDir(), "G-001.md"));
+    expect(() => addGrant(grant())).toThrow(/iptal edilmiş/);
+    // same signature under a new id is refused too
+    expect(() => addGrant(grant({ id: "G-002", signature: grant().signature }))).toThrow(/iptal edilmiş/);
+    // a file smuggled in by hand with revoked:false is still listed as revoked
+    writeFileSync(join(grantDir(), "G-001.md"), "---\n" + Object.entries(grant()).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join("\n") + "\n---\n");
+    expect(listGrants().grants[0]!.data.revoked).toBe(true);
+    expect(listGrants({ active: true }).grants).toHaveLength(0);
+  });
+
+  it("records: grant revoke works on a damaged file by id alone", () => {
+    mkdirSync(grantDir(), { recursive: true });
+    writeFileSync(join(grantDir(), "G-007.md"), "---\nid: G-007\nmax_uses: nonsense\n---\n");
+    revokeGrant("G-007");
+    expect(readDoc<{ revoked: boolean }>(join(grantDir(), "G-007.md")).data.revoked).toBe(true);
+    expect(readFileSync(join(grantDir(), ".revoked"), "utf8")).toContain('"id":"G-007"');
+    writeFileSync(join(grantDir(), "G-008.md"), "not frontmatter at all");
+    revokeGrant("G-008");
+    expect(readFileSync(join(grantDir(), ".revoked"), "utf8")).toContain('"id":"G-008"');
+  });
+
+  it("records: grant dates strict UTC and round-trip; id canonical; max_uses capped", () => {
+    for (const bad of [
+      grant({ created: "2026-10-25T10:00:00+03:00" }), grant({ created: plus(0).replace("Z", "+00:00") }),
+      grant({ created: "2026-02-31T10:00:00Z" }), grant({ expires: "2026-13-01T10:00:00Z" }),
+      grant({ id: "G-0001" }), grant({ id: "G-01" }), grant({ max_uses: 1001 }),
+    ]) {
+      expect(() => addGrant(bad)).toThrow();
+    }
+    addGrant(grant({ id: "G-1000", max_uses: 1000, created: CREATED.replace("Z", ".000Z") }));
+    addGrant(grant({ id: "G-002", created: CREATED.replace("Z", ".123Z"), expires: plus(DAY) }));
   });
 
   it("records: grant CLI add/list/revoke with --json errors", () => {
@@ -146,6 +197,15 @@ describe("records: separate kb repo (kbDir)", () => {
     writeFileSync(join(kb, "projects", "demo.md"), "# Demo\n\nkbdir-marker burada\n");
     writeFileSync(join(kb, "decisions.md"), "# Kararlar\n");
     process.env.VLAD_KB_DIR = kb;
+  });
+
+  it("records: kbDir equal to or above VLAD_HOME is an explicit error", () => {
+    process.env.VLAD_KB_DIR = home;
+    expect(() => readVault("kb/x.md")).toThrow();
+    const r = vlad(["grant", "list", "--json"], { VLAD_KB_DIR: join(home, "..") });
+    expect(r.code).toBe(1);
+    expect(r.err).toMatch(/atası olamaz/);
+    expect(vlad(["grant", "list", "--json"], { VLAD_KB_DIR: home }).err).toMatch(/atası olamaz/);
   });
 
   it("records: grants resolve under kbDir, not <home>/kb", () => {
@@ -187,6 +247,13 @@ describe("records: separate kb repo (kbDir)", () => {
     // a symlink inside the checkout cannot reach a forbidden folder or leave the checkout
     symlinkSync(join(kb, "grants", "G-1.md"), join(kb, "projects", "link.md"));
     expect(() => readVault("kb/projects/link.md")).toThrow();
+    // a link in vault/docs must not reach the stale <home>/kb of a separate-kb setup
+    mkdirSync(join(home, "kb", "projects"), { recursive: true });
+    writeFileSync(join(home, "kb", "projects", "stale.md"), "stale");
+    mkdirSync(join(home, "vault", "docs"), { recursive: true });
+    symlinkSync(join(home, "kb", "projects", "stale.md"), join(home, "vault", "docs", "stale.md"));
+    expect(() => readVault("vault/docs/stale.md")).toThrow(/kök dışına|izin listesinde/);
+    expect(searchVault("stale", { zone: "docs" }).hits).toEqual([]);
     writeFileSync(join(home, "outside.md"), "secret");
     symlinkSync(join(home, "outside.md"), join(kb, "projects", "out.md"));
     expect(() => readVault("kb/projects/out.md")).toThrow();

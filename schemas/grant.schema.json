@@ -4,7 +4,7 @@
   "additionalProperties": false,
   "required": ["id", "scope", "action", "conditions", "created", "expires", "max_uses", "revoked", "device_id", "signature", "payload_version"],
   "properties": {
-    "id": { "type": "string", "pattern": "^G-\\d{3,}$" },
+    "id": { "type": "string", "pattern": "^G-(\\d{3}|[1-9]\\d{3,})$" },
     "scope": {
       "type": "object",
       "additionalProperties": false,
@@ -21,9 +21,9 @@
       "items": { "enum": ["ci_green", "no_severe_findings", "codex_clear"] },
       "contains": { "const": "ci_green" }
     },
-    "created": { "type": "string", "format": "date-time" },
-    "expires": { "type": "string", "format": "date-time" },
-    "max_uses": { "type": "integer", "minimum": 1 },
+    "created": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$" },
+    "expires": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z$" },
+    "max_uses": { "type": "integer", "minimum": 1, "maximum": 1000 },
     "revoked": { "type": "boolean" },
     "device_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
     "signature": { "type": "string", "pattern": "^[A-Za-z0-9+/_=-]+$" },
