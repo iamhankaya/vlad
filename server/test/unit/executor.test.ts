@@ -531,7 +531,7 @@ describe("server: github write methods only via GithubWriter", () => {
     expect(src.filter((s) => /["'`]push["'`]/.test(s.text)).map((s) => s.f)).toEqual(["kbsync/gitexec.ts"]);
     // the port's push has no force: no `+` refspec, no force flag anywhere in the module
     const gx = src.find((s) => s.f === "kbsync/gitexec.ts")!.text;
-    expect(gx).not.toMatch(/--force|"-f"|\+refs/);
+    expect(gx).not.toMatch(/--force(?!-with-lease=)|"-f"|\+refs/);
     // and promote.ts is the only caller of pushKbMain
     expect(src.filter((s) => /\.pushKbMain\(/.test(s.text)).map((s) => s.f)).toEqual(["kbsync/promote.ts"]);
     expect(src.filter((s) => /createKbGitPort|firstParent/.test(s.text)).map((s) => s.f).sort()).toEqual(["github/writer.ts", "kbsync/config.ts", "kbsync/gitexec.ts"]);

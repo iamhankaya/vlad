@@ -221,11 +221,11 @@ describe("server: promote", () => {
     const r = rig();
     pushToServerBranch(r.w, [bad(1)]);
     await r.run();
-    expect(r.resolved).toHaveLength(0);
+    const afterRefusal = r.resolved.length; // opening a card first closes the previous open promote card (finding 9)
     r.w.remoteGit("update-ref", "refs/heads/kb-server", r.w.remoteHead("main")!); // discard: kb-server rebuilt on main
     pushToServerBranch(r.w, [[ok1("journal/2026-10-26.md")]]);
     expect((await r.run()).promoted).toBe(true);
-    expect(r.resolved).toHaveLength(1);
+    expect(r.resolved.length).toBe(afterRefusal + 1);
     expect(new StateStore(r.stateDir).read().blocked).toBeNull();
   });
 

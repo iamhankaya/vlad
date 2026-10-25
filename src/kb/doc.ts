@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parse, stringify } from "yaml";
+import { safeWriteFile } from "./safefs.js";
 
 const FRONT = /^---\n(?:([\s\S]*?)\n)?---[ \t]*(?:\n|$)/;
 
@@ -24,5 +25,5 @@ export function readDoc<T>(file: string): { data: T; body: string } {
 
 export function writeDoc(file: string, data: object, body: string): void {
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, serializeDoc(data, body), "utf8");
+  safeWriteFile(file, serializeDoc(data, body));
 }

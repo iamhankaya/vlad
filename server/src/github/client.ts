@@ -22,7 +22,7 @@ export class GithubHttpError extends Error {
 }
 
 export type GithubResponse = { status: number; body: any };
-export type RequestOptions = { body?: unknown; cap?: symbol };
+export type RequestOptions = { body?: unknown; cap?: symbol; /** Narrower token permissions than the default (e.g. the kb repository's `contents` read). */ perms?: Readonly<Record<string, "read" | "write">> };
 
 export interface GithubClientLike {
   request(method: string, path: string, repo: string, opts?: RequestOptions): Promise<GithubResponse>;
@@ -57,7 +57,7 @@ export class GithubClient implements GithubClientLike {
     try {
       // The timer covers the token lookup too: a stuck token endpoint must not hang the approval path.
       const token = await Promise.race([
-        this.tokens.token(repo),
+        this.tokens.token(repo, opts.perms),
         new Promise<never>((_, rej) => ac.signal.addEventListener("abort", () => rej(new Error("zaman aşımı")), { once: true })),
       ]);
       const res = await this.f(`${this.base}${path}`, {

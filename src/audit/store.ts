@@ -1,6 +1,7 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, validate } from "../kb/index.js";
+import { safeAppendFile } from "../kb/safefs.js";
 import type { AuditData } from "../kb/index.js";
 
 const auditDir = () => join(kbPaths().kb, "audit");
@@ -38,7 +39,7 @@ export function addAudit(raw: unknown): AuditData {
     throw new Error(`action_id zaten var: ${data.action_id}`);
   }
   mkdirSync(auditDir(), { recursive: true });
-  appendFileSync(join(auditDir(), `${data.ts.slice(0, 7)}.jsonl`), JSON.stringify(data) + "\n", "utf8");
+  safeAppendFile(join(auditDir(), `${data.ts.slice(0, 7)}.jsonl`), JSON.stringify(data) + "\n");
   return data;
 }
 

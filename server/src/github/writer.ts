@@ -8,7 +8,7 @@ export interface KbMainTarget {
   repo: string;
   main: string;
   tokens: { token(repo: string, perms: { contents: "write" }): Promise<string> };
-  git: { firstParent(commit: string): Promise<string>; push(o: { token: string; commit: string; ref: string }): Promise<"pushed" | "rejected"> };
+  git: { firstParent(commit: string): Promise<string>; push(o: { token: string; commit: string; ref: string; expectedMain: string }): Promise<"pushed" | "rejected"> };
 }
 
 export type MergeOutcome =
@@ -46,7 +46,7 @@ export class GithubWriter {
     if (!SHA.test(commit) || !SHA.test(expectedMain)) throw new GithubHttpError(0, "geçersiz sha");
     if ((await kb.git.firstParent(commit)) !== expectedMain) throw new GithubHttpError(0, "kb commit'in ilk ebeveyni beklenen main değil");
     const token = await kb.tokens.token(kb.repo, { contents: "write" });
-    const r = await kb.git.push({ token, commit, ref: `refs/heads/${kb.main}` });
+    const r = await kb.git.push({ token, commit, ref: `refs/heads/${kb.main}`, expectedMain });
     return r === "pushed" ? { kind: "pushed" } : { kind: "main_moved" };
   }
 

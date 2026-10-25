@@ -5,10 +5,11 @@
 // Nothing here runs git in the agent-writable kb clone, and the single write is `GithubWriter.pushKbMain`.
 import type { GithubWriter } from "../github/writer.ts";
 import type { GitExec } from "./gitexec.ts";
-import { GATE_IDENTITY } from "./gitexec.ts";
+import { discardFetched, GATE_IDENTITY, REPO_TOO_LARGE } from "./gitexec.ts";
+import { schemaProblems } from "./schemas.ts";
 import { acquireLock, StateStore } from "./state.ts";
 import {
-  checkChanges, checkSensitiveFields, conflictKey, parseRawZ, PROMOTE_LIMITS,
+  checkActiveChange, checkChanges, checkSensitiveFields, conflictKey, normalizeRepo, parseRawZ, PROMOTE_LIMITS, strictFrontmatter,
   type RawChange, type RuleId, type Violation,
 } from "./rules.ts";
 
@@ -24,7 +25,16 @@ export interface PromoteDeps {
   cards: { open(i: KbConflictInput): Promise<{ id: string; created: boolean }>; resolveOpen(source: "promote"): Promise<number> };
   now(): number;
   sleep?: (ms: number) => Promise<void>;
+  /**
+   * Cheap look at the server branch before anything is fetched (GitHub's compare API): commits ahead and whether the file list was cut off.
+   * Null = could not tell (the fetch limits still apply). Finding 5.
+   */
+  preflight?: () => Promise<{ commits: number; truncated: boolean } | null>;
 }
+
+/** A takeover started this recently (and has not failed) is what lets a new `active.md` through. */
+const TAKEOVER_WINDOW_MS = 30 * 60_000;
+const takeoverIsPending = (t: { state: string; at: string } | undefined, now: number): boolean => t?.state === "pending" && now - Date.parse(t.at) < TAKEOVER_WINDOW_MS;
 
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 const BRANCH = /^[A-Za-z0-9._/-]{1,100}$/;
@@ -76,16 +86,42 @@ async function run(d: PromoteDeps): Promise<PromoteResult> {
 
   const ls = await git(["ls-remote", url, `refs/heads/${c.main}`, `refs/heads/${c.serverBranch}`], { token });
   if (ls.code !== 0) return { promoted: false, reason: "github_unavailable" };
-  const refs = new Set(ls.stdout.split("\n").map((l) => l.split("\t")[1]).filter(Boolean));
-  const remoteHas = (branch: string) => refs.has(`refs/heads/${branch}`);
-  if (!remoteHas(c.main)) return { promoted: false, reason: "github_unavailable" };
-  if (!remoteHas(c.serverBranch)) return { promoted: false, reason: "no_server_branch" };
+  const tip = new Map<string, string>();
+  for (const l of ls.stdout.split("\n")) {
+    const [sha, ref] = l.split("\t");
+    if (sha && ref && SHA.test(sha)) tip.set(ref, sha);
+  }
+  const remoteMain = tip.get(`refs/heads/${c.main}`);
+  const remoteHead = tip.get(`refs/heads/${c.serverBranch}`);
+  if (!remoteMain) return { promoted: false, reason: "github_unavailable" };
+  if (!remoteHead) return { promoted: false, reason: "no_server_branch" };
+
+  // the same refused branch head is not downloaded again every cycle (it would be the same objects, the same answer)
+  // (valid only while main and the takeover state are what the verdict was reached with: both feed the content rules)
+  const cur = store.read();
+  const pendingNow = takeoverIsPending(cur.takeover, d.now());
+  const was = cur.blocked;
+  if (was?.head === remoteHead && was.main === remoteMain && was.pending === pendingNow && was.violations?.length) {
+    return rejected(d, store, was.violations, new Map(), { main: remoteMain, head: remoteHead }, was.key);
+  }
+
+  const pre = await d.preflight?.().catch(() => null);
+  if (pre && (pre.commits > PROMOTE_LIMITS.commits || pre.truncated)) {
+    const v: Violation = { rule: "too_large", path: pre.commits > PROMOTE_LIMITS.commits ? "(commits)" : "(changes)", detail: "compare" };
+    return rejected(d, store, [v], new Map(), { main: remoteMain, head: remoteHead });
+  }
 
   const fetch = await git(
     ["fetch", "-q", "--no-tags", url, `+refs/heads/${c.main}:${trackingRef(c, c.main)}`, `+refs/heads/${c.serverBranch}:${trackingRef(c, c.serverBranch)}`],
     { token },
   );
-  if (fetch.code !== 0) return { promoted: false, reason: "github_unavailable" };
+  if (fetch.code !== 0) {
+    if ((fetch.stderr ?? "").includes(REPO_TOO_LARGE)) {
+      await discardFetched(git, c.stateDir, trackingRef(c, c.serverBranch));
+      return rejected(d, store, [{ rule: "too_large", path: "(fetch)", detail: "clone cap" }], new Map(), { main: remoteMain, head: remoteHead });
+    }
+    return { promoted: false, reason: "github_unavailable" };
+  }
 
   const main = await resolveRef(git, trackingRef(c, c.main));
   const head = await resolveRef(git, trackingRef(c, c.serverBranch));
@@ -171,11 +207,30 @@ async function run(d: PromoteDeps): Promise<PromoteResult> {
     for (const e of g.changes) if (!entries.has(e.path)) entries.set(e.path, e);
     violations.push(...checkChanges(g.changes, { sizeOf, candidatePaths: g.changes === r1 ? candidatePaths : g.changes.map((e) => e.path) }));
   }
-  // sensitive project-card fields: judged on the net diff only (what main would end up with), blobs already known to be small
+  // content rules, judged on the net diff only (what main would end up with); blobs are already known to be small
+  const blob = async (oid: string) => (await git(["cat-file", "blob", oid])).stdout;
+  let taken: Set<string> | undefined;
+  const takenRepos = async (): Promise<Set<string>> => {
+    if (taken) return taken;
+    taken = new Set([normalizeRepo(c.repo)]);
+    const names = (await git(["ls-tree", "-r", "--name-only", "-z", main, "--", "projects/"])).stdout.split("\0").filter((n) => /^projects\/[^/]+\.md$/.test(n)).slice(0, 1000);
+    for (const n of names) {
+      const repo = strictFrontmatter((await git(["cat-file", "blob", `${main}:${n}`])).stdout)?.repo;
+      if (repo !== undefined) taken.add(normalizeRepo(repo));
+    }
+    return taken;
+  };
+  const takeoverPending = takeoverIsPending(store.read().takeover, d.now());
   for (const e of r1) {
-    if (!/^projects\/[^/]+\.md$/.test(e.path) || e.status === "D" || e.newMode !== "100644" || violations.some((v) => v.path === e.path)) continue;
-    const blob = async (oid: string) => (await git(["cat-file", "blob", oid])).stdout;
-    violations.push(...checkSensitiveFields(e.path, e.status === "A" ? null : await blob(e.oldOid), await blob(e.newOid), c.serverMachine));
+    if (e.status === "D" || e.newMode !== "100644" || violations.some((v) => v.path === e.path)) continue;
+    if (e.path === "active.md") {
+      violations.push(...checkActiveChange(e.path, e.status === "A" ? null : await blob(e.oldOid), await blob(e.newOid), { serverMachine: c.serverMachine, takeoverPending, validate: (x) => schemaProblems("active", x) }));
+    } else if (/^projects\/[^/]+\.md$/.test(e.path)) {
+      const isNew = e.status === "A";
+      violations.push(...checkSensitiveFields(e.path, isNew ? null : await blob(e.oldOid), await blob(e.newOid), c.serverMachine, {
+        validate: (x) => schemaProblems("project", x), ...(isNew ? { takenRepos: await takenRepos() } : {}),
+      }));
+    }
   }
 
   const uniq = new Map<string, Violation>();
@@ -209,18 +264,21 @@ async function run(d: PromoteDeps): Promise<PromoteResult> {
   return { promoted: true, main: commit, head, merge: commit };
 }
 
+const clean = (p: string) => p.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, "?").slice(0, 200);
+
 async function rejected(
-  d: PromoteDeps, store: StateStore, found: Violation[], entries: Map<string, RawChange>, base: { main: string; head: string },
+  d: PromoteDeps, store: StateStore, found: Violation[], entries: Map<string, RawChange>, base: { main: string; head: string }, cachedKey?: string,
 ): Promise<PromoteResult> {
   const lines = found.map((v) => {
     const e = entries.get(v.path);
     return e ? `${v.rule}\t${e.status}\t${e.newMode}\t${e.newOid}\t${v.path}` : `${v.rule}\t-\t-\t-\t${v.path}`;
   });
-  const key = conflictKey("rejected", lines);
+  const key = cachedKey ?? conflictKey("rejected", lines);
   let card = store.read().seen[key];
   if (!card) {
     try {
-      const clean = (p: string) => p.replace(/[\u0000-\u001f\u007f]/g, "?").slice(0, 200);
+      // one open promote card at a time: a new refusal replaces the old one
+      await d.cards.resolveOpen("promote").catch(() => 0);
       const opened = await d.cards.open({
         key, reason: "rejected", source: "promote", head: base.head, base: base.main,
         paths: [...new Set(found.map((v) => clean(v.path)))].slice(0, 50), rules: [...new Set(found.map((v) => v.rule))],
@@ -230,6 +288,10 @@ async function rejected(
       store.update((s) => { s.seen[key] = opened.id; });
     } catch { /* card could not be written (e.g. this machine is not the active VLAD): the next cycle retries; the block is visible regardless */ }
   }
-  store.update((s) => { s.blocked = { key, ...(card ? { card } : {}), at: iso(d.now()) }; });
+  store.update((s) => {
+    s.blocked = { key, ...(card ? { card } : {}), at: iso(d.now()), head: base.head, main: base.main, pending: takeoverIsPending(s.takeover, d.now()), violations: found.slice(0, 50).map((v) => ({ rule: v.rule, path: v.path.slice(0, 200), ...(v.detail ? { detail: v.detail.slice(0, 200) } : {}) })) };
+  });
+  // the objects of a refused branch are not kept
+  if (!cachedKey) await discardFetched(d.git, d.config.stateDir, `refs/remotes/origin/${d.config.serverBranch}`);
   return { promoted: false, reason: "rejected", ...base, ...(card ? { card } : {}), violations: found };
 }

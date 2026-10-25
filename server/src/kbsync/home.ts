@@ -10,13 +10,14 @@ export interface KbSyncView { state: "ok" | "conflict" | "blocked" | "stale"; la
 
 export function kbSyncView(o: { kbDir: string; stateDir: string; now: () => number }): { takeover?: { state: string; reason?: string; at: string }; kb_sync: KbSyncView } {
   const st = new StateStore(o.stateDir).read();
+  // `ok` comes only from promote's own last clean run (state.json, not agent-writable). The kbsync status file is the agent's: it can
+  // say "conflict" (a downgrade), never "ok".
   const sync = readSyncStatus(o.kbDir);
-  const lastOk = sync?.ok ? Date.parse(sync.at) : null;
-  // `last_ok` is the last time kbsync finished a clean cycle; a failed cycle keeps the previous value only in the status file we cannot see, so it reads null until the next clean one
+  const lastOk = st.lastOk ? Date.parse(st.lastOk) : NaN;
   let state: KbSyncView["state"] = "ok";
   if (st.blocked) state = "blocked";
   else if (sync && !sync.ok && sync.error === "kb_conflict") state = "conflict";
-  else if (!sync || !sync.ok || !Number.isFinite(lastOk) || o.now() - (lastOk as number) > STALE_AFTER_MS) state = "stale";
+  else if (!Number.isFinite(lastOk) || o.now() - lastOk > STALE_AFTER_MS) state = "stale";
   return {
     ...(st.takeover ? { takeover: { state: st.takeover.state, ...(st.takeover.reason ? { reason: st.takeover.reason } : {}), at: st.takeover.at } } : {}),
     kb_sync: { state, last_ok: Number.isFinite(lastOk) ? ts(lastOk) : null, ...(st.blocked?.card ? { card: st.blocked.card } : {}) },

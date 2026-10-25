@@ -17,8 +17,8 @@ const A = "a".repeat(40), B = "b".repeat(40);
 const KB = "acme/vlad-kb";
 
 function recorder(reply: (args: string[]) => { code: number; stdout?: string; stderr?: string } = () => ({ code: 0 })) {
-  const calls: { file: string; args: string[]; cwd: string; env: Record<string, string>; input?: string }[] = [];
-  const run: Runner = async (file, args, o) => { calls.push({ file, args, cwd: o.cwd, env: o.env, input: o.input }); const r = reply(args); return { code: r.code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }; };
+  const calls: { file: string; args: string[]; cwd: string; env: Record<string, string>; input?: string; limits?: unknown }[] = [];
+  const run: Runner = async (file, args, o) => { calls.push({ file, args, cwd: o.cwd, env: o.env, input: o.input, limits: o.limits }); const r = reply(args); return { code: r.code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }; };
   return { calls, run };
 }
 
@@ -40,7 +40,7 @@ describe("server: promote git env hardened and token absent from argv", () => {
       expect(c.env).toMatchObject({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", HOME: dir });
       expect(JSON.stringify(c.args)).not.toContain(TOKEN);
     }
-    expect(HARDENED_CONFIG).toEqual(expect.arrayContaining(["core.hooksPath=/dev/null", "core.fsmonitor=false", "protocol.allow=never", "protocol.https.allow=always", "transfer.fsckObjects=true", "fetch.fsckObjects=true", "submodule.recurse=false", "credential.helper="]));
+    expect(HARDENED_CONFIG).toEqual(expect.arrayContaining(["core.hooksPath=/dev/null", "core.fsmonitor=false", "protocol.allow=never", "protocol.https.allow=always", "transfer.fsckObjects=true", "fetch.fsckObjects=true", "submodule.recurse=false", "credential.helper=", "http.lowSpeedLimit=1000", "http.lowSpeedTime=30"]));
     expect(f!.env.VLAD_GIT_TOKEN).toBe(TOKEN);
     expect(f!.env.GIT_ASKPASS).toBe(join(dir, "askpass.sh"));
     expect(p!.env.VLAD_GIT_TOKEN).toBeUndefined();
@@ -77,15 +77,17 @@ describe("server: promote git env hardened and token absent from argv", () => {
     const dir = tmp();
     const rec = recorder((args) => (args.at(-1)!.startsWith(B) ? { code: 1, stderr: " ! [rejected]        bbbb -> main (fetch first)" } : { code: 0 }));
     const port = createKbGitPort(createGitExec({ stateDir: dir, run: rec.run, path: "/usr/bin" }), `https://github.com/${KB}.git`);
-    expect(await port.push({ token: TOKEN, commit: A, ref: "refs/heads/main" })).toBe("pushed");
-    expect(await port.push({ token: TOKEN, commit: B, ref: "refs/heads/main" })).toBe("rejected");
+    expect(await port.push({ token: TOKEN, commit: A, ref: "refs/heads/main", expectedMain: B })).toBe("pushed");
+    expect(await port.push({ token: TOKEN, commit: B, ref: "refs/heads/main", expectedMain: A })).toBe("rejected");
     const pushes = rec.calls.map((c) => c.args.slice(HARDENED_CONFIG.length * 2));
-    expect(pushes[0]).toEqual(["push", "-q", `https://github.com/${KB}.git`, `${A}:refs/heads/main`]);
-    for (const c of rec.calls) expect(c.args.join(" ")).not.toMatch(/--force|\s-f\b|\+refs/);
+    // finding 8: leased on the main we validated against, atomic; still no plain force and no `+` refspec
+    expect(pushes[0]).toEqual(["push", "-q", "--atomic", `--force-with-lease=refs/heads/main:${B}`, `https://github.com/${KB}.git`, `${A}:refs/heads/main`]);
+    expect(pushes[1]).toContain(`--force-with-lease=refs/heads/main:${A}`);
+    for (const c of rec.calls) expect(c.args.join(" ")).not.toMatch(/--force(?!-with-lease=)|\s-f\b|\+refs/);
     // an auth or network failure is not "main moved"
     const bad = createKbGitPort(createGitExec({ stateDir: dir, run: recorder(() => ({ code: 128, stderr: "fatal: Authentication failed" })).run, path: "/usr/bin" }), "https://x/y.git");
-    await expect(bad.push({ token: TOKEN, commit: A, ref: "refs/heads/main" })).rejects.toThrow(/kb push başarısız/);
-    await expect(bad.push({ token: TOKEN, commit: A, ref: "refs/heads/main" })).rejects.not.toThrow(TOKEN);
+    await expect(bad.push({ token: TOKEN, commit: A, ref: "refs/heads/main", expectedMain: B })).rejects.toThrow(/kb push başarısız/);
+    await expect(bad.push({ token: TOKEN, commit: A, ref: "refs/heads/main", expectedMain: B })).rejects.not.toThrow(TOKEN);
   });
 });
 
@@ -105,7 +107,7 @@ describe("server: pushKbMain fixed to VLAD_KB_REPO and refs/heads/main", () => {
     expect(await w.pushKbMain(A, B)).toEqual({ kind: "pushed" });
     expect(seen.repo).toBe(KB);
     expect(seen.perms).toEqual({ contents: "write" });
-    expect(seen.push).toEqual({ token: TOKEN, commit: A, ref: "refs/heads/main" });
+    expect(seen.push).toEqual({ token: TOKEN, commit: A, ref: "refs/heads/main", expectedMain: B });
     expect(w.pushKbMain.length).toBe(2); // (commit, expectedMain): no repo, no ref, no force parameter
   });
 
@@ -156,6 +158,10 @@ describe("server: startup refuses VLAD_KB_REPO equal to a project repo", () => {
     expect(() => assertKbRepoIsNotCodeRepo("iamhankaya/vlad", ["iamhankaya/vlad-kb", "iamhankaya/vlad"])).toThrow(/kb_repo_is_code_repo/);
     expect(() => assertKbRepoIsNotCodeRepo("IamHankaya/Vlad", ["iamhankaya/vlad"])).toThrow(/kb_repo_is_code_repo/);
     expect(() => assertKbRepoIsNotCodeRepo("iamhankaya/vlad-kb", ["iamhankaya/vlad", null, undefined, "x/y"])).not.toThrow();
+    // the comparison is on the normalized owner/name: URL forms, a `.git` suffix and case do not get around it
+    for (const form of ["https://github.com/IamHankaya/Vlad.git", "git@github.com:iamhankaya/vlad.git", "ssh://git@github.com/iamhankaya/vlad/", "iamhankaya/vlad.git"]) {
+      expect(() => assertKbRepoIsNotCodeRepo("iamhankaya/vlad", [form]), form).toThrow(/kb_repo_is_code_repo/);
+    }
   });
 
   it("the gate is off without VLAD_KB_REPO; a malformed or self-colliding setting refuses to start", () => {

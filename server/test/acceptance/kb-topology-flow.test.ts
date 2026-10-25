@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { classifyVladError } from "../../src/vlad/cli.ts";
 import { makeWorld, newRunningTask, taskRel } from "../helpers/kbRepos.ts";
 import { makePromoteEnv } from "../helpers/kbPromote.ts";
+import { StateStore } from "../../src/kbsync/state.ts";
 
 describe("acceptance: kb topology server", () => {
   it("acceptance: kb topology server read-only after windows retakes -> API write 409, worker writes still reach main", async () => {
@@ -17,6 +18,8 @@ describe("acceptance: kb topology server", () => {
     srv.ok(["active", "claim"]);
     const id = newRunningTask(srv);
     srv.ok(["kb", "sync"]);
+    // S13c security review, finding 3: main only takes the server's claim during a pending takeover (the server's own state, as POST /active/takeover leaves it)
+    new StateStore(env.stateDir).update((st) => { st.takeover = { state: "pending", reason: "in_progress", at: new Date().toISOString() }; });
     expect(await env.run()).toMatchObject({ promoted: true });
     expect(w.mainFile("active.md")).toMatch(/machine: srvbox/);
 

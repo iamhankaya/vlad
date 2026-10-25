@@ -3,9 +3,11 @@
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { KB_TOKEN_PERMISSIONS } from "../github/appToken.ts";
+import type { GithubClientLike } from "../github/client.ts";
 import { GithubWriter } from "../github/writer.ts";
 import { runVlad, runVladJson } from "../vlad/cli.ts";
 import { createGitExec, createKbGitPort, ensureBareRepo, type GitExec } from "./gitexec.ts";
+import { normalizeRepo } from "./rules.ts";
 import { mainActiveMachine, promoteKb, type KbConflictInput, type KbSyncConfig, type PromoteDeps, type PromoteResult } from "./promote.ts";
 import { requestSync, waitSync, type TakeoverDeps } from "./takeover.ts";
 
@@ -33,7 +35,8 @@ export function loadKbSyncConfig(env: NodeJS.ProcessEnv, stateDir: string): (KbS
  * a code repo it would be a way around it. `repos` are the `repo` fields of all project cards.
  */
 export function assertKbRepoIsNotCodeRepo(kbRepo: string, repos: Iterable<string | null | undefined>): void {
-  for (const r of repos) if (r && r.toLowerCase() === kbRepo.toLowerCase()) throw new Error(`kb_repo_is_code_repo: ${kbRepo} bir proje reposu; kb reposu ayrı olmalı`);
+  const kb = normalizeRepo(kbRepo);
+  for (const r of repos) if (r && normalizeRepo(r) === kb) throw new Error(`kb_repo_is_code_repo: ${kbRepo} bir proje reposu; kb reposu ayrı olmalı`);
 }
 
 export async function projectRepos(): Promise<string[]> {
@@ -62,13 +65,27 @@ export function vladCardPort(): PromoteDeps["cards"] {
   };
 }
 
+/** `GET compare/main...kb-server`: commits ahead and whether the (300-entry) file list is full, i.e. possibly cut off. Null on any failure. */
+export function githubPreflight(client: GithubClientLike, c: Pick<KbSyncConfig, "repo" | "main" | "serverBranch">): NonNullable<PromoteDeps["preflight"]> {
+  return async () => {
+    if (c.main.includes("/") || c.serverBranch.includes("/")) return null; // a slash cannot be passed through the guarded client's path check
+    try {
+      const r = await client.request("GET", `/repos/${c.repo}/compare/${encodeURIComponent(c.main)}...${encodeURIComponent(c.serverBranch)}?per_page=1`, c.repo, { perms: KB_TOKEN_PERMISSIONS });
+      if (r.status !== 200 || !Number.isSafeInteger(r.body?.total_commits)) return null;
+      return { commits: r.body.total_commits, truncated: Array.isArray(r.body.files) && r.body.files.length >= 300 };
+    } catch {
+      return null;
+    }
+  };
+}
+
 export interface KbGate { config: KbSyncConfig & { kbDir: string }; git: GitExec; writer: GithubWriter; deps: PromoteDeps; promote(o?: { trigger?: "timer" | "takeover"; waitLockMs?: number }): Promise<PromoteResult>; takeoverDeps: TakeoverDeps }
 
 /** Builds the gate. `tokens.token(repo, perms)` is the App token provider; the writer's client is the guarded GitHub client (unused by `pushKbMain`). */
 export async function buildKbGate(o: {
   config: KbSyncConfig & { kbDir: string };
   tokens: { token(repo: string, perms: typeof KB_TOKEN_PERMISSIONS): Promise<string> };
-  client: ConstructorParameters<typeof GithubWriter>[0];
+  client: GithubClientLike;
   now?: () => number;
 }): Promise<KbGate> {
   const { config } = o;
@@ -77,7 +94,7 @@ export async function buildKbGate(o: {
   const url = config.remoteUrl ?? `https://github.com/${config.repo}.git`;
   const writer = new GithubWriter(o.client, { repo: config.repo, main: config.main, tokens: o.tokens, git: createKbGitPort(git, url) });
   const now = o.now ?? Date.now;
-  const deps: PromoteDeps = { config, git, tokens: o.tokens, writer, cards: vladCardPort(), now };
+  const deps: PromoteDeps = { config, git, tokens: o.tokens, writer, cards: vladCardPort(), now, preflight: githubPreflight(o.client, config) };
   const promote = (po?: { trigger?: "timer" | "takeover"; waitLockMs?: number }) => promoteKb(deps, po);
   const takeoverDeps: TakeoverDeps = {
     serverMachine: config.serverMachine, stateDir: config.stateDir, now,

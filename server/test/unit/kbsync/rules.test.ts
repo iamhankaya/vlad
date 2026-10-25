@@ -58,7 +58,7 @@ describe("server: promote rules", () => {
     const del = (path: string) => ch(path, { status: "D", newMode: "000000", newOid: "0".repeat(40) });
     expect(rules([del("projects/alpha.md")])).toEqual(["delete_not_allowed"]);
     expect(rules([del("decisions.md")])).toEqual(["delete_not_allowed"]);
-    expect(rules([del("active.md")])).toEqual([]);
+    expect(rules([del("active.md")])).toEqual(["delete_not_allowed"]); // finding 3: no deletion at all, active.md included
     // deleting something that was never allowed is still a path violation (first matching rule)
     expect(rules([del("logs/x.md")])).toEqual(["path_not_allowed"]);
   });
@@ -112,10 +112,21 @@ describe("server: promote sensitive fields (K5, user decision)", () => {
     expect(hits(SEED, card("stack: [ts]\n"))).toEqual([]);
   });
 
-  it("server: promote new project card may not carry a gate or local_only, but may name its repo and paths", () => {
-    expect(hits(null, SEED)).toEqual([]);
-    expect(hits(null, card("gate: rm -rf /\n"))).toEqual(["gate"]);
-    expect(hits(null, card("local_only: true\n"))).toEqual(["local_only"]);
+  it("server: promote new project card (finding 4): only the server's own paths entry, path equal to it, no gate/local_only, a repo nobody has", () => {
+    const born = (extra = "") => `---\nslug: beta\npath: /srv/beta\npaths:\n  srvbox: /srv/beta\nrepo: o/beta\n${extra}---\n\nx\n`;
+    const taken = new Set(["o/alpha", "iamhankaya/vlad-kb"]);
+    const h = (t: string, over: string[] = []) => checkSensitiveFields("projects/beta.md", null, t, "srvbox", { takenRepos: new Set([...taken, ...over]) }).map((v) => v.detail);
+    expect(h(born())).toEqual([]);
+    expect(h(born("gate: rm -rf /\n"))).toEqual(["gate"]);
+    expect(h(born("local_only: true\n"))).toEqual(["local_only"]);
+    expect(h(born().replace("paths:\n", "paths:\n  winbox: C:\\x\n"))).toEqual(["paths.winbox"]);
+    expect(h(born().replace("path: /srv/beta", "path: /srv/elsewhere"))).toEqual(["path"]);
+    expect(h(born().replace("repo: o/beta", "repo: o/alpha"))).toEqual(["repo"]);
+    expect(h(born().replace("repo: o/beta", "repo: IamHankaya/Vlad-KB.git"))).toEqual(["repo"]);
+    expect(h(born().replace("repo: o/beta", "repo: https://github.com/O/Alpha.git"))).toEqual(["repo"]);
+    expect(h(born().replace("repo: o/beta", "repo: o/gamma"), ["o/other"])).toEqual([]);
+    // no path at all is not this rule's business (the schema requires one)
+    expect(hits(null, SEED)).toEqual(["paths.winbox", "path"]);
     // no readable frontmatter in the new text: refused rather than guessed at
     expect(hits(SEED, "no frontmatter")).toEqual(["frontmatter"]);
     expect(hits(SEED, "---\n: : bad\n  - [\n---\n")).toEqual(["frontmatter"]);

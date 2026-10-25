@@ -107,7 +107,6 @@ describe("server: takeover", () => {
     expect(new StateStore(f.stateDir).read().takeover).toMatchObject({ state: "pending", reason: "rejected" });
     // the home view carries it next to the blocked state
     new StateStore(f.stateDir).update((s) => { s.blocked = { key: "k", card: "C-20261025-07", at: new Date().toISOString() }; });
-    writeStatus(f.kb, STATUS(1));
     const v = kbSyncView({ kbDir: f.kb, stateDir: f.stateDir, now: () => Date.now() });
     expect(v.takeover).toMatchObject({ state: "pending", reason: "rejected" });
     expect(v.kb_sync).toMatchObject({ state: "blocked", card: "C-20261025-07" });
@@ -254,7 +253,7 @@ describe("server: takeover route", () => {
     try {
       const kb = join(root, "kb"), stateDir = join(root, "state");
       writeStatus(kb, STATUS(3));
-      new StateStore(stateDir).update((s) => { s.takeover = { state: "pending", reason: "main_moved", at: "2026-10-25T14:59:00Z" }; });
+      new StateStore(stateDir).update((s) => { s.takeover = { state: "pending", reason: "main_moved", at: "2026-10-25T14:59:00Z" }; s.lastOk = new Date().toISOString(); });
       const r = rig({ read: { activeExtra: () => kbSyncView({ kbDir: kb, stateDir, now: () => Date.now() }) } });
       const d = await pairDevice(r);
       const res = await signedCall(r, d, "GET", "/v1/home");
@@ -266,17 +265,19 @@ describe("server: takeover route", () => {
     }
   });
 
-  it("kb_sync view: ok, stale after 5 minutes, conflict from the status file, blocked wins", () => {
+  it("kb_sync view (finding 6): ok comes from promote's own lastOk only; the agent's status file can downgrade, never upgrade", () => {
     const kb = tmp(), stateDir = tmp();
-    const view = (now: number) => kbSyncView({ kbDir: kb, stateDir, now: () => now }).kb_sync.state;
+    const view = (now: number) => kbSyncView({ kbDir: kb, stateDir, now: () => now }).kb_sync;
     const t0 = Date.parse("2026-10-25T12:00:00Z");
-    expect(view(t0)).toBe("stale"); // kbsync never ran
-    writeStatus(kb, STATUS(1, { at: new Date(t0).toISOString() }));
-    expect(view(t0 + 4 * 60_000)).toBe("ok");
-    expect(view(t0 + 5 * 60_000 + 1)).toBe("stale");
+    expect(view(t0).state).toBe("stale"); // promote never ran
+    writeStatus(kb, STATUS(1, { at: new Date(t0).toISOString() })); // a forged "all fine" changes nothing
+    expect(view(t0).state).toBe("stale");
+    new StateStore(stateDir).update((s) => { s.lastOk = new Date(t0).toISOString(); });
+    expect(view(t0 + 4 * 60_000)).toEqual({ state: "ok", last_ok: new Date(t0).toISOString() });
+    expect(view(t0 + 5 * 60_000 + 1).state).toBe("stale");
     writeStatus(kb, STATUS(2, { at: new Date(t0).toISOString(), ok: false, phase: "merge", error: "kb_conflict" }));
-    expect(view(t0)).toBe("conflict");
+    expect(view(t0).state).toBe("conflict");
     new StateStore(stateDir).update((s) => { s.blocked = { key: "k", at: "x" }; });
-    expect(view(t0)).toBe("blocked");
+    expect(view(t0).state).toBe("blocked");
   });
 });

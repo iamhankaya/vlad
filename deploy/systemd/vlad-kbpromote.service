@@ -11,3 +11,18 @@ EnvironmentFile=-/etc/vlad/vlad.env
 # promote runs git only in its own bare clone under /var/lib/vladapi (never in the agent's kb clone) and writes only through GithubWriter.pushKbMain
 Environment=VLAD_SERVER_STATE_DIR=/var/lib/vladapi
 ExecStart=/usr/bin/env vlad-server kb-promote
+# a hung fetch or a hostile branch must not hold the unit (or the machine) for long
+TimeoutStartSec=300
+MemoryMax=512M
+TasksMax=128
+# promote reads the kb (VLAD_KB_DIR, group read; `vlad card` writes cards there) and writes its own state; nothing else
+NoNewPrivileges=yes
+ProtectSystem=strict
+# the kb directory (cards are written there through `vlad card`) is added by the installer as a drop-in: ReadWritePaths=<VLAD_KB_DIR>
+ReadWritePaths=/var/lib/vladapi
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes

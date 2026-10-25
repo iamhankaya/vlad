@@ -5,7 +5,8 @@ import YAML from "yaml";
 
 export const KB_ALLOWED_DIRS = ["projects", "tasks", "findings", "cards", "grants", "audit", "journal", "docs"] as const;
 export const KB_ALLOWED_FILES = ["decisions.md", "active.md"] as const;
-export const KB_DELETABLE = ["active.md"] as const;
+/** Nothing may be deleted. (`active.md` used to be deletable; its content rules now cover it, and a release is the user's act on Windows.) */
+export const KB_DELETABLE = [] as const;
 /** `totalBytes` (all distinct blobs of one promote together) is an addition to the note: 2000 blobs of 1 MiB would otherwise be 2 GB for a main checkout. */
 export const PROMOTE_LIMITS = { blobBytes: 1_048_576, changes: 2000, commits: 500, pathChars: 180, depth: 4, totalBytes: 64 * 1_048_576 } as const;
 
@@ -101,45 +102,109 @@ function rowRule(c: RawChange, collide: Set<string>, sizeOf: (oid: string) => nu
   return null;
 }
 
-/** The `---` frontmatter of a kb markdown file as an object; null when there is none or it does not parse. */
-function frontmatter(text: string): Record<string, unknown> | null {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text);
+/** Same front-matter pattern, BOM and CRLF handling as the CLI's `parseDoc` (`src/kb/doc.ts`). */
+const FRONT = /^---\n(?:([\s\S]*?)\n)?---[ \t]*(?:\n|$)/;
+
+/**
+ * The front matter exactly as the CLI reads it (core schema), but stricter: anything the CLI's parser could read differently from a
+ * plain reading is refused: `%` directives (a `%YAML 1.1` line switches the schema), anchors and aliases, explicit tags, `<<` merge keys,
+ * several documents or any parser error/warning (security review, finding 2). Null when there is none or it is refused.
+ */
+export function strictFrontmatter(text: string): Record<string, unknown> | null {
+  const src = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  const m = FRONT.exec(src);
   if (!m) return null;
+  const yaml = m[1] ?? "";
+  if (/^%/m.test(yaml) || /^(---|\.\.\.)[ \t]*$/m.test(yaml)) return null;
   try {
-    const v: unknown = YAML.parse(m[1]!);
-    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+    const doc = YAML.parseDocument(yaml, { schema: "core", uniqueKeys: true });
+    if (doc.errors.length || doc.warnings.length || doc.directives.docStart || doc.directives.yaml.explicit) return null;
+    let refused = false;
+    YAML.visit(doc, {
+      Alias: () => { refused = true; },
+      Node: (_k, node) => { if (node.anchor || node.tag) refused = true; },
+      Pair: (_k, pair) => { if (YAML.isScalar(pair.key) && pair.key.value === "<<") refused = true; },
+    });
+    if (refused) return null;
+    const v: unknown = doc.toJS();
+    if (v === null || v === undefined) return {};
+    return typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
 const EXEC_FIELDS = ["gate", "repo", "default_branch", "path", "local_only"] as const;
-/** Fields that make a command run or point work at another clone, even on a brand-new card. */
-const BORN_FIELDS = ["gate", "local_only"] as const;
+
+/** `owner/name` of a GitHub repository however it is written (URL, ssh form, `.git`, case); anything else comes back lower-cased as it was. */
+export function normalizeRepo(v: unknown): string {
+  let s = String(v ?? "").trim().toLowerCase();
+  s = s.replace(/^(?:https?:\/\/|ssh:\/\/)?(?:[^@/]+@)?github\.com[/:]/, "").replace(/[/]+$/, "").replace(/\.git$/, "");
+  return s;
+}
+
+export interface SensitiveContext {
+  /** Problems of the new front matter against the CLI's schema (`schemaProblems`); empty = valid. Omitted: not checked. */
+  validate?: (data: unknown) => string[];
+  /** Normalized `repo` of every project card main already has, and the kb repository itself: a new card may not claim one of them. */
+  takenRepos?: ReadonlySet<string>;
+}
 
 /**
  * K5 `sensitive_field`: a server-side change to what a project card makes VLAD run or open (`gate`, `repo`, `default_branch`,
- * `path`, `local_only`, another machine's `paths` entry). The body and the server's own `paths` entry stay free. A new card
- * (`oldText` null) may not carry a `gate` or `local_only`. Call for `projects/<slug>.md` only.
+ * `path`, `local_only`, another machine's `paths` entry). The body and the server's own `paths` entry stay free. A NEW card
+ * (`oldText` null) is stricter (finding 4): only the server's own `paths` entry; `path` must equal it; no `gate`, `local_only`
+ * or other machine's `paths`; `repo` may not be the kb repository or one an existing card already has. Call for `projects/<slug>.md` only.
  */
-export function checkSensitiveFields(path: string, oldText: string | null, newText: string | null, serverMachine: string): Violation[] {
+export function checkSensitiveFields(path: string, oldText: string | null, newText: string | null, serverMachine: string, ctx: SensitiveContext = {}): Violation[] {
   if (newText === null) return [];
-  const next = frontmatter(newText);
+  const next = strictFrontmatter(newText);
   if (!next) return [{ rule: "sensitive_field", path, detail: "frontmatter" }];
   const out: Violation[] = [];
   const hit = (detail: string) => out.push({ rule: "sensitive_field", path, detail });
+  const problems = ctx.validate?.(next) ?? [];
+  if (problems.length) hit(`schema: ${problems[0]}`);
+  const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+  const b = obj(next.paths);
   if (oldText === null) {
-    for (const f of BORN_FIELDS) if (f in next) hit(f);
+    for (const f of ["gate", "local_only"]) if (f in next) hit(f);
+    for (const k of Object.keys(b)) if (k !== serverMachine) hit(`paths.${k}`);
+    if (typeof next.path === "string" && next.path !== b[serverMachine]) hit("path");
+    if ("repo" in next && ctx.takenRepos?.has(normalizeRepo(next.repo))) hit("repo");
     return out;
   }
-  const prev = frontmatter(oldText) ?? {};
+  const prev = strictFrontmatter(oldText) ?? {};
   for (const f of EXEC_FIELDS) if (!isDeepStrictEqual(prev[f], next[f])) hit(f);
-  const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-  const a = obj(prev.paths), b = obj(next.paths);
+  const a = obj(prev.paths);
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
     if (k !== serverMachine && !isDeepStrictEqual(a[k], b[k])) hit(`paths.${k}`);
   }
   return out;
+}
+
+export interface ActiveContext {
+  serverMachine: string;
+  /** state.json: a takeover is pending and started recently (the server's own record, not the agent's). */
+  takeoverPending: boolean;
+  validate?: (data: unknown) => string[];
+}
+
+/**
+ * `active.md` may change on main in two cases only (finding 3): (a) a recent takeover of this server is pending and the new record names this
+ * server; (b) main already names this server and only the heartbeat moves forward. Everything else, a deletion included, is refused.
+ */
+export function checkActiveChange(path: string, oldText: string | null, newText: string | null, ctx: ActiveContext): Violation[] {
+  const no = (detail: string): Violation[] => [{ rule: "sensitive_field", path, detail: `active.md: ${detail}` }];
+  if (newText === null) return no("silinemez");
+  const next = strictFrontmatter(newText);
+  if (!next) return no("frontmatter");
+  const problems = ctx.validate?.(next) ?? [];
+  if (problems.length) return no(`schema: ${problems[0]}`);
+  if (next.machine !== ctx.serverMachine) return no("başka makineyi etkin yapamaz");
+  if (ctx.takeoverPending) return [];
+  const prev = oldText === null ? null : strictFrontmatter(oldText);
+  if (prev && prev.machine === ctx.serverMachine && prev.since === next.since && isDeepStrictEqual(prev.takeover_from, next.takeover_from) && Date.parse(String(next.heartbeat)) >= Date.parse(String(prev.heartbeat))) return [];
+  return no("devralma beklemiyor");
 }
 
 /** Dedupe key of a kb_conflict (K6): the same set of lines always gives the same key. Same formula as `src/kb/sync.ts`. */

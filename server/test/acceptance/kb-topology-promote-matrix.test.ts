@@ -6,6 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
+import { StateStore } from "../../src/kbsync/state.ts";
 import { git, makeWorld, SEED_CARD, type World } from "../helpers/kbRepos.ts";
 import {
   bulkOnServerBranch, makePromoteEnv, pushRawTreeEntry, pushToServerBranch,
@@ -22,6 +23,10 @@ beforeEach(() => {
 });
 
 const sha40 = "a".repeat(40);
+// S13c security review (findings 3 and 4): a new active.md only passes while a recent takeover of the server is pending (the server's own state.json),
+// and a new project card may carry only the server's own paths entry, a path equal to it, and a repo no other card has.
+const ACTIVE = "---\nmachine: srvbox\nsince: 2026-10-25T10:00:00Z\nheartbeat: 2026-10-25T10:00:00Z\n---\n";
+const pendingTakeover = (e: PromoteEnv) => new StateStore(e.stateDir).update((st) => { st.takeover = { state: "pending", reason: "in_progress", at: new Date().toISOString() }; });
 const longName = "a".repeat(176) + ".md"; // tasks/ + 179 = 185 > 180
 
 async function expectRejected(rule: string | string[], path?: string): Promise<void> {
@@ -181,11 +186,12 @@ describe("acceptance: kb topology promote allowlist matrix", () => {
 
   // ---- pozitif kontroller: aynı kapı izinli değişikliği geçirir (matris yalnız "hep reddet" ile yeşile dönemez)
   it("acceptance: kb topology promote allowlist matrix lets every allowed kind of change through with a --no-ff merge [main, kb-server]", async () => {
+    pendingTakeover(env);
     const tip = pushToServerBranch(w, [[
-      ok1("projects/beta.md", SEED_CARD().replace(/slug: alpha/, "slug: beta").replace(/name: alpha/, "name: beta")),
+      ok1("projects/beta.md", SEED_CARD().replace(/slug: alpha/, "slug: beta").replace(/name: alpha/, "name: beta").replace("repo: acme/alpha", "repo: acme/beta").replace("path: /nonexistent/alpha", "path: /srv/beta").replace("  winbox: C:\\dev\\alpha", "  srvbox: /srv/beta")),
       ok1("tasks/T20261025-01-x.md"), ok1("findings/F-alpha-001.md"), ok1("cards/C-001.md"), ok1("grants/G-001.md"),
       ok1("audit/2026-10.jsonl", "{}\n"), ok1("journal/2026-10-26.md"), ok1("docs/notes.md"), ok1("docs/a/b/c.md"),
-      ok1("decisions.md", "# Karar günlüğü\n\n## yeni\n"), ok1("active.md", "---\nmachine: srvbox\n---\n"),
+      ok1("decisions.md", "# Karar günlüğü\n\n## yeni\n"), ok1("active.md", ACTIVE),
       // sunucunun KENDİ paths girdisi ve gövde (Çalışma notları) serbest
       { path: "projects/alpha.md", text: SEED_CARD().replace("paths:\n", "paths:\n  srvbox: /srv/alpha\n").replace("## Özet\nx", "## Özet\nx\n\n## Çalışma notları\n- ders\n") },
       { path: "docs/edge.md", bytes: 1_048_576 }, // tam sınır: 1 MiB geçer
@@ -200,12 +206,17 @@ describe("acceptance: kb topology promote allowlist matrix", () => {
     expect(env.writes).toHaveLength(1);
   });
 
-  it("acceptance: kb topology promote allowlist matrix allows deleting active.md and nothing else", async () => {
-    pushToServerBranch(w, [[ok1("active.md", "---\nmachine: srvbox\n---\n")]]);
+  // finding 3 reverses the old "active.md may be deleted": a deletion is refused like any other, and a new record needs a pending takeover
+  it("acceptance: kb topology promote allowlist matrix refuses deleting active.md and a claim without a pending takeover", async () => {
+    pushToServerBranch(w, [[ok1("active.md", ACTIVE)]]);
+    await expectRejected("sensitive_field", "active.md");
+    pendingTakeover(env);
     expect((await env.run()).promoted).toBe(true);
+    env.writes.length = 0;
+    const landed = w.remoteHead("main")!;
     pushToServerBranch(w, [[{ path: "active.md", delete: true }]]);
-    const r = await env.run();
-    expect(r, JSON.stringify(r)).toMatchObject({ promoted: true });
-    expect(w.mainFile("active.md")).toBeNull();
+    mainBefore = landed;
+    await expectRejected("delete_not_allowed", "active.md");
+    expect(w.mainFile("active.md")).toMatch(/machine: srvbox/);
   });
 });
