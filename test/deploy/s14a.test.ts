@@ -135,9 +135,10 @@ describe("deploy: install.sh dry run", () => {
       "gen-chat-settings.ts", "@anthropic-ai/claude-code@1.2.3",
       "npm install -g --ignore-scripts", "npm audit --package-lock-only", "setfacl -R -m u:vladchat:rX", "chmod 0700 /home/vlad",
       "empty root-owned file /var/lib/vladchat/.claude/settings.json", "empty root-owned dir /var/lib/vladchat/.claude/skills",
-      "install -d -m 0755 -o root -g root /etc/vlad-chat", "/etc/vlad-chat/chat-settings.json (root:root 0444)", "/etc/claude-code/managed-settings.json", "systemctl stop vlad-chat.socket",
+      "install -d -m 0755 -o root -g root /etc/vlad-chat", "/etc/vlad-chat/chat-settings.json (root:root 0444)", "remove /etc/claude-code/managed-settings.json if it is our old disableAllHooks file", "systemctl stop vlad-chat.socket",
     ]) expect(r.stdout, need).toContain(need);
     expect(r.stdout).not.toMatch(/usermod -aG vlad vladchat/);
+    expect(r.stdout).not.toMatch(/write \/etc\/claude-code|install -d [^\n]*\/etc\/claude-code/); // no machine-wide managed settings: they would break the workers' own hooks
     expect(r.stdout).not.toMatch(/chown -R root:root \/opt\/vlad/); // state/ stays vlad's on a second run
     expect(r.stdout).not.toMatch(/usermod -aG vladapi vlad|usermod -aG vladchat vlad/); // the agent user joins no gate group
   });

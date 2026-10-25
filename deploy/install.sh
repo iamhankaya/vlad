@@ -235,13 +235,15 @@ else
   node "$VLAD_HOME_DIR/server/scripts/gen-chat-settings.ts" "$KB_DIR" /var/lib/vladapi "$VLAD_HOME_DIR" "$ETC" "$CHAT_ETC" >"$tmp"
   install -m 0444 -o root -g root "$tmp" "$CHAT_ETC/chat-settings.json"; rm -f "$tmp"
 fi
-# Machine-wide managed policy (highest precedence, root-owned): hooks off for every claude on this host. Note: this also applies to workers.
-run install -d -m 0755 -o root -g root /etc/claude-code
-put 0644 root:root /etc/claude-code/managed-settings.json <<'EOS'
-{
-  "disableAllHooks": true
-}
-EOS
+# An earlier install wrote /etc/claude-code/managed-settings.json (disableAllHooks, machine-wide). That breaks VLAD's own hooks (SessionEnd
+# session-report, SessionStart summary) for workers, so it is removed again, but only if the content is exactly what we wrote.
+managed=/etc/claude-code/managed-settings.json
+if [[ $DRY == 1 ]]; then
+  echo "+ remove $managed if it is our old disableAllHooks file"
+elif [[ -f $managed && ! -L $managed ]] && [[ $(jq -c . "$managed" 2>/dev/null) == '{"disableAllHooks":true}' ]]; then
+  rm -f -- "$managed"; rmdir /etc/claude-code 2>/dev/null || true
+  log "removed $managed left by an earlier install"
+fi
 
 # --- 7. environment file (no secrets) ---------------------------------------------------------------------------------------------
 if [[ ! -e $ETC/vlad.env ]]; then
