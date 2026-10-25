@@ -64,6 +64,17 @@ describe("prepareCloudLaunch", () => {
     expect(g.data).toMatchObject({ state: "running", branch: `vlad/${t.data.id}`, worktree: null, error: null });
   });
 
+  it("a vendored skill (ponytail) is inlined, not listed as a skill to load", () => {
+    const role = join(home, "roles", "developer.md");
+    writeFileSync(role, readFileSync(role, "utf8").replace("skills:\n", "skills:\n  - ponytail\n"));
+    mkdirSync(join(home, "vendor", "skills", "ponytail"), { recursive: true });
+    writeFileSync(join(home, "vendor", "skills", "ponytail", "SKILL.md"), "PONYTAIL-GÖVDESİ lazy senior\n");
+    const p = prepareCloudLaunch(mk().data.id).prompt;
+    expect(p).toContain("PONYTAIL-GÖVDESİ lazy senior");
+    expect(p).toContain("`superpowers:test-driven-development`");
+    expect(p).not.toMatch(/yüklemeyi dene:.*ponytail/);
+  });
+
   it("task model overrides the role's model in create_session; no task model keeps the role's", () => {
     expect(prepareCloudLaunch(mk("alpha", { model: "haiku" }).data.id).model).toBe("haiku");
     expect(prepareCloudLaunch(mk("alpha", { model: "opus", modelReason: "kritik" }).data.id).model).toBe("opus");

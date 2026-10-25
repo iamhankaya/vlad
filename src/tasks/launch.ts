@@ -10,7 +10,10 @@ import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
+import { splitSkills } from "../roles/store.js";
 import type { Role } from "../roles/store.js";
+import { markSilentWorkers } from "./liveness.js";
+import type { LivenessProbe } from "./liveness.js";
 import { effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -45,11 +48,13 @@ export function buildPrompt(
   const withRole =
     `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${role.file}\` dosyasını oku ` +
     `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
-  if (!role.skills?.length) return withRole;
-  return (
-    `${withRole} İşe başlamadan şu skill'leri yükle: ${role.skills.map((s) => `\`${s}\``).join(", ")}. ` +
-    `Yüklenemeyen olursa kapanış raporunda belirt.`
-  );
+  const { load, vendored } = splitSkills(role.skills ?? [], role.file);
+  const parts = [withRole];
+  if (load.length) {
+    parts.push(`İşe başlamadan şu skill'leri yükle: ${load.map((s) => `\`${s}\``).join(", ")}. Yüklenemeyen olursa kapanış raporunda belirt.`);
+  }
+  for (const v of vendored) parts.push(`\`${v.name}\` skill'i yüklü değildir; \`${v.file}\` dosyasını oku ve uygula.`);
+  return parts.join(" ");
 }
 
 const CLOSED: TaskState[] = ["done", "cancelled", "failed"];
@@ -253,11 +258,16 @@ function removeTaskWorktree(repo: string, wt: string, id: string): void {
 export function statusSummary(
   cfg: VladConfig,
   now: Date,
+  probe?: LivenessProbe,
+  platform?: NodeJS.Platform,
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
   undigested: number; openSevereFindings: number;
 } {
-  const newlyStalled = markStale(now, cfg.staleAfterHours).map((t) => t.data.id);
+  const newlyStalled = [
+    ...markStale(now, cfg.staleAfterHours),
+    ...markSilentWorkers(now, cfg, probe, platform),
+  ].map((t) => t.data.id);
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
   for (const t of tasks) counts[t.data.state]++;

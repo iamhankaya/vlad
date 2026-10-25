@@ -126,16 +126,24 @@ describe("quoting fixes", () => {
 describe("closeWorkerWindow", () => {
   it.runIf(process.platform === "win32")("kills the process whose command line runs the task's worker script", async () => {
     const id = "T29990101-99";
+    // this test kills only its own stand-in processes, so it opts out of the VLAD_LAUNCHER=noop guard (F-vlad-064)
+    vi.stubEnv("VLAD_ALLOW_REAL_LAUNCHER", "1");
     // stands in for `powershell -File %TEMP%\vlad\<id>.ps1`
     const worker = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", join(tmpdir(), "vlad", `${id}.ps1`)], { stdio: "ignore" });
     const other = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", join(tmpdir(), "vlad", "T29990101-98.ps1")], { stdio: "ignore" });
     const exited = new Promise((r) => worker.once("exit", r));
     try {
-      await new Promise((r) => setTimeout(r, 300));
-      expect(closeWorkerWindow(id)).toEqual([worker.pid]);
+      // under suite load the stand-ins can take seconds to show up in the process list: retry instead of a fixed wait
+      let killed: number[] = [];
+      for (let i = 0; i < 40 && !killed.length; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        killed = closeWorkerWindow(id);
+      }
+      expect(killed).toEqual([worker.pid]);
       await exited;
       expect(other.exitCode).toBeNull();
     } finally {
+      vi.unstubAllEnvs();
       worker.kill();
       other.kill();
     }

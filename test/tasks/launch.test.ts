@@ -182,6 +182,17 @@ describe("launchTask", () => {
     expect(buildPrompt("f.md", "commit", { ...r, skills: [] })).not.toContain("skill'leri yükle");
   });
 
+  it("a vendored skill (ponytail) is read from its file, not loaded by name (F-vlad-065)", () => {
+    const home = join(tmpdir(), "H");
+    const file = join(home, "roles", "developer.md");
+    const p = buildPrompt("f.md", "commit", { title: "T", file, skills: ["a:b", "ponytail"] });
+    expect(p).toContain("İşe başlamadan şu skill'leri yükle: `a:b`. Yüklenemeyen olursa kapanış raporunda belirt.");
+    expect(p).toContain(`\`ponytail\` skill'i yüklü değildir; \`${join(home, "vendor", "skills", "ponytail", "SKILL.md")}\` dosyasını oku ve uygula.`);
+    const only = buildPrompt("f.md", "commit", { title: "T", file, skills: ["ponytail"] });
+    expect(only).not.toContain("skill'leri yükle");
+    expect(only).toContain("dosyasını oku ve uygula");
+  });
+
   it("launch with a deleted role file keeps queued, records error, opens no worktree", async () => {
     const file = writeRole("tester");
     const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });

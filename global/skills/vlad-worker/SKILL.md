@@ -68,6 +68,8 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 
 Rapordan önce proje kartında `gate` alanı varsa (`vlad project list --json` → `gate`) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
 
+Değişiklik turunda (VLAD düzeltme isteyip seni sürdürdüyse) rapor yine **tam metindir**: "önceki raporun yerine geçer / üstüne ekler / #N aynen geçerlidir" yazma, değişmeyen kısımlar dahil her bölümü yeniden yaz. VLAD eski raporu `## Önceki raporlar`'da saklar, ama bağımlı fazlara ve kapıya yalnızca son rapor gider; atıf kalıbı CLI'da uyarı üretir.
+
 Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
 ### Yapılanlar

@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
+import { splitSkills } from "../roles/store.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -97,7 +98,7 @@ const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
   "- İlerlemeyi yanıtlarına satır başında şu işaretlerle yaz (kod çitinin dışında). **`#n` tüm işaretlerde (LOG, ASK, REPORT, END, FAIL) ortak tek sayaçtır: 1'den başlar, her işarette bir artar. REPORT ve END aynı numarayı taşır; REPORT'u 1'den başlatma, sayacın devamını kullan.**",
   "  `[VLAD:LOG #n] <kısa adım>`",
   "- Karar gerektiren soru: `[VLAD:ASK #n] <soru, seçenekler>` yaz ve turunu bitir; cevap `[VLAD:ANSWER #n]` ile gelir.",
-  "- Önce tüm işini push et, ardından kapanış raporunu **son tur mesajında tam metin olarak** yaz; \"rapor yukarıda\" gibi özet ya da atıf yasak (VLAD yalnızca son sayfayı okuyabilir); rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
+  "- Önce tüm işini push et, ardından kapanış raporunu **son tur mesajında tam metin olarak** yaz; \"rapor yukarıda\" gibi özet ya da atıf yasak (VLAD yalnızca son sayfayı okuyabilir). Değişiklik turu raporu da tam metindir: \"önceki raporun yerine geçer / üstüne ekler / #N aynen geçerlidir\" yazma, değişmeyen kısımlar dahil tümünü yeniden yaz (VLAD önceki raporu saklar ama atıfı uyarıyla işaretler); rapordan sonra yeni commit/push yapma. Rapor biçimi (yalnızca `###` ve daha derin başlıklar; build/test komutları ve sonuçları dahil):",
   `  \`[VLAD:REPORT #n branch=vlad/${id} head=<sha>]\` … rapor … \`[VLAD:END #n]\``,
   "- Başarısızsan: `[VLAD:FAIL #n] <neden, tek satır>`.",
   "- Kısa yaz: düz metinde dolgu, selam ve tekrar yok; ama kapanış raporunda başlıklar, ID'ler, komutlar, sayılar ve kararların gerekçesi korunur.",
@@ -168,12 +169,15 @@ function buildCloudPrompt(
   if (role) {
     const body = readDoc<unknown>(role.file).body.trim();
     parts.push(`## Rolün: ${role.title}\n${body}`);
-    if (role.skills.length) {
+    const { load, vendored } = splitSkills(role.skills, role.file);
+    if (load.length) {
       parts.push(
-        `İşe başlamadan şu skill'leri yüklemeyi dene: ${role.skills.map((s) => `\`${s}\``).join(", ")}. ` +
+        `İşe başlamadan şu skill'leri yüklemeyi dene: ${load.map((s) => `\`${s}\``).join(", ")}. ` +
           "Yüklenemeyen olursa kapanış raporunda belirt.",
       );
     }
+    // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline
+    for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
   }
   for (const d of task.data.depends_on ?? []) {
     let report: string | null = null;

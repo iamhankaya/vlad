@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { listRolesWithWarnings } from "../../src/roles/store.js";
@@ -167,6 +167,23 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
   });
 
+  it("security review is tiered: critical/high blocks, lower go to findings, 1 round, exception tied to the finding", () => {
+    for (const f of [".claude/skills/status/SKILL.md", ".claude/skills/delegate/SKILL.md"]) {
+      const t = read(f);
+      expect(t, f).toContain("Kademeli güvenlik kuralı");
+      expect(t, f).toMatch(/kritik\/yüksek[^.]*merge/);
+      expect(t, f).toMatch(/orta\/düşük\/bilgi[^.]*değişiklik turu açılmaz/);
+      expect(t, f).toContain("en çok 1 güvenlik değişiklik turu");
+      expect(t, f).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
+      expect(t, f).toMatch(/kimlik doğrulamasız[^.]*sır[^.]*imza[^.]*yetki yükseltme/);
+      expect(t, f).not.toMatch(/faz auth\/yetki\/oturum\/sır\/veri silmeye dokunuyorsa/);
+    }
+    const claude = read("CLAUDE.md");
+    expect(claude).toMatch(/kritik\/yüksek[^.]*merge[^.]*orta\/düşük/);
+    expect(claude).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
+    expect(claude).not.toMatch(/auth\/yetki\/oturum\/sır\/veri silme ya da/);
+  });
+
   it("roles ask for real response fixtures on external-API work", () => {
     for (const r of ["analyst", "architect", "tester", "developer"]) {
       expect(read(`roles/${r}.md`), r).toMatch(/gerçek (yanıt|fixture)/);
@@ -226,13 +243,17 @@ describe("ponytail (vendored, developer + game-developer only)", () => {
   const SOURCE_BLOB = "d64edd32265ba21cbf5270158f04e97d96925f27"; // DietrichGebert/ponytail@09c434a skills/ponytail/SKILL.md
 
   it("SKILL.md is byte-identical to the source blob; only SOURCE.md and LICENSE sit beside it", () => {
-    const body = Buffer.from(read(".claude/skills/ponytail/SKILL.md").replace(/\r\n/g, "\n"), "utf8");
+    const body = Buffer.from(read("vendor/skills/ponytail/SKILL.md").replace(/\r\n/g, "\n"), "utf8");
     const sha = createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
     expect(sha).toBe(SOURCE_BLOB);
-    expect(readdirSync(resolve(root, ".claude/skills/ponytail")).sort()).toEqual(["LICENSE", "SKILL.md", "SOURCE.md"]);
-    const source = read(".claude/skills/ponytail/SOURCE.md");
+    expect(readdirSync(resolve(root, "vendor/skills/ponytail")).sort()).toEqual(["LICENSE", "SKILL.md", "SOURCE.md"]);
+    const source = read("vendor/skills/ponytail/SOURCE.md");
     for (const w of ["github.com/DietrichGebert/ponytail", "09c434ab73ca43761c5d8b0c5d341926c2fba710", SOURCE_BLOB, "MIT"]) expect(source, w).toContain(w);
-    expect(read(".claude/skills/ponytail/LICENSE")).toContain("MIT License");
+    expect(read("vendor/skills/ponytail/LICENSE")).toContain("MIT License");
+  });
+
+  it("is not under .claude/skills (it would be listed in every session of the repo; F-vlad-065)", () => {
+    expect(existsSync(resolve(root, ".claude/skills/ponytail"))).toBe(false);
   });
 
   it("only developer and game-developer list ponytail in skills", () => {
@@ -251,5 +272,37 @@ describe("ponytail (vendored, developer + game-developer only)", () => {
     const c = read("CLAUDE.md");
     expect(c).toContain("ponytail");
     expect(c).toMatch(/ponytail.*deneme/);
+  });
+});
+
+describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const section = (md: string, heading: string) => {
+    const i = md.indexOf(heading);
+    expect(i, heading).toBeGreaterThanOrEqual(0);
+    const rest = md.slice(i + heading.length);
+    const j = rest.search(/\n#{1,3} /);
+    return j < 0 ? rest : rest.slice(0, j);
+  };
+
+  it("CLAUDE.md: model değiştirme yok, agent model kademeleri, agent kb'ye yazmaz, sonuç taslak", () => {
+    const s = section(read("CLAUDE.md"), "## Orkestratör disiplini");
+    for (const w of ["modelini değiştirmez", "arka plan agent", "`haiku`", "`sonnet`", "`opus`", "kb'ye yazmaz", "taslak", "kullanıcı onayı"]) expect(s, w).toContain(w);
+  });
+
+  it("digest: çok rapor için sonnet taslak agent'ları; 3b onay kontrolü agent talimatında; yazma VLAD'da", () => {
+    const s = section(read(".claude/skills/digest/SKILL.md"), "**Çok rapor (taslak agent'ları):**");
+    for (const w of [">10", "`sonnet`", "taslak", "3b", "kb'ye yazmaz", "vlad"]) expect(s, w).toContain(w);
+  });
+
+  it("status 1b: olay çekme haiku agent'ına verilebilir, ingest VLAD'da; A'nın result-first metni korunur", () => {
+    const s = section(read(".claude/skills/status/SKILL.md"), "### 1b.");
+    for (const w of ["`haiku`", "ham çıktı", "yolunu", "`vlad task ingest`", "kinds=[\"result\"], limit=3"]) expect(s, w).toContain(w);
+  });
+
+  it("status kapı incelemesi: uzun diff/test özeti için sonnet agent seçeneği", () => {
+    const s = section(read(".claude/skills/status/SKILL.md"), "## 2. `awaiting_approval`");
+    expect(s).toMatch(/`sonnet`.*agent|agent.*`sonnet`/);
   });
 });

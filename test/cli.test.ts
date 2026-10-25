@@ -51,6 +51,18 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     expect(r.code).toBe(0);
     expect(JSON.parse(r.out).id).toMatch(/^T\d{8}-01$/);
   });
+  it("task new warns (not fails) about task ids in the body that are not in the kb", () => {
+    const known = mkTask();
+    const body = `## Tanım\n${known} var, T20251025-100 yok, T20251025-100 tekrar, T20251025-101 de yok\n`;
+    const args = ["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", "-"];
+    const r = vlad([...args, "--json"], body);
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.id).toMatch(/^T\d{8}-02$/);
+    expect(j.warnings).toEqual([expect.stringContaining("T20251025-100"), expect.stringContaining("T20251025-101")]);
+    expect(vlad(args, body).out).toContain("uyarı:");
+    expect(JSON.parse(vlad([...args, "--json"], "## Tanım\nx\n").out).warnings).toEqual([]);
+  });
   it("invalid transition exits 1 with JSON error on stderr", () => {
     const id = mkTask();
     const r = vlad(["task", "set", id, "done", "--json"]);

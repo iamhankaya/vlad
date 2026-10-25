@@ -41,6 +41,8 @@ Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an)
 - Aynı `session_id`'ye sahip birden çok kayıt (devam ettirilmiş session) varsa bunları **tek** bir günlük maddesinde birleştir; her kayıt için ayrı madde yazma. Birleştirilen tüm dosyaları adım 6'da yine kapat.
 - Tahmin yürütme; rapordan çıkmayan bir şeyi yazma.
 
+**Çok rapor (taslak agent'ları):** Raporlu görev sayısı büyükse (>10) ana bağlamı şişirmemek için proje (pipeline ise çatı) başına bir arka plan agent'ı (`sonnet`) başlat; her agent kendi grubunun görev dosyalarını okuyup günlük, kart, bulgu ve karar **taslağı** döndürür. Agent talimatına adım 3b (kullanıcı onayı kontrolü) aynen girer: onaylanmış konuyu açık nokta yazmasın, kaynağını belirtsin. Agent'lar kb'ye yazmaz; taslakları VLAD kontrol eder, `vlad` CLI ile yazar ve kartı doğrular (adım 3–6 aynen işler).
+
 ## 3. Günlük
 
 `ended` tarihine (YYYY-MM-DD, yerel) göre her gün için Markdown hazırla:
