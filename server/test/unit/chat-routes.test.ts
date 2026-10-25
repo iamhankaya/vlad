@@ -233,7 +233,7 @@ describe("server: card answer and change request", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
     expect(w.vlad.writes).toEqual([
-      ["card", "answer", CARD, "--option=yes", "--text=Ama önce testleri koş", `--by-device=${d.id}`],
+      ["card", "answer", CARD, "--option=yes", "--text=Ama önce testleri koş", "--by-device", d.id],
       ["task", "answer", TASK, "--", `(kart ${CARD}) Evet: Ama önce testleri koş`],
       ["task", "relaunch", TASK],
       ["card", "resolve", CARD],
@@ -369,7 +369,7 @@ describe("server: card answer and change request", () => {
     // B signs; the recorded device is B whatever else the request says
     const ok = await signedCall(w.r, b, "POST", `/v1/cards/${CARD}/answer`, JSON.stringify({ text: "benden" }));
     expect(ok.statusCode).toBe(200);
-    expect(w.vlad.writes[0]).toContain(`--by-device=${b.id}`);
+    expect(w.vlad.writes[0]).toContain(b.id);
     expect(w.vlad.writes[0]!.join(" ")).not.toContain(a.id);
     // claiming to be A in the envelope with B's key fails the signature check: nothing is written
     w.vlad.calls.length = 0;
@@ -392,7 +392,8 @@ describe("server: card answer and change request", () => {
       expect(res.statusCode, text).toBe(200);
       const cardArgs = w.vlad.writes.find((c) => c[1] === "answer" && c[0] === "card")!;
       // exactly one token carries the text, glued to its flag; the device flag is ours
-      expect(cardArgs.filter((a) => a.startsWith("--by-device"))).toEqual([`--by-device=${d.id}`]);
+      expect(cardArgs.filter((a) => a.startsWith("--by-device"))).toEqual(["--by-device"]);
+      expect(cardArgs[cardArgs.indexOf("--by-device") + 1]).toBe(d.id);
       expect(cardArgs).toContain(`--text=${text}`);
       const taskArgs = w.vlad.writes.find((c) => c[0] === "task" && c[1] === "answer")!;
       expect(taskArgs[3]).toBe("--"); // everything after is data

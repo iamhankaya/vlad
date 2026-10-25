@@ -168,14 +168,14 @@ export function chatHandlers(deps: ChatDeps = {}): Record<"postChat" | "getChatH
       } else {
         if (option !== undefined && !card.options.some((o) => o.id === option)) return bad(reply, { field: "option" }, "Geçersiz seçenek.");
         // `=` forms: the value is one argv token and can never be taken for a flag.
-        await vlad.run(["card", "answer", id, ...(option !== undefined ? [`--option=${option}`] : []), ...(text !== undefined ? [`--text=${text}`] : []), `--by-device=${deviceId}`], opts);
+        await vlad.run(["card", "answer", id, ...(option !== undefined ? [`--option=${option}`] : []), ...(text !== undefined ? [`--text=${text}`] : []), "--by-device", deviceId], opts); // ids are `d-<slug>` from the device ledger: never a flag
         said = spoken(card.options, option, text);
       }
 
       // F2: only a question card speaks for its task; every other kind just closes.
       if (card.kind === "vlad_question" && card.task && TASK_ID.test(card.task)) {
-        const { task } = await vlad.json<{ task: { state: string; kind: string; host?: string | null } }>(["task", "show", card.task], opts);
-        if (task.state === "blocked") {
+        const { task } = await vlad.json<{ task?: { state: string; kind: string; host?: string | null } }>(["task", "show", card.task], opts);
+        if (task?.state === "blocked") {
           await vlad.run(["task", "answer", card.task, "--", oneLine(`(kart ${id}) ${said}`)], opts);
           if (task.kind === "dev" && task.host && !(await relaunch(card.task))) {
             // The answer is on file and the task runs; the worker did not come back. Say so; the card stays open for the retry that closes it.
@@ -212,7 +212,8 @@ export function chatHandlers(deps: ChatDeps = {}): Record<"postChat" | "getChatH
     const deviceId = req.vladDevice?.device_id;
     if (!deviceId) return fail(reply, 500, "bad_request", "Sunucu hatası.");
     try {
-      const { task } = await vlad.json<{ task: { state: string; kind: string; host?: string | null } }>(["task", "show", id], opts);
+      const { task } = await vlad.json<{ task?: { state: string; kind: string; host?: string | null } }>(["task", "show", id], opts);
+      if (!task) return fail(reply, 503, "bad_request", "VLAD şu an okunamıyor.", { reason: "vlad_failed" });
       if (task.state !== "awaiting_approval") return bad(reply, { reason: "task_state" }, "Görev onay beklemiyor.");
       // F3: the state change is the claim. Of two concurrent requests only one gets past it, so the request is logged once.
       await vlad.run(["task", "set", id, "running"], opts);
