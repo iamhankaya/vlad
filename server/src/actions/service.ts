@@ -35,7 +35,9 @@ export type ApprovalProof = { kind: "device"; device_id: string; signature: stri
  * The only way out of the approval path (S9b implements it: check-run, merge, audit). Throw an `ActionError` to report a
  * specific refusal (`head_moved`), anything else becomes a generic failure. In S9a nothing here writes to GitHub.
  */
-export type ExecuteAction = (action: ActionDescriptor, approval: ApprovalProof) => Promise<ActionResult>;
+export type ExecuteAction = (action: ActionDescriptor, approval: ApprovalProof, ctx?: ExecuteContext) => Promise<ActionResult>;
+/** `stillAuthorized()`: asked right before the write; false when the approving device was revoked or the task is no longer waiting for this. */
+export type ExecuteContext = { stillAuthorized: () => Promise<boolean> };
 
 export type ActionPolicy = {
   /** Accept `mergeable_state: blocked`. S9b needs it: until `vlad-gate` writes `vlad/approved` a protected branch reports `blocked`. */
@@ -67,6 +69,9 @@ export type Approved = { status: "executed"; result: { kind: string; repo: strin
 export const MERGEABLE_ATTEMPTS = 3;
 export const MERGEABLE_WAIT_MS = 2000;
 export const PRUNE_AFTER_MS = 24 * 3600_000;
+
+/** Failures that decide nothing about the merge: the action stays `checked` and the same approval may be sent again. */
+const RETRYABLE = new Set(["github_unavailable", "bookkeeping_failed"]);
 
 const TASK_ID = /^T[0-9]{8}-[0-9]{2,}$/;
 
@@ -275,7 +280,7 @@ export class ActionService {
       let cur = rec;
       if (cur.state === "prepared") cur = this.d.store.transition(cur.action_id, "approved", this.d.now(), { approval: { device_id: device.device_id, signature, at_ms: this.d.now() } });
 
-      await this.liveChecks(cur, f);
+      await this.liveChecks(cur, f, rec.state === "checked");
 
       cur = this.fresh(cur.action_id);
       if (cur.state === "approved") cur = this.d.store.transition(cur.action_id, "checked", this.d.now());
@@ -291,15 +296,39 @@ export class ActionService {
         result = await this.d.execute(
           { action_id: cur.action_id, kind: f.kind!, repo: f.repo!, pr: Number(f.pr), base: f.base!, head_sha: f.head_sha!, task: f.task! },
           { kind: "device", device_id: approval.device_id, signature: approval.signature, signed_bytes_b64: cur.bytes_b64, approved_at_ms: approval.at_ms },
+          { stillAuthorized: () => this.stillAuthorized(cur.action_id, f) },
         );
       } catch (e) {
         const err = e instanceof ActionError ? e : new ActionError(502, "bad_request", "execute_failed");
-        this.settle(cur.action_id, "failed", err.message);
+        // GitHub or the kb not reachable (or bookkeeping after a merge failed): the action stays `checked`, the same signature may retry.
+        if (!(RETRYABLE.has(String(err.details?.reason)))) this.settle(cur.action_id, "failed", err.message);
         throw err;
       }
       this.d.store.transition(cur.action_id, "merged", this.d.now(), { result });
       return out(result);
     });
+  }
+
+  /**
+   * Asked by the executor right before it writes to GitHub: the approving device must still be active, the challenge not
+   * dead, and the task still waiting for exactly this merge. A revocation ends the action (`invalid`), a changed task fails it.
+   * Fails closed: if the task cannot be read, nothing is written.
+   */
+  private async stillAuthorized(id: string, f: Record<string, string>): Promise<boolean> {
+    const rec = this.d.store.get(id);
+    if (!rec || rec.state === "invalid" || isTerminal(rec.state)) throw new ActionError(410, "expired", rec?.reason ?? "invalid");
+    if (this.d.devices.get(rec.prepared_by)?.revoked_at) {
+      this.d.store.transition(id, "invalid", this.d.now(), { reason: "revoked" });
+      throw new ActionError(410, "expired", "revoked");
+    }
+    let t: TaskInfo | null;
+    try {
+      t = await this.d.tasks(f.task!);
+    } catch {
+      throw new ActionError(503, "bad_request", "github_unavailable");
+    }
+    if (!t || t.state !== "awaiting_approval" || !t.pr || t.pr.repo !== f.repo || t.pr.number !== Number(f.pr) || t.pr.base !== f.base) throw new ActionError(409, "bad_request", "task_changed");
+    return true;
   }
 
   /** Reloads a record after an `await`: revocation or a rewind may have invalidated it meanwhile. */
@@ -343,9 +372,19 @@ export class ActionService {
   }
 
   /** Steps 5-8: PR open, head and base unchanged, CI green, mergeable. Every refusal here is final for this challenge. */
-  private async liveChecks(rec: ActionRecord, f: Record<string, string>) {
+  private async liveChecks(rec: ActionRecord, f: Record<string, string>, resuming: boolean) {
     const pr = Number(f.pr);
     try {
+      // An earlier attempt may have merged and died before the bookkeeping (task `done`, audit): if the PR is merged at exactly the
+      // approved head, there is nothing to re-check; the executor completes the rest without a second merge.
+      if (resuming) {
+        const p = await this.read(() => this.d.reader.getPull(f.repo!, pr));
+        if (p?.merged) {
+          this.checkOrigin(p, f.repo!, f.task!, f.base!);
+          if (p.head.sha !== f.head_sha) throw new ActionError(409, "head_moved", "head_moved");
+          return;
+        }
+      }
       // The task must still be waiting for exactly this: same repo, PR and base (it could have been re-pointed since prepare).
       const t = await this.read(() => this.d.tasks(f.task!));
       if (!t || t.state !== "awaiting_approval" || !t.pr || t.pr.repo !== f.repo || t.pr.number !== pr || t.pr.base !== f.base) throw new ActionError(409, "bad_request", "task_changed");

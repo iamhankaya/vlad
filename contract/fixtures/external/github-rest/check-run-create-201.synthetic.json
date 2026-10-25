@@ -1,0 +1,28 @@
+{
+ "_fixture_header": {
+  "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+  "captured_at": "2026-10-25",
+  "command": "yok (sentetik); gerçek kayıt: gh api -X POST repos/<o>/<r>/check-runs (App token gerekir)",
+  "description": "POST check-runs: vlad/approved success",
+  "masking": "yok gerekmedi: token yer tutucudur (ghs_EXAMPLE)"
+ },
+ "status": "HTTP/1.1 201 Created",
+ "headers": {
+  "content-type": "application/json; charset=utf-8"
+ },
+ "body": {
+  "id": 4242,
+  "name": "vlad/approved",
+  "head_sha": "0123456789abcdef0123456789abcdef01234567",
+  "status": "completed",
+  "conclusion": "success",
+  "app": {
+   "id": 123456,
+   "slug": "vlad-gate"
+  },
+  "output": {
+   "title": "VLAD onayı",
+   "summary": "x"
+  }
+ }
+}

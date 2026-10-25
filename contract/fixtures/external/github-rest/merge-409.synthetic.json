@@ -1,0 +1,17 @@
+{
+ "_fixture_header": {
+  "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+  "captured_at": "2026-10-25",
+  "command": "yok (sentetik)",
+  "description": "PUT merge: head değişmiş",
+  "masking": "yok gerekmedi: token yer tutucudur (ghs_EXAMPLE)"
+ },
+ "status": "HTTP/1.1 409 Conflict",
+ "headers": {
+  "content-type": "application/json; charset=utf-8"
+ },
+ "body": {
+  "message": "Head branch was modified. Review and try the merge again.",
+  "documentation_url": "https://docs.github.com/rest/pulls/pulls#merge-a-pull-request"
+ }
+}

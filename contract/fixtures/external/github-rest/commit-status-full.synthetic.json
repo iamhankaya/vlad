@@ -1,0 +1,24 @@
+{
+ "_fixture_header": {
+  "source": "elle yazıldı (SENTETİK): GitHub REST belgesindeki biçime göre; gerçek yanıt kaydı yok (D0A/D0B: App ve test PR'ı yok)",
+  "captured_at": "2026-10-25",
+  "command": "yok (sentetik)",
+  "description": "GET commits/{sha}/status: dolu",
+  "masking": "yok gerekmedi: token yer tutucudur (ghs_EXAMPLE)"
+ },
+ "status": "HTTP/1.1 200 OK",
+ "headers": {
+  "content-type": "application/json; charset=utf-8"
+ },
+ "body": {
+  "state": "success",
+  "total_count": 1,
+  "statuses": [
+   {
+    "state": "success",
+    "context": "ci/example"
+   }
+  ],
+  "sha": "0123456789abcdef0123456789abcdef01234567"
+ }
+}

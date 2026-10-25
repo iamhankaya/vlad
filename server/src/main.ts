@@ -3,11 +3,46 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { vladSnapshot } from "./events/diff.ts";
 import { EventWatcher, startKbWatch } from "./events/watch.ts";
+import { vladProjectSource, vladTaskSource } from "./actions/tasks.ts";
+import { createExecutor } from "./actions/executor.ts";
+import { vladOps } from "./actions/ops.ts";
+import { EventLedger } from "./events/ledger.ts";
+import { AppTokenProvider, loadAppKey } from "./github/appToken.ts";
+import { GithubClient, observeWrites } from "./github/client.ts";
+import { RestGithubReader } from "./github/reader.ts";
+import { GithubWriter } from "./github/writer.ts";
 import { buildApp } from "./http/app.ts";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const stateDir = process.env.VLAD_SERVER_STATE_DIR ?? join(homedir(), ".vlad-server");
-const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true });
+const ledger = new EventLedger(stateDir);
+
+// Approval path: only with a configured GitHub App (id + private key in the state dir or env). Without it the action routes answer 501.
+const appId = process.env.VLAD_GITHUB_APP_ID;
+const appKey = loadAppKey(process.env, stateDir);
+let actions: NonNullable<Parameters<typeof buildApp>[0]["actions"]> | undefined;
+let logWrite: ((method: string, path: string) => void) | undefined;
+if (appId && appKey) {
+  const client = observeWrites(
+    new GithubClient({ tokens: new AppTokenProvider({ appId, privateKey: appKey, installationId: process.env.VLAD_GITHUB_APP_INSTALLATION_ID }) }),
+    (method, path) => logWrite?.(method, path),
+  );
+  const reader = new RestGithubReader(client);
+  actions = {
+    reader, tasks: vladTaskSource, projects: vladProjectSource,
+    // `blocked` is expected until `vlad/approved` is written; any other blocker (review, required checks) still stops the merge.
+    policy: { allowBlocked: true },
+    execute: createExecutor({
+      reader, writer: new GithubWriter(client), tasks: vladTaskSource, ops: vladOps, now: Date.now,
+      appendEvent: (type, data, key) => ledger.append(type, data, key),
+      appId: Number(appId), mergerLogin: process.env.VLAD_GITHUB_APP_LOGIN,
+      log: (m) => console.warn(m),
+    }),
+  };
+}
+const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, ...(actions ? { actions } : {}) });
+logWrite = (method, path) => app.log.info({ method, path }, "github write");
+if (!actions) app.log.warn("GitHub App yapılandırılmadı (VLAD_GITHUB_APP_ID + anahtar): onay uçları 501");
 
 // Event source: the kb (VLAD_KB_DIR, else <VLAD_HOME>/kb). Without VLAD_HOME there is nothing to look at (read routes answer 503 too).
 const kb = process.env.VLAD_KB_DIR ?? (process.env.VLAD_HOME ? join(process.env.VLAD_HOME, "kb") : undefined);
