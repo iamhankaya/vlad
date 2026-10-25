@@ -320,6 +320,100 @@ describe("pipeline launch", () => {
   });
 });
 
+describe("cross-project pipeline launch (F-vlad-044)", () => {
+  let beta: string;
+  let origin: string;
+  beforeEach(() => {
+    const base = join(repo, "..");
+    beta = join(base, "beta");
+    origin = join(base, "beta-origin.git");
+    mkdirSync(beta);
+    git(beta, "init", "-b", "main");
+    writeFileSync(join(beta, "b.txt"), "1");
+    git(beta, "add", ".");
+    git(beta, "commit", "-m", "first");
+    git(base, "init", "--bare", "-b", "main", origin);
+    git(beta, "remote", "add", "origin", origin);
+    git(beta, "push", "origin", "main");
+    writeProject("beta", `---
+slug: beta
+name: Beta
+path: ${JSON.stringify(beta)}
+stack: [ts]
+status: active
+autonomy: commit
+last_activity: null
+last_scanned: null
+---
+
+## Özet
+x
+`);
+  });
+  const pipe = () => createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" });
+  const betaPhase = (parent: string) =>
+    createTask({ project: "beta", title: "faz", kind: "dev", body: "", parent, phase: "uygulama" });
+  /** the integration branch exists only on beta's origin, with one commit of its own */
+  const remoteOnlyIntegration = (parentId: string) => {
+    const b = `vlad/${parentId}`;
+    git(beta, "switch", "-c", b);
+    writeFileSync(join(beta, "remote.txt"), "r");
+    git(beta, "add", ".");
+    git(beta, "commit", "-m", "remote entegrasyon");
+    git(beta, "push", "origin", b);
+    git(beta, "switch", "main");
+    git(beta, "branch", "-D", b);
+  };
+
+  it("phase branch is cut from the integration branch in the phase's repo; the pipeline's repo stays clean", async () => {
+    const p = pipe();
+    remoteOnlyIntegration(p.data.id);
+    const c = betaPhase(p.data.id);
+    const r = await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
+    const wt = r.data.worktree!;
+    expect(wt).toBe(worktreePath(cfg, beta, c.data.id));
+    expect(git(wt, "branch", "--show-current").trim()).toBe(`vlad/${c.data.id}`);
+    expect(existsSync(join(wt, "remote.txt"))).toBe(true);
+    // integration branch is a tracking local branch in beta
+    expect(git(beta, "rev-parse", "--abbrev-ref", `vlad/${p.data.id}@{upstream}`).trim()).toBe(`origin/vlad/${p.data.id}`);
+    // nothing in alpha, and the pipeline record keeps alpha-only fields untouched
+    expect(git(repo, "branch", "--list", `vlad/${p.data.id}`).trim()).toBe("");
+    expect(git(repo, "worktree", "list", "--porcelain")).not.toContain("vlad/");
+    const pd = getTask(p.data.id).data;
+    expect(pd.state).toBe("running");
+    expect(pd.branch).toBeNull();
+    expect(pd.worktree).toBeNull();
+  });
+
+  it("without a remote copy the integration branch is created from the phase repo's default branch", async () => {
+    const p = pipe();
+    const c = betaPhase(p.data.id);
+    await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
+    expect(git(beta, "rev-parse", `vlad/${p.data.id}`).trim()).toBe(git(beta, "rev-parse", "main").trim());
+    expect(git(repo, "branch", "--list", `vlad/${p.data.id}`).trim()).toBe("");
+  });
+
+  it("a worktree that is not on the expected phase branch fails the launch, queued, integration branch kept", async () => {
+    const p = pipe();
+    remoteOnlyIntegration(p.data.id);
+    const c = betaPhase(p.data.id);
+    const launcher = fakeLauncher();
+    await expect(launchTask(c.data.id, { launcher, cfg, branchOf: () => "vlad/baska" })).rejects.toThrow(/beklenen faz dalı/);
+    expect(launcher.reqs).toHaveLength(0);
+    expect(getTask(c.data.id).data.state).toBe("queued");
+    expect(getTask(c.data.id).data.error).toMatch(/beklenen faz dalı/);
+    expect(existsSync(worktreePath(cfg, beta, c.data.id))).toBe(false);
+    expect(git(beta, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
+  });
+
+  it("a same-project phase still records the integration branch on the pipeline", async () => {
+    const p = pipe();
+    const a = createTask({ project: "alpha", title: "faz", kind: "dev", body: "", parent: p.data.id, phase: "uygulama" });
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    expect(getTask(p.data.id).data).toMatchObject({ branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, repo, p.data.id) });
+  });
+});
+
 describe("cleanupTask", () => {
   it("refuses a running task", async () => {
     const t = mk();
