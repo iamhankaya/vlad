@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +9,8 @@ import { commitKb } from "../../src/kb/commit.js";
 import { serializeDoc } from "../../src/kb/doc.js";
 import { KB_GITIGNORE } from "../../src/kb/commit.js";
 import { nowIso } from "../../src/kb/time.js";
-import { KbConflictError, kbMainBranch, pullKb, resolveKb, syncKb } from "../../src/kb/sync.js";
+import { maskUrls } from "../../src/kb/git.js";
+import { assertInsideKb, KbConflictError, kbMainBranch, pullKb, resolveKb, syncKb } from "../../src/kb/sync.js";
 import { makeHome } from "../helpers.js";
 
 const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
@@ -74,24 +75,30 @@ const makeConflict = (file = "tasks/seed.md") => {
 
 const parents = (dir: string, rev = "HEAD") => sh(dir, "rev-list", "--parents", "-n1", rev).split(" ").length - 1;
 
-/** pre-push hook of the kb clone that lets `other` push to `target` first (every time, or only on the first push). */
+/**
+ * pre-receive hook of the bare remote (kb git runs hardened with hooks off, so the race lives on the server side):
+ * `other` pushes to `target` while the kb's push is in flight (every time, or only the first), so that push loses.
+ */
 function racingHook(target: string, always: boolean): string {
   const dir = tmp("vlad-s13b-hook-");
   const script = `#!/bin/sh
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+[ -n "$VLAD_RACING" ] && exit 0
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_QUARANTINE_PATH GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 n=$(cat "${dir}/count" 2>/dev/null || echo 0)
 echo $((n+1)) > "${dir}/count"
 if [ "${always ? "1" : "$n"}" = "${always ? "1" : "0"}" ]; then
   cd "${other}" && git pull -q --no-rebase origin ${target} >/dev/null 2>&1
-  echo "race $n" > "race-$n.md" && git add -A && git -c user.name=T -c user.email=t@t commit -q -m "race $n" && git push -q origin HEAD:${target} >/dev/null 2>&1
+  echo "race $n" > "race-$n.md" && git add -A && git -c user.name=T -c user.email=t@t commit -q -m "race $n" && VLAD_RACING=1 git push -q origin HEAD:${target} >/dev/null 2>&1
 fi
 exit 0
 `;
-  const hook = join(kb, ".git", "hooks", "pre-push");
+  const hook = join(remote, "hooks", "pre-receive");
   writeFileSync(hook, script);
   chmodSync(hook, 0o755);
   return dir;
 }
+
+const stateDir = (key8: string) => join(home, "state", "kb-conflicts", key8);
 
 beforeEach(() => setup());
 afterEach(() => {
@@ -404,7 +411,8 @@ describe("records: kb resolve and discard", () => {
     const r = resolveKb({ take: "main" });
     expect(r).toMatchObject({ merged: true, resolved: ["tasks/seed.md"] });
     expect(read(kb, "tasks/seed.md")).toBe("main side\n");
-    expect(r.backupDir).toMatch(/logs[\\/]kb-conflicts[\\/][0-9a-f]{8}$/);
+    expect(r.backupDir).toMatch(/state[\\/]kb-conflicts[\\/][0-9a-f]{8}$/);
+    expect(r.backupDir!.startsWith(kb)).toBe(false); // outside the kb tree (O3)
     expect(read(r.backupDir!, "tasks/seed.md")).toBe("local side\n");
     expect(parents(kb)).toBe(2);
     expect(sh(kb, "status", "--porcelain")).toBe("");
@@ -451,7 +459,7 @@ describe("records: kb resolve and discard", () => {
     expect(existsSync(join(kb, "tasks/bad.md"))).toBe(false);
     expect(read(kb, "tasks/good.md")).toBe("good\n");
     expect(existsSync(join(kb, "tasks/main-new.md"))).toBe(true);
-    expect(read(join(kb, "logs", "kb-conflicts", "cccccccc"), "tasks/bad.md")).toBe("bad\n");
+    expect(read(stateDir("cccccccc"), "tasks/bad.md")).toBe("bad\n");
     expect(remoteRev("refs/heads/kb-server")).toBe(sh(kb, "rev-parse", "HEAD"));
     // the promote card stays open (promote closes it); a later cycle must not rebuild again
     expect(getCard(card.data.id).data.state).toBe("open");
@@ -508,5 +516,168 @@ describe("records: kb helpers", () => {
     const st = activeStatus({ now: NOW, machine: "server1" });
     expect(st.warnings.join(" ")).toMatch(/^clock_skew/);
     expect(st.stale).toBe(false); // still fresh: the safe side
+  });
+});
+
+describe("records: kb sync hardening (security review)", () => {
+  const cardsOf = () => listCardsWithWarnings({ kind: ["kb_conflict"] }).cards;
+  const rejectedCard = (key: string, head: string, paths: string[]) =>
+    addCard({
+      kind: "kb_conflict", project: "vlad", title: "rejected",
+      kbConflict: { key, reason: "rejected", source: "promote", head, base: remoteRev("main"), paths },
+    });
+
+  it("records: O1 take_main answer applies only to the conflict it was given for", () => {
+    makeConflict();
+    expect(() => syncKb()).toThrow(/^kb_conflict/);
+    const [c1] = cardsOf();
+    answerCard(c1.data.id, { option: "take_main", by_device: "phone" });
+    // before the next cycle a second, different conflict joins: the old answer no longer fits (other key)
+    makeConflict("tasks/b.md");
+    expect(() => syncKb()).toThrow(/^kb_conflict/);
+    expect(read(kb, "tasks/seed.md")).toBe("local side\n"); // nothing was taken from main
+    expect(read(kb, "tasks/b.md")).toBe("local side\n");
+    expect(cardsOf()).toHaveLength(2);
+    const c2 = cardsOf()[1].data;
+    expect(c2.kb_conflict!.paths).toEqual(["tasks/b.md", "tasks/seed.md"]);
+    expect(c2.answer).toBeNull();
+    // the answer for the matching conflict does apply, and only to the card's paths
+    answerCard(c2.id, { option: "take_main", by_device: "phone" });
+    const r = syncKb();
+    expect(r.applied).toEqual([`take_main:${c2.id}`]);
+    expect(read(kb, "tasks/seed.md")).toBe("main side\n");
+  });
+
+  it("records: O2 discard reverts only the rejected content, once, and never force-pushes legitimate writes", () => {
+    put(kb, "tasks/bad.md", "bad\n");
+    syncKb();
+    const head = sh(kb, "rev-parse", "HEAD");
+    // a later, legitimate write to the same path
+    put(kb, "tasks/bad.md", "fixed\n");
+    syncKb();
+    const card = rejectedCard("e".repeat(64), head, ["tasks/bad.md"]);
+    answerCard(card.data.id, { option: "discard", by_device: "phone" });
+    const tip = sh(kb, "rev-parse", "HEAD");
+    expect(syncKb().applied).toBeUndefined(); // content differs from the rejected blob: nothing to revert
+    expect(read(kb, "tasks/bad.md")).toBe("fixed\n");
+    expect(sh(kb, "merge-base", "--is-ancestor", tip, "HEAD")).toBe(""); // fast history, no rebuild
+    expect(remoteRev("refs/heads/kb-server")).toBe(sh(kb, "rev-parse", "HEAD"));
+  });
+
+  it("records: O2 discard card whose head is not part of origin/kb-server is not applied", () => {
+    put(kb, "tasks/bad.md", "bad\n");
+    syncKb();
+    otherPush("tasks/x.md", "x");
+    const stray = sh(other, "rev-parse", "HEAD"); // a commit the server branch never carried
+    const card = rejectedCard("f".repeat(64), stray, ["tasks/bad.md"]);
+    answerCard(card.data.id, { option: "discard", by_device: "phone" });
+    expect(syncKb().applied).toBeUndefined();
+    expect(read(kb, "tasks/bad.md")).toBe("bad\n");
+  });
+
+  it("records: O2 a failed discard push restores the pre-rebuild branch and is retried, not applied", () => {
+    put(kb, "tasks/bad.md", "bad\n");
+    syncKb();
+    otherPush("tasks/main-new.md", "m\n");
+    const card = rejectedCard("a1".repeat(32), sh(kb, "rev-parse", "HEAD"), ["tasks/bad.md"]);
+    answerCard(card.data.id, { option: "discard", by_device: "phone" });
+    const hook = join(remote, "hooks", "pre-receive");
+    racingHook("kb-server", false);
+    expect(() => syncKb()).toThrow(/^kb_push_rejected/);
+    expect(read(kb, "tasks/bad.md")).toBe("bad\n"); // local branch restored
+    expect(existsSync(join(home, "state", "kb-conflicts", "applied.json"))).toBe(false);
+    chmodSync(hook, 0o644); // race over
+    const r = syncKb();
+    expect(r.applied).toEqual([`discard:${card.data.id}`]);
+    expect(existsSync(join(kb, "tasks/bad.md"))).toBe(false);
+    expect(remoteRev("refs/heads/kb-server")).toBe(sh(kb, "rev-parse", "HEAD"));
+  });
+
+  it("records: O3 backups live outside the kb tree with 0700 and never show in the kb", () => {
+    makeConflict();
+    const r = resolveKb({ take: "main" });
+    expect(r.backupDir!.startsWith(home)).toBe(true);
+    expect(r.backupDir!.startsWith(kb)).toBe(false);
+    if (process.platform !== "win32") expect(statSync(r.backupDir!).mode & 0o777).toBe(0o700);
+    expect(sh(kb, "status", "--porcelain")).toBe("");
+    expect(sh(kb, "ls-files")).not.toContain("kb-conflicts");
+  });
+
+  it("records: O3 local-only paths are never committed, and a kb .gitignore missing them stops sync, pull and resolve", () => {
+    put(kb, "logs/secret.txt", "s");
+    put(kb, "inbox/i.json", "{}");
+    put(kb, "cards/C-1.lock", "");
+    put(kb, "tasks/ok.md", "ok");
+    commitKb("x");
+    expect(sh(kb, "show", "--name-only", "--format=", "HEAD")).toBe("tasks/ok.md");
+
+    // .gitignore without the local-only lines: the commands refuse, kb commit still leaves the paths out
+    put(kb, ".gitignore", "# emptied\n");
+    sh(kb, "add", ".gitignore");
+    sh(kb, "commit", "-q", "-m", "kb: gitignore emptied");
+    put(kb, "logs/secret2.txt", "s");
+    put(kb, "tasks/ok2.md", "ok");
+    expect(() => syncKb()).toThrow(/^kb_gitignore_missing/);
+    expect(() => pullKb()).toThrow(/^kb_gitignore_missing/);
+    expect(() => resolveKb({ take: "main" })).toThrow(/^kb_gitignore_missing/);
+    commitKb("y");
+    expect(sh(kb, "show", "--name-only", "--format=", "HEAD")).toBe("tasks/ok2.md");
+    expect(sh(kb, "ls-files")).not.toMatch(/logs|inbox|\.lock/);
+  });
+
+  it("records: D1 kbPushBranch can never be main, master or the remote's real default branch", () => {
+    otherPush("tasks/x.md", "x");
+    sh(other, "push", "-q", "origin", "HEAD:refs/heads/trunk");
+    sh(remote, "symbolic-ref", "HEAD", "refs/heads/trunk");
+    // the agent-writable local origin/HEAD still says main: it is not trusted
+    sh(kb, "fetch", "-q", "origin");
+    for (const bad of ["main", "master", "trunk", "a b", "x..y", "@{-1}"]) {
+      writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "process", machines: { server1: { kbPushBranch: bad } } }));
+      put(kb, "tasks/T1.md", bad);
+      expect(() => commitKb("x", { push: true }), bad).toThrow(/^kb_push_branch_invalid/);
+      expect(() => syncKb(), bad).toThrow(/^kb_push_branch_invalid/);
+    }
+  });
+
+  it("records: D3 a symlinked ancestor or an outside path is refused for card paths", () => {
+    const outside = tmp("vlad-s13b-outside-");
+    symlinkSync(outside, join(kb, "tasks", "evil"));
+    expect(() => assertInsideKb(kb, "tasks/evil/x.md")).toThrow(/symlink/);
+    expect(() => assertInsideKb(kb, "../x.md")).toThrow(/geçersiz/);
+    expect(() => assertInsideKb(kb, "/etc/passwd")).toThrow(/geçersiz/);
+    expect(() => assertInsideKb(kb, "tasks/new/x.md")).not.toThrow();
+    expect(() => assertInsideKb(kb, "tasks/seed.md")).not.toThrow();
+  });
+
+  it.skipIf(process.platform === "win32")("records: D4 kb git ignores repo hooks and fsmonitor, and refuses a writable .git/config", () => {
+    const marker = tmp("vlad-s13b-marker-");
+    const hookDir = join(marker, "hooks");
+    mkdirSync(hookDir);
+    for (const h of ["pre-commit", "commit-msg", "post-commit"]) {
+      writeFileSync(join(hookDir, h), `#!/bin/sh\ntouch "${marker}/ran-${h}"\n`);
+      chmodSync(join(hookDir, h), 0o755);
+    }
+    writeFileSync(join(marker, "fsm.sh"), `#!/bin/sh\ntouch "${marker}/ran-fsmonitor"\n`);
+    chmodSync(join(marker, "fsm.sh"), 0o755);
+    sh(kb, "config", "core.hooksPath", hookDir);
+    sh(kb, "config", "core.fsmonitor", join(marker, "fsm.sh"));
+    put(kb, "tasks/T1.md", "x");
+    expect(commitKb("hook").committed).toBe(true);
+    syncKb();
+    expect(existsSync(join(marker, "ran-pre-commit"))).toBe(false);
+    expect(existsSync(join(marker, "ran-post-commit"))).toBe(false);
+    expect(existsSync(join(marker, "ran-fsmonitor"))).toBe(false);
+
+    chmodSync(join(kb, ".git", "config"), 0o664);
+    expect(() => commitKb("x")).toThrow(/^git_unsafe_perms/);
+    expect(() => pullKb()).toThrow(/^git_unsafe_perms/);
+  });
+
+  it("records: info resolve --card needs a kb_conflict card; git output hides URL credentials", () => {
+    makeConflict();
+    const q = addCard({ kind: "vlad_question", project: "vlad", title: "q" });
+    expect(() => resolveKb({ take: "main", card: q.data.id })).toThrow(/kb_conflict değil/);
+    expect(read(kb, "tasks/seed.md")).toBe("local side\n"); // refused before any merge
+    expect(maskUrls("fatal: unable to access 'https://user:tok3n@github.com/o/r.git/': 403")).toBe("fatal: unable to access 'https://***@github.com/o/r.git/': 403");
   });
 });

@@ -48,7 +48,7 @@ export function registerKb(program: Command): void {
     const r = syncKb();
     out(o, r, [r.committed ? "commit'lendi" : "değişiklik yok", r.merged ? "origin main birleştirildi" : "birleştirme yok", "push edildi", ...(r.card ? [`kart: ${r.card}`] : []), ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
   }, { guard: "off" });
-  defWrite(kb, "resolve", "Çakışmayı çözer: origin/main'i yeniden birleştirir, seçilen taraf alınır, öteki logs/kb-conflicts/ altına yedeklenir", (o: Opts) => {
+  defWrite(kb, "resolve", "Çakışmayı çözer: origin/main'i yeniden birleştirir, seçilen taraf alınır, öteki state/kb-conflicts/ altına (kb dışı) yedeklenir", (o: Opts) => {
     const r = resolveKb({ take: o.take as "main" | "local", paths: o.path as string[] | undefined, card: o.card as string | undefined });
     out(o, r, [r.merged ? "birleştirildi" : "çakışma yoktu", ...(r.resolved.length ? [`çözülen: ${r.resolved.join(", ")}`] : []), ...(r.backupDir ? [`yedek: ${r.backupDir}`] : [])].join("\n"));
   }, { guard: "off" })

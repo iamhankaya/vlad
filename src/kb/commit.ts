@@ -1,21 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { resolveLaunchMode } from "../launcher/mode.js";
 import { loadConfig } from "./config.js";
 import { git } from "./git.js";
 import { isSeparateKb, kbPaths } from "./home.js";
+import { missingIgnores, stageKb } from "./ignore.js";
 import { assertGitOwner, kbMainBranch, pushWithMerge, resolvePushTarget } from "./sync.js";
 
-/** Lines a kb repo's .gitignore must carry (local-only state). */
-export const KB_GITIGNORE = ["inbox/", "logs/", "vlad-session.txt", ".vlad.lock", "cards/*.lock"];
-
-function missingIgnores(kbDir: string): string[] {
-  const file = join(kbDir, ".gitignore");
-  const have = existsSync(file)
-    ? new Set(readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim().replace(/^\//, "")))
-    : new Set<string>();
-  return KB_GITIGNORE.filter((l) => !have.has(l));
-}
+export { KB_GITIGNORE } from "./ignore.js";
 
 export interface KbCommitResult {
   committed: boolean;
@@ -48,16 +38,19 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
   const paths = kbPaths();
   const separate = isSeparateKb(paths.home);
   const cwd = separate ? paths.kb : paths.home;
-  const spec = separate ? "." : "kb";
+  const spec = ["kb"];
   const r: KbCommitResult = { committed: false };
   assertGitOwner(cwd);
   if (separate) {
     const miss = missingIgnores(paths.kb);
     if (miss.length) r.warning = `kb .gitignore eksik: ${miss.join(", ")} ekle (yerel durum commit'lenmesin)`;
   }
-  git(cwd, ["add", "--", spec]);
-  if (git(cwd, ["diff", "--cached", "--name-only", "--", spec]).trim()) {
-    git(cwd, ["commit", "-q", "-m", `kb: ${message.trim()}`, "--", spec]);
+  if (separate) stageKb((a) => git(cwd, a));
+  else git(cwd, ["add", "--", ...spec]);
+  // separate layout: everything staged is a kb commit; legacy: only the kb/ pathspec
+  const only = separate ? [] : ["--", ...spec];
+  if (git(cwd, ["diff", "--cached", "--name-only", ...only]).trim()) {
+    git(cwd, ["commit", "-q", "-m", `kb: ${message.trim()}`, ...only]);
     r.committed = true;
     r.sha = git(cwd, ["rev-parse", "--short", "HEAD"]).trim();
   }

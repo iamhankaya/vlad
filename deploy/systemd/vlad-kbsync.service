@@ -7,6 +7,12 @@ Wants=network-online.target
 Type=oneshot
 User=vlad
 UMask=0002
-# VLAD_HOME, VLAD_KB_DIR and VLAD_MACHINE come from here (written by the installer)
-EnvironmentFile=-/etc/vlad/vlad.env
-ExecStart=/usr/bin/env vlad kb sync --json
+# VLAD_HOME, VLAD_KB_DIR and VLAD_MACHINE come from here (written by the installer); required, no leading "-"
+EnvironmentFile=/etc/vlad/vlad.env
+# the installer replaces @VLAD_HOME@ and @KB_DIR@ (and the binary path if vlad is installed elsewhere)
+ExecStart=/usr/local/bin/vlad kb sync --json
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=@KB_DIR@ @VLAD_HOME@
+ProtectHome=read-only
+PrivateTmp=yes
