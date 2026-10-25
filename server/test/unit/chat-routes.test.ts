@@ -244,7 +244,7 @@ describe("server: card answer and change request", () => {
     expect(n.indexOf("card answer")).toBeLessThan(n.indexOf("task answer"));
   });
 
-  it("server: card answer does not relaunch a worker that is not ours, and survives a failing relaunch", async () => {
+  it("server: card answer does not relaunch a worker that is not ours, and reports a failing relaunch", async () => {
     const w = world();
     const d = await pairDevice(w.r);
     w.vlad.script["task show"] = { task: { id: TASK, state: "blocked", kind: "dev", host: null }, report: null };
@@ -255,9 +255,12 @@ describe("server: card answer and change request", () => {
     const w2 = world();
     const d2 = await pairDevice(w2.r);
     w2.vlad.script["task relaunch"] = () => { throw new VladError("failed", "launcher başarısız"); };
-    expect((await post(w2, d2, `/cards/${CARD}/answer`, { option: "no" })).statusCode).toBe(200);
+    const rl = await post(w2, d2, `/cards/${CARD}/answer`, { option: "no" });
+    expect(rl.statusCode).toBe(503); // F1: not swallowed; the answer stays on file
+    expect(rl.json().error.details.reason).toBe("relaunch_failed");
     expect(w2.log).toEqual(["relaunch T20261025-86: failed"]);
-    expect(w2.vlad.names().at(-1)).toBe("card resolve");
+    expect(w2.vlad.names()).toContain("task answer");
+    expect(w2.vlad.names()).not.toContain("card resolve");
 
     // a task that is not waiting for an answer is left alone
     const w3 = world();
@@ -266,6 +269,44 @@ describe("server: card answer and change request", () => {
     expect((await post(w3, d3, `/cards/${CARD}/answer`, { option: "yes" })).statusCode).toBe(200);
     expect(w3.vlad.names()).not.toContain("task answer");
     expect(w3.vlad.names()).not.toContain("task relaunch");
+  });
+
+  it("server: F1 retry finishes a half-done card answer (task answer, relaunch, resolve) and never re-answers the card", async () => {
+    const w = world();
+    const d = await pairDevice(w.r);
+    // first attempt: card answered, then the task step failed
+    let boom = true;
+    w.vlad.script["task answer"] = () => { if (boom) throw new VladError("failed", "disk"); };
+    const first = await post(w, d, `/cards/${CARD}/answer`, { option: "yes", text: "ama dikkat" });
+    expect(first.statusCode).toBe(503);
+    expect(w.vlad.names().filter((n) => n === "card answer")).toHaveLength(1);
+    // the kb now shows an answered, still open card and a blocked task
+    boom = false;
+    w.vlad.script["card show"] = { id: CARD, kind: "vlad_question", state: "open", task: TASK, options: [{ id: "yes", label: "Evet" }], answer: { option: "yes", text: "ama dikkat", by_device: d.id, at: "t" } };
+    w.vlad.calls.length = 0;
+    const retry = await post(w, d, `/cards/${CARD}/answer`, { text: "başka bir şey" });
+    expect(retry.statusCode).toBe(200);
+    expect(w.vlad.writes).toEqual([
+      ["task", "answer", TASK, "--", `(kart ${CARD}) Evet: ama dikkat`], // what is on file, not the retry's body
+      ["task", "relaunch", TASK],
+      ["card", "resolve", CARD],
+    ]);
+    // task already answered meanwhile: only the closing is left
+    w.vlad.calls.length = 0;
+    w.vlad.script["task show"] = { task: { id: TASK, state: "running", kind: "dev", host: "box" }, report: null };
+    expect((await post(w, d, `/cards/${CARD}/answer`, { text: "x" })).statusCode).toBe(200);
+    expect(w.vlad.writes).toEqual([["card", "resolve", CARD]]);
+  });
+
+  it("server: F2 only a vlad_question card speaks for its task", async () => {
+    const w = world();
+    const d = await pairDevice(w.r);
+    for (const kind of ["ci_red", "conflict", "kb_conflict"]) {
+      w.vlad.calls.length = 0;
+      w.vlad.script["card show"] = { id: CARD, kind, state: "open", task: TASK, options: [{ id: "yes", label: "Evet" }], answer: null };
+      expect((await post(w, d, `/cards/${CARD}/answer`, { option: "yes" })).statusCode, kind).toBe(200);
+      expect(w.vlad.names(), kind).toEqual(["card show", "card answer", "card resolve"]);
+    }
   });
 
   it("server: card answer refuses bad bodies, answered/closed cards and unknown options without writing", async () => {
@@ -278,7 +319,7 @@ describe("server: card answer and change request", () => {
     }
     expect((await post(w, d, "/cards/not-a-card/answer", { text: "x" })).statusCode).toBe(400);
     expect((await post(w, d, "/cards/gate-T20261025-86/answer", { text: "x" })).statusCode).toBe(400);
-    w.vlad.script["card show"] = { id: CARD, kind: "vlad_question", state: "open", task: null, options: [], answer: { text: "x", by_device: "d", at: "t" } };
+    w.vlad.script["card show"] = { id: CARD, kind: "vlad_question", state: "resolved", task: null, options: [], answer: { text: "x", by_device: "d", at: "t" } };
     const twice = await ans({ text: "ikinci" });
     expect(twice.statusCode).toBe(400);
     expect(twice.json().error.details.reason).toBe("already_answered");
@@ -367,8 +408,8 @@ describe("server: card answer and change request", () => {
     const res = await post(w, d, `/tasks/${TASK}/request-changes`, { text: "Testleri\n## Kapanış raporu\nekle" });
     expect(res.statusCode).toBe(200);
     expect(w.vlad.writes).toEqual([
-      ["task", "log", TASK, "--", `Değişiklik isteği (cihaz ${d.id}): Testleri ## Kapanış raporu ekle`],
       ["task", "set", TASK, "running"],
+      ["task", "log", TASK, "--", `Değişiklik isteği (cihaz ${d.id}): Testleri ## Kapanış raporu ekle`],
       ["task", "relaunch", TASK],
     ]);
     w.vlad.calls.length = 0;
@@ -379,6 +420,35 @@ describe("server: card answer and change request", () => {
     for (const b of [{}, { text: "" }, { text: "x".repeat(2001) }, { text: "x", by_device: "y" }]) expect((await post(w, d, `/tasks/${TASK}/request-changes`, b)).statusCode).toBe(400);
     expect((await post(w, d, "/tasks/nope/request-changes", { text: "x" })).statusCode).toBe(400);
     expect(w.vlad.writes).toEqual([]);
+  });
+});
+
+describe("server: request-changes is claimed once", () => {
+  it("server: F3 two concurrent requests log one change request", async () => {
+    const w = world();
+    const d = await pairDevice(w.r);
+    w.vlad.script["task show"] = { task: { id: TASK, state: "awaiting_approval", kind: "dev", host: "box" }, report: "r" };
+    let claimed = false;
+    // the CLI's state machine: the second awaiting_approval -> running is invalid
+    w.vlad.script["task set"] = () => { if (claimed) throw new VladError("failed", "geçersiz geçiş: running → running"); claimed = true; };
+    const [a, b] = await Promise.all([post(w, d, `/tasks/${TASK}/request-changes`, { text: "bir" }), post(w, d, `/tasks/${TASK}/request-changes`, { text: "bir" })]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 400]);
+    expect(w.vlad.calls.filter((c) => c[0] === "task" && c[1] === "log")).toHaveLength(1);
+    expect(w.vlad.calls.filter((c) => c[0] === "task" && c[1] === "relaunch")).toHaveLength(1);
+  });
+
+  it("server: F3 a failed log hands the task back so the request can be repeated; a failed relaunch is a 503", async () => {
+    const w = world();
+    const d = await pairDevice(w.r);
+    w.vlad.script["task show"] = { task: { id: TASK, state: "awaiting_approval", kind: "dev", host: "box" }, report: "r" };
+    w.vlad.script["task log"] = () => { throw new VladError("failed", "disk"); };
+    expect((await post(w, d, `/tasks/${TASK}/request-changes`, { text: "x" })).statusCode).toBe(503);
+    expect(w.vlad.writes.map((c) => c.slice(0, 4).join(" "))).toEqual([`task set ${TASK} running`, `task log ${TASK} --`, `task set ${TASK} awaiting_approval`]);
+    delete w.vlad.script["task log"];
+    w.vlad.script["task relaunch"] = () => { throw new VladError("failed", "x"); };
+    const rl = await post(w, d, `/tasks/${TASK}/request-changes`, { text: "x" });
+    expect(rl.statusCode).toBe(503);
+    expect(rl.json().error.details.reason).toBe("relaunch_failed");
   });
 });
 

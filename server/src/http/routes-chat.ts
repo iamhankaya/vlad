@@ -79,6 +79,10 @@ function vladFailure(reply: FastifyReply, e: unknown) {
   throw e;
 }
 
+/** What the card's answer says to the worker: the chosen option's label and/or the free text. */
+const spoken = (options: { id: string; label: string }[], option?: string, text?: string) =>
+  [option === undefined ? undefined : (options.find((o) => o.id === option)?.label ?? option), text].filter((x): x is string => !!x).join(": ");
+
 const record = (r: ChatRecord) => Number(/^chat-(\d+)$/.exec(r.chat_id)?.[1] ?? 0);
 
 /** Handlers of `postChat`, `getChatHistory`, `answerCard` and `requestTaskChanges`, mounted by `buildApp` behind the signature check. */
@@ -151,25 +155,35 @@ export function chatHandlers(deps: ChatDeps = {}): Record<"postChat" | "getChatH
     const deviceId = req.vladDevice?.device_id;
     if (!deviceId) return fail(reply, 500, "bad_request", "Sunucu hatası.");
     try {
-      const card = await vlad.json<{ id: string; kind: string; state: string; task: string | null; options: { id: string; label: string }[]; answer: unknown }>(["card", "show", id], opts);
+      const card = await vlad.json<{ id: string; kind: string; state: string; task: string | null; options: { id: string; label: string }[]; answer: { option?: string; text?: string } | null }>(["card", "show", id], opts);
       if (card.kind === "action_request") return bad(reply, { reason: "use_actions" }, "Bu kart yalnız onay yoluyla çözülür.");
-      if (card.answer) return bad(reply, { reason: "already_answered" }, "Zaten cevaplandı.");
-      if (card.state !== "open") return bad(reply, { reason: "card_closed" }, "Kart kapalı.");
-      const picked = option === undefined ? undefined : card.options.find((o) => o.id === option);
-      if (option !== undefined && !picked) return bad(reply, { field: "option" }, "Geçersiz seçenek.");
+      let said: string;
+      if (card.answer && card.state === "open") {
+        // F1: an earlier request wrote the answer and stopped before the card was closed. Finish with what is on file (the body is not used).
+        said = spoken(card.options, card.answer.option, card.answer.text);
+      } else if (card.answer) {
+        return bad(reply, { reason: "already_answered" }, "Zaten cevaplandı.");
+      } else if (card.state !== "open") {
+        return bad(reply, { reason: "card_closed" }, "Kart kapalı.");
+      } else {
+        if (option !== undefined && !card.options.some((o) => o.id === option)) return bad(reply, { field: "option" }, "Geçersiz seçenek.");
+        // `=` forms: the value is one argv token and can never be taken for a flag.
+        await vlad.run(["card", "answer", id, ...(option !== undefined ? [`--option=${option}`] : []), ...(text !== undefined ? [`--text=${text}`] : []), `--by-device=${deviceId}`], opts);
+        said = spoken(card.options, option, text);
+      }
 
-      // `=` forms: the value is one argv token and can never be taken for a flag.
-      await vlad.run(["card", "answer", id, ...(option !== undefined ? [`--option=${option}`] : []), ...(text !== undefined ? [`--text=${text}`] : []), `--by-device=${deviceId}`], opts);
-
-      if (card.task && TASK_ID.test(card.task)) {
+      // F2: only a question card speaks for its task; every other kind just closes.
+      if (card.kind === "vlad_question" && card.task && TASK_ID.test(card.task)) {
         const { task } = await vlad.json<{ task: { state: string; kind: string; host?: string | null } }>(["task", "show", card.task], opts);
         if (task.state === "blocked") {
-          const said = [picked?.label, text].filter((x): x is string => !!x).join(": ");
           await vlad.run(["task", "answer", card.task, "--", oneLine(`(kart ${id}) ${said}`)], opts);
-          if (task.kind === "dev" && task.host) await relaunch(card.task);
+          if (task.kind === "dev" && task.host && !(await relaunch(card.task))) {
+            // The answer is on file and the task runs; the worker did not come back. Say so; the card stays open for the retry that closes it.
+            return fail(reply, 503, "bad_request", "Çalışan yeniden başlatılamadı.", { reason: "relaunch_failed" });
+          }
         }
       }
-      // The answer is on file; a card that could not be closed only shows up once more and refuses a second answer.
+      // The answer is on file; a card that could not be closed only shows up once more, and the next request finishes the closing.
       await vlad.run(["card", "resolve", id], opts).catch((e) => deps.log?.(`card resolve ${id}: ${e instanceof VladError ? e.kind : "error"}`));
       return { ok: true };
     } catch (e) {
@@ -177,12 +191,14 @@ export function chatHandlers(deps: ChatDeps = {}): Record<"postChat" | "getChatH
     }
   };
 
-  /** The worker is started again where it ran. Best effort: the answer is already on file, and `stalled` detection shows a worker that did not come back. */
-  async function relaunch(taskId: string): Promise<void> {
+  /** The worker is started again where it ran. False when the launcher refused. */
+  async function relaunch(taskId: string): Promise<boolean> {
     try {
       await vlad.run(["task", "relaunch", taskId], { ...opts, timeoutMs: RELAUNCH_TIMEOUT_MS });
+      return true;
     } catch (e) {
       deps.log?.(`relaunch ${taskId}: ${e instanceof VladError ? e.kind : "error"}`);
+      return false;
     }
   }
 
@@ -198,9 +214,16 @@ export function chatHandlers(deps: ChatDeps = {}): Record<"postChat" | "getChatH
     try {
       const { task } = await vlad.json<{ task: { state: string; kind: string; host?: string | null } }>(["task", "show", id], opts);
       if (task.state !== "awaiting_approval") return bad(reply, { reason: "task_state" }, "Görev onay beklemiyor.");
-      await vlad.run(["task", "log", id, "--", oneLine(`Değişiklik isteği (cihaz ${deviceId}): ${text}`)], opts);
+      // F3: the state change is the claim. Of two concurrent requests only one gets past it, so the request is logged once.
       await vlad.run(["task", "set", id, "running"], opts);
-      if (task.kind === "dev" && task.host) await relaunch(id);
+      try {
+        await vlad.run(["task", "log", id, "--", oneLine(`Değişiklik isteği (cihaz ${deviceId}): ${text}`)], opts);
+      } catch (e) {
+        // Without the log line the worker would not know what to change: hand the task back so the request can be repeated.
+        await vlad.run(["task", "set", id, "awaiting_approval"], opts).catch((x) => deps.log?.(`request-changes revert ${id}: ${x instanceof VladError ? x.kind : "error"}`));
+        throw e;
+      }
+      if (task.kind === "dev" && task.host && !(await relaunch(id))) return fail(reply, 503, "bad_request", "Çalışan yeniden başlatılamadı.", { reason: "relaunch_failed" });
       return { ok: true };
     } catch (e) {
       return vladFailure(reply, e);
