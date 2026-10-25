@@ -58,6 +58,13 @@ describe("server: openapi matches the plan", () => {
     expect(doc.components.schemas.GrantAction.enum.filter((a: string) => NON.includes(a))).toEqual([]);
     expect(doc.components.schemas.ActionKind.enum).toContain("tag_release"); // device-approvable, never delegable
   });
+  it("approve/revoke bodies carry no device id (X-Vlad-Device is the single source)", () => {
+    const S = doc.components.schemas;
+    expect(S.ApproveRequest.required).toEqual(["signature"]);
+    expect(Object.keys(S.ApproveRequest.properties)).toEqual(["signature"]);
+    expect(Object.keys(S.RevokeDeviceRequest.properties)).toEqual(["ts_ms", "signature"]);
+    expect(S.RevokeDeviceRequest.description).toContain("X-Vlad-Ts");
+  });
   it("body size, chat and event bounds", () => {
     expect(doc.components.schemas.ChatRequest.properties.text).toMatchObject({ minLength: 1, maxLength: 4000 });
     const ev = operations.find((o) => o.id === "listEvents")!.op.parameters;

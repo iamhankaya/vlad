@@ -1,7 +1,7 @@
 {
-  "vectors_version": 1,
+  "vectors_version": 2,
   "note": "Read-only contract. Append new vectors, never change existing ones. Format: contract/README.md. Keys are TEST ONLY.",
-  "signature_format": "ECDSA P-256, SHA-256, ASN.1 DER (not raw r||s), base64url without padding",
+  "signature_format": "ECDSA P-256, SHA-256, ASN.1 DER, base64url without padding. Accepted only if minimal short-form DER (no padding, no long form, no trailing bytes) AND low-S (s <= n/2); raw r||s, high-S and non-minimal DER are rejected",
   "keys": [
     {
       "id": "session-a",
@@ -17,6 +17,21 @@
       "id": "other",
       "note": "TEST ONLY: unrelated key (wrong-key vectors)",
       "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwJWmKZUUfXTWeQIiFHJfQgUpB9iug8hsT3KrRpiF_YdkwSKlR9g9dBYKBe1DjK9wmGExVzHmnAypa9IKaimtzA"
+    },
+    {
+      "id": "session-b",
+      "note": "TEST ONLY: second device session key (path vectors)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAErJxGtd-gnNPc63839vuzCVufFV-OZaENmdVibgbavDLR57vOnJnVX1PmDa2lUdLrLB4Z1nETx04rDeDmZgSEtA"
+    },
+    {
+      "id": "approval-b",
+      "note": "TEST ONLY: second device approval key (revoke vectors)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAES0Nph0YhXN6_hNJgzIM46Z-CeuhEwXLiu7sOU5uvYPhLwUmD7bqCJ4udrFnuyu1iSPUCyTvPOcpMZZt8pnBGtg"
+    },
+    {
+      "id": "session-c",
+      "note": "TEST ONLY: third device session key (query vector)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEt4tiNLD38_MiesTpwmNEnboA4FXv_qG-LKBea0W5MRLxpPuBKDx4olTwq_dIaXNTeDrn9Lwq14jOSK3icfhNjQ"
     }
   ],
   "canonical_query": [
@@ -34,11 +49,6 @@
       "id": "sorted",
       "raw_query": "b=2&a=1",
       "expected": "a=1&b=2"
-    },
-    {
-      "id": "duplicate-keys-sorted-by-value",
-      "raw_query": "a=2&a=1&a=1",
-      "expected": "a=1&a=1&a=2"
     },
     {
       "id": "empty-value",
@@ -117,6 +127,22 @@
     {
       "id": "invalid-utf8",
       "raw_query": "a=%FF"
+    },
+    {
+      "id": "duplicate-key-same-value",
+      "raw_query": "a=1&a=1"
+    },
+    {
+      "id": "duplicate-key-different-value",
+      "raw_query": "a=2&a=1"
+    },
+    {
+      "id": "duplicate-key-after-decoding",
+      "raw_query": "a=1&%61=2"
+    },
+    {
+      "id": "duplicate-empty-key",
+      "raw_query": "a&a="
     }
   ],
   "body_hash": [
@@ -175,22 +201,6 @@
       "expect_valid": true
     },
     {
-      "id": "env-unsorted-query-signs-canonical",
-      "description": "client signs canonical query; raw order on the wire is irrelevant",
-      "key_id": "session-a",
-      "input": {
-        "method": "GET",
-        "path": "/v1/projects",
-        "raw_query": "b=2&a=1&a=%C3%BC",
-        "ts_ms": 1761350400000,
-        "nonce": "AAECAwQFBgcICQoLDA0ODw",
-        "body_b64u": ""
-      },
-      "envelope_string": "v1\nGET\n/v1/projects?a=1&a=%C3%BC&b=2\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "signature_b64u": "MEQCICU6R5CQLqatyU4wyFK1qPcv1gISYLUjhyXpBkYMf--LAiBM7Z7P83Wg0chlmXvkPzmXwQbNj8G_Fd-1Jntx7PRrVg",
-      "expect_valid": true
-    },
-    {
       "id": "env-tampered-body-byte",
       "description": "body byte changed after signing",
       "key_id": "session-a",
@@ -203,7 +213,7 @@
         "body_b64u": "eyJjbGllbnRfbXNnX2lkIjoibS0xIiwidGV4dCI6Ik1lcmhhYmIifQ"
       },
       "envelope_string": "v1\nPOST\n/v1/chat\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ncfa159a369b1f850ac1224e79a0642f3d36630b245fc728fd40a6b6bdaf14b6e",
-      "signature_b64u": "MEYCIQChWxoUPrrQQJcbNM5LmIdQ7P37KkjM-kVSdFVdPTABuwIhANCGJuCfc-WluWoUq89LzbBnsRm6IyqwWXDtSUe31wne",
+      "signature_b64u": "MEUCIQChWxoUPrrQQJcbNM5LmIdQ7P37KkjM-kVSdFVdPTABuwIgL3nZHmCMGltGletUMLQyT1U14POD7O4rgsyBe0SMG3M",
       "expect_valid": false
     },
     {
@@ -301,6 +311,182 @@
       "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "signature_b64u": "uoyoUEzQHDq7IuJD6hDmS4xepon97hRXv69GObK2dbW_tT2xUsIwdw-icYO3ytsShQ_sIA3zKkKu3kQ0ek5DVQ",
       "expect_valid": false
+    },
+    {
+      "id": "env-path-encoded-slash",
+      "description": "raw path with %2F is signed verbatim",
+      "key_id": "session-b",
+      "input": {
+        "method": "GET",
+        "path": "/v1/cards/a%2Fb",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/cards/a%2Fb\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCIBDjtTHL2pQpBzjmfiEZj4ZL2UUstj_Mgvc4NQEouxftAiAugv28e1boSFZWKRghzEr5Cns04WI8qcgK-eNPQjhIMg",
+      "expect_valid": true
+    },
+    {
+      "id": "env-path-slash-vs-encoded-slash",
+      "description": "signature made for /a%2Fb presented with /a/b",
+      "key_id": "session-b",
+      "input": {
+        "method": "GET",
+        "path": "/v1/cards/a/b",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/cards/a/b\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCIFlc865KmigQW8wxqNvNxu_-YMzQDfpNCRR3zHOhB2ANAiB9SbtqYaWxlg5_WzddVkNa6QOmylug4f1nNssaditoFg",
+      "expect_valid": false
+    },
+    {
+      "id": "env-path-double-slash",
+      "description": "raw path with // is signed verbatim",
+      "key_id": "session-b",
+      "input": {
+        "method": "GET",
+        "path": "/v1//home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1//home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCICGiFdyj6xDeOBqTruF-6JpN8k2LKXd5XqbeK33HFaGeAiAxYowBXi8B1RRIk9vf9EmSxvVb-7Wtuwx-1jReRbfa0Q",
+      "expect_valid": true
+    },
+    {
+      "id": "env-path-double-slash-vs-single",
+      "description": "signature made for //home presented with /home",
+      "key_id": "session-b",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCID53s3NcY9kn19c-2GYYUjCE-RKIgl6IQFkfiBCPP178AiBVaHT6okFb4nqow873ROTyLjSvXAo6NJTQqDn2qv0fWw",
+      "expect_valid": false
+    },
+    {
+      "id": "env-path-trailing-slash",
+      "description": "trailing slash is signed verbatim",
+      "key_id": "session-b",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home/",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home/\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEUCIQCmcc3koCdlpjev_l4xSrQlj1wfXBoiannkRCf07dfKNwIgc7Am2phbMBXQmelWopwqXPtuiUspS3QUxmPBgzJjc0Q",
+      "expect_valid": true
+    },
+    {
+      "id": "env-path-trailing-slash-vs-none",
+      "description": "signature made for /home/ presented with /home",
+      "key_id": "session-b",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEUCIQDHs6rqRavGYYOm3D9t_NR_u4Y7qMLRqv9FYVypUxexsAIgaXh5VpojfFxswhnGZi_C7xztyEeGyKDBoSDU_RReI_k",
+      "expect_valid": false
+    },
+    {
+      "id": "env-high-s",
+      "description": "valid ECDSA signature with s replaced by n-s (high-S malleated twin): rejected, low-S required",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEUCIEM0j4QO1pt4ncWXfjv-XFSr5zgc2I0xS7P-SMD7dmOBAiEA0zJ4rDxQr9wzjl6CqCjjeVcbhIJNXKPhC1iRhYpKBas",
+      "expect_valid": false
+    },
+    {
+      "id": "env-der-leading-zero",
+      "description": "r padded with a redundant leading 0x00 (non-minimal DER)",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEUCIQBDNI-EDtabeJ3Fl347_lxUq-c4HNiNMUuz_kjA-3ZjgQIgLM2HUsOvUCTMcaF9V9cchmXLditZuvqj6GE5PXIZH6Y",
+      "expect_valid": false
+    },
+    {
+      "id": "env-der-long-form-length",
+      "description": "SEQUENCE length in long form (0x81 len)",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MIFEAiBDNI-EDtabeJ3Fl347_lxUq-c4HNiNMUuz_kjA-3ZjgQIgLM2HUsOvUCTMcaF9V9cchmXLditZuvqj6GE5PXIZH6Y",
+      "expect_valid": false
+    },
+    {
+      "id": "env-der-trailing-bytes",
+      "description": "valid DER followed by one extra byte",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCIEM0j4QO1pt4ncWXfjv-XFSr5zgc2I0xS7P-SMD7dmOBAiAszYdSw69QJMxxoX1X1xyGZct2K1m6-qPoYTk9chkfpgA",
+      "expect_valid": false
+    },
+    {
+      "id": "env-unsorted-query-signs-canonical",
+      "description": "client signs canonical query; raw order on the wire is irrelevant",
+      "key_id": "session-c",
+      "input": {
+        "method": "GET",
+        "path": "/v1/projects",
+        "raw_query": "b=2&a=1&c=%C3%BC",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/projects?a=1&b=2&c=%C3%BC\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCIG1keD_BbNScMm8jnCFy1sSg1UCZSxQFUXIMclYo8xUfAiBeohHBreqCmKok96MROSd2fbzIbbbUCVLojkVdGzH0iQ",
+      "expect_valid": true
     }
   ],
   "challenge": [
@@ -377,7 +563,7 @@
         "exp": "1761350460"
       },
       "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
-      "signature_b64u": "MEYCIQDN0wRrWMJy9nEikfrH9bgbnFObJx78VuOznOysO_11DwIhAObUk0b6XlTifLWd1G06S6tZy2L4vpWQTtB-Ki-BStnP",
+      "signature_b64u": "MEUCIQDN0wRrWMJy9nEikfrH9bgbnFObJx78VuOznOysO_11DwIgGStsuAWhqx6DSmIrksW0VGMbl7Togg42Izugk3sYS4I",
       "expect_valid": false
     },
     {
@@ -416,6 +602,25 @@
       },
       "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
       "signature_b64u": "ps7YWGESQJgGyUtQJaxd6-tpO9E7g8ciFrxLJs1vzALy0BocjS_1KfptiNrSE71EHiktZY2-cihA2pFERarj9w",
+      "expect_valid": false
+    },
+    {
+      "id": "chal-high-s",
+      "description": "valid signature with s replaced by n-s (high-S twin): rejected",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "MEYCIQCzM8G5RpqeMM-JFz71aY4lvP4-ecwxvo33k9zRj5g0MAIhAPAGpGQlDf9chFUzG09fT6fMPcP5hYqMGoyIdZ6Or4Lv",
       "expect_valid": false
     }
   ],
@@ -488,6 +693,206 @@
       "payload": "vlad-grant/v1\nid=G-001\nscope=project:vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
       "signature_b64u": "MEUCIQD2Hnmuf1na7IZCQDU1zyqngthci3AaDzlaBfaYqknbpAIgEUYYt5_BuK5yhIqBe6Yia1c-wsEHBJeaqxPa3zmW6uY",
       "expect_valid": false
+    }
+  ],
+  "envelope_errors": [
+    {
+      "id": "nonce-21-chars",
+      "description": "nonce one character short",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0OD",
+        "body_b64u": ""
+      }
+    },
+    {
+      "id": "nonce-23-chars",
+      "description": "nonce one character long",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODwA",
+        "body_b64u": ""
+      }
+    },
+    {
+      "id": "nonce-not-base64url",
+      "description": "22 characters but outside the base64url alphabet",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0OD+",
+        "body_b64u": ""
+      }
+    },
+    {
+      "id": "nonce-empty",
+      "description": "empty nonce",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "",
+        "body_b64u": ""
+      }
+    },
+    {
+      "id": "method-lowercase",
+      "description": "method must be upper case",
+      "input": {
+        "method": "get",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      }
+    },
+    {
+      "id": "path-with-query",
+      "description": "path must not carry the query",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home?a=1",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      }
+    },
+    {
+      "id": "duplicate-query-key",
+      "description": "repeated query key",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "a=1&a=2",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      }
+    }
+  ],
+  "revoke": [
+    {
+      "id": "revoke-valid",
+      "description": "approval key of the signing device signs target+signer+ts",
+      "key_id": "approval-b",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      },
+      "revoke_text": "vlad-revoke/v1\ndevice=d-old-phone\nsigner=d-pixel-9\nts=1761350400000",
+      "signature_b64u": "MEUCIQC-hL60M1grFfP-wcmLFRRVXUmrbXuBHTynQR9mZMVcoAIgCwIsWSdCPQG-PiTDWcPX8zTZSKLI3S4fdCKWk65w0yU",
+      "expect_valid": true
+    },
+    {
+      "id": "revoke-signer-swapped",
+      "description": "signed with signer=d-pixel-9, presented as signer=d-other (replay by another device)",
+      "key_id": "approval-b",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d-other",
+        "ts_ms": 1761350400000
+      },
+      "revoke_text": "vlad-revoke/v1\ndevice=d-old-phone\nsigner=d-other\nts=1761350400000",
+      "signature_b64u": "MEQCID51GnJ-CSIjm84FVXng_bH6FNEIjMr9ToIqSxXAczswAiA1jQ2mz9-LVBvFjWXcANci8-zz9YUgFKQyWva-l65Z1A",
+      "expect_valid": false
+    },
+    {
+      "id": "revoke-target-changed",
+      "description": "signed for d-old-phone, presented for d-tablet",
+      "key_id": "approval-b",
+      "fields": {
+        "device": "d-tablet",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      },
+      "revoke_text": "vlad-revoke/v1\ndevice=d-tablet\nsigner=d-pixel-9\nts=1761350400000",
+      "signature_b64u": "MEQCIDPaH25R-H1dV6_HQ4vvlFl_AaGoGb1G3Je_ayubXAALAiBpW7vcAefMzSPI8mLh5aMz5tRhxLuLhqnPegAkMtlSAA",
+      "expect_valid": false
+    },
+    {
+      "id": "revoke-ts-changed",
+      "description": "ts changed after signing",
+      "key_id": "approval-b",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400001
+      },
+      "revoke_text": "vlad-revoke/v1\ndevice=d-old-phone\nsigner=d-pixel-9\nts=1761350400001",
+      "signature_b64u": "MEQCIGjfyPNtsNQb0Dy4EBm44X-FNFjk3Md9NGETiisa0m8HAiAYy7p6rRbFRbAiHOw2jD_7Z_7lzSxvOXEK_pUi1vtXaw",
+      "expect_valid": false
+    },
+    {
+      "id": "revoke-session-key",
+      "description": "signed by the session key, verified against the approval key",
+      "key_id": "approval-b",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      },
+      "revoke_text": "vlad-revoke/v1\ndevice=d-old-phone\nsigner=d-pixel-9\nts=1761350400000",
+      "signature_b64u": "MEQCIFxb_Nc4bgX4HN1yH-whFHjhRhFcfcrY1jffMubNwLndAiB1bRIiOoRJ7hh8AgBETtd58F-nYQk53hV60evQiQFWww",
+      "expect_valid": false
+    },
+    {
+      "id": "revoke-high-s",
+      "description": "high-S twin of the valid signature",
+      "key_id": "approval-b",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      },
+      "revoke_text": "vlad-revoke/v1\ndevice=d-old-phone\nsigner=d-pixel-9\nts=1761350400000",
+      "signature_b64u": "MEUCIB0uxsx_TVVAwo3ddL6M-wgJPlEsf1P6RTKqFeJklB7mAiEAgzyraCfBtvnROgWrQeqo7dyblM1Op8s-u2wyaum3Zo8",
+      "expect_valid": false
+    }
+  ],
+  "revoke_errors": [
+    {
+      "id": "revoke-newline-injection",
+      "fields": {
+        "device": "d-old\nsigner=x",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      }
+    },
+    {
+      "id": "revoke-empty-device",
+      "fields": {
+        "device": "",
+        "signer": "d-pixel-9",
+        "ts_ms": 1761350400000
+      }
+    },
+    {
+      "id": "revoke-bad-signer-alphabet",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d pixel",
+        "ts_ms": 1761350400000
+      }
+    },
+    {
+      "id": "revoke-negative-ts",
+      "fields": {
+        "device": "d-old-phone",
+        "signer": "d-pixel-9",
+        "ts_ms": -1
+      }
     }
   ]
 }

@@ -50,8 +50,8 @@ function percentEncode(s: string): string {
 
 /**
  * Canonical query string (no leading `?`): split on `&` (empty segments dropped), key/value split at the first `=`
- * (no `=` means empty value), `+` and `%XX` decoded (UTF-8, strict), pairs sorted by key then value as UTF-8 bytes
- * (duplicates are kept), then re-encoded with RFC 3986 unreserved characters only (space becomes `%20`).
+ * (no `=` means empty value), `+` and `%XX` decoded (UTF-8, strict), pairs sorted by key as UTF-8 bytes (a repeated
+ * key, also after decoding, throws `bad_query`), then re-encoded with RFC 3986 unreserved characters only (space becomes `%20`).
  */
 export function canonicalQuery(rawQuery: string): string {
   const q = rawQuery.startsWith("?") ? rawQuery.slice(1) : rawQuery;
@@ -63,6 +63,8 @@ export function canonicalQuery(rawQuery: string): string {
   }
   const cmp = (a: string, b: string) => Buffer.compare(Buffer.from(a), Buffer.from(b));
   pairs.sort((a, b) => cmp(a[0], b[0]) || cmp(a[1], b[1]));
+  // No endpoint takes an array parameter, so a repeated key (also after decoding, `a` vs `%61`) is ambiguous input.
+  for (let i = 1; i < pairs.length; i++) if (pairs[i]![0] === pairs[i - 1]![0]) throw new CanonicalError("bad_query", `yinelenen sorgu anahtarı: ${pairs[i]![0]}`);
   return pairs.map(([k, v]) => `${percentEncode(k)}=${percentEncode(v)}`).join("&");
 }
 
@@ -74,20 +76,23 @@ export type EnvelopeInput = {
   path: string;
   rawQuery?: string;
   tsMs: number;
-  /** base64url, as in `X-Vlad-Nonce`. */
+  /** `X-Vlad-Nonce`: exactly 22 base64url characters (16 random bytes). */
   nonce: string;
   /** Raw request body bytes (empty body: `sha256("")`). The hash is over bytes, never over parsed JSON. */
   body?: Uint8Array;
 };
 
-const B64URL = /^[A-Za-z0-9_-]+$/;
+const NONCE = /^[A-Za-z0-9_-]{22}$/;
 
-/** `v1\n<METHOD>\n<path + ? + canonical query>\n<ts_ms>\n<nonce>\n<sha256hex(raw body)>` (no trailing newline). */
+/**
+ * The server builds this from the raw request target (`req.raw.url`: raw path before `?`, as sent), before routing
+ * or any normalization. `%2F`, `//` and a trailing `/` are therefore distinct signed paths.
+ * `v1\n<METHOD>\n<path + ? + canonical query>\n<ts_ms>\n<nonce>\n<sha256hex(raw body)>` (no trailing newline). */
 export function envelopeString(i: EnvelopeInput): string {
   if (!/^[A-Z]{3,7}$/.test(i.method)) throw new CanonicalError("bad_envelope", "yöntem büyük harfli olmalı");
   if (!/^\/[^?#\s\u0000-\u001f\u007f]*$/.test(i.path)) throw new CanonicalError("bad_envelope", "geçersiz yol");
   if (!Number.isSafeInteger(i.tsMs) || i.tsMs < 0) throw new CanonicalError("bad_envelope", "ts_ms negatif olmayan tam sayı olmalı");
-  if (!B64URL.test(i.nonce) || i.nonce.length > 64) throw new CanonicalError("bad_envelope", "nonce base64url olmalı");
+  if (!NONCE.test(i.nonce)) throw new CanonicalError("bad_envelope", "nonce tam 22 karakter base64url olmalı (16 bayt)");
   const q = canonicalQuery(i.rawQuery ?? "");
   const target = q === "" ? i.path : `${i.path}?${q}`;
   return ["v1", i.method, target, String(i.tsMs), i.nonce, sha256Hex(i.body ?? new Uint8Array())].join("\n");
@@ -142,4 +147,18 @@ export function parseChallengeBytes(bytes: Uint8Array): Record<string, string> {
     out[k] = checkChallengeField(k, line.slice(k.length + 1));
   });
   return out;
+}
+
+export const REVOKE_HEADER = "vlad-revoke/v1";
+const DEVICE_ID = /^[A-Za-z0-9._-]{1,64}$/;
+
+/**
+ * Bytes the `approval` key signs to revoke a device: `vlad-revoke/v1\ndevice=<target>\nsigner=<calling device>\nts=<ts_ms>`
+ * (no trailing newline). Server rules (S6b): `signer` == `X-Vlad-Device`, `ts` == `X-Vlad-Ts`, within +-120 s,
+ * `(signer, ts)` single use.
+ */
+export function revokeBytes(f: { device: string; signer: string; tsMs: number }): Uint8Array {
+  for (const k of ["device", "signer"] as const) if (!DEVICE_ID.test(f[k])) throw new CanonicalError("bad_envelope", `geçersiz cihaz kimliği: ${k}`);
+  if (!Number.isSafeInteger(f.tsMs) || f.tsMs < 0) throw new CanonicalError("bad_envelope", "ts_ms negatif olmayan tam sayı olmalı");
+  return utf8.encode([REVOKE_HEADER, `device=${f.device}`, `signer=${f.signer}`, `ts=${f.tsMs}`].join("\n"));
 }

@@ -13,6 +13,10 @@ info:
     `X-Vlad-Ts`, `X-Vlad-Nonce`, `X-Vlad-Sig` (ECDSA P-256 SHA-256, DER, base64url). Kanonik sorgu, challenge ve devir
     baytları `contract/signing-vectors.json` ile sabitlenmiştir (biçim: `contract/README.md`).
 
+    **Zarf hedefi.** Sunucu zarfı yönlendirmeden önce ham istek hedefinden (`req.raw.url`, `?` öncesi ham yol) kurar; yol
+    çözülmez ya da normalleştirilmez (`%2F`, `//`, sondaki `/` ayrı imzalı yollardır). Nonce tam 22 karakter base64url
+    (16 bayt). Sorguda yinelenen anahtar `bad_request`. İmza yalnız minimal DER + low-S kabul edilir.
+
     **Hatalar.** Gövde her zaman `{error:{code, message_tr, details?}}`. İstemci ve CI `code` anahtarına bakar,
     Türkçe metne değil. Eşleşmemiş/imzası geçersiz istek `401 unauthorized` alır ve gövde nedeni sızdırmaz.
   license:
@@ -483,8 +487,9 @@ paths:
       summary: Cihazı iptal et (`approval` imzalı)
       description: |
         İptal edilen cihazın açık SSE'leri kapanır, bekleyen challenge'ları geçersiz olur, imzaladığı devirler geçersiz
-        sayılır. `signature`, `approval` anahtarıyla `vlad-revoke/v1\ndevice=<id>\nts=<ts_ms>` baytları üzerindedir (varsayım,
-        bkz. `contract/README.md` açık nokta).
+        sayılır. `signature`, `approval` anahtarıyla `vlad-revoke/v1\ndevice=<hedef>\nsigner=<X-Vlad-Device>\nts=<ts_ms>`
+        baytları üzerindedir. Kurallar: `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts_ms)` tek kullanım; ihlal `401 unauthorized`
+        (vektör: `signing-vectors.json` `revoke`).
       x-vlad-auth: session+approval
       parameters:
         - name: id
@@ -1129,12 +1134,12 @@ components:
           description: Unix saniye; `now >= exp` reddedilir.
     ApproveRequest:
       type: object
+      description: Onaylayan cihaz yalnız `X-Vlad-Device` başlığından bilinir (gövdede cihaz kimliği yoktur).
       additionalProperties: false
-      required: [device_id, signature]
+      required: [signature]
       properties:
-        device_id: { $ref: "#/components/schemas/DeviceId" }
         signature:
-          description: '`approval` anahtarıyla challenge baytları üzerinde ECDSA P-256 SHA-256 DER, base64url.'
+          description: '`approval` anahtarıyla challenge baytları üzerinde ECDSA P-256 SHA-256 DER (minimal, low-S), base64url.'
           allOf: [{ $ref: "#/components/schemas/B64Url" }]
     ApproveResult:
       type: object
@@ -1249,12 +1254,12 @@ components:
         fcm_token: { type: string, minLength: 1, maxLength: 4096 }
     RevokeDeviceRequest:
       type: object
+      description: |
+        İmzalayan cihaz `X-Vlad-Device` başlığıdır (gövdede yoktur). Sunucu kuralları: `ts_ms` == `X-Vlad-Ts`, pencere
+        ±120 sn, `(signer, ts_ms)` tek kullanım, imza `approval` anahtarıyla `vlad-revoke/v1` baytları üzerinde.
       additionalProperties: false
-      required: [device_id, ts_ms, signature]
+      required: [ts_ms, signature]
       properties:
-        device_id:
-          description: İmzalayan (çağıran) cihaz.
-          allOf: [{ $ref: "#/components/schemas/DeviceId" }]
         ts_ms: { type: integer, minimum: 0 }
         signature: { $ref: "#/components/schemas/B64Url" }
     EventType:

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { canonicalQuery, challengeBytes, envelopeString, parseChallengeBytes, sha256Hex } from "../../src/auth/canonical.ts";
+import { canonicalQuery, challengeBytes, envelopeString, parseChallengeBytes, revokeBytes, sha256Hex } from "../../src/auth/canonical.ts";
+import { isCanonicalSignature } from "../../src/auth/der.ts";
 import { readJson, verifyDer } from "../helpers/contract.ts";
 
 type R = Record<string, any>;
@@ -9,8 +10,8 @@ const spki = (id: string): string => V.keys.find((k: { id: string }) => k.id ===
 
 describe("server: signing vectors verify (valid/invalid set)", () => {
   it("has the documented sections and test-only keys", () => {
-    expect(V.vectors_version).toBe(1);
-    for (const k of ["keys", "canonical_query", "canonical_query_errors", "body_hash", "envelope", "challenge", "grant"]) expect(V[k].length).toBeGreaterThan(0);
+    expect(V.vectors_version).toBe(2);
+    for (const k of ["keys", "canonical_query", "canonical_query_errors", "body_hash", "envelope", "envelope_errors", "challenge", "grant", "revoke", "revoke_errors"]) expect(V[k].length).toBeGreaterThan(0);
     expect(V.keys.every((k: { note: string }) => k.note.startsWith("TEST ONLY"))).toBe(true);
     expect(JSON.stringify(V)).not.toMatch(/PRIVATE KEY|"priv/);
   });
@@ -37,7 +38,14 @@ describe("server: signing vectors verify (valid/invalid set)", () => {
     });
     it("covers the required invalid classes", () => {
       const ids = V.envelope.filter((v: Keyed) => !v.expect_valid).map((v: Keyed) => v.id).join(" ");
-      for (const c of ["tampered-body", "wrong-key", "bad-der", "raw-r-s"]) expect(ids).toContain(c);
+      for (const c of ["tampered-body", "wrong-key", "bad-der", "raw-r-s", "high-s", "leading-zero", "long-form", "trailing-bytes", "encoded-slash", "double-slash", "trailing-slash"]) expect(ids).toContain(c);
+    });
+    it.each(V.envelope_errors as R[])("rejects: $id", (v) => {
+      const i = v.input;
+      expect(() => envelopeString({ method: i.method, path: i.path, rawQuery: i.raw_query, tsMs: i.ts_ms, nonce: i.nonce, body: Buffer.from(i.body_b64u, "base64url") })).toThrow();
+    });
+    it("every valid envelope signature is minimal DER with low-S", () => {
+      for (const v of V.envelope as Keyed[]) if (v.expect_valid) expect(isCanonicalSignature(Buffer.from(v.signature_b64u, "base64url")), v.id).toBe(true);
     });
   });
 
@@ -47,6 +55,17 @@ describe("server: signing vectors verify (valid/invalid set)", () => {
       expect(Buffer.from(bytes).toString("utf8")).toBe(v.challenge_text);
       expect(parseChallengeBytes(bytes)).toEqual(v.fields);
       expect(verifyDer(spki(v.key_id), bytes, v.signature_b64u)).toBe(v.expect_valid);
+    });
+  });
+
+  describe("revoke", () => {
+    it.each(V.revoke as R[])("$id", (v) => {
+      const bytes = revokeBytes({ device: v.fields.device, signer: v.fields.signer, tsMs: v.fields.ts_ms });
+      expect(Buffer.from(bytes).toString("utf8")).toBe(v.revoke_text);
+      expect(verifyDer(spki(v.key_id), bytes, v.signature_b64u)).toBe(v.expect_valid);
+    });
+    it.each(V.revoke_errors as R[])("rejects: $id", (v) => {
+      expect(() => revokeBytes({ device: v.fields.device, signer: v.fields.signer, tsMs: v.fields.ts_ms })).toThrow();
     });
   });
 

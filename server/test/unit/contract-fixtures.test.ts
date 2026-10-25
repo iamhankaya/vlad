@@ -73,6 +73,13 @@ describe("server: contract fixtures parse", () => {
     expect(f.action_id).toBe(f.fields.action_id);
   });
 
+  it("revoke-device fixture reuses the signed revoke vector", () => {
+    const v = readJson("signing-vectors.json").revoke.find((x: any) => x.id === "revoke-valid");
+    const f = readJson("fixtures", "api", "revoke-device.200.json").request;
+    expect(f.path.id).toBe(v.fields.device);
+    expect(f.body).toEqual({ ts_ms: v.fields.ts_ms, signature: v.signature_b64u });
+  });
+
   it("create-grant fixture reuses the signed grant vector", () => {
     const g = readJson("signing-vectors.json").grant.find((v: any) => v.id === "grant-valid");
     const body = readJson("fixtures", "api", "create-grant.200.json").request.body;

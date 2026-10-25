@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { grantSigningPayload } from "../../src/grants/store.js";
 
 // contract/signing-vectors.json `grant` section pins the bytes the approval key signs; src/grants/store.ts is the
+// (strict DER / low-S is enforced by server/test; here Node's verifier is enough to pin the payload bytes)
 // single source of those bytes, so the vector must equal grantSigningPayload() byte for byte.
 const V = JSON.parse(readFileSync(new URL("../../contract/signing-vectors.json", import.meta.url), "utf8"));
 const spki = (id: string): string => V.keys.find((k: { id: string }) => k.id === id).spki_b64u;
