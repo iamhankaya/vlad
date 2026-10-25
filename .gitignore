@@ -7,3 +7,4 @@ dist/
 /kb/
 .cli-build-*/
 /state/
+/vault/

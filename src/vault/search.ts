@@ -1,11 +1,12 @@
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { getVladHome, isSeparateKb, kbPaths } from "../kb/index.js";
 
 /**
- * Read-only vault access. Allowlist (paths are relative to VLAD_HOME, "/"-separated):
+ * Read-only vault access. Virtual allowlist ("/"-separated; the same paths the API and the mobile app use):
  *   kb/        (the kb checkout, which may be its own repo: `kbPaths().kb`) except kb/inbox, kb/logs, kb/grants, kb/audit and any dot-entry
- *   vault/docs/
+ *   vault/docs/  real root: `<kb>/docs` when the kb is its own repo and that folder exists (S13a K7), else the legacy `<VLAD_HOME>/vault/docs`
+ * With a separate kb, `<kb>/docs` is only reachable as vault/docs (kb/docs is refused: no double results).
  * Only *.md files are readable. Every path (input and symlink target) is checked after
  * lower-casing, so case variants cannot reach a forbidden folder.
  */
@@ -24,6 +25,8 @@ export type Zone = "kb" | "docs";
 export const ZONES: Zone[] = ["kb", "docs"];
 const ZONE_ROOT: Record<Zone, string> = { kb: "kb", docs: "vault/docs" };
 const FORBIDDEN_UNDER_KB = ["inbox", "logs", "grants", "audit"];
+/** Folder of the docs zone inside a separate kb checkout. */
+const KB_DOCS_DIR = "docs";
 
 export class VaultError extends Error {
   constructor(message: string) {
@@ -58,11 +61,11 @@ export function fold(s: string): string {
 }
 
 /** Splits an allowlist-relative path into lower-cased segments, or null when not allowed. */
-function allowedZone(rel: string[]): Zone | null {
+function allowedZone(rel: string[], docsInKb: boolean): Zone | null {
   const low = rel.map(denyKey);
   if (low.some((s) => s.startsWith("."))) return null;
   if (low[0] === "kb") {
-    if (low.length > 1 && FORBIDDEN_UNDER_KB.includes(low[1])) return null;
+    if (low.length > 1 && (FORBIDDEN_UNDER_KB.includes(low[1]) || (docsInKb && low[1] === KB_DOCS_DIR))) return null;
     return "kb";
   }
   if (low[0] === "vault" && low[1] === "docs") return "docs";
@@ -97,38 +100,70 @@ function kbReal(): string {
   return realpathSync.native(kbPaths().kb);
 }
 
-/** Directory a virtual path hangs under, plus the virtual segments that stay in front of the real remainder. */
-function locate(segs: string[]): { base: string; prefix: string[]; rest: string[] } {
-  if (denyKey(segs[0]) === "kb") return { base: kbReal(), prefix: ["kb"], rest: segs.slice(1) };
-  return { base: homeReal(), prefix: [], rest: segs };
+/**
+ * Real roots of one operation. `docs` is null when no docs folder exists. `docsInKb` is true when the kb is its own
+ * repo and `<kb>/docs` is the docs root: then kb/docs is not part of the kb zone.
+ */
+interface Layout { home: string; kb: string; docs: string | null; docsInKb: boolean }
+
+/** `<parent>/<segs>` as a docs root, only if it is a plain directory chain: no link anywhere on the way (fail closed). */
+function plainDir(parent: string, segs: string[]): string | null {
+  try {
+    const lexical = join(parent, ...segs);
+    const real = realpathSync.native(lexical);
+    return real === lexical && statSync(real).isDirectory() ? real : null;
+  } catch {
+    return null;
+  }
+}
+
+function layout(): Layout {
+  const home = homeReal();
+  const kb = kbReal();
+  if (isSeparateKb()) {
+    const inKb = plainDir(kb, [KB_DOCS_DIR]);
+    if (inKb) return { home, kb, docs: inKb, docsInKb: true };
+  }
+  return { home, kb, docs: plainDir(home, ["vault", "docs"]), docsInKb: false };
+}
+
+const within = (root: string, abs: string) => abs === root || abs.startsWith(root + sep);
+
+/** Virtual path of a real path, or null when it is in neither root. The more specific docs root wins over the kb root. */
+function virtualOf(l: Layout, abs: string): string[] | null {
+  if (l.docs && within(l.docs, abs)) return ["vault", "docs", ...abs.slice(l.docs.length + 1).split(sep).filter(Boolean)];
+  if (within(l.kb, abs)) return ["kb", ...abs.slice(l.kb.length + 1).split(sep).filter(Boolean)];
+  return null;
+}
+
+/** Directory a virtual path hangs under, plus the real remainder. */
+function locate(l: Layout, segs: string[]): string | null {
+  if (denyKey(segs[0]) === "kb") return join(l.kb, ...segs.slice(1));
+  return l.docs ? join(l.docs, ...segs.slice(2)) : null; // segs[0..1] is vault/docs (checked by allowedZone)
 }
 
 /** Resolves an allowlisted path to its real file. Throws VaultError on any violation. */
-function resolveAllowed(input: string, want: "file" | "dir"): { rel: string; abs: string } {
+function resolveAllowed(input: string, want: "file" | "dir", l: Layout = layout()): { rel: string; abs: string } {
   const segs = parseUserPath(input);
-  if (!allowedZone(segs)) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
-  const { base, prefix, rest } = locate(segs);
+  if (!allowedZone(segs, l.docsInKb)) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
+  const target = locate(l, segs);
+  if (target === null) throw new VaultError(`bulunamadı: ${segs.join("/")}`);
   let abs: string;
   try {
-    abs = realpathSync.native(join(base, ...rest));
+    abs = realpathSync.native(target);
   } catch {
     throw new VaultError(`bulunamadı: ${segs.join("/")}`);
   }
-  const within = (root: string) => abs === root || abs.startsWith(root + sep);
-  let realRel: string[];
-  if (within(base)) {
-    realRel = [...prefix, ...abs.slice(base.length + 1).split(sep).filter(Boolean)];
-    // docs zone is rooted at VLAD_HOME: with a separate kb, <home>/kb is a stale leftover, never readable through a link
-    if (prefix.length === 0 && denyKey(realRel[0] ?? "") === "kb" && isSeparateKb()) throw new VaultError("yol kök dışına çıkıyor");
-  } else if (within(homeReal())) {
-    // a link that left the zone's root but stays in VLAD_HOME: judged by its home-relative path, and "kb/" there is
-    // never the kb checkout (only vault/docs can qualify), so a stale <home>/kb cannot be read through a link
-    realRel = abs.slice(homeReal().length + 1).split(sep);
-    if (denyKey(realRel[0] ?? "") === "kb") throw new VaultError("yol kök dışına çıkıyor");
-  } else {
+  // A link may point from one zone into the other; the target is judged by the virtual path it lands on.
+  const real = virtualOf(l, abs);
+  if (real === null) {
+    // inside VLAD_HOME but in neither root: judged (and refused) by the allowlist; anywhere else it left the root.
+    // A stale <home>/kb next to a separate kb checkout is never readable through a link.
+    const rel = within(l.home, abs) ? abs.slice(l.home.length + 1).split(sep) : null;
+    if (rel && !(isSeparateKb() && denyKey(rel[0] ?? "") === "kb")) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
     throw new VaultError("yol kök dışına çıkıyor");
   }
-  if (!allowedZone(realRel)) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
+  if (!allowedZone(real, l.docsInKb)) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
   const st = statSync(abs);
   if (want === "file" && !st.isFile()) throw new VaultError(`dosya değil: ${segs.join("/")}`);
   if (want === "dir" && !st.isDirectory()) throw new VaultError(`dizin değil: ${segs.join("/")}`);
@@ -218,11 +253,12 @@ export function listVault(dir?: string): { entries: VaultEntry[]; truncated: boo
     if (dir === undefined || dir === "") {
       return { entries: ZONES.map((z) => ({ path: ZONE_ROOT[z], type: "dir" as const })), truncated: false };
     }
-    const { rel, abs } = resolveAllowed(dir, "dir");
+    const l = layout();
+    const { rel, abs } = resolveAllowed(dir, "dir", l);
     const entries: VaultEntry[] = [];
     let truncated = false;
     for (const d of readdirSync(abs, { withFileTypes: true })) {
-      const e = entryFor(`${rel}/${d.name}`, d.name);
+      const e = entryFor(`${rel}/${d.name}`, d.name, l);
       if (!e) continue;
       if (entries.length >= MAX_LS_ENTRIES) {
         truncated = true;
@@ -236,11 +272,11 @@ export function listVault(dir?: string): { entries: VaultEntry[]; truncated: boo
 }
 
 /** An entry is shown only if it resolves (symlinks included) to an allowlisted .md file or dir. */
-function entryFor(rel: string, name: string): VaultEntry | null {
+function entryFor(rel: string, name: string, l: Layout): VaultEntry | null {
   if (name.startsWith(".")) return null;
   for (const want of ["dir", "file"] as const) {
     try {
-      const r = resolveAllowed(rel, want);
+      const r = resolveAllowed(rel, want, l);
       if (want === "dir") return { path: r.rel, type: "dir" };
       return { path: r.rel, type: "file", size: statSync(r.abs).size };
     } catch {
@@ -274,7 +310,7 @@ function searchUnsafe(
   let bytes = 0;
   let truncated = false;
   const needle = fold(q);
-  homeReal(); // a missing VLAD_HOME fails the whole search (generic "okunamadı"), not silently with no hits
+  const l = layout(); // a missing VLAD_HOME fails the whole search (generic "okunamadı"), not silently with no hits
   const zones = opts.zone ? [opts.zone as Zone] : ZONES;
   let hits: VaultHit[] = [];
   const rank = (a: VaultHit, b: VaultHit) => b.score - a.score || a.path.localeCompare(b.path);
@@ -282,14 +318,8 @@ function searchUnsafe(
   // Iterative walk: explicit stack, no recursion depth to blow.
   const stack: { rel: string; abs: string; depth: number }[] = [];
   for (const z of [...zones].reverse()) {
-    const root = ZONE_ROOT[z];
-    try {
-      let absRoot = z === "kb" ? kbPaths().kb : join(homeReal(), ...root.split("/"));
-      if (lstatSync(absRoot).isSymbolicLink()) absRoot = resolveAllowed(root, "dir").abs;
-      stack.push({ rel: root, abs: absRoot, depth: 0 });
-    } catch {
-      /* zone missing: nothing to search */
-    }
+    const absRoot = z === "kb" ? l.kb : l.docs; // real roots: a linked root was already refused when the layout was built
+    if (absRoot) stack.push({ rel: ZONE_ROOT[z], abs: absRoot, depth: 0 }); // zone missing: nothing to search
   }
   walk: while (stack.length) {
     const dir = stack.pop()!;
@@ -306,7 +336,7 @@ function searchUnsafe(
         break walk;
       }
       const rel = `${dir.rel}/${d.name}`;
-      if (d.name.startsWith(".") || !allowedZone(rel.split("/"))) continue;
+      if (d.name.startsWith(".") || !allowedZone(rel.split("/"), l.docsInKb)) continue;
       if (d.isSymbolicLink()) continue; // search never follows links (no loops, no escapes)
       const abs = join(dir.abs, d.name);
       if (d.isDirectory()) {

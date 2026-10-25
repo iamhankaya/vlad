@@ -262,12 +262,15 @@ describe("records: separate kb repo (kbDir)", () => {
     // a symlink inside the checkout cannot reach a forbidden folder or leave the checkout
     symlinkSync(join(kb, "grants", "G-1.md"), join(kb, "projects", "link.md"));
     expect(() => readVault("kb/projects/link.md")).toThrow();
-    // a link in vault/docs must not reach the stale <home>/kb of a separate-kb setup
+    // a link in vault/docs (<kb>/docs here) must not reach the stale <home>/kb of a separate-kb setup
     mkdirSync(join(home, "kb", "projects"), { recursive: true });
     writeFileSync(join(home, "kb", "projects", "stale.md"), "stale");
-    mkdirSync(join(home, "vault", "docs"), { recursive: true });
-    symlinkSync(join(home, "kb", "projects", "stale.md"), join(home, "vault", "docs", "stale.md"));
+    symlinkSync(join(home, "kb", "projects", "stale.md"), join(kb, "docs", "stale.md"));
     expect(() => readVault("vault/docs/stale.md")).toThrow(/kök dışına|izin listesinde/);
+    // the same through the legacy fallback root (no <kb>/docs): the link is refused, not followed
+    mkdirSync(join(home, "vault", "docs"), { recursive: true });
+    symlinkSync(join(home, "kb", "projects", "stale.md"), join(home, "vault", "docs", "stale2.md"));
+    expect(() => readVault("vault/docs/stale2.md")).toThrow();
     expect(searchVault("stale", { zone: "docs" }).hits).toEqual([]);
     writeFileSync(join(home, "outside.md"), "secret");
     symlinkSync(join(home, "outside.md"), join(kb, "projects", "out.md"));
