@@ -338,3 +338,23 @@ describe("vlad cli", () => {
   });
 });
 
+
+describe("task show", () => {
+  it("frontmatter ve kapanış raporu; rapor yoksa null; olmayan görev bulunamadı", () => {
+    writeCard(home);
+    vlad(["project", "write", "alpha", "--file", join(home, "card.md")]);
+    const id = mkTask();
+    const before = JSON.parse(vlad(["task", "show", id, "--json"]).out);
+    expect(before.task.id).toBe(id);
+    expect(before.report).toBeNull();
+    vlad(["task", "set", id, "running"]);
+    writeFileSync(join(home, "rapor.md"), "### Yapılanlar\n- bir\n");
+    expect(vlad(["task", "report", id, "--file", join(home, "rapor.md")]).code).toBe(0);
+    const after = JSON.parse(vlad(["task", "show", id, "--json"]).out);
+    expect(after.task.state).toBe("awaiting_approval");
+    expect(after.report).toBe("### Yapılanlar\n- bir");
+    const miss = vlad(["task", "show", "T20250101-99", "--json"]);
+    expect(miss.code).toBe(1);
+    expect(JSON.parse(miss.err).error).toMatch(/bulunamadı/);
+  });
+});
