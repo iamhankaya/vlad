@@ -1,0 +1,12 @@
+[Unit]
+Description=VLAD kb sync (commit, merge origin/main, push kb-server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=vlad
+UMask=0002
+# VLAD_HOME, VLAD_KB_DIR and VLAD_MACHINE come from here (written by the installer)
+EnvironmentFile=-/etc/vlad/vlad.env
+ExecStart=/usr/bin/env vlad kb sync --json

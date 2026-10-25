@@ -114,6 +114,30 @@ export const CARD_ACTION_KINDS = ["merge_phase", "merge_final", "push", "tag"] a
 export type CardActionKind = (typeof CARD_ACTION_KINDS)[number];
 /** The only options an action_request card has; an agent cannot supply its own. */
 export const ACTION_OPTIONS = [{ id: "approve", label: "Onayla" }, { id: "reject", label: "Reddet" }];
+export const KB_CONFLICT_REASONS = ["merge_conflict", "rejected"] as const;
+export type KbConflictReason = (typeof KB_CONFLICT_REASONS)[number];
+export const KB_CONFLICT_SOURCES = ["kbsync", "promote"] as const;
+export type KbConflictSource = (typeof KB_CONFLICT_SOURCES)[number];
+/** Promote rule ids a `rejected` kb_conflict card may name (kb topology note, K5). */
+export const KB_CONFLICT_RULES = [
+  "path_not_allowed", "dot_entry", "bad_segment", "windows_reserved", "case_collision", "path_too_long", "bad_extension",
+  "symlink", "submodule", "mode", "rename", "delete_not_allowed", "too_large", "too_many_parents", "sensitive_field",
+] as const;
+/** The only options a kb_conflict card has, by reason; an agent cannot supply its own (K6). */
+export const KB_CONFLICT_OPTIONS: Record<KbConflictReason, { id: string; label: string }[]> = {
+  merge_conflict: [{ id: "take_main", label: "main sürümünü al" }, { id: "manual", label: "Elle çözeceğim" }],
+  rejected: [{ id: "discard", label: "Reddedilenleri at" }, { id: "manual", label: "Elle çözeceğim" }],
+};
+/** `CardData.kb_conflict`: what the conflict is; `key` dedupes the same conflict across cycles. */
+export interface KbConflictData {
+  key: string;
+  reason: KbConflictReason;
+  source: KbConflictSource;
+  head: string;
+  base: string;
+  paths: string[];
+  rules?: string[];
+}
 export type CardState = "open" | "resolved" | "dismissed";
 
 /** kb/cards/C-<YYYYMMDD>-<NN>.md frontmatter (mobile plan, kayıt türleri) */
@@ -130,6 +154,8 @@ export interface CardData {
   answer: { option?: string; text?: string; by_device: string; at: string } | null;
   /** Only for `action_request`; its repo must be the card project's registered repo. */
   action?: { kind: CardActionKind; repo: string; sha: string; pr?: number; base?: string; ref?: string };
+  /** Only for `kb_conflict` (and required there). */
+  kb_conflict?: KbConflictData;
   created: string;
   updated: string;
 }
@@ -175,7 +201,11 @@ export interface VladConfig {
   maxParallel?: number;
   launcher: Launcher;
   worktreeDir: string;
-  /** Branch `vlad kb commit --push` pushes to when it has no upstream; absent → `origin <current branch>`. */
+  /**
+   * Server machines only (`machines.<server>.kbPushBranch`): `vlad kb commit --push` and `vlad kb sync` push
+   * `HEAD:refs/heads/<branch>`, never the kb main branch. Absent on a `process`-launcher machine → push refused;
+   * absent elsewhere (Windows, cloud) → upstream (main), unchanged.
+   */
   kbPushBranch?: string;
   /** Per-machine overlay of roots/launcher/maxParallel/worktreeDir/kbPushBranch; applied by loadConfig. */
   machines?: Record<string, MachineConfig>;
