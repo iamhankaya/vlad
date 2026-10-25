@@ -156,6 +156,24 @@ describe("vlad cli", () => {
     expect(j.warnings).toHaveLength(1);
     expect(vlad(["role", "list"]).out).toContain("tester  executor  Senior Tester");
   });
+  it("task new --model: opus needs --model-reason; list --json shows the effective model", () => {
+    mkdirSync(join(home, "roles"));
+    writeFileSync(join(home, "roles", "tester.md"), "---\nslug: tester\ntitle: Senior Tester\nkind: executor\nsummary: s\nmodel: sonnet\n---\n");
+    const bad = vlad(["task", "new", "--project", "alpha", "--title", "T", "--model", "opus", "--json"]);
+    expect(bad.code).toBe(1);
+    expect(JSON.parse(bad.err).error).toMatch(/gerekçe|model-reason/);
+    expect(vlad(["task", "new", "--project", "alpha", "--title", "T", "--model", "gpt", "--json"]).code).toBe(1);
+    const ok = vlad(["task", "new", "--project", "alpha", "--title", "T", "--role", "tester", "--model", "opus", "--model-reason", "kritik", "--json"]);
+    expect(ok.code).toBe(0);
+    const plain = vlad(["task", "new", "--project", "alpha", "--title", "T2", "--role", "tester", "--json"]);
+    const { tasks } = JSON.parse(vlad(["task", "list", "--json"]).out);
+    expect(tasks.find((t: { id: string }) => t.id === JSON.parse(ok.out).id)).toMatchObject({ model: "opus", model_reason: "kritik", effective_model: "opus", role_model: "sonnet" });
+    expect(tasks.find((t: { id: string }) => t.id === JSON.parse(plain.out).id)).toMatchObject({ effective_model: "sonnet", role_model: "sonnet" });
+    for (const r of [ok, plain]) expect(vlad(["task", "set", JSON.parse(r.out).id, "running"]).code).toBe(0);
+    const st = vlad(["status"]).out;
+    expect(st).toContain("model: opus");
+    expect(st).not.toMatch(/alpha {2}T2\b.*model:/);
+  });
   it("task new --role writes the role; a kind mismatch exits 1 with a JSON error", () => {
     mkdirSync(join(home, "roles"));
     writeFileSync(join(home, "roles", "tester.md"), "---\nslug: tester\ntitle: Senior Tester\nkind: executor\nsummary: s\n---\n");

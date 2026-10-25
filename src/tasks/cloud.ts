@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
-import { roleFor, getTask, saveTask, setState } from "./store.js";
+import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
 /** What VLAD hands to `create_session` for a cloud worker (`vlad task launch --json`, cloud mode). */
@@ -230,7 +230,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       repo: c.repo, source_url: `https://github.com/${c.repo}`,
       source_revision: base, base_branch: base, outcome_branch: branch, branch, worktree: null,
       integration,
-      model: role?.model ?? null,
+      model: effectiveModel(task.data, role),
       title: `VLAD ${id} — ${task.data.title}`,
       tags: ["vlad", `vlad-task:${id}`, `vlad-project:${c.slug}`],
       permission_mode: "auto",

@@ -15,7 +15,7 @@ import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, launchTask, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportTask, resumeInfo, saveTask, setState, statusSummary,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -47,6 +47,13 @@ function out(o: Opts, data: unknown, text: string): void {
 }
 
 const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}`;
+/** Task data plus the model it runs on (task `model` ?? role `model`), for --json consumers. */
+const withModel = (t: Task) => ({ ...t.data, ...modelInfo(t.data) });
+/** Detailed status line: shows the model only when the task's own model deviates from its role's. */
+const statusLine = (t: Task) => {
+  const m = t.data.model && t.data.model !== modelInfo(t.data).role_model ? `  [model: ${t.data.model}]` : "";
+  return taskLine(t) + m;
+};
 
 // commander writes the help of a bare group ("vlad", "vlad task") to writeErr before throwing
 // commander.help; keep it so the catch below can show it instead of a bare "(outputHelp)" error.
@@ -156,10 +163,13 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
   const t = createTask({
     project: o.project as string, title: o.title as string, kind: o.kind as TaskKind, body, role: o.role as string | undefined,
     parent: o.parent as string | undefined, dependsOn, phase: o.phase as string | undefined,
+    model: o.model as string | undefined, modelReason: o.modelReason as string | undefined,
   });
   out(o, { id: t.data.id }, t.data.id);
 })
   .option("--role <slug>", "roles/<slug>.md uzman rolü (advisory → research, executor → dev)")
+  .option("--model <m>", "görev modeli: haiku | sonnet | opus (rolün modelini ezer)")
+  .option("--model-reason <gerekçe>", "model gerekçesi; opus için zorunlu")
   .option("--parent <id>", "çatı (pipeline) görevi")
   .option("--depends-on <ids>", "virgülle ayrılmış, aynı pipeline'daki bağımlılıklar")
   .option("--phase <ad>", "faz adı (spec, tasarım, plan, sözleşme, kabul, karakterizasyon, uygulama, doğrulama, denetim, prova, danışma)")
@@ -256,7 +266,7 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
   const { warnings } = listed;
   out(
     o,
-    { tasks: tasks.map((t) => t.data), warnings },
+    { tasks: tasks.map(withModel), warnings },
     [...tasks.map(taskLine), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
   );
 })
@@ -296,10 +306,10 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
     out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
     return;
   }
-  const lines = [...s.active.map(taskLine), `inbox: ${s.inbox}`];
+  const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
-  out(o, { ...s, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
+  out(o, { ...s, active: s.active.map(withModel), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
 }).option("--summary", "tek satır özet")
   .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");
 

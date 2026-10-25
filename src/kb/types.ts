@@ -38,6 +38,8 @@ export interface ProjectCard {
 }
 
 /** kb/tasks/<id>.md frontmatter (spec 5.2) */
+export type TaskModel = "haiku" | "sonnet" | "opus";
+
 export interface TaskData {
   id: string;
   project: string;
@@ -63,6 +65,10 @@ export interface TaskData {
   phase?: string | null;
   /** Repo file (relative path) holding this task's full closing report; a long report travels to dependants as summary + this path. */
   report_file?: string | null;
+  /** Model this task's worker runs on; overrides the role's `model`. Absent → the role's, then the default. */
+  model?: TaskModel | null;
+  /** Why this task needs `model`; required for `opus`. */
+  model_reason?: string | null;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
