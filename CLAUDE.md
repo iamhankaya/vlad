@@ -11,7 +11,7 @@ Görevlerin:
 - Sohbet geçmişi kaybolabilir; doğruluk kaynağı `kb/` dosyalarıdır.
 - `kb/` altındaki her yazma **`vlad` CLI ile** yapılır. `kb/` dosyalarını Write/Edit ile **elle düzenleme**. CLI şemaya göre doğrular; elle düzenleme bu sözleşmeyi bozar.
 - Makine okunur çıktı gerektiğinde komutlara `--json` ekle. Hata olursa CLI stderr'e `{"error": ..., "details": [...]}` basar ve 1 ile çıkar; hatayı kullanıcıya açıkça söyle, uydurma.
-- `kb/` git'te tutulur (remote: private `iamhankaya/vlad`). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır. Komut yalnızca `kb/`'yi commit'ler; `kb/inbox/`, `kb/logs/` ve `kb/vlad-session.txt` `.gitignore`'dadır.
+- `kb/` **ayrı private repoda** tutulur: `iamhankaya/vlad-kb` (yerel klon `C:\dev\vlad-kb`; konum `VLAD_KB_DIR` ya da `vlad.config.json`'daki `kbDir` ile çözülür, vlad reposundaki `kb/` artık izlenmez). `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır; komut kb reposunda commit'ler ve o reponun upstream'ine push eder. `inbox/`, `logs/`, `vlad-session.txt` ve `.vlad.lock` kb reposunun `.gitignore`'ındadır.
 - `--file` / `--body-file` için içeriği önce geçici bir dosyaya yaz (ör. işletim sisteminin temp klasörü) veya `-` verip stdin'den geçir.
 
 Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set|note|list` (`set` alanları: exposure, repo, default_branch, local_only, local_only_reason, `gate` — projenin tek kapı komutu; `note <slug> "<ders>"` kartın `## Çalışma notları` bölümüne tarihli madde ekler), `vlad task new|launch|ready|resume|log|ask|answer|report|ingest|set|session|cleanup|digested|list`, `vlad status [--summary]`, `vlad inbox list|count|done`, `vlad finding add|list|set` (bulgu kaydı: `kb/findings/`; `add` kartı olmayan projeyi reddeder; değeri `-` ile başlayan `project set` için `--` kullan: `project set <slug> gate -- "- a"`), `vlad decision add`, `vlad journal append`, `vlad kb commit`, `vlad session register|name`, `vlad install`.
@@ -24,7 +24,7 @@ Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set
 ## Yetki sınırları
 
 - Dış dünyaya etki eden **her** eylem kullanıcının **açık onayını** ister: `git push`, `gh pr create`, merge, ileride mail gönderme. "Sanırım istiyor" yetmez; açıkça sor, açık "evet" bekle.
-- **İstisna:** VLAD reposunun `kb:` commit'lerinin push'u kullanıcı tarafından önceden onaylandı (2026-10-15); `vlad kb commit --push` sormadan çalıştırılır. Push edilmemiş commit'ler arasında `kb/` dışı dosya varsa komut push etmez ve uyarı verir; o durumda kod push'u için yine onay iste.
+- **İstisna:** `vlad-kb` reposunun `kb:` commit'lerinin push'u kullanıcı tarafından önceden onaylandı (2026-10-15, vlad-kb için 2026-10-25'te geçerli kılındı); `vlad kb commit --push` sormadan çalıştırılır. Eski düzende (kb, vlad reposunun içinde) push edilmemiş commit'ler arasında `kb/` dışı dosya varsa komut push etmez ve uyarı verir; o durumda kod push'u için yine onay iste. Kod (vlad reposu) push'u her zaman onay ister.
 - Push/PR/merge için CLI komutu yoktur. Onaydan sonra bunları `git -C <worktree> …` / `gh` ile görevin worktree'sinde sen yaparsın.
 - Kullanıcının projelerinde kod yazma işini kendin yapma; `/delegate` ile çalışana devret.
 - Görev durumunu yalnızca CLI ile değiştir (`vlad task set <id> <state>` vb.); geçersiz geçişi zorlamaya çalışma.
