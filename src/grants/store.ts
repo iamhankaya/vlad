@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { GRANT_MAX_MS, kbPaths, nowIso, NON_DELEGABLE_ACTIONS, readDoc, validate, writeDoc } from "../kb/index.js";
+import { safeAppendFile } from "../kb/safefs.js";
 import type { GrantData } from "../kb/index.js";
 
 export type Grant = { data: GrantData; file: string };
@@ -136,7 +137,7 @@ export function revokeGrant(id: string, now: Date = new Date()): Grant {
     if (doc.data.id !== id) doc = undefined;
   } catch { /* unreadable: the tombstone still revokes it */ }
   if (!tombstones().ids.has(id)) {
-    appendFileSync(tombFile(), JSON.stringify({ id, ...(typeof doc?.data.signature === "string" ? { sig_sha256: sigHash(doc.data.signature) } : {}), at: nowIso(now) }) + "\n", "utf8");
+    safeAppendFile(tombFile(), JSON.stringify({ id, ...(typeof doc?.data.signature === "string" ? { sig_sha256: sigHash(doc.data.signature) } : {}), at: nowIso(now) }) + "\n");
   }
   if (doc && doc.data.revoked !== true) writeDoc(file, { ...doc.data, revoked: true }, doc.body);
   return { data: { ...(doc?.data ?? { id }), revoked: true } as GrantData, file };

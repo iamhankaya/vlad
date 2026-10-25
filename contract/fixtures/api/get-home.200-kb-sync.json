@@ -1,0 +1,74 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S13c); gerçek sunucu çıktısı değil, topoloji notu şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getHome 200 takeover bekliyor, kb_sync blocked"
+  },
+  "operationId": "getHome",
+  "response": {
+    "status": 200,
+    "body": {
+      "seq": 21,
+      "asks": [
+        {
+          "id": "C-20261025-07",
+          "kind": "kb_conflict",
+          "project": "vlad",
+          "task": null,
+          "state": "open",
+          "title": "kb promote reddedildi: 2 ihlal",
+          "options": [
+            {
+              "id": "discard",
+              "label": "Reddedilenleri at"
+            },
+            {
+              "id": "manual",
+              "label": "Elle çözeceğim"
+            }
+          ],
+          "answer": null,
+          "kb_conflict": {
+            "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "reason": "rejected",
+            "source": "promote",
+            "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "base": "cccccccccccccccccccccccccccccccccccccccc",
+            "paths": [
+              "src/evil.ts",
+              ".github/workflows/steal.yml"
+            ],
+            "rules": [
+              "path_not_allowed",
+              "dot_entry"
+            ]
+          },
+          "created": "2026-10-25T15:00:00Z",
+          "updated": "2026-10-25T15:00:00Z"
+        }
+      ],
+      "workers": [],
+      "quota": {
+        "limited": false
+      },
+      "active_vlad": {
+        "machine": "srv",
+        "since": "2026-10-25T14:00:00Z",
+        "heartbeat": "2026-10-25T15:00:00Z",
+        "mine": true,
+        "takeover": {
+          "state": "pending",
+          "reason": "main_moved",
+          "at": "2026-10-25T14:59:00Z"
+        },
+        "kb_sync": {
+          "state": "blocked",
+          "last_ok": "2026-10-25T14:58:00Z",
+          "card": "C-20261025-07"
+        }
+      },
+      "warnings": []
+    }
+  }
+}

@@ -150,6 +150,7 @@ export function parseChallengeBytes(bytes: Uint8Array): Record<string, string> {
 }
 
 export const REVOKE_HEADER = "vlad-revoke/v1";
+export const TAKEOVER_HEADER = "vlad-takeover/v1";
 const DEVICE_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
 /**
@@ -161,4 +162,15 @@ export function revokeBytes(f: { device: string; signer: string; tsMs: number })
   for (const k of ["device", "signer"] as const) if (!DEVICE_ID.test(f[k])) throw new CanonicalError("bad_envelope", `geçersiz cihaz kimliği: ${k}`);
   if (!Number.isSafeInteger(f.tsMs) || f.tsMs < 0) throw new CanonicalError("bad_envelope", "ts_ms negatif olmayan tam sayı olmalı");
   return utf8.encode([REVOKE_HEADER, `device=${f.device}`, `signer=${f.signer}`, `ts=${f.tsMs}`].join("\n"));
+}
+
+/**
+ * Bytes the `approval` key signs to take over the active VLAD: `vlad-takeover/v1\nsigner=<calling device>\nts=<ts_ms>` (no trailing newline).
+ * The takeover has no parameters, so there is nothing else to bind. Server rules: `signer` == `X-Vlad-Device`, `ts` == `X-Vlad-Ts`, within +-120 s,
+ * `(signer, ts)` single use.
+ */
+export function takeoverBytes(f: { signer: string; tsMs: number }): Uint8Array {
+  if (!DEVICE_ID.test(f.signer)) throw new CanonicalError("bad_envelope", "geçersiz cihaz kimliği: signer");
+  if (!Number.isSafeInteger(f.tsMs) || f.tsMs < 0) throw new CanonicalError("bad_envelope", "ts_ms negatif olmayan tam sayı olmalı");
+  return utf8.encode([TAKEOVER_HEADER, `signer=${f.signer}`, `ts=${f.tsMs}`].join("\n"));
 }

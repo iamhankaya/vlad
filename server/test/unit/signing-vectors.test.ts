@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalQuery, challengeBytes, envelopeString, parseChallengeBytes, revokeBytes, sha256Hex } from "../../src/auth/canonical.ts";
+import { canonicalQuery, challengeBytes, envelopeString, parseChallengeBytes, revokeBytes, sha256Hex, takeoverBytes } from "../../src/auth/canonical.ts";
 import { isCanonicalSignature } from "../../src/auth/der.ts";
 import { readJson, verifyDer } from "../helpers/contract.ts";
 
@@ -11,7 +11,7 @@ const spki = (id: string): string => V.keys.find((k: { id: string }) => k.id ===
 describe("server: signing vectors verify (valid/invalid set)", () => {
   it("has the documented sections and test-only keys", () => {
     expect(V.vectors_version).toBe(2);
-    for (const k of ["keys", "canonical_query", "canonical_query_errors", "body_hash", "envelope", "envelope_errors", "challenge", "grant", "revoke", "revoke_errors"]) expect(V[k].length).toBeGreaterThan(0);
+    for (const k of ["keys", "canonical_query", "canonical_query_errors", "body_hash", "envelope", "envelope_errors", "challenge", "grant", "revoke", "revoke_errors", "takeover", "takeover_errors"]) expect(V[k].length).toBeGreaterThan(0);
     expect(V.keys.every((k: { note: string }) => k.note.startsWith("TEST ONLY"))).toBe(true);
     expect(JSON.stringify(V)).not.toMatch(/PRIVATE KEY|"priv/);
   });
@@ -66,6 +66,17 @@ describe("server: signing vectors verify (valid/invalid set)", () => {
     });
     it.each(V.revoke_errors as R[])("rejects: $id", (v) => {
       expect(() => revokeBytes({ device: v.fields.device, signer: v.fields.signer, tsMs: v.fields.ts_ms })).toThrow();
+    });
+  });
+
+  describe("takeover", () => {
+    it.each(V.takeover as R[])("$id", (v) => {
+      const bytes = takeoverBytes({ signer: v.fields.signer, tsMs: v.fields.ts_ms });
+      expect(Buffer.from(bytes).toString("utf8")).toBe(v.takeover_text);
+      expect(verifyDer(spki(v.key_id), bytes, v.signature_b64u)).toBe(v.expect_valid);
+    });
+    it.each(V.takeover_errors as R[])("rejects: $id", (v) => {
+      expect(() => takeoverBytes({ signer: v.fields.signer, tsMs: v.fields.ts_ms })).toThrow();
     });
   });
 

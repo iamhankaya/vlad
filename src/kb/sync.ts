@@ -1,0 +1,521 @@
+import { createHash } from "node:crypto";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
+import { activeStatus, heartbeatActive } from "../active/index.js";
+import { addCard, getCard, listCardsWithWarnings, resolveCard } from "../cards/store.js";
+import type { Card } from "../cards/store.js";
+import { loadConfig } from "./config.js";
+import { git, gitTry } from "./git.js";
+import { isSeparateKb, kbPaths } from "./home.js";
+import { missingIgnores, stageKb } from "./ignore.js";
+import { nowIso } from "./time.js";
+
+/** Card project of kbsync's own `kb_conflict` cards (the server's kb always carries this card). */
+export const KB_CONFLICT_PROJECT = "vlad";
+
+const PUSH_BRANCH = /^[A-Za-z0-9._/-]{1,100}$/;
+/** What git prints when the remote moved under a push. */
+const NON_FF = /non-fast-forward|fetch first|\brejected\b|stale info/i;
+
+/** Branch name of the kb remote's main: `origin/HEAD`, else `main` (kb topology note, K3). */
+export function kbMainBranch(cwd: string): string {
+  const r = gitTry(cwd, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"]);
+  const name = r.code === 0 ? r.out.trim().replace(/^origin\//, "") : "";
+  return name || "main";
+}
+
+/**
+ * POSIX: refuses to run git in a kb whose `.git` belongs to another user (`git_owner_mismatch`). The agent controls
+ * that `.git/config`; a process of another identity (the API server) must never run git there (K9). Skipped on Windows.
+ */
+export function assertGitOwner(cwd: string): void {
+  if (process.platform === "win32" || typeof process.getuid !== "function") return;
+  let owner: number;
+  try {
+    owner = statSync(join(cwd, ".git")).uid;
+  } catch {
+    return; // no .git: git itself reports the missing repo
+  }
+  if (owner !== process.getuid()) throw new Error(`git_owner_mismatch: ${cwd}/.git başka bir kullanıcıya ait (uid ${owner}); bu komut orada git çalıştırmaz`);
+  // another user able to write the repo config could plant core.* settings that run code as us (security review D4)
+  for (const f of [".git", ".git/config"]) {
+    try {
+      if (statSync(join(cwd, f)).mode & 0o022) throw new Error(`git_unsafe_perms: ${cwd}/${f} grup/diğerleri için yazılabilir; \`chmod go-w\` ile kapat`);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+    }
+  }
+}
+
+/**
+ * Throws unless `rel` stays inside the kb: no ancestor of it (inside the kb) may be a symlink, and what exists must
+ * resolve under the kb's real path. Guards writes at paths that come from cards (security review D3).
+ */
+export function assertInsideKb(cwd: string, rel: string): void {
+  if (!safeRel(rel)) throw new Error(`kb dışı ya da geçersiz yol: ${JSON.stringify(rel)}`);
+  const root = realpathSync(cwd);
+  let cur = cwd;
+  for (const seg of rel.split("/").slice(0, -1)) {
+    cur = join(cur, seg);
+    let st;
+    try {
+      st = lstatSync(cur);
+    } catch {
+      return; // the rest does not exist yet
+    }
+    if (st.isSymbolicLink()) throw new Error(`symlink üst klasör: ${rel}`);
+    const real = realpathSync(cur);
+    if (real !== root && !real.startsWith(root + sep)) throw new Error(`kb dışına çıkan yol: ${rel}`);
+  }
+}
+
+/** Error key `kb_conflict`; `details` (the conflicting paths) reach the CLI's JSON error. */
+export class KbConflictError extends Error {
+  readonly code = "kb_conflict";
+  constructor(public paths: string[], public key: string, public head: string, public base: string) {
+    super(`kb_conflict: ${paths.length} dosya çakıştı: ${paths.join(", ")}; \`vlad kb resolve --take main|local\` ile çöz`);
+    this.name = "KbConflictError";
+  }
+  get details(): string[] {
+    return this.paths;
+  }
+}
+
+/** Dedupe key of a conflict: the same set of lines always gives the same key (K6). */
+export function conflictKey(reason: "merge_conflict" | "rejected", lines: string[]): string {
+  return createHash("sha256").update(`vlad-kbconflict/v1\n${reason}\n${[...lines].sort().join("\n")}`).digest("hex");
+}
+
+/** A kb-relative path that stays inside the kb: no absolute, `..`, dot or backslash segments. Card paths are untrusted. */
+function safeRel(p: string): boolean {
+  return p.length > 0 && p.length <= 200 && !/[\\\0:]/.test(p) && !p.startsWith("/") && p.split("/").every((s) => s !== "" && !s.startsWith("."));
+}
+
+/** Commits pending kb changes; local-only state (logs, inbox, locks, session file) is excluded whatever .gitignore says. */
+export function commitPending(cwd: string, message: string): boolean {
+  stageKb((a) => git(cwd, a));
+  if (!git(cwd, ["diff", "--cached", "--name-only"]).trim()) return false;
+  git(cwd, ["commit", "-q", "-m", `kb: ${message}`]);
+  return true;
+}
+
+/** Conflict backups live outside the kb tree (`$VLAD_HOME/state/kb-conflicts`, 0700), so they are never committed or promoted. */
+const backupRoot = (sub = ""): string => {
+  const root = join(kbPaths().home, "state", "kb-conflicts");
+  const dir = sub ? join(root, sub) : root;
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    chmodSync(root, 0o700);
+  } catch { /* best effort */ }
+  return dir;
+};
+
+export function fetchOrigin(cwd: string): void {
+  const r = gitTry(cwd, ["fetch", "-q", "origin"]);
+  if (r.code !== 0) throw new Error(`kb_fetch_failed: ${r.err.trim()}`);
+}
+
+const blobAt = (cwd: string, rev: string, path: string): string => {
+  const r = gitTry(cwd, ["rev-parse", "-q", "--verify", `${rev}:${path}`]);
+  return r.code === 0 ? r.out.trim() : "";
+};
+
+export interface MergeResult {
+  merged: boolean;
+  fastForward: boolean;
+  /** active.md conflicted and the main side was taken */
+  activeMainWon: boolean;
+  /** `take` paths resolved from the chosen side, local side backed up under `backupDir` */
+  resolved: string[];
+  backupDir?: string;
+}
+
+/**
+ * Merges `origin/<main>` into HEAD (merge commit, never a rebase; fast-forward when possible).
+ * Conflicts: only active.md → main wins; anything else → `git merge --abort` (worktree clean, local commits kept)
+ * and `KbConflictError`. With `take` the named `paths` (default: every conflicting file) are taken from that side
+ * instead, and the other side is saved under `state/kb-conflicts/<key8>/` ($VLAD_HOME, kb dışı). Call after `fetchOrigin` and with no dirty files.
+ */
+export function mergeMain(cwd: string, main: string, o: { take?: "main" | "local"; paths?: string[] } = {}): MergeResult {
+  const ref = `origin/${main}`;
+  const none: MergeResult = { merged: false, fastForward: false, activeMainWon: false, resolved: [] };
+  if (gitTry(cwd, ["rev-parse", "-q", "--verify", `${ref}^{commit}`]).code !== 0) return none;
+  if (gitTry(cwd, ["merge-base", "--is-ancestor", ref, "HEAD"]).code === 0) return none;
+  const fastForward = gitTry(cwd, ["merge-base", "--is-ancestor", "HEAD", ref]).code === 0;
+  const head = git(cwd, ["rev-parse", "HEAD"]).trim();
+  const base = git(cwd, ["rev-parse", ref]).trim();
+  const r = gitTry(cwd, ["merge", "--no-edit", "-q", ref]);
+  if (r.code === 0) return { ...none, merged: true, fastForward };
+  if (gitTry(cwd, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code !== 0) throw new Error(`git merge başarısız: ${(r.err || r.out).trim()}`);
+
+  // stage 2 = ours (HEAD), stage 3 = theirs (origin/main); "" = absent on that side
+  const stages = new Map<string, { ours: string; theirs: string }>();
+  for (const line of git(cwd, ["ls-files", "-u", "-z"]).split("\0").filter(Boolean)) {
+    const m = /^\d+ ([0-9a-f]+) ([123])\t(.*)$/s.exec(line);
+    if (!m) continue;
+    const e = stages.get(m[3]) ?? { ours: "", theirs: "" };
+    if (m[2] === "2") e.ours = m[1];
+    if (m[2] === "3") e.theirs = m[1];
+    stages.set(m[3], e);
+  }
+  const unmerged = [...stages.keys()].sort();
+  const key = conflictKey("merge_conflict", unmerged.map((p) => `${p}\t${stages.get(p)!.ours}\t${stages.get(p)!.theirs}`));
+  const chosen = o.take ? unmerged.filter((p) => !o.paths?.length || o.paths.includes(p)) : [];
+  const rest = unmerged.filter((p) => !chosen.includes(p));
+  const bad = rest.filter((p) => p !== "active.md");
+  if (bad.length) {
+    git(cwd, ["merge", "--abort"]);
+    throw new KbConflictError(unmerged, key, head, base);
+  }
+  const backupDir = backupRoot(key.slice(0, 8));
+  const take = (p: string, side: "main" | "local", backup: boolean) => {
+    const mine = side === "local";
+    assertInsideKb(cwd, p);
+    if (backup) {
+      const other = stages.get(p)![mine ? "theirs" : "ours"];
+      if (other) {
+        const dest = join(backupDir, p);
+        mkdirSync(dirname(dest), { recursive: true });
+        writeFileSync(dest, git(cwd, ["cat-file", "blob", other]));
+      }
+    }
+    if (stages.get(p)![mine ? "ours" : "theirs"]) {
+      git(cwd, ["checkout", mine ? "--ours" : "--theirs", "--", p]);
+      git(cwd, ["add", "--", p]);
+    } else git(cwd, ["rm", "-q", "-f", "--", p]);
+  };
+  for (const p of chosen) take(p, o.take!, true);
+  const activeMainWon = rest.includes("active.md");
+  if (activeMainWon) take("active.md", "main", false);
+  git(cwd, ["commit", "-q", "--no-edit"]);
+  return { merged: true, fastForward: false, activeMainWon, resolved: chosen, ...(chosen.length ? { backupDir } : {}) };
+}
+
+/** The "this machine lost the active role" warning when a main-wins active.md names someone else. */
+function activeLostWarning(): string | null {
+  const st = activeStatus();
+  return st.record && !st.mine ? `active_elsewhere: etkin VLAD artık ${st.record.machine}; bu makine salt okunur` : null;
+}
+
+/** The remote's real default branch (`ls-remote`, not the agent-writable local `origin/HEAD`); null when unreachable. */
+function remoteDefaultBranch(cwd: string): string | null {
+  const r = gitTry(cwd, ["ls-remote", "--symref", "origin", "HEAD"]);
+  return r.code === 0 ? (/^ref: refs\/heads\/(\S+)\tHEAD/m.exec(r.out)?.[1] ?? null) : null;
+}
+
+/** `kbPushBranch` rules (K2, security review D1/D2): a well-formed branch name that is never a main/default branch. */
+function validatePushBranch(cwd: string, branch: string, main: string): void {
+  const form = PUSH_BRANCH.test(branch) && !branch.startsWith("-") && !branch.includes("..") && !branch.endsWith("/") && !branch.endsWith(".lock")
+    && gitTry(cwd, ["check-ref-format", "--branch", branch]).code === 0;
+  const banned = new Set(["main", "master", main]);
+  if (!form || banned.has(branch) || branch === remoteDefaultBranch(cwd)) {
+    throw new Error(`kb_push_branch_invalid: "${branch}" (kb main/varsayılan dalı olamaz; geçerli dal adı: harf, rakam, . _ - /)`);
+  }
+}
+
+export interface KbPushTarget {
+  /** args after `git push -q` */
+  args: string[];
+  /** branch the commits end up on */
+  branch: string;
+}
+
+/**
+ * Where `kb commit --push` goes for a separate-layout kb (K2). `kbPushBranch` set → `HEAD:refs/heads/<it>`.
+ * Unset on a `process`-launcher machine (a server) → refused (`kb_push_branch_required`). Unset elsewhere
+ * (Windows, cloud) → the upstream, unchanged.
+ */
+export function resolvePushTarget(cwd: string, main: string, o: { pushBranch?: string; serverMode: boolean }): KbPushTarget {
+  const branch = git(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  if (o.pushBranch) {
+    validatePushBranch(cwd, o.pushBranch, main);
+    return { args: ["origin", `HEAD:refs/heads/${o.pushBranch}`], branch: o.pushBranch };
+  }
+  if (o.serverMode) throw new Error("kb_push_branch_required: bu makinede (process launcher) kb push'u için machines.<makine>.kbPushBranch gerekli");
+  const hasUpstream = gitTry(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).code === 0;
+  return { args: hasUpstream ? [] : ["-u", "origin", `${branch}:refs/heads/${branch}`], branch };
+}
+
+/**
+ * Fetch + merge origin/<main>, then push; one non-fast-forward rejection → fetch + merge + push once more,
+ * a second one → `kb_push_rejected` (local commits stay). Returns whether any merge happened.
+ */
+export function pushWithMerge(cwd: string, main: string, args: string[]): { merged: boolean; activeLost?: string } {
+  fetchOrigin(cwd);
+  let m = mergeMain(cwd, main);
+  let merged = m.merged;
+  let activeMainWon = m.activeMainWon;
+  const push = () => gitTry(cwd, ["push", "-q", ...args]);
+  let r = push();
+  if (r.code !== 0) {
+    if (!NON_FF.test(r.err)) throw new Error(`git push başarısız: ${r.err.trim()}`);
+    fetchOrigin(cwd);
+    m = mergeMain(cwd, main);
+    merged ||= m.merged;
+    activeMainWon ||= m.activeMainWon;
+    r = push();
+    if (r.code !== 0) {
+      if (!NON_FF.test(r.err)) throw new Error(`git push başarısız: ${r.err.trim()}`);
+      throw new Error(`kb_push_rejected: push iki kez reddedildi; yerel commit'ler korundu, tekrar dene (${r.err.trim()})`);
+    }
+  }
+  return { merged, ...(activeMainWon ? { activeLost: activeLostWarning() ?? undefined } : {}) };
+}
+
+function requireSeparate(): { cwd: string; home: string } {
+  const p = kbPaths();
+  if (!isSeparateKb(p.home)) throw new Error("kb_separate_required: bu komut yalnız ayrı kb deposunda (kbDir) çalışır");
+  const miss = missingIgnores(p.kb);
+  if (miss.length) throw new Error(`kb_gitignore_missing: kb .gitignore eksik: ${miss.join(", ")}; yerel durum commit'lenmesin diye komut durdu`);
+  return { cwd: p.kb, home: p.home };
+}
+
+export interface KbPullResult {
+  committed: boolean;
+  merged: boolean;
+  fastForward: boolean;
+  activeMachine: string | null;
+  warnings: string[];
+}
+
+/** `vlad kb pull`: commits pending changes, fetches, merges origin/<main>. Call inside withKbLock. */
+export function pullKb(): KbPullResult {
+  const { cwd } = requireSeparate();
+  assertGitOwner(cwd);
+  const committed = commitPending(cwd, "pull öncesi otomatik");
+  fetchOrigin(cwd);
+  const m = mergeMain(cwd, kbMainBranch(cwd));
+  const st = activeStatus();
+  const warnings = [...st.warnings];
+  if (m.activeMainWon) {
+    const w = activeLostWarning();
+    if (w) warnings.push(w);
+  }
+  return { committed, merged: m.merged, fastForward: m.fastForward, activeMachine: st.record?.machine ?? null, warnings };
+}
+
+export interface KbResolveResult {
+  merged: boolean;
+  resolved: string[];
+  backupDir?: string;
+}
+
+/**
+ * `vlad kb resolve --take main|local [--path P…] [--card id]`: redoes the merge of origin/<main> and takes the
+ * named (default all) conflicting files from the chosen side; the other side is backed up under
+ * `state/kb-conflicts/<key8>/` ($VLAD_HOME, kb dışı). Conflicts left outside the selection stay `kb_conflict`.
+ */
+export function resolveKb(o: { take: "main" | "local"; paths?: string[]; card?: string }): KbResolveResult {
+  if (o.take !== "main" && o.take !== "local") throw new Error(`geçersiz --take: "${o.take}" (main | local)`);
+  for (const p of o.paths ?? []) if (!safeRel(p)) throw new Error(`geçersiz --path: "${p}"`);
+  const { cwd } = requireSeparate();
+  assertGitOwner(cwd);
+  if (o.card && getCard(o.card).data.kind !== "kb_conflict") throw new Error(`kart kb_conflict değil: ${o.card}`);
+  commitPending(cwd, "resolve öncesi otomatik");
+  fetchOrigin(cwd);
+  const m = mergeMain(cwd, kbMainBranch(cwd), { take: o.take, paths: o.paths });
+  if (o.card) resolveCard(o.card, "resolved");
+  return { merged: m.merged, resolved: m.resolved, ...(m.backupDir ? { backupDir: m.backupDir } : {}) };
+}
+
+export interface KbSyncStatus {
+  v: 1;
+  /** `seq` of the last `logs/kbsync.request` this cycle saw (0: none) */
+  seq: number;
+  at: string;
+  ok: boolean;
+  phase: "commit" | "fetch" | "merge" | "push" | "done";
+  error?: string;
+  head?: string;
+  main?: string;
+}
+
+export interface KbSyncResult {
+  committed: boolean;
+  heartbeat: boolean;
+  merged: boolean;
+  pushed: boolean;
+  head: string;
+  main: string | null;
+  card?: string;
+  applied?: string[];
+  warnings: string[];
+}
+
+const requestFile = (logs: string) => join(logs, "kbsync.request");
+export const kbSyncStatusFile = (logs: string) => join(logs, "kbsync.status.json");
+
+function readRequestSeq(logs: string): number {
+  try {
+    const seq = (JSON.parse(readFileSync(requestFile(logs), "utf8")) as { seq?: unknown }).seq;
+    return typeof seq === "number" && Number.isSafeInteger(seq) && seq > 0 ? seq : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeStatus(logs: string, s: KbSyncStatus): void {
+  mkdirSync(logs, { recursive: true });
+  const file = kbSyncStatusFile(logs);
+  const tmp = `${file}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(s) + "\n", "utf8");
+  renameSync(tmp, file);
+}
+
+const appliedFile = () => join(backupRoot(), "applied.json");
+const readApplied = (): string[] => {
+  try {
+    const v = JSON.parse(readFileSync(appliedFile(), "utf8"));
+    return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+/** A discard answer is applied once per card key; the mark is local state (outside the kb), so card edits cannot reset it. */
+const markApplied = (key: string): void => writeFileSync(appliedFile(), JSON.stringify([...new Set([...readApplied(), key])]) + "\n", { mode: 0o600 });
+
+/**
+ * Rebuilds HEAD as one cleaning commit on origin/<main>: the card's paths go back to main's version, but only where
+ * the server branch still holds exactly the rejected content (`card.head`'s blob) and the card's head is part of what
+ * the remote kb-server really has. A path rewritten legitimately since is left alone (security review O2).
+ */
+function applyDiscard(cwd: string, main: string, pushBranch: string, card: Card): boolean {
+  const c = card.data.kb_conflict!;
+  if (readApplied().includes(c.key)) return false;
+  if (gitTry(cwd, ["merge-base", "--is-ancestor", c.head, `origin/${pushBranch}`]).code !== 0) return false;
+  const ref = `origin/${main}`;
+  const dirty = c.paths.filter((p) => {
+    try {
+      assertInsideKb(cwd, p);
+    } catch {
+      return false;
+    }
+    const now = blobAt(cwd, "HEAD", p);
+    return now === blobAt(cwd, c.head, p) && now !== blobAt(cwd, ref, p);
+  });
+  if (!dirty.length) return false;
+  const backup = backupRoot(c.key.slice(0, 8));
+  for (const p of dirty) {
+    const oid = blobAt(cwd, "HEAD", p);
+    if (!oid) continue;
+    const dest = join(backup, p);
+    mkdirSync(dirname(dest), { recursive: true, mode: 0o700 });
+    writeFileSync(dest, git(cwd, ["cat-file", "blob", oid]));
+  }
+  git(cwd, ["reset", "-q", "--soft", ref]);
+  for (const p of dirty) {
+    if (blobAt(cwd, ref, p)) git(cwd, ["checkout", ref, "--", p]);
+    else git(cwd, ["rm", "-q", "-f", "--ignore-unmatch", "--", p]);
+  }
+  if (git(cwd, ["diff", "--cached", "--name-only"]).trim()) git(cwd, ["commit", "-q", "-m", `kb: discard ${c.key.slice(0, 8)} — reddedilen girdiler atıldı`]);
+  return true;
+}
+
+function openConflictCard(e: KbConflictError): { id?: string; warning?: string } {
+  try {
+    const c = addCard({
+      kind: "kb_conflict", project: KB_CONFLICT_PROJECT, title: `kb çakışması: ${e.paths.length} dosya`,
+      kbConflict: { key: e.key, reason: "merge_conflict", source: "kbsync", head: e.head, base: e.base, paths: e.paths.slice(0, 50) },
+    });
+    return { id: c.data.id };
+  } catch (err) {
+    return { warning: `kb_conflict kartı açılamadı: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * `vlad kb sync` (server, one cycle; call inside withKbLock with guard off): heartbeat if this machine is the
+ * active VLAD, commit pending files, fetch, apply answered kb_conflict cards, merge origin/<main>, push to
+ * `kbPushBranch`, close this machine's own kb_conflict cards on a clean run. The outcome always lands in
+ * `logs/kbsync.status.json`, together with the `seq` of the last `logs/kbsync.request`.
+ */
+export function syncKb(): KbSyncResult {
+  const { cwd } = requireSeparate();
+  assertGitOwner(cwd);
+  const logs = kbPaths().logs;
+  const pushBranch = loadConfig().kbPushBranch;
+  if (!pushBranch) throw new Error("kb_push_branch_required: kb sync yalnız machines.<makine>.kbPushBranch tanımlı makinede çalışır");
+  const main = kbMainBranch(cwd);
+  validatePushBranch(cwd, pushBranch, main);
+  const seq = readRequestSeq(logs);
+  const res: KbSyncResult = { committed: false, heartbeat: false, merged: false, pushed: false, head: "", main: null, warnings: [] };
+  let phase: KbSyncStatus["phase"] = "commit";
+  const status = (ok: boolean, error?: string): void => {
+    const rev = (r: string) => gitTry(cwd, ["rev-parse", "-q", "--verify", r]).out.trim() || undefined;
+    writeStatus(logs, { v: 1, seq, at: nowIso(), ok, phase: ok ? "done" : phase, ...(error ? { error } : {}), head: rev("HEAD"), main: rev(`origin/${main}`) });
+  };
+  try {
+    const st = activeStatus();
+    if (st.record && st.mine) res.heartbeat = heartbeatActive().written;
+    res.committed = commitPending(cwd, "sunucu: otomatik");
+    phase = "fetch";
+    fetchOrigin(cwd);
+    phase = "merge";
+    const open = listCardsWithWarnings({ state: ["open"], kind: ["kb_conflict"] }).cards;
+    const answered = (reason: string, option: string) =>
+      open.filter((c) => c.data.kb_conflict!.reason === reason && c.data.answer?.option === option);
+    const takeMain = answered("merge_conflict", "take_main");
+    res.applied = [];
+    try {
+      let m: MergeResult;
+      try {
+        m = mergeMain(cwd, main);
+      } catch (e) {
+        // a take_main answer applies only to the very conflict it was given for (same key), and only to that card's paths (O1)
+        const card = e instanceof KbConflictError ? takeMain.find((c) => c.data.kb_conflict!.key === e.key) : undefined;
+        if (!card) throw e;
+        m = mergeMain(cwd, main, { take: "main", paths: card.data.kb_conflict!.paths });
+        res.applied.push(`take_main:${card.data.id}`);
+      }
+      res.merged = m.merged;
+      if (m.activeMainWon) {
+        const w = activeLostWarning();
+        if (w) res.warnings.push(w);
+      }
+    } catch (e) {
+      if (e instanceof KbConflictError) {
+        const card = openConflictCard(e);
+        if (card.id) res.card = card.id;
+        if (card.warning) res.warnings.push(card.warning);
+      }
+      throw e;
+    }
+    const before = git(cwd, ["rev-parse", "HEAD"]).trim();
+    const discards: Card[] = [];
+    for (const c of answered("rejected", "discard")) {
+      if (applyDiscard(cwd, main, pushBranch, c)) discards.push(c);
+    }
+    const discarded = discards.length > 0;
+    if (discarded) res.applied.push(...discards.map((c) => `discard:${c.data.id}`));
+    phase = "push";
+    const dest = `refs/heads/${pushBranch}`;
+    if (discarded) {
+      // the rebuilt branch is not a descendant of what the remote has: replace it, but only if nobody pushed meanwhile
+      const old = gitTry(cwd, ["rev-parse", "-q", "--verify", `origin/${pushBranch}`]).out.trim();
+      // empty expected value = "the branch must not exist"; never a bare --force-with-lease (it trusts our tracking ref blindly)
+      const r = gitTry(cwd, ["push", "-q", `--force-with-lease=${dest}:${old}`, "origin", `HEAD:${dest}`]);
+      if (r.code !== 0) {
+        git(cwd, ["reset", "-q", "--hard", before]); // retry from the pre-rebuild state: a plain push must never bring the rejected content back
+        throw new Error(`kb_push_rejected: discard sonrası force-with-lease push reddedildi: ${r.err.trim()}`);
+      }
+      for (const c of discards) markApplied(c.data.kb_conflict!.key);
+      res.merged = true;
+    } else {
+      const p = pushWithMerge(cwd, main, ["origin", `HEAD:${dest}`]);
+      res.merged ||= p.merged;
+    }
+    res.pushed = true;
+    for (const c of listCardsWithWarnings({ state: ["open"], kind: ["kb_conflict"] }).cards) {
+      if (c.data.kb_conflict!.source === "kbsync") resolveCard(c.data.id, "resolved");
+    }
+    res.head = git(cwd, ["rev-parse", "HEAD"]).trim();
+    res.main = gitTry(cwd, ["rev-parse", "-q", "--verify", `origin/${main}`]).out.trim() || null;
+    if (!res.applied.length) delete res.applied;
+    status(true);
+    return res;
+  } catch (e) {
+    const msg = (e as Error).message;
+    status(false, /^[a-z_]+(?=:)/.exec(msg)?.[0] ?? "kb_sync_failed");
+    throw e;
+  }
+}

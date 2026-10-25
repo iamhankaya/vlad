@@ -1,9 +1,10 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ACTION_OPTIONS, CARD_KINDS, kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc } from "../kb/index.js";
-import type { CardData, CardKind, CardState, ProjectCard } from "../kb/index.js";
+import { ACTION_OPTIONS, CARD_KINDS, KB_CONFLICT_OPTIONS, kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc } from "../kb/index.js";
+import type { CardData, CardKind, CardState, KbConflictData, ProjectCard } from "../kb/index.js";
 
-export type Card = { data: CardData; body: string; file: string };
+/** `created` is set by addCard: false when an existing kb_conflict card with the same key was returned. */
+export type Card = { data: CardData; body: string; file: string; created?: boolean };
 
 export const KINDS: readonly CardKind[] = CARD_KINDS;
 export const STATES: readonly CardState[] = ["open", "resolved", "dismissed"];
@@ -21,6 +22,10 @@ function check(data: CardData): void {
   for (const op of data.options) {
     if (seen.has(op.id)) throw new Error(`yinelenen seçenek: ${op.id}`);
     seen.add(op.id);
+  }
+  if (data.kind === "kb_conflict" && data.kb_conflict) {
+    const fixed = KB_CONFLICT_OPTIONS[data.kb_conflict.reason];
+    if (JSON.stringify(data.options) !== JSON.stringify(fixed)) throw new Error("kb_conflict seçenekleri sabittir");
   }
 }
 
@@ -96,6 +101,13 @@ export interface NewCard {
   task?: string | null;
   options?: { id: string; label: string }[];
   action?: { kind: string; repo: string; sha?: string; pr?: number; base?: string; ref?: string };
+  /** Required for (and only for) `kb_conflict`. */
+  kbConflict?: KbConflictData;
+}
+
+/** Any card (open, resolved or dismissed) already carrying this conflict key. */
+export function findCardByConflictKey(key: string): Card | undefined {
+  return listCardsWithWarnings({ kind: ["kb_conflict"] }).cards.find((c) => c.data.kb_conflict?.key === key);
 }
 
 export function addCard(o: NewCard, now: Date = new Date()): Card {
@@ -106,12 +118,21 @@ export function addCard(o: NewCard, now: Date = new Date()): Card {
     // allowlist: the only repo an action may target is the one registered on the card's project
     if (!repo || o.action.repo !== repo) throw new Error("repo izin listesinde değil");
   }
+  if (o.kind === "kb_conflict") {
+    if (o.options?.length) throw new Error("kb_conflict seçenekleri sabittir");
+    if (!o.kbConflict) throw new Error("kb_conflict kartı için kb_conflict alanları gerekli");
+    // the same conflict never opens a second card, whatever state the first is in
+    const existing = findCardByConflictKey(o.kbConflict.key);
+    if (existing) return { ...existing, created: false };
+  } else if (o.kbConflict) throw new Error("kb_conflict alanı yalnız kb_conflict kartında olur");
   // an action_request has fixed options; the caller (an agent) cannot supply its own
   if (o.kind === "action_request") {
     if (o.options?.length) throw new Error("action_request kartında seçenek verilemez (sabit: approve/reject)");
     if (!o.action) throw new Error("action_request kartı için action gerekli");
   }
-  const options = o.kind === "action_request" ? ACTION_OPTIONS.map((x) => ({ ...x })) : (o.options ?? []);
+  const options = o.kind === "action_request"
+    ? ACTION_OPTIONS.map((x) => ({ ...x }))
+    : o.kind === "kb_conflict" ? KB_CONFLICT_OPTIONS[o.kbConflict!.reason].map((x) => ({ ...x })) : (o.options ?? []);
   const dir = kbPaths().cards;
   mkdirSync(dir, { recursive: true });
   const prefix = `C-${dayOf(now)}-`;
@@ -121,7 +142,8 @@ export function addCard(o: NewCard, now: Date = new Date()): Card {
     const ts = nowIso(now);
     const data: CardData = {
       id, kind: o.kind as CardKind, project: o.project, task: o.task ?? null, state: "open", title: o.title.trim(),
-      options, answer: null, ...(o.action ? { action: o.action as CardData["action"] } : {}), created: ts, updated: ts,
+      options, answer: null, ...(o.action ? { action: o.action as CardData["action"] } : {}),
+      ...(o.kbConflict ? { kb_conflict: o.kbConflict } : {}), created: ts, updated: ts,
     };
     check(data);
     const file = cardFile(id);
@@ -134,7 +156,7 @@ export function addCard(o: NewCard, now: Date = new Date()): Card {
       }
       throw e;
     }
-    return { data, body: "", file };
+    return { data, body: "", file, created: true };
   }
 }
 

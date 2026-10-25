@@ -7,6 +7,8 @@ import { getTask } from "../tasks/store.js";
 /** The only place for the heartbeat thresholds (mobile plan, open point 5; user approval pending). */
 export const ACTIVE_HEARTBEAT_WRITE_MS = 30 * 60_000;
 export const ACTIVE_STALE_MS = 2 * 3_600_000;
+/** A heartbeat further than this in the future of our clock adds a `clock_skew` warning (kb topology note, K8). */
+export const ACTIVE_SKEW_WARN_MS = 5 * 60_000;
 
 export const activeFile = () => join(kbPaths().kb, "active.md");
 
@@ -47,7 +49,10 @@ export function activeStatus(opts: { now?: number; machine?: string } = {}): Act
     return { ...none, warnings: [`active.md yok sayıldı (${(e as Error).message})`] };
   }
   const ageMs = now - Date.parse(record.heartbeat);
-  return { record, mine: record.machine === machine, ageMs, stale: ageMs >= ACTIVE_STALE_MS, warnings: [] };
+  const warnings = ageMs < -ACTIVE_SKEW_WARN_MS
+    ? [`clock_skew: "${record.machine}" nabzı bu makinenin saatinden ${Math.round(-ageMs / 60_000)} dk ileride; saatleri (NTP) denetle`]
+    : [];
+  return { record, mine: record.machine === machine, ageMs, stale: ageMs >= ACTIVE_STALE_MS, warnings };
 }
 
 const write = (d: ActiveData) => writeDoc(activeFile(), d, "");

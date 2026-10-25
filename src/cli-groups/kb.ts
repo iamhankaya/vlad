@@ -5,6 +5,7 @@ import type { Command } from "commander";
 import { def, defWrite, out, readInput, type Opts } from "../cli-util.js";
 import { installGlobal } from "../install.js";
 import { commitKb } from "../kb/commit.js";
+import { pullKb, resolveKb, syncKb } from "../kb/sync.js";
 import { addDecision, appendJournal, getVladHome, kbPaths } from "../kb/index.js";
 
 export function registerKb(program: Command): void {
@@ -33,10 +34,27 @@ export function registerKb(program: Command): void {
   defWrite(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)", (msg: string, o: Opts) => {
     const r = commitKb(msg, { push: !!o.push });
     const lines = [r.committed ? `commit: ${r.sha}` : "kb'de değişiklik yok"];
-    if (r.pushed) lines.push("push edildi");
+    if (r.pushed) lines.push(`push edildi${r.branch ? ` (${r.branch})` : ""}${r.merged ? "; origin main birleştirildi" : ""}`);
     if (r.warning) lines.push(`uyarı: ${r.warning}`);
     out(o, r, lines.join("\n"));
   }).option("--push", "upstream'e push eder (yalnızca push edilmemiş commit'lerin hepsi kb/ ise)");
+  defWrite(kb, "pull", "Bekleyen değişikliği commit'ler, origin/main'i çeker ve birleştirir (ayrı kb deposu)", (o: Opts) => {
+    const r = pullKb();
+    const lines = [r.committed ? "bekleyen değişiklik commit'lendi" : "bekleyen değişiklik yok", r.merged ? (r.fastForward ? "origin main alındı (ff)" : "origin main birleştirildi") : "origin main zaten içeride"];
+    lines.push(`etkin VLAD: ${r.activeMachine ?? "(yok)"}`, ...r.warnings.map((w) => `uyarı: ${w}`));
+    out(o, r, lines.join("\n"));
+  }, { guard: "off" });
+  defWrite(kb, "sync", "Sunucu kb döngüsü: nabız, commit, merge origin/main, kbPushBranch'e push, kb_conflict kartları", (o: Opts) => {
+    const r = syncKb();
+    out(o, r, [r.committed ? "commit'lendi" : "değişiklik yok", r.merged ? "origin main birleştirildi" : "birleştirme yok", "push edildi", ...(r.card ? [`kart: ${r.card}`] : []), ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+  }, { guard: "off" });
+  defWrite(kb, "resolve", "Çakışmayı çözer: origin/main'i yeniden birleştirir, seçilen taraf alınır, öteki state/kb-conflicts/ altına (kb dışı) yedeklenir", (o: Opts) => {
+    const r = resolveKb({ take: o.take as "main" | "local", paths: o.path as string[] | undefined, card: o.card as string | undefined });
+    out(o, r, [r.merged ? "birleştirildi" : "çakışma yoktu", ...(r.resolved.length ? [`çözülen: ${r.resolved.join(", ")}`] : []), ...(r.backupDir ? [`yedek: ${r.backupDir}`] : [])].join("\n"));
+  }, { guard: "off" })
+    .requiredOption("--take <taraf>", "main | local")
+    .option("--path <yol>", "yalnız bu dosya(lar) (tekrarlanabilir; yoksa tüm çakışanlar)", (v: string, prev: string[] = []) => [...prev, v])
+    .option("--card <id>", "başarıdan sonra bu kb_conflict kartını kapat");
 
   const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
   const session = program.command("session").description("VLAD oturum adı");

@@ -1,0 +1,53 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S13c); gerçek sunucu çıktısı değil, topoloji notu şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getCard 200 kb_conflict"
+  },
+  "operationId": "getCard",
+  "request": {
+    "path": {
+      "id": "C-20261025-07"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": "C-20261025-07",
+      "kind": "kb_conflict",
+      "project": "vlad",
+      "task": null,
+      "state": "open",
+      "title": "kb promote reddedildi: 2 ihlal",
+      "options": [
+        {
+          "id": "discard",
+          "label": "Reddedilenleri at"
+        },
+        {
+          "id": "manual",
+          "label": "Elle çözeceğim"
+        }
+      ],
+      "answer": null,
+      "kb_conflict": {
+        "key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "reason": "rejected",
+        "source": "promote",
+        "head": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "base": "cccccccccccccccccccccccccccccccccccccccc",
+        "paths": [
+          "src/evil.ts",
+          ".github/workflows/steal.yml"
+        ],
+        "rules": [
+          "path_not_allowed",
+          "dot_entry"
+        ]
+      },
+      "created": "2026-10-25T15:00:00Z",
+      "updated": "2026-10-25T15:00:00Z"
+    }
+  }
+}

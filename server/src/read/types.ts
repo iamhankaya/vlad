@@ -16,6 +16,7 @@ export interface CardData {
   options: { id: string; label: string }[];
   answer: { option?: string; text?: string; by_device: string; at: string } | null;
   action?: { kind: string; repo: string; sha: string; pr?: number; base?: string; ref?: string };
+  kb_conflict?: { key: string; reason: string; source: string; head: string; base: string; paths: string[]; rules?: string[] };
   created: string; updated: string;
 }
 

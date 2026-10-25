@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { def, defWrite, out, type Opts } from "../cli-util.js";
 import { CARD_ACTION_KINDS } from "../kb/index.js";
-import { addCard, answerCard, getCard, KINDS, listCardsWithWarnings, parseFilter, resolveCard, STATES, type Card } from "../cards/store.js";
+import { addCard, answerCard, getCard, KINDS, listCardsWithWarnings, parseFilter, resolveCard, STATES, type Card, type NewCard } from "../cards/store.js";
 
 const cardLine = (c: Card) => `${c.data.id}  ${c.data.state.padEnd(9)} ${c.data.kind.padEnd(14)} ${c.data.project}  ${c.data.title}`;
 
@@ -11,6 +11,8 @@ function parseOption(raw: string, prev: { id: string; label: string }[] = []): {
   return [...prev, { id: raw.slice(0, i), label: raw.slice(i + 1) }];
 }
 
+const collect = (v: string, prev: string[] = []): string[] => [...prev, v];
+
 export function registerCard(program: Command): void {
   const card = program.command("card").description("Karar kartı (mobil: senden beklenenler)");
   defWrite(card, "new", "Kart oluşturur (state open)", (o: Opts) => {
@@ -18,7 +20,20 @@ export function registerCard(program: Command): void {
     const extras = ["pr", "base", "ref", "sha"].filter((k) => o[k] !== undefined);
     if (!hasAction && extras.length) throw new Error(`--${extras.join("/--")} yalnız --action-kind ve --repo ile verilir`);
     if (hasAction && (o.actionKind === undefined || o.repo === undefined)) throw new Error("action için --action-kind ve --repo birlikte gerekli");
+    const conflictFlags = ["conflictKey", "conflictReason", "conflictSource", "conflictHead", "conflictBase", "conflictPath", "conflictRule"];
+    let kbConflict: NewCard["kbConflict"];
+    if (o.kind === "kb_conflict") {
+      if (o.option !== undefined) throw new Error("kb_conflict seçenekleri sabittir; --option verilemez");
+      const missing = ["conflictKey", "conflictReason", "conflictSource", "conflictHead", "conflictBase"].filter((k) => o[k] === undefined);
+      if (missing.length) throw new Error(`kb_conflict için gerekli: ${missing.map((k) => "--" + k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase())).join(", ")}`);
+      kbConflict = {
+        key: o.conflictKey as string, reason: o.conflictReason as never, source: o.conflictSource as never,
+        head: o.conflictHead as string, base: o.conflictBase as string, paths: (o.conflictPath as string[] | undefined) ?? [],
+        ...(o.conflictRule ? { rules: o.conflictRule as string[] } : {}),
+      };
+    } else if (conflictFlags.some((k) => o[k] !== undefined)) throw new Error("--conflict-* yalnız --kind kb_conflict ile verilir");
     const c = addCard({
+      kbConflict,
       kind: o.kind as string, project: o.project as string, title: o.title as string, task: o.task as string | undefined,
       options: o.option as { id: string; label: string }[] | undefined,
       action: hasAction
@@ -30,7 +45,7 @@ export function registerCard(program: Command): void {
           }
         : undefined,
     });
-    out(o, { id: c.data.id }, c.data.id);
+    out(o, { id: c.data.id, created: c.created ?? true }, c.data.id);
   })
     .requiredOption("--kind <tür>", KINDS.join(" | "))
     .requiredOption("--project <slug>", "proje slug'ı")
@@ -42,7 +57,14 @@ export function registerCard(program: Command): void {
     .option("--repo <owner/ad>", "yalnız action_request: projenin kayıtlı repo'su olmalı")
     .option("--pr <no>", "yalnız action_request: PR numarası")
     .option("--base <branch>", "yalnız action_request: taban branch")
-    .option("--ref <ref>", "yalnız action_request: ref");
+    .option("--ref <ref>", "yalnız action_request: ref")
+    .option("--conflict-key <hex64>", "yalnız kb_conflict: çakışma anahtarı (aynı anahtar varsa kart açılmaz, created:false)")
+    .option("--conflict-reason <neden>", "yalnız kb_conflict: merge_conflict | rejected")
+    .option("--conflict-source <kaynak>", "yalnız kb_conflict: kbsync | promote")
+    .option("--conflict-head <sha>", "yalnız kb_conflict: 40 haneli hex head")
+    .option("--conflict-base <sha>", "yalnız kb_conflict: 40 haneli hex main")
+    .option("--conflict-path <yol>", "yalnız kb_conflict: çakışan yol (tekrarlanabilir)", collect)
+    .option("--conflict-rule <id>", "yalnız kb_conflict: ihlal edilen kural (tekrarlanabilir)", collect);
   def(card, "list", "Kartları listeler", (o: Opts) => {
     const { cards, warnings } = listCardsWithWarnings({
       project: o.project as string | undefined,

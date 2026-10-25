@@ -41,7 +41,8 @@ describe("rota envanteri: sınıflandırma tam", () => {
   it("her session+approval ucu matris satırlıdır (onay isteyen uç tek çıkış sayılır)", () => {
     for (const o of OPS.filter((x) => x.auth === "session+approval")) {
       // revokeDevice bilerek 'eylem değil': yalnız azaltır; matriste yerine auth-revoke.test.ts onu sınar.
-      if (o.id === "revokeDevice") continue;
+      // takeoverActive aynı sınıfta: GitHub'a yazmaz, yalnız etkin VLAD kaydını devralır; imza kapısı kbsync-takeover.test.ts'te sınanır.
+      if (o.id === "revokeDevice" || o.id === "takeoverActive") continue;
       expect(exitIds.has(o.id), `${o.id} session+approval ama matriste yok`).toBe(true);
     }
   });

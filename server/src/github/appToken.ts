@@ -41,6 +41,9 @@ type Cached = { token: string; expMs: number };
 export const API_TIMEOUT_MS = 15_000;
 /** The least the approval path needs: write the check-run, merge (contents), read PRs and commit statuses. */
 export const TOKEN_PERMISSIONS = { checks: "write", contents: "write", pull_requests: "read", statuses: "read" } as const;
+/** What the kb promote gate's token carries: write access to the kb repository's contents and nothing else. */
+export const KB_TOKEN_PERMISSIONS = { contents: "write" } as const;
+export type TokenPermissions = Readonly<Record<string, "read" | "write">>;
 
 /**
  * GitHub App JWT -> installation token, cached until 5 minutes before it expires. The installation is looked up per
@@ -91,20 +94,21 @@ export class AppTokenProvider implements TokenProvider {
     }
   }
 
-  async token(repo: string): Promise<string> {
+  /** `perms` default to {@link TOKEN_PERMISSIONS}; a narrower set gets its own cache entry. */
+  async token(repo: string, perms: TokenPermissions = TOKEN_PERMISSIONS): Promise<string> {
     if (!REPO_RE.test(repo)) throw new Error("geçersiz repo");
-    const key = repo; // the token is scoped to this one repository
+    const key = `${repo}|${JSON.stringify(Object.entries(perms).sort())}`; // the token is scoped to this one repository and this permission set
     const hit = this.cache.get(key);
     if (hit && hit.expMs - 5 * 60_000 > this.o.now()) return hit.token;
     // One refresh at a time: concurrent callers share it.
     const running = this.inflight.get(key);
     if (running) return running;
-    const p = this.refresh(repo, key).finally(() => this.inflight.delete(key));
+    const p = this.refresh(repo, key, perms).finally(() => this.inflight.delete(key));
     this.inflight.set(key, p);
     return p;
   }
 
-  private async refresh(repo: string, key: string): Promise<string> {
+  private async refresh(repo: string, key: string, perms: TokenPermissions): Promise<string> {
     const jwt = appJwt(this.o.appId, this.o.privateKey, this.o.now());
     let id = this.o.installationId ?? this.installs.get(repo);
     if (!id) {
@@ -113,7 +117,7 @@ export class AppTokenProvider implements TokenProvider {
       id = String(r.body.id);
       this.installs.set(repo, id);
     }
-    const r = await this.api("POST", `/app/installations/${id}/access_tokens`, jwt, { repositories: [repo.split("/")[1]], permissions: TOKEN_PERMISSIONS });
+    const r = await this.api("POST", `/app/installations/${id}/access_tokens`, jwt, { repositories: [repo.split("/")[1]], permissions: perms });
     if (r.status !== 201 || typeof r.body?.token !== "string" || typeof r.body?.expires_at !== "string") throw new Error(`installation token alınamadı (HTTP ${r.status})`);
     const expMs = Date.parse(r.body.expires_at);
     if (Number.isNaN(expMs)) throw new Error("installation token yanıtı beklenen biçimde değil");

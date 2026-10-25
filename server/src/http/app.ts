@@ -4,7 +4,7 @@ import { ActionService, type ActionPolicy, type ExecuteAction, type ProjectSourc
 import { ActionStore } from "../actions/state.ts";
 import type { GithubReader } from "../actions/github.ts";
 import { DeviceLedger, type DeviceRecord } from "../auth/devices.ts";
-import { verifyEnvelope, verifyRevokeApproval } from "../auth/envelope.ts";
+import { verifyEnvelope, verifyRevokeApproval, verifyTakeoverApproval } from "../auth/envelope.ts";
 import { ensureDir } from "../auth/files.ts";
 import { isP256Spki } from "../auth/keys.ts";
 import { PairingCodes } from "../auth/pairing.ts";
@@ -17,6 +17,7 @@ import { ReadCache } from "../read/cache.ts";
 import { readHandlers, type ReadDeps } from "../read/routes.ts";
 import { registerGrantRoutes } from "./routes-grants.ts";
 import type { GrantConfig, GrantEngine } from "../actions/grants.ts";
+import { activeHandlers, type ActiveDeps } from "./routes-active.ts";
 import { chatHandlers, type ChatDeps } from "./routes-chat.ts";
 import { reject, type ApprovalContext, type ApprovalGuard } from "./approval.ts";
 import { send } from "./errors.ts";
@@ -51,6 +52,8 @@ export type AppConfig = {
   grants?: GrantConfig;
   /** Chat, card answers, change requests (S11b). Without it those routes answer 501; without `runner` only the chat routes do. */
   chat?: ChatDeps;
+  /** Takeover of the active VLAD (S13c). Without it `takeoverActive` answers 501. */
+  active?: ActiveDeps;
   /** Handlers of later slices (and tests) by `operationId`. A `session+approval` route with a handler here needs a guard in `approvalGuards`. */
   extraHandlers?: Record<string, (req: FastifyRequest, reply: FastifyReply) => unknown>;
   /** Approval guards by `operationId` (see `http/approval.ts`). */
@@ -202,6 +205,7 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     ...(actions ? actionHandlers(actions) : {}),
     ...grants.handlers,
     ...(cfg.chat ? chatHandlers(cfg.chat) : {}),
+    ...(cfg.active ? activeHandlers(cfg.active) : {}),
     ...cfg.extraHandlers,
     getHealth: () => ({ ok: true, version: cfg.version }),
 
@@ -244,7 +248,18 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
     return { ok: true };
   };
   // Built-in guards come last: nothing passed in can replace the guard of `revokeDevice` or `approveAction`.
-  const guards: Record<string, ApprovalGuard> = { ...cfg.approvalGuards, revokeDevice: revokeGuard, ...(actions ? { approveAction: approveGuard(actions) } : {}), ...grants.guards };
+  /** The `approval` signature of a takeover (`vlad-takeover/v1`): the same checks as a revocation, over bytes that name only the signer and the time. */
+  const takeoverGuard: ApprovalGuard = (req, caller) => {
+    const b = jsonBody(req);
+    if (!b || !hasOnly(b, ["ts_ms", "signature"]) || !Number.isSafeInteger(b.ts_ms) || typeof b.signature !== "string") return reject(400, "bad_request");
+    const why = verifyTakeoverApproval({ replay }, caller, Number(req.headers["x-vlad-ts"]), b);
+    if (why) {
+      req.log.debug({ reason: why }, "takeover rejected");
+      return reject(401, "unauthorized", undefined, { charge: true });
+    }
+    return { ok: true };
+  };
+  const guards: Record<string, ApprovalGuard> = { ...cfg.approvalGuards, revokeDevice: revokeGuard, ...(cfg.active ? { takeoverActive: takeoverGuard } : {}), ...(actions ? { approveAction: approveGuard(actions) } : {}), ...grants.guards };
 
   app.decorate("vladApprovalGuards", new Set(Object.keys(guards)));
 

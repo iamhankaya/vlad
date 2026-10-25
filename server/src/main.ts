@@ -12,6 +12,9 @@ import { GithubClient, observeWrites } from "./github/client.ts";
 import { RestGithubReader } from "./github/reader.ts";
 import { GithubWriter } from "./github/writer.ts";
 import { buildApp } from "./http/app.ts";
+import { assertKbRepoIsNotCodeRepo, buildKbGate, loadKbSyncConfig, projectRepos } from "./kbsync/config.ts";
+import { kbSyncView } from "./kbsync/home.ts";
+import { createTakeover } from "./kbsync/takeover.ts";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const stateDir = process.env.VLAD_SERVER_STATE_DIR ?? join(homedir(), ".vlad-server");
@@ -41,7 +44,20 @@ if (appId && appKey) {
     }),
   };
 }
-const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, chat: { log: (m) => console.warn(m) }, ...(actions ? { actions, grants: { sweepMs: 60_000, log: (m: string) => console.warn(m) } } : {}) });
+// kb promote gate (S13c): takeover route and the kb_sync/takeover fields of /home. Needs the App token (writes main) and VLAD_KB_REPO.
+let kbActive: Pick<Parameters<typeof buildApp>[0], "active" | "read"> = {};
+const kbCfg = loadKbSyncConfig(process.env, stateDir);
+if (kbCfg && appId && appKey) {
+  // a kb repo that is also a project's code repo would let pushKbMain write a code main without the approval path: refuse to start
+  assertKbRepoIsNotCodeRepo(kbCfg.repo, await projectRepos());
+  const tokens = new AppTokenProvider({ appId, privateKey: appKey, installationId: process.env.VLAD_GITHUB_APP_INSTALLATION_ID });
+  const gate = await buildKbGate({ config: kbCfg, tokens, client: new GithubClient({ tokens }) });
+  kbActive = {
+    active: { takeover: createTakeover(gate.takeoverDeps) },
+    read: { activeExtra: () => kbSyncView({ kbDir: kbCfg.kbDir, stateDir: kbCfg.stateDir, now: Date.now }) },
+  };
+} else if (kbCfg) console.warn("VLAD_KB_REPO ayarlı ama GitHub App yok: devralma ve promote devre dışı");
+const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, chat: { log: (m) => console.warn(m) }, ...kbActive, ...(actions ? { actions, grants: { sweepMs: 60_000, log: (m: string) => console.warn(m) } } : {}) });
 logWrite = (method, path) => app.log.info({ method, path }, "github write");
 if (!actions) app.log.warn("GitHub App yapılandırılmadı (VLAD_GITHUB_APP_ID + anahtar): onay uçları 501");
 

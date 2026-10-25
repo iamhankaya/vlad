@@ -17,7 +17,7 @@ const PLAN: Record<string, "none" | "session" | "session+approval"> = {
   "POST /chat": "session", "GET /chat/history": "session",
   "POST /actions/prepare": "session", "POST /actions/{id}/approve": "session+approval", "POST /actions/{id}/reject": "session",
   "GET /grants": "session", "DELETE /grants/{id}": "session", "POST /grants": "session+approval",
-  "POST /active/takeover": "session",
+  "POST /active/takeover": "session+approval",
   "GET /devices": "session", "PUT /devices/me/fcm": "session", "POST /devices/{id}/revoke": "session+approval",
   "GET /events": "session", "GET /stream": "session",
 };
@@ -47,7 +47,7 @@ describe("server: openapi matches the plan", () => {
     expect(e.properties.error.required).toEqual(["code", "message_tr"]);
   });
   it("error codes and SSE types are the planned sets", () => {
-    expect(doc.components.schemas.ErrorCode.enum).toEqual(["unauthorized", "expired", "head_moved", "ci_not_green", "not_mergeable", "not_delegable", "grant_invalid", "device_revoked", "bad_request", "rate_limited", "quota_hold", "active_elsewhere"]);
+    expect(doc.components.schemas.ErrorCode.enum).toEqual(["unauthorized", "expired", "head_moved", "ci_not_green", "not_mergeable", "not_delegable", "grant_invalid", "device_revoked", "bad_request", "rate_limited", "quota_hold", "active_elsewhere", "kb_conflict", "takeover_in_progress", "kb_sync_unavailable"]);
     expect(doc.components.schemas.EventType.enum).toEqual(["card.opened", "task.state", "worker.progress", "chat.delta", "chat.done", "action.executed", "grant.used", "quota.changed"]);
   });
   it("grants: only merge_phase|merge_final are delegable; non-delegable actions are outside every enum used by grants", () => {

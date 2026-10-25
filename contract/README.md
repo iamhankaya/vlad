@@ -35,6 +35,8 @@ doğrula).
   "grant":     [ { "id", "description", "key_id", "input": {..}, "payload", "signature_b64u", "expect_valid" } ],
   "revoke":    [ { "id", "description", "key_id", "fields": { "device", "signer", "ts_ms" }, "revoke_text", "signature_b64u", "expect_valid" } ],
   "revoke_errors": [ { "id", "fields": {..} } ]                        // revokeBytes hata vermeli
+  "takeover":  [ { "id", "description", "key_id", "fields": { "signer", "ts_ms" }, "takeover_text", "signature_b64u", "expect_valid" } ],
+  "takeover_errors": [ { "id", "fields": {..} } ]                      // takeoverBytes hata vermeli
 }
 ```
 
@@ -45,6 +47,7 @@ Bir tüketicinin yapması gerekenler:
    Zarf vektörleri ek olarak: yol sınıfları (`%2F`, `//`, sondaki `/` ayrı imzalı yoldur; birine atılan imza ötekinde geçersiz), yüksek-S, öndeki sıfır, uzun biçim, sondaki bayt. `envelope_errors`: nonce 21/23 karakter, base64url dışı, boş; küçük harfli yöntem; yolda sorgu; yinelenen sorgu anahtarı.
 3. `challenge`: `challengeBytes(fields)` UTF-8 olarak `challenge_text`'e eşit olmalı; `verify(approval anahtarı, bayt, imza) == expect_valid`. Session anahtarıyla atılmış imza geçersizdir.
 5. `revoke`: `revokeBytes(...)` UTF-8 olarak `revoke_text`'e eşit; `verify(approval anahtarı, bayt, imza) == expect_valid`. `revoke_errors` hata vermeli.
+   `takeover`: `takeoverBytes(...)` UTF-8 olarak `takeover_text`'e eşit; `verify(approval anahtarı, bayt, imza) == expect_valid`. `takeover_errors` hata vermeli.
 4. `grant`: `payload`, `src/grants/store.ts` `grantSigningPayload()` çıktısıdır (tek kaynak; kök `test/contract/grant-signing-vector.test.ts` eşitliği doğrular). `verify(approval anahtarı, payload, imza) == expect_valid`.
 
 ### Kanonik kurallar
@@ -53,6 +56,7 @@ Bir tüketicinin yapması gerekenler:
 - **Sorgu** (`canonicalQuery`): baştaki `?` atılır; `&` ile bölünür, boş parçalar atılır; ilk `=`'te anahtar/değer (`=` yoksa değer boş → `a` = `a=`); `+` boşluk, `%XX` bayt olarak çözülür (UTF-8, katı; bozuk yüzde kodu ya da geçersiz UTF-8 hata); çiftler **anahtara göre, UTF-8 bayt sırasıyla** sıralanır (büyük harf küçükten önce gelir); **yinelenen anahtar (çözümden sonra da, `a` ve `%61`) `bad_query` hatasıdır** (hiçbir uç dizi parametre almaz); yeniden kodlamada yalnız `A-Za-z0-9-._~` açık kalır, kalan her bayt `%XX` (büyük harf hex), boşluk `%20`.
 - **Zarf**: `v1\n<METHOD>\n<yol[?kanonik sorgu]>\n<ts_ms>\n<nonce>\n<sha256hex(ham gövde)>`. Yöntem büyük harf; yol olduğu gibi imzalanır (çözülmez, `?`/`#`/boşluk/kontrol karakteri içermez); `ts_ms` negatif olmayan tam sayı; nonce base64url. Boş gövde `sha256("")`. **Nonce tam 22 karakter base64url (16 bayt)**; kısa/uzun nonce hatadır. Başlıklar: `X-Vlad-Device`, `X-Vlad-Ts`, `X-Vlad-Nonce`, `X-Vlad-Sig`.
 - **Challenge**: `vlad-approve/v1` + `action_id, kind, repo, pr, base, head_sha, task, nonce, exp` satırları (`anahtar=değer`) bu sırayla; değer alfabesi `[A-Za-z0-9._/#:-]` ve alana özgü kalıp; eksik/fazla alan, farklı sıra, satır sonu enjeksiyonu, sonda `\n` reddedilir. `exp` unix saniye; `now >= exp` reddedilir.
+- **Devralma** (`takeoverBytes`, `POST /active/takeover`): `vlad-takeover/v1\nsigner=<çağıran cihaz>\nts=<ts_ms>`, `approval` anahtarıyla; gövde `{ts_ms, signature}`. Kurallar iptalle aynı: `signer == X-Vlad-Device`, `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts)` tek kullanım; ihlal `401`. `session` anahtarıyla imza geçmez.
 - **İptal** (`revokeBytes`): `vlad-revoke/v1\ndevice=<hedef>\nsigner=<çağıran cihaz>\nts=<ts_ms>`, `approval` anahtarıyla. Sunucu kuralları (S6b): `signer == X-Vlad-Device`, `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts)` tek kullanım; ihlal `401`. Gövdede cihaz kimliği yoktur; `POST /actions/{id}/approve` gövdesinde de yoktur: cihaz yalnız `X-Vlad-Device` başlığıdır.
 - **Devir tekilliği/iptali (S10a)** imza baytına değil `id` ve payload hash'ine bağlanır (imza biçimi esnemez ama tekillik anahtarı imza olmamalı; low-S zorunluluğu malleability'yi zaten kapatır).
 - **Devir (v2)**: `vlad-grant/v2\nid=..\nscope=<type>:<ref>\nproject=<slug>\nrepo=<o/r>\naction=..\nconditions=<sıralı,virgüllü>\ncreated=..\nexpires=..\nmax_uses=..`. Sunucu yalnız v2 kabul eder; `grant-valid` gibi v1 vektörleri (`input.payload_version` yok) tarihsel olarak kalır, v2 vektörleri `grant-v2-*` (anahtarlar `approval-g2`, `session-g2`) eklenmiştir.

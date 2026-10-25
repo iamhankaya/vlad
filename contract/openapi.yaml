@@ -459,12 +459,39 @@ paths:
     post:
       operationId: takeoverActive
       tags: [write]
-      summary: Etkin VLAD'ı bu sunucuya devral
-      x-vlad-auth: session
+      summary: Etkin VLAD'ı bu sunucuya devral (`approval` imzalı; senkron, devral, senkron, promote; sonuç main'deki active.md'ye göre)
+      description: |
+        `signature`, `approval` anahtarıyla `vlad-takeover/v1\nsigner=<X-Vlad-Device>\nts=<ts_ms>` baytları üzerindedir.
+        Kurallar: `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts_ms)` tek kullanım; ihlal `401 unauthorized` (vektör: `signing-vectors.json` `takeover`).
+      x-vlad-auth: session+approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TakeoverRequest" }
       responses:
-        "200": { $ref: "#/components/responses/Ok" }
+        "200":
+          description: Devralındı ve main'e indi.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TakeoverResponse" }
+        "202":
+          description: Devralma yazıldı ama main'e henüz inmedi (`reason` neden); sonraki promote'ta `active` ya da `lost` olur.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TakeoverResponse" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
-        "409": { $ref: "#/components/responses/ActiveElsewhere" }
+        "409":
+          description: Etkin VLAD başka makinede (`active_elsewhere`), devralmadan önceki senkronda kb çakışması var (`kb_conflict`) ya da başka bir devralma sürüyor (`takeover_in_progress`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: kb senkronu yanıt vermedi (`kb_sync_unavailable`); devralma yapılmadı.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
   /devices:
     get:
       operationId: listDevices
@@ -656,7 +683,7 @@ components:
     ErrorCode:
       type: string
       description: Hata kodu anahtarı; istemci ve CI yalnız buna bakar.
-      enum: [unauthorized, expired, head_moved, ci_not_green, not_mergeable, not_delegable, grant_invalid, device_revoked, bad_request, rate_limited, quota_hold, active_elsewhere]
+      enum: [unauthorized, expired, head_moved, ci_not_green, not_mergeable, not_delegable, grant_invalid, device_revoked, bad_request, rate_limited, quota_hold, active_elsewhere, kb_conflict, takeover_in_progress, kb_sync_unavailable]
     Error:
       type: object
       additionalProperties: false
@@ -788,6 +815,26 @@ components:
       properties:
         limited: { type: boolean }
         until: { $ref: "#/components/schemas/Timestamp" }
+    TakeoverRequest:
+      type: object
+      description: |
+        İmzalayan cihaz `X-Vlad-Device` başlığıdır (gövdede yoktur). Sunucu kuralları: `ts_ms` == `X-Vlad-Ts`, pencere
+        ±120 sn, `(signer, ts_ms)` tek kullanım, imza `approval` anahtarıyla `vlad-takeover/v1` baytları üzerinde.
+      additionalProperties: false
+      required: [ts_ms, signature]
+      properties:
+        ts_ms: { type: integer, minimum: 0 }
+        signature: { $ref: "#/components/schemas/B64Url" }
+    TakeoverResponse:
+      type: object
+      additionalProperties: false
+      required: [ok, state]
+      properties:
+        ok: { type: boolean, const: true }
+        state: { type: string, enum: [active, pending] }
+        reason:
+          type: string
+          description: "`pending` iken neden (ör. `main_moved`, `merge_conflict`, `rejected`, `active_elsewhere`, `kb_sync_unavailable`)."
     ActiveVlad:
       type: object
       additionalProperties: false
@@ -799,6 +846,27 @@ components:
         mine:
           type: boolean
           description: Etkin VLAD bu sunucu mu.
+        takeover:
+          type: object
+          additionalProperties: false
+          required: [state, at]
+          description: Son devralma isteğinin durumu (sunucu durumundan).
+          properties:
+            state: { type: string, enum: [active, pending, lost] }
+            reason: { type: string }
+            at: { $ref: "#/components/schemas/Timestamp" }
+        kb_sync:
+          type: object
+          additionalProperties: false
+          required: [state, last_ok]
+          description: Sunucu kb'sinin main'e akışı. `blocked`, promote'un bir farkı reddettiği kalıcı durumdur (kart kapatılsa da görünür).
+          properties:
+            state: { type: string, enum: [ok, conflict, blocked, stale] }
+            last_ok:
+              oneOf:
+                - { $ref: "#/components/schemas/Timestamp" }
+                - { type: "null" }
+            card: { $ref: "#/components/schemas/CardId" }
     Home:
       type: object
       additionalProperties: false
@@ -905,8 +973,27 @@ components:
         answer: { $ref: "#/components/schemas/CardAnswer" }
         action: { $ref: "#/components/schemas/CardAction" }
         gate: { $ref: "#/components/schemas/GateInfo" }
+        kb_conflict: { $ref: "#/components/schemas/KbConflict" }
         created: { $ref: "#/components/schemas/Timestamp" }
         updated: { $ref: "#/components/schemas/Timestamp" }
+    KbConflict:
+      type: object
+      additionalProperties: false
+      required: [key, reason, source, head, base, paths]
+      description: "Yalnız `kb_conflict` türündeki kartlarda. `key` aynı çakışmanın aynı kartı bulmasını sağlar; seçenekler sabittir."
+      properties:
+        key: { type: string, pattern: "^[0-9a-f]{64}$" }
+        reason: { type: string, enum: [merge_conflict, rejected] }
+        source: { type: string, enum: [kbsync, promote] }
+        head: { type: string, pattern: "^[0-9a-f]{40}$" }
+        base: { type: string, pattern: "^[0-9a-f]{40}$" }
+        paths:
+          type: array
+          maxItems: 50
+          items: { type: string, maxLength: 200 }
+        rules:
+          type: array
+          items: { type: string, enum: [path_not_allowed, dot_entry, bad_segment, windows_reserved, case_collision, path_too_long, bad_extension, symlink, submodule, mode, rename, delete_not_allowed, too_large, too_many_parents, sensitive_field] }
     CardAnswerRequest:
       type: object
       additionalProperties: false

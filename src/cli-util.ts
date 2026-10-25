@@ -14,6 +14,7 @@ export function fail(e: unknown): never {
   let details: string[] = [];
   if (e instanceof ValidationError) details = e.details;
   else if (e instanceof TransitionError) details = [`izin verilenler: ${TRANSITIONS[e.from].join(", ") || "(yok)"}`];
+  else if (Array.isArray((e as { details?: unknown }).details)) details = (e as { details: string[] }).details;
   if (wantsJson()) process.stderr.write(JSON.stringify({ error, details }) + "\n");
   else {
     error = `hata: ${error}`;
