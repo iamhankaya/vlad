@@ -1,0 +1,66 @@
+[Unit]
+Description=VLAD chat turn (sandboxed claude as vladchat)
+# Accept=yes template: one instance per socket connection
+
+[Service]
+User=vladchat
+Group=vladchat
+# no supplementary groups: the kb is readable through an ACL entry for vladchat (install.sh), never through group vlad
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+UMask=0077
+# VLAD_HOME, VLAD_KB_DIR come from here (no secrets in this file)
+EnvironmentFile=/etc/vlad/vlad.env
+Environment=HOME=/var/lib/vladchat
+ExecStart=/usr/local/libexec/vlad/chat-turn
+# a turn that runs longer than the runner's own timeout (10 min) plus margin is killed with the whole group
+RuntimeMaxSec=660
+KillMode=control-group
+TimeoutStopSec=10
+MemoryMax=1G
+TasksMax=128
+# --- sandbox (F-vlad-024): this agent reads a (partly untrusted) kb and takes text from the internet ---
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+# the kb is readable, never writable; the only writable tree is vladchat's own home (claude login, session files)
+ReadOnlyPaths=@KB_DIR@ @VLAD_HOME@
+ReadWritePaths=/var/lib/vladchat
+# user settings, memory files and the extension directories of the chat agent are root-owned empty placeholders, bind-mounted read-only: nothing the agent writes can persist as instructions, rules, hooks or skills (install.sh creates them).
+# ~/.claude.json holds the login state and stays writable; chat-turn refuses a turn when it carries allowedTools/mcpServers/hooks.
+ReadOnlyPaths=/var/lib/vladchat/CLAUDE.md /var/lib/vladchat/CLAUDE.local.md /var/lib/vladchat/.claude/settings.json /var/lib/vladchat/.claude/settings.local.json /var/lib/vladchat/.claude/CLAUDE.md
+ReadOnlyPaths=/var/lib/vladchat/.claude/agents /var/lib/vladchat/.claude/commands /var/lib/vladchat/.claude/skills /var/lib/vladchat/.claude/rules /var/lib/vladchat/.claude/plugins /var/lib/vladchat/.claude/hooks /var/lib/vladchat/.claude/output-styles
+# nothing the agent writes can be executed; binaries come from the root-owned trees only
+NoExecPaths=/var/lib/vladchat
+ExecPaths=/usr /opt /usr/local
+# the API's state (device ledger, App key, challenges) and the agent's worktrees/credentials do not exist for this unit
+InaccessiblePaths=/var/lib/vladapi -/var/lib/vlad/worktrees /home /root -/run/tailscale -/run/dbus
+# project memory/settings inside the kb (workers write there) are never loaded by the chat turn
+InaccessiblePaths=-@KB_DIR@/.claude -@KB_DIR@/CLAUDE.md -@KB_DIR@/CLAUDE.local.md
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+# network: the model API and DNS only. Loopback (the API on 8787), private ranges, the tailnet (100.64/10) and the metadata service are unreachable.
+# 127.0.0.53 is the resolver stub; allow overrides deny for that one address.
+RestrictAddressFamilies=AF_INET AF_INET6
+IPAddressDeny=localhost link-local multicast 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 fc00::/7 169.254.0.0/16
+IPAddressAllow=127.0.0.53
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources

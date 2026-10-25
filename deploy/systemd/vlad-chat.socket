@@ -1,0 +1,17 @@
+[Unit]
+Description=VLAD chat turn socket (vlad-api connects, systemd starts one sandboxed turn per connection)
+
+[Socket]
+ListenStream=/run/vlad-chat/turn.sock
+# only the API user may connect; the turn itself runs as vladchat (see vlad-chat@.service)
+SocketUser=vladapi
+SocketGroup=vladapi
+SocketMode=0600
+DirectoryMode=0755
+Accept=yes
+# the runner sends one message at a time; more than a couple of connections is a bug or an attack
+MaxConnections=2
+MaxConnectionsPerSource=2
+
+[Install]
+WantedBy=sockets.target

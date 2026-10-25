@@ -167,7 +167,7 @@ export interface ClaudeClientOptions {
 
 /** The chat agent's fixed deny list, applied twice (`--settings` and `--disallowedTools`): a settings file it could edit would not hold. */
 const DENY = [
-  "Bash(git push*)", "Bash(git -C*push*)", "Bash(gh *)", "WebFetch", "Bash(rm:*)", "Bash(rm *)", "Bash(find * -delete*)",
+  "Bash(git push*)", "Bash(git -C*push*)", "Bash(gh *)", "WebFetch", "Bash(rm:*)", "Bash(rm *)", "Bash(find * -delete*)", "Bash(vlad install*)",
   "Bash(python* -c*)", "Bash(node -e*)", "Bash(node *)", "Bash(npx *)", "Bash(curl*)", "Bash(wget*)", "Bash(env *)",
   "Bash(*/var/lib/vladapi*)", "Bash(*~/.vlad-server*)", "Bash(*~/.claude*)", "Bash(cat *.env*)", "Bash(* .env*)",
   "Edit(**/deploy/**)", "Write(**/deploy/**)", "Edit(**/worker-settings.json)", "Write(**/worker-settings.json)",
@@ -198,8 +198,8 @@ export function turnArgs(sessionId: string | null, kbDir: string, protect: strin
   const perm = chatPermissions(kbDir, protect);
   return [
     "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-    "--permission-mode", "auto",
-    "--settings", JSON.stringify({ permissions: perm }),
+    "--permission-mode", "dontAsk",
+    "--settings", JSON.stringify({ permissions: perm, disableAllHooks: true }),
     "--disallowedTools", ...perm.deny,
     ...(sessionId ? ["--resume", sessionId] : []),
   ];

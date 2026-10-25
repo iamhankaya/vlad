@@ -1,0 +1,48 @@
+[Unit]
+Description=VLAD mobile API (loopback only; Tailscale Funnel is the public side)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vladapi
+Group=vladapi
+# kb is shared with the agent side (group vlad, umask 002); vladapi calls the `vlad` CLI with group write
+SupplementaryGroups=vlad
+UMask=0007
+# VLAD_HOME, VLAD_KB_DIR, VLAD_KB_*, VLAD_GITHUB_APP_*, VLAD_SERVER_*, VLAD_CHAT_CLIENT come from here (no secrets)
+EnvironmentFile=/etc/vlad/vlad.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=@VLAD_HOME@/server
+ExecStart=/usr/bin/node @VLAD_HOME@/server/src/main.ts
+Restart=on-failure
+RestartSec=5
+# --- sandbox: holds the GitHub App key and the device ledger ---
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+# code is root-owned and read-only here too (F-vlad-037); cards/answers go through `vlad` into the kb
+ReadWritePaths=/var/lib/vladapi @KB_DIR@
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+MemoryMax=1G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

@@ -20,9 +20,23 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 # the installer replaces @KB_DIR@ with the kb checkout (VLAD_KB_DIR): cards are written there through `vlad card`; nothing else outside the state dir is writable
 ReadWritePaths=/var/lib/vladapi @KB_DIR@
-ProtectHome=read-only
+ProtectHome=yes
 PrivateTmp=yes
 PrivateDevices=yes
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
+# same hardening block as vlad-api.service (promote holds the App token)
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
