@@ -167,6 +167,23 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
   });
 
+  it("security review is tiered: critical/high blocks, lower go to findings, 1 round, exception tied to the finding", () => {
+    for (const f of [".claude/skills/status/SKILL.md", ".claude/skills/delegate/SKILL.md"]) {
+      const t = read(f);
+      expect(t, f).toContain("Kademeli güvenlik kuralı");
+      expect(t, f).toMatch(/kritik\/yüksek[^.]*merge/);
+      expect(t, f).toMatch(/orta\/düşük\/bilgi[^.]*değişiklik turu açılmaz/);
+      expect(t, f).toContain("en çok 1 güvenlik değişiklik turu");
+      expect(t, f).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
+      expect(t, f).toMatch(/kimlik doğrulamasız[^.]*sır[^.]*imza[^.]*yetki yükseltme/);
+      expect(t, f).not.toMatch(/faz auth\/yetki\/oturum\/sır\/veri silmeye dokunuyorsa/);
+    }
+    const claude = read("CLAUDE.md");
+    expect(claude).toMatch(/kritik\/yüksek[^.]*merge[^.]*orta\/düşük/);
+    expect(claude).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
+    expect(claude).not.toMatch(/auth\/yetki\/oturum\/sır\/veri silme ya da/);
+  });
+
   it("roles ask for real response fixtures on external-API work", () => {
     for (const r of ["analyst", "architect", "tester", "developer"]) {
       expect(read(`roles/${r}.md`), r).toMatch(/gerçek (yanıt|fixture)/);
