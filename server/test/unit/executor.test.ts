@@ -31,7 +31,10 @@ class FakeOps implements VladOps {
   launched: string[] = [];
   launchFails = new Set<string>();
   failAudit = 0;
-  constructor(private readonly tasks: Record<string, TaskInfo>) {}
+  private readonly tasks: Record<string, TaskInfo>;
+  constructor(tasks: Record<string, TaskInfo>) {
+    this.tasks = tasks;
+  }
   async addAudit(e: Record<string, unknown>) {
     this.auditCalls++;
     if (this.failAudit > 0) { this.failAudit--; throw new Error("kb meşgul"); }
@@ -478,7 +481,7 @@ describe("server: github App token", () => {
     await Promise.all([p.token(REPO), p.token(REPO), p.token(REPO)]);
     expect(calls).toHaveLength(2);
     const bad = new AppTokenProvider({ appId: "1", privateKey: pem, fetch: async () => ({ status: 401, text: async () => '{"message":"Bad credentials"}' }) });
-    const err = await bad.token(REPO).catch((e) => e as Error);
+    const err = (await bad.token(REPO).catch((e) => e)) as Error;
     expect(err.message).not.toMatch(/BEGIN|eyJ/);
     expect(() => new AppTokenProvider({ appId: "abc", privateKey: pem })).toThrow();
   });
