@@ -157,7 +157,7 @@ export interface TurnClient {
 export interface ClaudeClientOptions {
   /** Executable (default `claude`). Never run through a shell. */
   bin?: string;
-  /** Working directory of every turn (the kb directory): required, absolute, existing. Checked at construction and before each turn. */
+  /** Working directory of every turn = the kb root, the only tree the agent may read: required, absolute, existing. Checked at construction and before each turn. */
   cwd: string;
   /** Absolute directories the agent must not read or write (API state dir, ...); added to the fixed deny list. */
   protect?: string[];
@@ -165,7 +165,6 @@ export interface ClaudeClientOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-const ALLOW = ["Read", "Grep", "Glob", "Bash(vlad *)"];
 /** The chat agent's fixed deny list, applied twice (`--settings` and `--disallowedTools`): a settings file it could edit would not hold. */
 const DENY = [
   "Bash(git push*)", "Bash(git -C*push*)", "Bash(gh *)", "WebFetch", "Bash(rm:*)", "Bash(rm *)", "Bash(find * -delete*)",
@@ -177,20 +176,26 @@ const DENY = [
 const PROTECTED = ["//var/lib/vladapi/**", "~/.vlad-server/**", "~/.claude/**"];
 
 /** Permission rules of a chat turn: read tools and `vlad *` only; everything that edits, publishes or reaches the network is denied. */
-export function chatPermissions(protect: string[] = []): { allow: string[]; deny: string[] } {
-  const dirs = [...PROTECTED, ...protect.map((d) => `/${d.replace(/\/+$/, "")}/**`)];
+const absGlob = (d: string) => `/${d.replace(/\/+$/, "")}/**`; // `//abs/path/**`: the rule syntax for an absolute path
+
+export function chatPermissions(kbDir: string, protect: string[] = []): { allow: string[]; deny: string[] } {
+  // Reads are scoped to the kb root (the turn's cwd): a read of any other absolute path is not allowed.
+  const kb = absGlob(kbDir);
+  const allow = [`Read(${kb})`, `Grep(${kb})`, `Glob(${kb})`, "Bash(vlad *)"];
+  const dirs = [...PROTECTED, ...protect.map(absGlob)];
   const deny = [...DENY];
   for (const d of dirs) for (const t of ["Read", "Edit", "Write"]) deny.push(`${t}(${d})`);
-  return { allow: [...ALLOW], deny };
+  return { allow, deny };
 }
 
 /**
  * The argv of a turn (exported for tests). The prompt is not in it: it goes to stdin, so no text can ever be parsed as an option.
  * Permissions are built here, not read from a file the agent could edit: inline `--settings` JSON plus `--disallowedTools`.
  */
-export function turnArgs(sessionId: string | null, protect: string[] = []): string[] {
+export function turnArgs(sessionId: string | null, kbDir: string, protect: string[] = []): string[] {
+  if (!isAbsolute(kbDir)) throw new Error("chat: kb dir must be absolute");
   if (sessionId !== null && !SESSION_ID.test(sessionId)) throw new Error("invalid session id");
-  const perm = chatPermissions(protect);
+  const perm = chatPermissions(kbDir, protect);
   return [
     "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
     "--permission-mode", "auto",
@@ -222,7 +227,7 @@ export class ClaudeCliClient implements TurnClient {
       if (signal.aborted) return resolve({ kind: "aborted", stderr: "" });
       let argv: string[];
       if (!isDir(this.opts.cwd)) return resolve({ kind: "spawn", error: "cwd" });
-      try { argv = turnArgs(req.sessionId, this.opts.protect); } catch (e) { return resolve({ kind: "spawn", error: (e as Error).message }); }
+      try { argv = turnArgs(req.sessionId, this.opts.cwd, this.opts.protect); } catch (e) { return resolve({ kind: "spawn", error: (e as Error).message }); }
       const child = spawn(this.opts.bin ?? "claude", argv, {
         cwd: this.opts.cwd, env: childEnv(this.opts.env), stdio: ["pipe", "pipe", "pipe"], detached: true, windowsHide: true,
       });

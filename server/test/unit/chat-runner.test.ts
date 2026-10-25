@@ -364,9 +364,10 @@ describe("server: chat turn runner", () => {
       writeFileSync(t.sessions.path, bad);
       expect(t.sessions.get(), bad).toBeNull();
     }
-    expect(() => turnArgs("--evil")).toThrow();
-    expect(() => turnArgs("abcdefgh; rm -rf /")).toThrow();
-    const argv = turnArgs(SID1);
+    expect(() => turnArgs("--evil", "/kb")).toThrow();
+    expect(() => turnArgs("abcdefgh; rm -rf /", "/kb")).toThrow();
+    expect(() => turnArgs(null, "kb")).toThrow(/absolute/);
+    const argv = turnArgs(SID1, "/kb");
     expect(argv.slice(0, 7)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "auto"]);
     expect(argv.slice(-2)).toEqual(["--resume", SID1]);
   });
@@ -377,12 +378,17 @@ describe("server: chat turn runner", () => {
     await t.runner.whenIdle();
     const argv = t.claude.calls()[0]!.argv;
     const settings = JSON.parse(argv[argv.indexOf("--settings") + 1]!);
-    const perm = chatPermissions([join(t.dir, "state")]);
+    const perm = chatPermissions(t.kb, [join(t.dir, "state")]);
     expect(settings).toEqual({ permissions: perm }); // inline JSON, no file path
     expect(argv[argv.indexOf("--settings") + 1]!.startsWith("{")).toBe(true); // JSON text, not a path to a file the agent could edit
     const dis = argv.slice(argv.indexOf("--disallowedTools") + 1, argv.indexOf("--resume") === -1 ? undefined : argv.indexOf("--resume"));
     expect(dis.slice(0, perm.deny.length)).toEqual(perm.deny); // same deny list as a flag: it holds even if settings were lost
-    expect(perm.allow).toEqual(["Read", "Grep", "Glob", "Bash(vlad *)"]);
+    const kbGlob = `/${t.kb}/**`;
+    expect(perm.allow).toEqual([`Read(${kbGlob})`, `Grep(${kbGlob})`, `Glob(${kbGlob})`, "Bash(vlad *)"]);
+    // no unscoped read tool: a read of any absolute path outside the kb has no allow rule
+    expect(perm.allow.filter((a) => /^(Read|Grep|Glob)$/.test(a))).toEqual([]);
+    expect(perm.allow.every((a) => a === "Bash(vlad *)" || a.endsWith(`(${kbGlob})`))).toBe(true);
+    expect(chatPermissions("/srv/other-kb").allow).toContain("Read(//srv/other-kb/**)");
     for (const r of ["Bash(git push*)", "Bash(gh *)", "WebFetch", "Bash(rm:*)", "Bash(find * -delete*)", "Bash(python* -c*)", "Bash(node -e*)", "Bash(curl*)", "Bash(wget*)",
       "Edit(**/deploy/**)", "Write(**/deploy/**)", "Write(**/worker-settings.json)", "Read(//var/lib/vladapi/**)", "Edit(~/.vlad-server/**)", "Write(~/.claude/**)", "Read(~/.claude/**)",
       `Edit(/${join(t.dir, "state")}/**)`, `Read(/${join(t.dir, "state")}/**)`]) {
