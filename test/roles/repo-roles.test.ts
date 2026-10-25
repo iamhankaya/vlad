@@ -274,3 +274,35 @@ describe("ponytail (vendored, developer + game-developer only)", () => {
     expect(c).toMatch(/ponytail.*deneme/);
   });
 });
+
+describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const section = (md: string, heading: string) => {
+    const i = md.indexOf(heading);
+    expect(i, heading).toBeGreaterThanOrEqual(0);
+    const rest = md.slice(i + heading.length);
+    const j = rest.search(/\n#{1,3} /);
+    return j < 0 ? rest : rest.slice(0, j);
+  };
+
+  it("CLAUDE.md: model değiştirme yok, agent model kademeleri, agent kb'ye yazmaz, sonuç taslak", () => {
+    const s = section(read("CLAUDE.md"), "## Orkestratör disiplini");
+    for (const w of ["modelini değiştirmez", "arka plan agent", "`haiku`", "`sonnet`", "`opus`", "kb'ye yazmaz", "taslak", "kullanıcı onayı"]) expect(s, w).toContain(w);
+  });
+
+  it("digest: çok rapor için sonnet taslak agent'ları; 3b onay kontrolü agent talimatında; yazma VLAD'da", () => {
+    const s = section(read(".claude/skills/digest/SKILL.md"), "**Çok rapor (taslak agent'ları):**");
+    for (const w of [">10", "`sonnet`", "taslak", "3b", "kb'ye yazmaz", "vlad"]) expect(s, w).toContain(w);
+  });
+
+  it("status 1b: olay çekme haiku agent'ına verilebilir, ingest VLAD'da; A'nın result-first metni korunur", () => {
+    const s = section(read(".claude/skills/status/SKILL.md"), "### 1b.");
+    for (const w of ["`haiku`", "ham çıktı", "yolunu", "`vlad task ingest`", "kinds=[\"result\"], limit=3"]) expect(s, w).toContain(w);
+  });
+
+  it("status kapı incelemesi: uzun diff/test özeti için sonnet agent seçeneği", () => {
+    const s = section(read(".claude/skills/status/SKILL.md"), "## 2. `awaiting_approval`");
+    expect(s).toMatch(/`sonnet`.*agent|agent.*`sonnet`/);
+  });
+});
