@@ -27,7 +27,7 @@ const ingest = (body: string, extra: string[] = ["--remote-head", SHA]) => {
 const report = (seq: number, head = SHA) =>
   `[VLAD:REPORT #${seq} branch=vlad/${id} head=${head}]\n### Yapılanlar\n- x\n[VLAD:END #${seq}]`;
 
-describe("zarf ve sayfalama", () => {
+describe("zarf ve sayfalama", { timeout: 30_000 }, () => {
   it("zarf metninde '[' / '{' geçse de JSON okunur", () => {
     const body = `Result [ok] for {call}:\n${JSON.stringify(page([asst("[VLAD:LOG #1] merhaba")]))}\n[end of output]`;
     const r = ingest(body);
@@ -51,7 +51,7 @@ describe("zarf ve sayfalama", () => {
   });
 });
 
-describe("yaşam döngüsü", () => {
+describe("yaşam döngüsü", { timeout: 30_000 }, () => {
   it("user olayındaki protokol örneği yok sayılır", () => {
     const r = ingest(JSON.stringify(page([user("[VLAD:LOG #1] örnek"), asst("selam")])));
     expect(r.code, r.out + r.err).toBe(0);

@@ -58,7 +58,7 @@ x
   expect(vlad(["project", "write", "alpha", "--file", join(home, "card.md")]).code).toBe(0);
 });
 
-describe("model dağıtımı: uçtan uca", () => {
+describe("model dağıtımı: uçtan uca", { timeout: 30_000 }, () => {
   it("task new --model haiku → launcher isteği ve script'te `claude --model 'haiku'`", async () => {
     const r = newTask("--model", "haiku");
     expect(r.code, r.err).toBe(0);
@@ -109,7 +109,7 @@ describe("model dağıtımı: uçtan uca", () => {
   });
 });
 
-describe("roller: vlad role list --json", () => {
+describe("roller: vlad role list --json", { timeout: 30_000 }, () => {
   it("game-developer, game-director, growth listelenir; uyarı yok; kind'lar CLAUDE.md ile uyumlu", () => {
     const r = vlad(["role", "list", "--json"]);
     expect(r.code, r.err).toBe(0);

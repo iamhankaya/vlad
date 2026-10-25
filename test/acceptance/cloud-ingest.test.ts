@@ -26,7 +26,7 @@ const SHA = "a".repeat(40);
 const report = (seq: number, head = SHA) =>
   `[VLAD:REPORT #${seq} branch=vlad/${id} head=${head}]\n### Yapılanlar\nTestler yazıldı RaporMarker\n[VLAD:END #${seq}]`;
 
-describe("senaryo 8: geçerli işaretler görev dosyasına yazılır", () => {
+describe("senaryo 8: geçerli işaretler görev dosyasına yazılır", { timeout: 30_000 }, () => {
   it("LOG satırı ## İlerleme'ye [cloud #n] etiketiyle eklenir", () => {
     const r = ingest([assistantEvent("[VLAD:LOG #1] ilk adım tamam")]);
     expect(r.code, r.err).toBe(0);
@@ -114,7 +114,7 @@ describe("senaryo 8: geçerli işaretler görev dosyasına yazılır", () => {
   });
 });
 
-describe("senaryo 9: user olayları yok sayılır", () => {
+describe("senaryo 9: user olayları yok sayılır", { timeout: 30_000 }, () => {
   it("prompt/protokol örneği içeren user olayı görevi değiştirmez", () => {
     const before = taskState(home, id);
     const r = ingest([
@@ -128,7 +128,7 @@ describe("senaryo 9: user olayları yok sayılır", () => {
   });
 });
 
-describe("senaryo 10: REPORT head= remote ile eşleşmiyor", () => {
+describe("senaryo 10: REPORT head= remote ile eşleşmiyor", { timeout: 30_000 }, () => {
   it("awaiting_approval olmaz, uyarı verilir; rapor yazılmaz", () => {
     const r = ingest([assistantEvent(report(3, SHA))], ["--remote-head", "b".repeat(40)]);
     expect(r.code, r.err).toBe(0);

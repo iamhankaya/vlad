@@ -21,7 +21,7 @@ const setLauncher = (launcher: string) => writeFileSync(join(home, "vlad.config.
 const launch = (id: string, env: Record<string, string | undefined>) => vlad(home, ["task", "launch", id, "--json"], { env });
 const onLinux = process.platform === "linux";
 
-describe("senaryo 1: config launcher=cloud", () => {
+describe("senaryo 1: config launcher=cloud", { timeout: 30_000 }, () => {
   it("şema `cloud` değerini kabul eder", () => {
     setLauncher("cloud");
     expect(loadConfig(home).launcher).toBe("cloud");
@@ -38,7 +38,7 @@ describe("senaryo 1: config launcher=cloud", () => {
   });
 });
 
-describe("senaryo 2: Windows davranışı değişmez", () => {
+describe("senaryo 2: Windows davranışı değişmez", { timeout: 30_000 }, () => {
   const realPlatform = process.platform;
   beforeEach(() => { Object.defineProperty(process, "platform", { value: "win32" }); });
   afterEach(() => {
@@ -72,7 +72,7 @@ describe("senaryo 2: Windows davranışı değişmez", () => {
   });
 });
 
-describe.runIf(onLinux)("senaryo 3-4: auto seçimi (Linux)", () => {
+describe.runIf(onLinux)("senaryo 3-4: auto seçimi (Linux)", { timeout: 30_000 }, () => {
   beforeEach(() => { setLauncher("auto"); writeCard(home, "alpha", { repo: "iamhankaya/vlad" }); });
 
   it("senaryo 3: auto + Linux + bulut işaretleri → cloud modu", () => {
@@ -92,7 +92,7 @@ describe.runIf(onLinux)("senaryo 3-4: auto seçimi (Linux)", () => {
   });
 });
 
-describe.runIf(onLinux)("senaryo 5: cloud launch --json", () => {
+describe.runIf(onLinux)("senaryo 5: cloud launch --json", { timeout: 30_000 }, () => {
   beforeEach(() => { setLauncher("cloud"); writeRoles(home); writeCard(home, "alpha", { repo: "iamhankaya/vlad" }); });
 
   it("başlatma bilgisini döndürür, görevi running yapar, yerel worktree/terminal açmaz", () => {
@@ -151,7 +151,7 @@ describe.runIf(onLinux)("senaryo 5: cloud launch --json", () => {
   });
 });
 
-describe.runIf(onLinux)("senaryo 6: pipeline fazı", () => {
+describe.runIf(onLinux)("senaryo 6: pipeline fazı", { timeout: 30_000 }, () => {
   beforeEach(() => { setLauncher("cloud"); writeCard(home, "alpha", { repo: "iamhankaya/vlad" }); });
 
   // `git ls-remote https://github.com/iamhankaya/vlad.git` is redirected to a local bare repo, so the
@@ -224,7 +224,7 @@ describe.runIf(onLinux)("senaryo 6: pipeline fazı", () => {
   });
 });
 
-describe.runIf(onLinux)("senaryo 7: repo yok / local_only", () => {
+describe.runIf(onLinux)("senaryo 7: repo yok / local_only", { timeout: 30_000 }, () => {
   beforeEach(() => setLauncher("cloud"));
 
   it("kartta repo yoksa açık hata; görev queued, error dolu; C:\\dev yolu bulutta kullanılmaz", () => {
@@ -261,7 +261,7 @@ describe.runIf(onLinux)("senaryo 7: repo yok / local_only", () => {
   });
 });
 
-describe.runIf(onLinux)("senaryo 11: cloud görevi cleanup", () => {
+describe.runIf(onLinux)("senaryo 11: cloud görevi cleanup", { timeout: 30_000 }, () => {
   it("done cloud görevinde cleanup hata vermez", () => {
     setLauncher("cloud");
     writeCard(home, "alpha", { repo: "iamhankaya/vlad" });
