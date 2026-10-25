@@ -166,6 +166,11 @@ export class ChatTurnRunner {
     return { chat_id: rec.chat_id, duplicate: false, status: rec.status };
   }
 
+  /** Whether a message with this `client_msg_id` was already accepted (a repeat is answered from the log). */
+  hasClientId(clientMsgId: string): boolean {
+    return this.byClientId.has(clientMsgId);
+  }
+
   state(): ChatState {
     const now = this.opts.now();
     const status: RunnerStatus = this.isDown() ? "session_down" : this.running ? "busy" : this.retryAt !== null && now < this.retryAt ? "backoff" : "idle";
