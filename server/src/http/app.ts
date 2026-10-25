@@ -17,6 +17,7 @@ import { ReadCache } from "../read/cache.ts";
 import { readHandlers, type ReadDeps } from "../read/routes.ts";
 import { registerGrantRoutes } from "./routes-grants.ts";
 import type { GrantConfig, GrantEngine } from "../actions/grants.ts";
+import { chatHandlers, type ChatDeps } from "./routes-chat.ts";
 import { reject, type ApprovalContext, type ApprovalGuard } from "./approval.ts";
 import { send } from "./errors.ts";
 import { ROUTES, type RouteSpec } from "./routes.generated.ts";
@@ -48,6 +49,8 @@ export type AppConfig = {
   actions?: { reader: GithubReader; tasks: TaskSource; projects: ProjectSource; execute: ExecuteAction; /** Default `<stateDir>/challenges`. */ dir?: string; sleep?: (ms: number) => Promise<void>; policy?: ActionPolicy };
   /** Grant engine (S10a): kb mirror, live checks, sweep. Only active together with `actions`. */
   grants?: GrantConfig;
+  /** Chat, card answers, change requests (S11b). Without it those routes answer 501; without `runner` only the chat routes do. */
+  chat?: ChatDeps;
   /** Handlers of later slices (and tests) by `operationId`. A `session+approval` route with a handler here needs a guard in `approvalGuards`. */
   extraHandlers?: Record<string, (req: FastifyRequest, reply: FastifyReply) => unknown>;
   /** Approval guards by `operationId` (see `http/approval.ts`). */
@@ -194,10 +197,11 @@ export function buildApp(cfg: AppConfig): FastifyInstance {
 
   type Handler = (req: FastifyRequest, reply: FastifyReply) => unknown;
   const handlers: Record<string, Handler> = {
-    ...readHandlers({ ...cfg.read, cache, seq: cfg.read?.seq ?? (() => ledger.lastSeq) }),
+    ...readHandlers({ ...cfg.read, warnings: () => [...(cfg.read?.warnings?.() ?? []), ...(cfg.chat?.runner?.warnings() ?? [])], cache, seq: cfg.read?.seq ?? (() => ledger.lastSeq) }),
     ...eventHandlers(ledger, hub),
     ...(actions ? actionHandlers(actions) : {}),
     ...grants.handlers,
+    ...(cfg.chat ? chatHandlers(cfg.chat) : {}),
     ...cfg.extraHandlers,
     getHealth: () => ({ ok: true, version: cfg.version }),
 
