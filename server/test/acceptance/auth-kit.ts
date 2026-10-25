@@ -132,7 +132,17 @@ export async function call(r: Rig, p: Phone, method: string, target: string, bod
 }
 
 /** İstek zarfı kabul edildi mi: auth reddi (400/401/429) dışında herhangi bir yanıt (uçlar henüz taslak olabilir). */
-export const passedAuth = (status: number) => ![400, 401, 429].includes(status);
+export const passedAuth = (status: number, body?: string) => {
+  if (status === 401 || status === 429) return false;
+  if (status !== 400) return true;
+  // 400: yalnız işleyici kaynaklıysa (details.field/reason) auth geçmiştir; zarf/imza aşaması 400'ü ayrıntısızdır.
+  try {
+    const d = JSON.parse(body ?? "")?.error?.details;
+    return typeof d?.field === "string" || typeof d?.reason === "string";
+  } catch {
+    return false;
+  }
+};
 
 export const GOOD_TARGET = "/v1/home";
 
@@ -164,3 +174,19 @@ export const errCode = (body: string): string | undefined => {
     return undefined;
   }
 };
+
+/** Akış (SSE) uçları için: gerçek soketle bağlanır, yalnız durum satırı ve başlıkları okur, bağlantıyı keser (gövde beklenmez). */
+export async function headersOnly(app: FastifyInstance, target: string, headers: Record<string, string>): Promise<{ status: number; headers: http.IncomingHttpHeaders }> {
+  if (!app.server.listening) await app.listen({ port: 0, host: "127.0.0.1" });
+  const { port } = app.server.address() as AddressInfo;
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port, method: "GET", path: target, headers }, (res) => {
+      const out = { status: res.statusCode ?? 0, headers: res.headers };
+      res.destroy();
+      req.destroy();
+      resolve(out);
+    });
+    req.on("error", (e) => (req.destroyed ? undefined : reject(e)));
+    req.end();
+  });
+}

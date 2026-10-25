@@ -35,9 +35,7 @@ describe("imza vektörleri HTTP üzerinden (signing-vectors.json v2)", () => {
         headers: { "x-vlad-device": phone.id, "x-vlad-ts": String(v.input.ts_ms), "x-vlad-nonce": v.input.nonce, "x-vlad-sig": v.signature_b64u, ...(body.length ? { "content-type": "application/json" } : {}) },
         ...(body.length ? { body: body.toString("utf8") } : {}),
       });
-      // Gerçek işleyicisi olan uçlar kendi alan doğrulamasıyla 400 (details.field) dönebilir; bu auth'un geçtiğini gösterir.
-      const handler400 = res.status === 400 && typeof JSON.parse(res.body)?.error?.details?.field === "string";
-      if (v.expect_valid) expect(passedAuth(res.status) || handler400, `${res.status} ${res.body}`).toBe(true);
+      if (v.expect_valid) expect(passedAuth(res.status, res.body), `${res.status} ${res.body}`).toBe(true);
       else {
         expect(res.status).toBe(401);
         expect(JSON.parse(res.body)).toEqual(UNAUTH_BODY);

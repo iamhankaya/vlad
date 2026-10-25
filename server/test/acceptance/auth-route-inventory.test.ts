@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { CONTRACT, Phone, call, pair, passedAuth, rawHttp, rig, type Rig } from "./auth-kit.ts";
+import { CONTRACT, Phone, call, headersOnly, pair, passedAuth, rawHttp, rig, type Rig } from "./auth-kit.ts";
 
 const doc: any = parse(readFileSync(join(CONTRACT, "openapi.yaml"), "utf8"));
 const METHODS = ["get", "post", "put", "delete", "patch"];
@@ -67,7 +67,16 @@ describe("openapi envanteri", () => {
       const p = await pair(r);
       const target = concrete(o.path, o.path.includes("/devices/") ? p.id : undefined);
       const hasBody = o.method !== "GET" && o.method !== "DELETE";
+      if (o.id === "streamEvents") {
+        // SSE yanıtı hiç bitmez: yalnız durum satırı + başlıklar okunur, sonra bağlantı kesilir.
+        const h = await headersOnly(r.app, target, p.headers(r.clock, "GET", target));
+        expect([401, 429], `${h.status}`).not.toContain(h.status);
+        expect(h.status).toBe(200);
+        expect(String(h.headers["content-type"])).toMatch(/^text\/event-stream/);
+        return;
+      }
       const res = await call(r, p, o.method, target, hasBody ? "{}" : undefined);
+      // Gövde "{}" olduğundan işleyici 400 (gövde doğrulaması) dönebilir; zarf reddi yalnız 401/429'dur (400 ayrıntısız auth hataları ayrı testlerde).
       expect([401, 429], `${res.statusCode} ${res.body}`).not.toContain(res.statusCode);
     });
   }
