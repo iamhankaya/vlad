@@ -68,6 +68,7 @@ describe("openapi envanteri", () => {
       const target = concrete(o.path, o.path.includes("/devices/") ? p.id : undefined);
       const hasBody = o.method !== "GET" && o.method !== "DELETE";
       const res = await call(r, p, o.method, target, hasBody ? "{}" : undefined);
+      // Gövde "{}" olduğundan işleyici 400 (gövde doğrulaması) dönebilir; zarf reddi yalnız 401/429'dur (400 ayrıntısız auth hataları ayrı testlerde).
       expect([401, 429], `${res.statusCode} ${res.body}`).not.toContain(res.statusCode);
     });
   }

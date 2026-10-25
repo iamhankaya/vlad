@@ -132,7 +132,17 @@ export async function call(r: Rig, p: Phone, method: string, target: string, bod
 }
 
 /** İstek zarfı kabul edildi mi: auth reddi (400/401/429) dışında herhangi bir yanıt (uçlar henüz taslak olabilir). */
-export const passedAuth = (status: number) => ![400, 401, 429].includes(status);
+export const passedAuth = (status: number, body?: string) => {
+  if (status === 401 || status === 429) return false;
+  if (status !== 400) return true;
+  // 400: yalnız işleyici kaynaklıysa (details.field/reason) auth geçmiştir; zarf/imza aşaması 400'ü ayrıntısızdır.
+  try {
+    const d = JSON.parse(body ?? "")?.error?.details;
+    return typeof d?.field === "string" || typeof d?.reason === "string";
+  } catch {
+    return false;
+  }
+};
 
 export const GOOD_TARGET = "/v1/home";
 

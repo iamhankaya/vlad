@@ -42,7 +42,7 @@ describe("eşleşmemiş/eşleşmiş ayrı kovalar", () => {
     const codes: number[] = [];
     for (let i = 0; i < 10; i++) codes.push((await call(r, p, "GET", GOOD_TARGET)).statusCode);
     expect(codes.filter((c) => c === 429).length).toBeGreaterThan(0);
-    expect(codes.slice(0, 4).every(passedAuth)).toBe(true);
+    expect(codes.slice(0, 4).every((c) => passedAuth(c))).toBe(true);
     expect((await r.app.inject({ method: "GET", url: GOOD_TARGET })).statusCode).toBe(401);
   });
 
