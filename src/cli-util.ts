@@ -46,6 +46,23 @@ export function def(parent: Command, spec: string, desc: string, fn: (...a: any[
   return c;
 }
 
+const WORKER_TASK_ID = /^T\d{8}-\d{2,}$/;
+/** What a worker (VLAD_TASK_ID set) may write: its own task's log/ask/report/progress/pr, nothing else. */
+const WORKER_CMDS = new Set(["task log", "task ask", "task report", "task progress", "task pr"]);
+
+/**
+ * Worker scope (security review): with VLAD_TASK_ID set a write command must be one of WORKER_CMDS and name that
+ * same task; admin commands (quota, task set, grant, card answer, ...) and other tasks are refused. Defense in
+ * depth next to the settings allowlist: a worker environment is ours, but nothing else stops `vlad quota set`.
+ */
+export function assertWorkerScope(cmd: string, firstArg: unknown, env: NodeJS.ProcessEnv = process.env): void {
+  const tid = env.VLAD_TASK_ID?.trim();
+  if (!tid) return;
+  if (!WORKER_TASK_ID.test(tid)) throw new Error(`VLAD_TASK_ID geçersiz: ${JSON.stringify(tid)}`);
+  if (!WORKER_CMDS.has(cmd)) throw new Error(`worker bağlamında (VLAD_TASK_ID=${tid}) \`vlad ${cmd}\` yasak; yalnızca kendi görevine ${[...WORKER_CMDS].join("|")}`);
+  if (firstArg !== tid) throw new Error(`worker bağlamında yalnızca kendi görevine (${tid}) yazılır: ${JSON.stringify(firstArg)}`);
+}
+
 /**
  * Like def, for commands that write under kb/: the action runs inside withKbLock, after the active-VLAD
  * write guard (design §13). `guard`: "full" (default), "worker" (a running worker's own log|ask|report may
@@ -60,6 +77,7 @@ export function defWrite(
 ): Command {
   return def(parent, spec, desc, (...args: any[]) =>
     withKbLock(() => {
+      assertWorkerScope(`${parent.name()} ${spec.split(/\s/)[0]}`, args[0]);
       const mode = typeof opts.guard === "function" ? opts.guard(args[args.length - 2] ?? {}) : (opts.guard ?? "full");
       // a worker command's first argument is the task id it writes to
       for (const w of activeGuard(mode, { taskId: typeof args[0] === "string" ? args[0] : undefined })) process.stderr.write(`uyarı: ${w}\n`);

@@ -1,12 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
-import { buildShellScript } from "../../src/launcher/index.js";
+import { buildShellScript, defaultSettingsPath, renderSettings } from "../../src/launcher/index.js";
+import { assertWorkerScope } from "../../src/cli-util.js";
 import { readQuota } from "../../src/quota/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import {
@@ -130,8 +131,55 @@ describe("tasks: relaunch", () => {
     // the launch script quotes the id and tees through the tap
     const s = buildShellScript({ taskId: id, cwd: "/w", prompt: "x", env: {}, title: "t", resumeSessionId: SID, tap: true }, "/p", "/s", { PATH: "/bin", HOME: "/h" });
     expect(s).toContain(`--resume '${SID}'`);
-    expect(s).toContain(`| vlad worker tap '${id}'`);
+    expect(s).toContain(`| env -i `);
+    expect(s).toContain(`'${process.execPath}' `);
+    expect(s).toMatch(/cli\.js' worker tap 'T[0-9-]+'/);
+    expect(s).not.toContain("| vlad "); // absolute path, no PATH lookup
     expect(s).not.toMatch(/^exec /m);
+  });
+});
+
+describe("security review fixes", () => {
+  it("tasks: relaunch refuses a task without host", async () => {
+    const id = await running();
+    setSid(id, SID);
+    const t = getTask(id); t.data.host = null; saveTask(t);
+    await expect(relaunchTask(id, { launcher: fake() })).rejects.toThrow(/host kayıtlı değil/);
+  });
+  it("launcher: tap limit until is clamped to 24h and names tap", async () => {
+    const id = await running();
+    const now = new Date(1792899000 * 1000 - 30 * 24 * 3_600_000); // reset is 30 days away
+    await tapStream(id, Readable.from([fixture("limit-event.synthetic.jsonl")]), { now: () => now });
+    const q = readQuota(now.getTime());
+    expect(q.quota.until).toBe(new Date(now.getTime() + 24 * 3_600_000).toISOString());
+    expect(q.record?.reason).toMatch(/^tap T.*24 saate kırpıldı/);
+  });
+  it("launcher: worker log is 0600/0700 and capped", async () => {
+    const id = await running();
+    const warns: string[] = [];
+    await tapStream(id, Readable.from([fixture("single-turn.jsonl")]), { warn: (m) => warns.push(m), maxLogBytes: 500 });
+    expect(statSync(workerLogFile(id)).mode & 0o777).toBe(0o600);
+    expect(statSync(dirname(workerLogFile(id))).mode & 0o777).toBe(0o700);
+    expect(statSync(workerLogFile(id)).size).toBeLessThanOrEqual(500);
+    expect(warns.filter((w) => /günlük sınırı/.test(w))).toHaveLength(1);
+  });
+  it("launcher: settings copy denies Edit/Write on VLAD_HOME and kb; only own-task vlad commands allowed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "vlad-set-"));
+    const out = JSON.parse(renderSettings(defaultSettingsPath(), dir, ["/srv/vlad", "/srv/vlad/kb"])) as { permissions: { allow: string[]; deny: string[] } };
+    for (const tool of ["Edit", "Write"]) for (const p of ["/srv/vlad", "/srv/vlad/kb"]) expect(out.permissions.deny).toContain(`${tool}(/${p}/**)`);
+    expect(out.permissions.allow).not.toContain("Bash(vlad *)");
+    expect(out.permissions.allow.filter((a) => a.startsWith("Bash(vlad "))).toEqual([
+      "Bash(vlad task log *)", "Bash(vlad task ask *)", "Bash(vlad task report *)", "Bash(vlad task progress *)",
+    ]);
+  });
+  it("records: worker scope rejects admin commands and other tasks", () => {
+    const env = { VLAD_TASK_ID: "T20261025-59" };
+    for (const c of ["task log", "task ask", "task report", "task progress", "task pr"]) expect(() => assertWorkerScope(c, "T20261025-59", env)).not.toThrow();
+    for (const c of ["quota set", "quota clear", "task set", "task answer", "card answer", "project note", "kb commit", "status"]) {
+      expect(() => assertWorkerScope(c, "T20261025-59", env)).toThrow(/yasak/);
+    }
+    expect(() => assertWorkerScope("task log", "T20261025-58", env)).toThrow(/kendi görevine/);
+    expect(() => assertWorkerScope("quota set", undefined, {})).not.toThrow(); // no VLAD_TASK_ID: VLAD itself
   });
 });
 

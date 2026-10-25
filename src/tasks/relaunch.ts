@@ -40,7 +40,8 @@ export async function relaunchTask(id: string, o: { launcher: Launcher }): Promi
     throw new Error(`yalnızca running/stalled görev yeniden başlatılır (${t.data.state}): ${id}`);
   }
   const here = currentMachine();
-  if (t.data.host && t.data.host !== here) {
+  if (!t.data.host) throw new Error(`görev ${id} yeniden başlatılamaz: host kayıtlı değil (bu makinede başlatıldığı bilinmiyor)`);
+  if (t.data.host !== here) {
     throw new Error(`görev ${id} başka makinede başlatılmış (${t.data.host}); bu makine: ${here}`);
   }
   const sid = t.data.session_id?.trim();
