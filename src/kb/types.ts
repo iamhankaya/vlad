@@ -12,7 +12,7 @@ export type TaskState =
 export type ProjectStatus = "active" | "paused" | "archived";
 /** Who can reach the system: sizes the architect's `### Sistem tasarımı`. Unrelated to `local_only`. */
 export type Exposure = "local" | "network" | "internet";
-export type Launcher = "auto" | "wt" | "powershell" | "cloud";
+export type Launcher = "auto" | "wt" | "powershell" | "cloud" | "process";
 
 /** kb/projects/<slug>.md frontmatter (spec 5.1) */
 export interface ProjectCard {

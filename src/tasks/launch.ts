@@ -7,7 +7,7 @@ import { currentMachine, kbPaths, readDoc, resolveProjectPath } from "../kb/inde
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
-import { closeWorkerWindow } from "../launcher/index.js";
+import { closeWorker } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
 import type { Role } from "../roles/store.js";
 import { getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
@@ -163,7 +163,7 @@ export function cleanupTask(
   if (!wt) return;
   if (existsSync(wt)) {
     try {
-      (o.closeWorker ?? closeWorkerWindow)(id);
+      (o.closeWorker ?? closeWorker)(id);
     } catch {
       /* a window that could not be closed is reported by the removal below */
     }
