@@ -18,9 +18,9 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 ## 1. Oku
 
 - Görev dosyası: `## Tanım`, `## Kabul kriterleri`, `## Bağlam`, frontmatter'daki `project`, `autonomy`, `branch`.
-- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`. Kartın `## Çalışma notları` bölümü bu projede öğrenilmiş derslerdir (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
+- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md` (`Read` ile; kb ayrı repodur, kök `VLAD_KB_DIR` ya da `vlad.config.json`'daki `kbDir` ile çözülür, ayarsızsa `<VLAD_HOME>/kb`). Kartın `gate` alanı (projenin tek kapı komutu) ve `## Çalışma notları` bölümü kart dosyasından okunur; bu bilgiler için CLI listeleme komutu kullanılmaz. Çalışma notları bu projede öğrenilmiş derslerdir (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
 - Rol: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku (başlangıç prompt'u da bu dosyayı söyler). Rolün sorumluluk, yetki ve çıktı kuralları bu protokolle birlikte geçerlidir; rol kuralı ile `autonomy` kuralı çelişirse **daha kısıtlayıcı** olan uygulanır. Kapanış raporunu rolün `## Çıktı` bölümündeki başlıklarla yaz (adım 6'daki başlıklar her durumda bulunur).
-- Pipeline fazı: frontmatter'da `parent` doluysa bir pipeline'ın `phase` fazısın. `vlad task list --parent <parent> --json` ile kardeş fazları gör; `depends_on`'daki her görevin `<VLAD_HOME>/kb/tasks/<dep-id>.md` dosyasındaki `## Kapanış raporu`'nu oku — fazın girdisi (spec, plan, test matrisi…) budur. Danışma fazlarının (`phase: danışma`) raporları da bağlamdır.
+- Pipeline fazı: frontmatter'da `parent` doluysa bir pipeline'ın `phase` fazısın. `<VLAD_HOME>/kb/tasks/` altındaki `parent` alanı aynı olan görev dosyalarını `Read`/`Grep` ile tarayarak kardeş fazları gör; `depends_on`'daki her görevin `<VLAD_HOME>/kb/tasks/<dep-id>.md` dosyasındaki `## Kapanış raporu`'nu oku — fazın girdisi (spec, plan, test matrisi…) budur. Danışma fazlarının (`phase: danışma`) raporları da bağlamdır.
 - Bu dosyaları **elle düzenleme**; yalnızca okursun.
 - Çalıştığın klasör görevin worktree'sidir ve `vlad/<id>` branch'indesin (`git branch --show-current` ile doğrula). Pipeline fazındaysan branch'in ana branch'ten değil entegrasyon branch'i `vlad/<parent>`'tan açıldı; diff ve log tabanın odur (`git log --oneline vlad/<parent>..HEAD`).
 
@@ -64,7 +64,7 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle.
 
 **Entegrasyon öncesi kontrol (pipeline fazı, `parent` dolu):** rapordan önce entegrasyon branch'ini (`vlad/<parent>`) kendi branch'ine merge et (`git merge vlad/<parent>`; bu, kendi branch'ine güncel tabanı almaktır, entegrasyon branch'ine merge değildir), sonra lint + `gate` (yoksa tam test/build) koş. Çakışma veya kırmızı varsa kendi kapsamındaysa düzelt; değilse (başka fazın kodu, ortam) çözmeye çalışma, raporun `### Test sonuçları`'na kanıtıyla ve `### Açık noktalar`'a `- [yüksek] entegrasyon kontrolü kırmızı — …` olarak yaz. Merge'ü geri alma gerekirse `git merge --abort`. Faz kapısında sürpriz çıkmasın diye kapıdan önce koşulur.
 
-Rapordan önce proje kartında `gate` alanı varsa (`vlad project list --json` → `gate`) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
+Rapordan önce proje kartında `gate` alanı varsa (kart dosyasında `gate`, `Read` ile) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
 
 Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
@@ -82,13 +82,24 @@ vlad task report <id> --file <rapor.md>
 ```
 Görev `awaiting_approval` olur. Ardından **bildirim gönder** (adım 7).
 
+## Faz PR'ı (sunucu modu)
+
+Sunucu modunda (Linux, `systemd-run` çalışanı) görev tamamlanınca PR'ı VLAD değil çalışan açar; kapanış raporundan **önce** şu sırayı uygula:
+
+1. `git push -u origin vlad/<id>` (yalnız kendi branch'in).
+2. PR aç: `gh pr create --base <taban> --head vlad/<id>`. Taban kuralı: pipeline fazında (`parent` dolu) taban entegrasyon branch'i `vlad/<çatı-id>`; son kapıda (çatı görev ya da `parent`'sız görev) taban projenin ana branch'i.
+3. `vlad task pr <id> --number <N> --repo <owner/ad> --base <taban> [--url <PR adresi>]` ile PR'ı göreve kaydet.
+4. `vlad task report <id> --file <rapor.md>` (adım 6).
+
+PR açılamazsa (yetki, ağ) `vlad task pr` **çalıştırma**; nedenini raporun `### Açık noktalar`'ına yaz ve raporla devam et. Merge etme.
+
 ## 7. VLAD'a bildirim
 
 Durum değiştiğinde (soru sordun, rapor yazdın):
-1. `vlad session name` çalıştır ve `ListAgents` çalıştır.
+1. VLAD'ın kayıtlı oturum adını `<kb>/vlad-session.txt` dosyasından `Read` ile oku ve `ListAgents` çalıştır.
 2. Hedef adı seç:
-   - `vlad session name`'in döndürdüğü ad `ListAgents` listesinde varsa onu kullan.
-   - Yoksa (komut başarısız veya ad listede değil): `ListAgents`'ta adı `vlad-` ile başlayan session'lara bak (VLAD `C:\dev\vlad`'da çalışır). Tam olarak bir tane varsa onu kullan.
+   - Dosyadaki ad `ListAgents` listesinde varsa onu kullan.
+   - Yoksa (dosya yok veya ad listede değil): `ListAgents`'ta adı `vlad-` ile başlayan session'lara bak (VLAD `C:\dev\vlad`'da çalışır). Tam olarak bir tane varsa onu kullan.
    - Hiçbiri yoksa veya birden fazla `vlad-` session'ı varsa bildirimi **sessizce atla**.
 3. Hedef varsa:
    `SendMessage({to: "<ad>", message: "VLAD görev <id>: <state> — görev dosyasına bak"})`
@@ -98,7 +109,7 @@ Bildirim yalnızca bir dürtmedir; asıl bilgi görev dosyasındadır. Bildirim 
 
 ## Hata durumu
 
-Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad task log <id> "…"` ile yaz ve `vlad task set <id> failed` çalıştır, sonra bildirim gönder.
+Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad task log <id> "…"` ile yaz, sonra `failed` durumuyla bildirim gönder (durumu VLAD yazar).
 
 ## Bulut modu (`create_session` ile açılan çalışan)
 
