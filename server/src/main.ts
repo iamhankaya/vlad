@@ -41,7 +41,7 @@ if (appId && appKey) {
     }),
   };
 }
-const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, ...(actions ? { actions } : {}) });
+const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, chat: { log: (m) => console.warn(m) }, ...(actions ? { actions } : {}) });
 logWrite = (method, path) => app.log.info({ method, path }, "github write");
 if (!actions) app.log.warn("GitHub App yapılandırılmadı (VLAD_GITHUB_APP_ID + anahtar): onay uçları 501");
 

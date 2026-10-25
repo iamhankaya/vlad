@@ -144,7 +144,7 @@ export class ChatTurnRunner {
    * is `not_delivered` at once, except the first one after the cool-down, which is the probe.
    */
   submit(msg: { clientMsgId: string; text: string }): { chat_id: string; duplicate: boolean; status: MsgStatus } {
-    if (!CLIENT_MSG_ID.test(msg.clientMsgId)) throw new BadChatRequest("client_msg_id");
+    if (typeof msg.clientMsgId !== "string" || !CLIENT_MSG_ID.test(msg.clientMsgId)) throw new BadChatRequest("client_msg_id");
     if (typeof msg.text !== "string" || msg.text.length < 1 || msg.text.length > MAX_TEXT) throw new BadChatRequest("text");
     const known = this.byClientId.get(msg.clientMsgId);
     if (known) return { chat_id: known, duplicate: true, status: this.records.get(known)?.status ?? "done" };
@@ -164,6 +164,11 @@ export class ChatTurnRunner {
     }
     this.trim();
     return { chat_id: rec.chat_id, duplicate: false, status: rec.status };
+  }
+
+  /** Whether a message with this `client_msg_id` was already accepted (a repeat is answered from the log). */
+  hasClientId(clientMsgId: string): boolean {
+    return this.byClientId.has(clientMsgId);
   }
 
   state(): ChatState {
