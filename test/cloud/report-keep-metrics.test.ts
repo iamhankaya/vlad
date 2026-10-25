@@ -122,3 +122,48 @@ describe("rapor uyarısı: yanlış pozitif ve tekrar", () => {
     expect(getSection(getTask(id).body, "## Önceki raporlar")).toBeNull();
   });
 });
+
+// T20261025-63 bulut session'ının gerçek result olayları (alan adları birebir, uuid result.uuid'de)
+const real = (uuid: string, at: string, c: object) => ({ created_at: at, result: { uuid, internal_anthropic_catchall: { subtype: "success", result: "x", duration_api_ms: 1, ...c } } });
+const turn1 = real("u-1", "2026-10-26T01:00:00Z", {
+  num_turns: 42, duration_ms: 2690855, total_cost_usd: 1.0554,
+  model_usage_since_last_result: { "claude-sonnet-5-5": { costUSD: 1.0554, outputTokens: 10 } },
+});
+const turn2 = real("u-2", "2026-10-26T01:45:00Z", {
+  num_turns: 16, duration_ms: 823646, total_cost_usd: 1.4975,
+  model_usage_since_last_result: { "claude-sonnet-5-5": { costUSD: 0.4420 } },
+});
+const metricLines = () => getSection(getTask(id).body, "## İlerleme")!.split("\n").filter((l) => l.includes("ölçüm"));
+
+describe("ölçüm: gerçek result biçimi (kümülatif total_cost_usd)", () => {
+  it("maliyet tur başınadır (model_usage_since_last_result toplamı); total_cost_usd 'toplam' olarak ayrı yazılır", () => {
+    ingestEvents(id, [turn1, turn2], {});
+    const [l1, l2] = metricLines();
+    expect(l1).toContain("maliyet=$1.0554");
+    expect(l1).toContain("tur=42");
+    expect(l2).toContain("maliyet=$0.442");
+    expect(l2).not.toContain("maliyet=$1.4975");
+    expect(l2).toContain("toplam=$1.4975");
+    expect(l2).toContain("tur=16");
+    expect(l2).toContain("süre=824s");
+  });
+
+  it("birden çok modelin costUSD'si toplanır", () => {
+    const ev = real("u-3", "2026-10-26T02:00:00Z", {
+      total_cost_usd: 9, model_usage_since_last_result: { a: { costUSD: 0.1 }, b: { costUSD: 0.25 } },
+    });
+    ingestEvents(id, [ev], {});
+    expect(metricLines()[0]).toContain("maliyet=$0.35");
+  });
+
+  it("since_last yoksa total'e düşer ve kümülatif olabilir diye işaretlenir", () => {
+    ingestEvents(id, [real("u-4", "2026-10-26T02:10:00Z", { total_cost_usd: 0.5, num_turns: 2 })], {});
+    expect(metricLines()[0]).toMatch(/maliyet=\$0\.5 \(kümülatif olabilir\)/);
+  });
+
+  it("yeniden çalıştırma çiftlemez", () => {
+    ingestEvents(id, [turn1, turn2], {});
+    ingestEvents(id, [turn1, turn2], {});
+    expect(metricLines()).toHaveLength(2);
+  });
+});

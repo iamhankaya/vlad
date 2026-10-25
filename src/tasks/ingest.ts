@@ -47,10 +47,20 @@ function eventText(ev: any): { kind: "assistant" | "result" | null; text: string
   return { kind: "assistant", text: blocksText(content), at };
 }
 
-/** Per-turn cost/turns/duration of a `result` event as a progress line body; null when it carries none of them. */
+/**
+ * Per-turn cost/turns/duration of a `result` event as a progress line body; null when it carries none of them.
+ * `total_cost_usd` is cumulative over the session; the turn's own cost is the sum of
+ * `model_usage_since_last_result.<model>.costUSD`. Without it the total stands in, marked as possibly cumulative.
+ */
 function turnMetrics(r: any): string | null {
+  const usage = Object.values(r?.model_usage_since_last_result ?? {}).map((u: any) => u?.costUSD);
+  const turnCost = usage.some((c) => typeof c === "number")
+    ? Math.round(usage.reduce((a: number, c) => a + (typeof c === "number" ? c : 0), 0) * 1e4) / 1e4
+    : null;
+  const total = typeof r?.total_cost_usd === "number" ? r.total_cost_usd : null;
   const parts = [
-    typeof r?.total_cost_usd === "number" && `maliyet=$${r.total_cost_usd}`,
+    turnCost !== null ? `maliyet=$${turnCost}` : total !== null && `maliyet=$${total} (kümülatif olabilir)`,
+    turnCost !== null && total !== null && `toplam=$${total}`,
     typeof r?.num_turns === "number" && `tur=${r.num_turns}`,
     typeof r?.duration_ms === "number" && `süre=${Math.round(r.duration_ms / 1000)}s`,
   ].filter(Boolean);
