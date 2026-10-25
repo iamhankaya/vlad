@@ -1,0 +1,35 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "prepareAction 200"
+  },
+  "operationId": "prepareAction",
+  "request": {
+    "body": {
+      "kind": "merge_phase",
+      "task_id": "T20261025-61",
+      "card_id": "gate-T20261025-61"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "action_id": "A-7Q2M9K4X",
+      "bytes_b64": "dmxhZC1hcHByb3ZlL3YxCmFjdGlvbl9pZD1BLTdRMk05SzRYCmtpbmQ9bWVyZ2VfcGhhc2UKcmVwbz1pYW1oYW5rYXlhL3ZsYWQKcHI9NDIKYmFzZT12bGFkL1QyMDI2MTAyNC05NApoZWFkX3NoYT0wMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3CnRhc2s9VDIwMjYxMDI1LTYxCm5vbmNlPUFBRUNBd1FGQmdjSUNRb0xEQTBPRHcKZXhwPTE3NjEzNTA0NjA=",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "exp": 1761350460
+    }
+  }
+}

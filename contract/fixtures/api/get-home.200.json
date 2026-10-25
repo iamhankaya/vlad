@@ -1,0 +1,101 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getHome 200"
+  },
+  "operationId": "getHome",
+  "response": {
+    "status": 200,
+    "body": {
+      "seq": 17,
+      "asks": [
+        {
+          "id": "gate-T20261025-61",
+          "kind": "gate",
+          "project": "vlad",
+          "task": "T20261025-61",
+          "state": "open",
+          "title": "S6a sözleşme fazı onay bekliyor",
+          "options": [
+            {
+              "id": "merge",
+              "label": "Merge et"
+            },
+            {
+              "id": "changes",
+              "label": "Değişiklik iste"
+            }
+          ],
+          "answer": null,
+          "gate": {
+            "task_id": "T20261025-61",
+            "phase": "sözleşme",
+            "pr": {
+              "number": 42,
+              "repo": "iamhankaya/vlad",
+              "base": "vlad/T20261024-94",
+              "url": "https://github.com/iamhankaya/vlad/pull/42"
+            },
+            "head_sha": "0123456789abcdef0123456789abcdef01234567",
+            "ci": "green",
+            "mergeable": true,
+            "report_md": "### Yapılanlar\n- openapi.yaml ve imza vektörleri",
+            "merge_kind": "merge_phase",
+            "reviews": []
+          },
+          "created": "2026-10-25T09:00:00Z",
+          "updated": "2026-10-25T12:00:00Z"
+        },
+        {
+          "id": "C-20261025-01",
+          "kind": "vlad_question",
+          "project": "vlad",
+          "task": null,
+          "state": "open",
+          "title": "Exposure internet olarak kalsın mı?",
+          "options": [
+            {
+              "id": "yes",
+              "label": "Evet"
+            },
+            {
+              "id": "no",
+              "label": "Hayır"
+            }
+          ],
+          "answer": null,
+          "created": "2026-10-25T08:00:00Z",
+          "updated": "2026-10-25T08:00:00Z"
+        }
+      ],
+      "workers": [
+        {
+          "task_id": "T20261025-61",
+          "project": "vlad",
+          "title": "VLAD sunucu + mobil — S6a API sözleşmesi",
+          "phase": "S6a",
+          "state": "running",
+          "host": "sunucu-1",
+          "progress": {
+            "pct": 60,
+            "label": "openapi yazılıyor",
+            "at": "2026-10-25T11:00:00Z"
+          },
+          "updated": "2026-10-25T11:00:00Z"
+        }
+      ],
+      "quota": {
+        "limited": false
+      },
+      "active_vlad": {
+        "machine": "sunucu-1",
+        "since": "2026-10-25T07:00:00Z",
+        "heartbeat": "2026-10-25T12:00:00Z",
+        "mine": true
+      },
+      "warnings": []
+    }
+  }
+}

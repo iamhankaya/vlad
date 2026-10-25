@@ -1,0 +1,28 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listFindings 200"
+  },
+  "operationId": "listFindings",
+  "request": {
+    "query": "project=vlad&status=open"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "findings": [
+        {
+          "id": "F-vlad-001",
+          "project": "vlad",
+          "severity": "yüksek",
+          "status": "open",
+          "title": "Örnek bulgu",
+          "detail": "Ayrıntı"
+        }
+      ],
+      "warnings": []
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "prepareAction 409"
+  },
+  "operationId": "prepareAction",
+  "request": {
+    "body": {
+      "kind": "merge_phase",
+      "task_id": "T20261025-61"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "head_moved",
+        "message_tr": "PR başlığı değişti.",
+        "details": {
+          "head_sha": "0123456789abcdef0123456789abcdef01234567"
+        }
+      }
+    }
+  }
+}

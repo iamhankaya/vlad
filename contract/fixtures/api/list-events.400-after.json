@@ -1,0 +1,24 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "listEvents 400"
+  },
+  "operationId": "listEvents",
+  "request": {
+    "query": "after=-1"
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "bad_request",
+        "message_tr": "after geçersiz.",
+        "details": {
+          "field": "after"
+        }
+      }
+    }
+  }
+}

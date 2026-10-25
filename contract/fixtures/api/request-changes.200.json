@@ -1,0 +1,23 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "requestTaskChanges 200"
+  },
+  "operationId": "requestTaskChanges",
+  "request": {
+    "path": {
+      "id": "T20261025-61"
+    },
+    "body": {
+      "text": "README'ye vektör biçimini ekle."
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "ok": true
+    }
+  }
+}

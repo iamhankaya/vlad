@@ -1,0 +1,493 @@
+{
+  "vectors_version": 1,
+  "note": "Read-only contract. Append new vectors, never change existing ones. Format: contract/README.md. Keys are TEST ONLY.",
+  "signature_format": "ECDSA P-256, SHA-256, ASN.1 DER (not raw r||s), base64url without padding",
+  "keys": [
+    {
+      "id": "session-a",
+      "note": "TEST ONLY: device session key",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZw42La6GlZC2ZpEFJxP3SjKuSYLQ-zH1QNaxTekeMGHD8IWuy9D3CmPMHgc5eoPOh1eXAoYIPO7kBDTedBYzHA"
+    },
+    {
+      "id": "approval-a",
+      "note": "TEST ONLY: device approval key",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEg1ShQgfXbd7EcZUAH11tBKmKBQwuuIxLZLa20dckV7Jtz18_OucdcIgB_i-jZfUejbp2oZ9efRBbqbBBQL-oGQ"
+    },
+    {
+      "id": "other",
+      "note": "TEST ONLY: unrelated key (wrong-key vectors)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEwJWmKZUUfXTWeQIiFHJfQgUpB9iug8hsT3KrRpiF_YdkwSKlR9g9dBYKBe1DjK9wmGExVzHmnAypa9IKaimtzA"
+    }
+  ],
+  "canonical_query": [
+    {
+      "id": "empty",
+      "raw_query": "",
+      "expected": ""
+    },
+    {
+      "id": "leading-question-mark",
+      "raw_query": "?a=1",
+      "expected": "a=1"
+    },
+    {
+      "id": "sorted",
+      "raw_query": "b=2&a=1",
+      "expected": "a=1&b=2"
+    },
+    {
+      "id": "duplicate-keys-sorted-by-value",
+      "raw_query": "a=2&a=1&a=1",
+      "expected": "a=1&a=1&a=2"
+    },
+    {
+      "id": "empty-value",
+      "raw_query": "a=&b",
+      "expected": "a=&b="
+    },
+    {
+      "id": "empty-segments-dropped",
+      "raw_query": "&&a=1&",
+      "expected": "a=1"
+    },
+    {
+      "id": "percent-decoded-and-reencoded-uppercase",
+      "raw_query": "a=%c3%bc",
+      "expected": "a=%C3%BC"
+    },
+    {
+      "id": "unreserved-escaped-is-decoded",
+      "raw_query": "a=%41%7e",
+      "expected": "a=A~"
+    },
+    {
+      "id": "plus-is-space",
+      "raw_query": "q=a+b",
+      "expected": "q=a%20b"
+    },
+    {
+      "id": "percent20-is-space",
+      "raw_query": "q=a%20b",
+      "expected": "q=a%20b"
+    },
+    {
+      "id": "literal-plus-via-percent2b",
+      "raw_query": "q=a%2Bb",
+      "expected": "q=a%2Bb"
+    },
+    {
+      "id": "case-sensitive-keys-byte-order",
+      "raw_query": "a=1&B=2&A=3",
+      "expected": "A=3&B=2&a=1"
+    },
+    {
+      "id": "equals-in-value",
+      "raw_query": "a=b=c",
+      "expected": "a=b%3Dc"
+    },
+    {
+      "id": "encoded-delimiters",
+      "raw_query": "a=%26%3D%23",
+      "expected": "a=%26%3D%23"
+    },
+    {
+      "id": "utf8-key",
+      "raw_query": "%C3%BC=1&z=2",
+      "expected": "z=2&%C3%BC=1"
+    },
+    {
+      "id": "astral-vs-bmp-byte-order",
+      "raw_query": "%F0%9F%98%80=1&%EF%BD%A1=2",
+      "expected": "%EF%BD%A1=2&%F0%9F%98%80=1"
+    }
+  ],
+  "canonical_query_errors": [
+    {
+      "id": "truncated-percent",
+      "raw_query": "a=%2"
+    },
+    {
+      "id": "non-hex-percent",
+      "raw_query": "a=%zz"
+    },
+    {
+      "id": "lone-percent",
+      "raw_query": "a=%"
+    },
+    {
+      "id": "invalid-utf8",
+      "raw_query": "a=%FF"
+    }
+  ],
+  "body_hash": [
+    {
+      "id": "empty",
+      "body_b64u": "",
+      "sha256_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "id": "json",
+      "body_b64u": "eyJjbGllbnRfbXNnX2lkIjoibS0xIiwidGV4dCI6Ik1lcmhhYmEifQ",
+      "sha256_hex": "94452a02c4e05918711d5beba3939bdc2b11d15c560b6122db27e97d94784617"
+    },
+    {
+      "id": "utf8-turkish",
+      "body_b64u": "xLDEscWexZ_EnsSf",
+      "sha256_hex": "7f502a4566db2ae554da715c1f5058410fa77d4ab9c8a349d27d941cd155aa29"
+    },
+    {
+      "id": "binary-non-utf8",
+      "body_b64u": "_wCA_g",
+      "sha256_hex": "a11f576a1a785c1b5140a8d73b614b83fac847367d5433fff36a0f31b764e4ef"
+    }
+  ],
+  "envelope": [
+    {
+      "id": "env-get-empty-body",
+      "description": "GET, empty body hashes sha256(\"\")",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCIEM0j4QO1pt4ncWXfjv-XFSr5zgc2I0xS7P-SMD7dmOBAiAszYdSw69QJMxxoX1X1xyGZct2K1m6-qPoYTk9chkfpg",
+      "expect_valid": true
+    },
+    {
+      "id": "env-post-json-body",
+      "description": "POST with raw JSON body bytes",
+      "key_id": "session-a",
+      "input": {
+        "method": "POST",
+        "path": "/v1/chat",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": "eyJjbGllbnRfbXNnX2lkIjoibS0xIiwidGV4dCI6Ik1lcmhhYmEifQ"
+      },
+      "envelope_string": "v1\nPOST\n/v1/chat\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\n94452a02c4e05918711d5beba3939bdc2b11d15c560b6122db27e97d94784617",
+      "signature_b64u": "MEUCIQDE_GKZA0EHJKFdTOfvjt8JC8VNHDATndR7iq1JuDNhLgIgFF8Jo328H7Luv2bAzydkMr3tgT0r1zzEENIP8mmI6vU",
+      "expect_valid": true
+    },
+    {
+      "id": "env-unsorted-query-signs-canonical",
+      "description": "client signs canonical query; raw order on the wire is irrelevant",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/projects",
+        "raw_query": "b=2&a=1&a=%C3%BC",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/projects?a=1&a=%C3%BC&b=2\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCICU6R5CQLqatyU4wyFK1qPcv1gISYLUjhyXpBkYMf--LAiBM7Z7P83Wg0chlmXvkPzmXwQbNj8G_Fd-1Jntx7PRrVg",
+      "expect_valid": true
+    },
+    {
+      "id": "env-tampered-body-byte",
+      "description": "body byte changed after signing",
+      "key_id": "session-a",
+      "input": {
+        "method": "POST",
+        "path": "/v1/chat",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": "eyJjbGllbnRfbXNnX2lkIjoibS0xIiwidGV4dCI6Ik1lcmhhYmIifQ"
+      },
+      "envelope_string": "v1\nPOST\n/v1/chat\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ncfa159a369b1f850ac1224e79a0642f3d36630b245fc728fd40a6b6bdaf14b6e",
+      "signature_b64u": "MEYCIQChWxoUPrrQQJcbNM5LmIdQ7P37KkjM-kVSdFVdPTABuwIhANCGJuCfc-WluWoUq89LzbBnsRm6IyqwWXDtSUe31wne",
+      "expect_valid": false
+    },
+    {
+      "id": "env-tampered-method",
+      "description": "method changed after signing",
+      "key_id": "session-a",
+      "input": {
+        "method": "DELETE",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nDELETE\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCICooZJyzrKQTjlL0OpV2lnJObLB0r2TNJlfGk3VlBoqVAiBUMipM23tSpeUmBFezElA7rknvDXKM0aDu-c8uvUbFKg",
+      "expect_valid": false
+    },
+    {
+      "id": "env-tampered-ts",
+      "description": "ts_ms changed after signing",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400001,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400001\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEQCICrhw5IK_4-2nhON6cDV6UPFYKTwkYiN11wIkpxtKG8-AiBNTXvnCCL_Divwz2wvUHnGWDvA0YxNS4EZbo9dntD8mw",
+      "expect_valid": false
+    },
+    {
+      "id": "env-wrong-key",
+      "description": "signed by an unrelated key",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEUCIQCJoq44WwG_MzCd2VPsMVmS7DNXNyd5sN5qSjRKVS5dJAIgG9bpyBQyA_cpd0ehYMAv6-cHhecaLMx5WkfsvHw9Dxk",
+      "expect_valid": false
+    },
+    {
+      "id": "env-bad-der-truncated",
+      "description": "DER signature truncated",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MEYCIQCpnfSYdUvHSSUJV36pBacEJ7wNWRnVV_58pHXMuq3GhwIhAA",
+      "expect_valid": false
+    },
+    {
+      "id": "env-bad-der-wrong-tag",
+      "description": "DER sequence tag replaced",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "MUUCIQCF0zDgpgw8umS26XVIzx-PwyqI5N4HeXha5ijwz1GVugIgCLl-toun4AYTE2ac2QFb9Gz5P7CaiD6dfYGwZ5PbTw8",
+      "expect_valid": false
+    },
+    {
+      "id": "env-raw-r-s",
+      "description": "valid signature in raw r||s (IEEE P1363, 64 bytes) instead of DER",
+      "key_id": "session-a",
+      "input": {
+        "method": "GET",
+        "path": "/v1/home",
+        "raw_query": "",
+        "ts_ms": 1761350400000,
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "body_b64u": ""
+      },
+      "envelope_string": "v1\nGET\n/v1/home\n1761350400000\nAAECAwQFBgcICQoLDA0ODw\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signature_b64u": "uoyoUEzQHDq7IuJD6hDmS4xepon97hRXv69GObK2dbW_tT2xUsIwdw-icYO3ytsShQ_sIA3zKkKu3kQ0ek5DVQ",
+      "expect_valid": false
+    }
+  ],
+  "challenge": [
+    {
+      "id": "chal-valid",
+      "description": "approval key signs the stored challenge bytes",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "MEUCIQCzM8G5RpqeMM-JFz71aY4lvP4-ecwxvo33k9zRj5g0MAIgD_lbmtryAKR7qszksKCwV_CpNrQhjRJqZzFVJG2zomI",
+      "expect_valid": true
+    },
+    {
+      "id": "chal-session-key",
+      "description": "signed by the session key; verification against the approval key fails",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "MEUCIQC23KzeKZYL1ExGV3GQNshRp6j6FDZuvCisEwMsEamIzQIgUcQK-SzTHj82j7fF-BKe3mtcUP3B3hefKGlClKqe3-w",
+      "expect_valid": false
+    },
+    {
+      "id": "chal-tampered-field",
+      "description": "pr changed after signing",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "43",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=43\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "MEUCIQCZ_537Gk945jT_T-l7f6lt88E2ksBvS4kheir5k8HRSAIgDI13I3_EFct2voHPg4jhP7jgQtmpm484Yq9-vVTO21o",
+      "expect_valid": false
+    },
+    {
+      "id": "chal-wrong-key",
+      "description": "signed by an unrelated key",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "MEYCIQDN0wRrWMJy9nEikfrH9bgbnFObJx78VuOznOysO_11DwIhAObUk0b6XlTifLWd1G06S6tZy2L4vpWQTtB-Ki-BStnP",
+      "expect_valid": false
+    },
+    {
+      "id": "chal-bad-der-truncated",
+      "description": "DER signature truncated",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "MEQCIEIAbf4YQ4YPy7X6yajxtHSCXdoTkqztY_6r",
+      "expect_valid": false
+    },
+    {
+      "id": "chal-raw-r-s",
+      "description": "valid signature in raw r||s",
+      "key_id": "approval-a",
+      "fields": {
+        "action_id": "A-7Q2M9K4X",
+        "kind": "merge_phase",
+        "repo": "iamhankaya/vlad",
+        "pr": "42",
+        "base": "vlad/T20261024-94",
+        "head_sha": "0123456789abcdef0123456789abcdef01234567",
+        "task": "T20261025-61",
+        "nonce": "AAECAwQFBgcICQoLDA0ODw",
+        "exp": "1761350460"
+      },
+      "challenge_text": "vlad-approve/v1\naction_id=A-7Q2M9K4X\nkind=merge_phase\nrepo=iamhankaya/vlad\npr=42\nbase=vlad/T20261024-94\nhead_sha=0123456789abcdef0123456789abcdef01234567\ntask=T20261025-61\nnonce=AAECAwQFBgcICQoLDA0ODw\nexp=1761350460",
+      "signature_b64u": "ps7YWGESQJgGyUtQJaxd6-tpO9E7g8ciFrxLJs1vzALy0BocjS_1KfptiNrSE71EHiktZY2-cihA2pFERarj9w",
+      "expect_valid": false
+    }
+  ],
+  "grant": [
+    {
+      "id": "grant-valid",
+      "description": "approval key signs grantSigningPayload (conditions sorted)",
+      "key_id": "approval-a",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 5
+      },
+      "payload": "vlad-grant/v1\nid=G-001\nscope=project:vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
+      "signature_b64u": "MEQCIBsuRmx77SzMWI8GER-3dwOYTpf3kY5zcgLD5TEph531AiBlycnHOMMZwsSiioaTQVgeOH2L6aUJQwzp_sL7T7HyPA",
+      "expect_valid": true
+    },
+    {
+      "id": "grant-tampered-max-uses",
+      "description": "max_uses raised after signing",
+      "key_id": "approval-a",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 6
+      },
+      "payload": "vlad-grant/v1\nid=G-001\nscope=project:vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=6",
+      "signature_b64u": "MEUCIQDXhRYJxO6hxH3BzQnRPztVYKk2yARJZpca4KS6B84H8gIgRN--_MgHBd5eIlOFYDB_yK5EDdvUI1mGifRPYlKXOqM",
+      "expect_valid": false
+    },
+    {
+      "id": "grant-session-key",
+      "description": "signed by the session key, not the approval key",
+      "key_id": "approval-a",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 5
+      },
+      "payload": "vlad-grant/v1\nid=G-001\nscope=project:vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
+      "signature_b64u": "MEUCIQD2Hnmuf1na7IZCQDU1zyqngthci3AaDzlaBfaYqknbpAIgEUYYt5_BuK5yhIqBe6Yia1c-wsEHBJeaqxPa3zmW6uY",
+      "expect_valid": false
+    }
+  ]
+}

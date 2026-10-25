@@ -1,0 +1,18 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "getHome 401"
+  },
+  "operationId": "getHome",
+  "response": {
+    "status": 401,
+    "body": {
+      "error": {
+        "code": "device_revoked",
+        "message_tr": "Cihaz iptal edildi."
+      }
+    }
+  }
+}

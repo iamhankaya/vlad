@@ -1,0 +1,21 @@
+{
+  "_fixture_header": {
+    "kind": "synthetic",
+    "source": "sözleşme örneği (S6a); gerçek sunucu çıktısı değil, plan şekline göre elle yazıldı",
+    "created": "2026-10-25",
+    "description": "takeoverActive 409"
+  },
+  "operationId": "takeoverActive",
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "active_elsewhere",
+        "message_tr": "Etkin VLAD başka makinede ve tazesi.",
+        "details": {
+          "machine": "windows-pc"
+        }
+      }
+    }
+  }
+}
