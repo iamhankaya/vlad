@@ -17,5 +17,6 @@ export function makeHome(): string {
   }
   cpSync(resolve(here, "..", "schemas"), join(home, "schemas"), { recursive: true });
   process.env.VLAD_HOME = home;
+  delete process.env.VLAD_KB_DIR;
   return home;
 }

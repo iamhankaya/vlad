@@ -33,7 +33,7 @@ describe("config", () => {
     const cfg = loadConfig(repo);
     expect(cfg).toEqual({
       roots: ["C:\\dev"], ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
-      staleAfterHours: 6, launcher: "auto", worktreeDir: "{repo}-wt",
+      staleAfterHours: 6, launcher: "auto", kbDir: "../vlad-kb", worktreeDir: "{repo}-wt",
       projects: { watchparty: { autonomy: "commit" } },
     });
   });

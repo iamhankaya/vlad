@@ -181,6 +181,8 @@ export interface VladConfig {
   machines?: Record<string, MachineConfig>;
   /** Oldest CLI version allowed to use this home; older CLIs stop with `VLAD CLI çok eski`. */
   minCliVersion?: string;
+  /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
+  kbDir?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
 }
 
