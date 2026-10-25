@@ -1,0 +1,23 @@
+#!/bin/bash
+# Runs as vladapi, started by the API as the "claude" binary of ClaudeCliClient (VLAD_CHAT_CLIENT). It never starts claude itself:
+# it forwards the prompt (stdin) to the vlad-chat socket, where systemd runs the sandboxed turn as vladchat (deploy/bin/vlad-chat-turn).
+# Of the argv built by the API only `--resume <id>` is used; permissions and every other flag are fixed on the other side.
+set -euo pipefail
+
+sock=${VLAD_CHAT_SOCKET:-/run/vlad-chat/turn.sock}
+id_re='^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$'
+
+header=NEW
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  if [[ ${args[i]} == --resume ]]; then
+    id=${args[i + 1]:-}
+    [[ $id =~ $id_re ]] || { echo "chat-client: invalid session id" >&2; exit 64; }
+    header="RESUME $id"
+  fi
+done
+
+[[ -S $sock ]] || { echo "chat-client: socket missing: $sock" >&2; exit 69; }
+
+# -t: wait for the reply after our stdin ends (default 0.5 s would cut the turn off); the service caps a turn itself (RuntimeMaxSec).
+{ printf '%s\n' "$header"; cat; } | exec socat -t 700 - "UNIX-CONNECT:$sock"

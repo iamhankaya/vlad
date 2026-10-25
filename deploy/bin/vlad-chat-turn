@@ -1,0 +1,37 @@
+#!/bin/bash
+# Runs as vladchat inside vlad-chat@.service (socket-activated, one instance per turn). stdin/stdout are the socket.
+# First line: "NEW" or "RESUME <session id>"; the rest of stdin is the prompt. Flags are fixed here; nothing from the client reaches argv but the id.
+set -euo pipefail
+
+settings=${VLAD_CHAT_SETTINGS:-/etc/vlad/chat-settings.json}
+id_re='^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$'
+
+IFS= read -r -t 20 header || { echo "chat-turn: no header" >&2; exit 64; }
+header=${header%$'\r'}
+resume=()
+case $header in
+  NEW) ;;
+  "RESUME "*)
+    id=${header#RESUME }
+    [[ $id =~ $id_re ]] || { echo "chat-turn: invalid session id" >&2; exit 64; }
+    resume=(--resume "$id")
+    ;;
+  *) echo "chat-turn: bad header" >&2; exit 64 ;;
+esac
+
+[[ -r $settings ]] || { echo "chat-turn: settings missing: $settings" >&2; exit 78; }
+mapfile -t deny < <(jq -r '.permissions.deny[]' "$settings")
+((${#deny[@]} > 0)) || { echo "chat-turn: empty deny list, refusing to run" >&2; exit 78; }
+
+# cwd = kb (read-only mount); a clean environment, no inherited secrets
+cd "${VLAD_KB_DIR:?VLAD_KB_DIR missing}"
+exec env -i \
+  PATH=/usr/local/bin:/usr/bin:/bin \
+  HOME="${HOME:?}" \
+  VLAD_HOME="${VLAD_HOME:?VLAD_HOME missing}" \
+  VLAD_KB_DIR="$VLAD_KB_DIR" \
+  claude -p --output-format stream-json --verbose --include-partial-messages \
+    --permission-mode auto --setting-sources user --strict-mcp-config \
+    --settings "$settings" \
+    --disallowedTools "${deny[@]}" \
+    "${resume[@]}"

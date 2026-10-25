@@ -11,6 +11,7 @@ import { AppTokenProvider, loadAppKey } from "./github/appToken.ts";
 import { GithubClient, observeWrites } from "./github/client.ts";
 import { RestGithubReader } from "./github/reader.ts";
 import { GithubWriter } from "./github/writer.ts";
+import { createChatRunner } from "./chat/wire.ts";
 import { buildApp } from "./http/app.ts";
 import { assertKbRepoIsNotCodeRepo, buildKbGate, loadKbSyncConfig, projectRepos } from "./kbsync/config.ts";
 import { kbSyncView } from "./kbsync/home.ts";
@@ -57,7 +58,11 @@ if (kbCfg && appId && appKey) {
     read: { activeExtra: () => kbSyncView({ kbDir: kbCfg.kbDir, stateDir: kbCfg.stateDir, now: Date.now }) },
   };
 } else if (kbCfg) console.warn("VLAD_KB_REPO ayarlı ama GitHub App yok: devralma ve promote devre dışı");
-const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, chat: { log: (m) => console.warn(m) }, ...kbActive, ...(actions ? { actions, grants: { sweepMs: 60_000, log: (m: string) => console.warn(m) } } : {}) });
+// Chat (F-vlad-024): only with the sandboxed turn socket (deploy/systemd/vlad-chat.socket) and a root-owned client; otherwise the chat routes answer 501.
+const chatKbDir = process.env.VLAD_KB_DIR ?? (process.env.VLAD_HOME ? join(process.env.VLAD_HOME, "kb") : undefined);
+const chatRunner = chatKbDir ? createChatRunner({ env: process.env, stateDir, kbDir: chatKbDir, ledger, log: (m) => console.warn(m) }) : undefined;
+const app = buildApp({ stateDir, version: pkg.version, trustProxy: process.env.VLAD_SERVER_TRUST_PROXY === "1" ? "loopback" : false, logger: true, events: { ledger }, chat: { log: (m) => console.warn(m), ...(chatRunner ? { runner: chatRunner } : {}) }, ...kbActive, ...(actions ? { actions, grants: { sweepMs: 60_000, log: (m: string) => console.warn(m) } } : {}) });
+app.addHook("onClose", async () => chatRunner?.stop());
 logWrite = (method, path) => app.log.info({ method, path }, "github write");
 if (!actions) app.log.warn("GitHub App yapılandırılmadı (VLAD_GITHUB_APP_ID + anahtar): onay uçları 501");
 

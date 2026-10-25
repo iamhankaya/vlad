@@ -1,0 +1,54 @@
+[Unit]
+Description=VLAD chat turn (sandboxed claude as vladchat)
+# Accept=yes template: one instance per socket connection
+
+[Service]
+User=vladchat
+Group=vladchat
+# read access to the kb only (group vlad); kb is mounted read-only below
+SupplementaryGroups=vlad
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+UMask=0077
+# VLAD_HOME, VLAD_KB_DIR come from here (no secrets in this file)
+EnvironmentFile=/etc/vlad/vlad.env
+Environment=HOME=/var/lib/vladchat
+ExecStart=/usr/local/libexec/vlad/chat-turn
+# a turn that runs longer than the runner's own timeout (10 min) plus margin is killed with the whole group
+RuntimeMaxSec=660
+KillMode=control-group
+TimeoutStopSec=10
+MemoryMax=1G
+TasksMax=128
+# --- sandbox (F-vlad-024): this agent reads a (partly untrusted) kb and takes text from the internet ---
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+# the kb is readable, never writable; the only writable tree is vladchat's own home (claude login, session files)
+ReadOnlyPaths=@KB_DIR@ @VLAD_HOME@
+ReadWritePaths=/var/lib/vladchat
+# the API's state (device ledger, App key, challenges) and the agent's worktrees/credentials do not exist for this unit
+InaccessiblePaths=/var/lib/vladapi -/var/lib/vlad/worktrees /home /root
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateUsers=no
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
