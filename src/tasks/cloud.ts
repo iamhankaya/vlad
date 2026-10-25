@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
+import { splitSkills } from "../roles/store.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -168,12 +169,15 @@ function buildCloudPrompt(
   if (role) {
     const body = readDoc<unknown>(role.file).body.trim();
     parts.push(`## Rolün: ${role.title}\n${body}`);
-    if (role.skills.length) {
+    const { load, vendored } = splitSkills(role.skills, role.file);
+    if (load.length) {
       parts.push(
-        `İşe başlamadan şu skill'leri yüklemeyi dene: ${role.skills.map((s) => `\`${s}\``).join(", ")}. ` +
+        `İşe başlamadan şu skill'leri yüklemeyi dene: ${load.map((s) => `\`${s}\``).join(", ")}. ` +
           "Yüklenemeyen olursa kapanış raporunda belirt.",
       );
     }
+    // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline
+    for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
   }
   for (const d of task.data.depends_on ?? []) {
     let report: string | null = null;

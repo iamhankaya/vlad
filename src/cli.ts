@@ -9,14 +9,14 @@ import { installGlobal } from "./install.js";
 import { commitKb } from "./kb/commit.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
-import { TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setState, statusSummary,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setState, statusSummary, unknownTaskRefs,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -170,7 +170,8 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
     parent: o.parent as string | undefined, dependsOn, phase: o.phase as string | undefined,
     model: o.model as string | undefined, modelReason: o.modelReason as string | undefined,
   });
-  out(o, { id: t.data.id }, t.data.id);
+  const warnings = unknownTaskRefs(body).map((id) => `gövdede kb'de olmayan görev ID'si: ${id}`);
+  out(o, { id: t.data.id, warnings }, [t.data.id, ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
 })
   .option("--role <slug>", "roles/<slug>.md uzman rolü (advisory → research, executor → dev)")
   .option("--model <m>", "görev modeli: haiku | sonnet | opus (rolün modelini ezer)")
@@ -187,7 +188,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   const cfg = loadConfig();
   let mode: LaunchMode;
   try {
-    mode = resolveLaunchMode(cfg.launcher);
+    // a dry run only prints the terminal command, so the test guard does not apply
+    mode = resolveLaunchMode(cfg.launcher, process.platform, o.dryRun ? { ...process.env, VLAD_LAUNCHER: "" } : process.env);
   } catch (e) {
     if (!o.dryRun) throw e; // a dry run only prints the terminal command, so it works anywhere
     mode = "auto-terminal";
@@ -200,7 +202,9 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
     return;
   }
   let last: LaunchResult | undefined;
-  const real = new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+  const real = mode === "noop"
+    ? new NoopLauncher()
+    : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   const t = await launchTask(id, { launcher, cfg });
   out(

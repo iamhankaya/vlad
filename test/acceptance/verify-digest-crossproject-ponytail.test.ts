@@ -220,12 +220,12 @@ describe("F-vlad-062: bulut testleri Windows'ta gerçek terminal açmaz", () => 
 
 describe("ponytail (T20261026-04)", () => {
   it("SKILL.md blob SHA'sı SOURCE.md ile aynı (kaynakla birebir); LICENSE MIT; başka ponytail dosyası yok", () => {
-    const dir = join(root, ".claude", "skills", "ponytail");
+    const dir = join(root, "vendor", "skills", "ponytail");
     const sha = execFileSync("git", ["hash-object", join(dir, "SKILL.md")], { encoding: "utf8" }).trim();
-    expect(read(".claude/skills/ponytail/SOURCE.md")).toContain(sha);
-    expect(read(".claude/skills/ponytail/LICENSE")).toMatch(/MIT License/);
-    expect(execFileSync("git", ["ls-files", "--", ".claude/skills/ponytail"], { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/).sort())
-      .toEqual([".claude/skills/ponytail/LICENSE", ".claude/skills/ponytail/SKILL.md", ".claude/skills/ponytail/SOURCE.md"]);
+    expect(read("vendor/skills/ponytail/SOURCE.md")).toContain(sha);
+    expect(read("vendor/skills/ponytail/LICENSE")).toMatch(/MIT License/);
+    expect(execFileSync("git", ["ls-files", "--", "vendor/skills/ponytail"], { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/).sort())
+      .toEqual(["vendor/skills/ponytail/LICENSE", "vendor/skills/ponytail/SKILL.md", "vendor/skills/ponytail/SOURCE.md"]);
   });
 
   it("vlad role list --json: ponytail yalnız developer ve game-developer skills'inde", () => {
