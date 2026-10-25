@@ -31,6 +31,10 @@ export function checkMinCliVersion(home: string, current: string = cliVersion())
   } catch {
     return;
   }
-  if (typeof min !== "string" || !SEMVER.test(min)) return;
+  if (min === undefined || min === null) return;
+  // fail-closed: bozuk sürüm kapısı sessizce kapanmaz
+  if (typeof min !== "string" || !SEMVER.test(min)) {
+    throw new Error(`minCliVersion geçersiz: ${typeof min === "string" ? min : JSON.stringify(min)} (x.y.z olmalı)`);
+  }
   if (compareVersions(current, min) < 0) throw new Error(`VLAD CLI çok eski: ${min} gerekli (kurulu: ${current})`);
 }
