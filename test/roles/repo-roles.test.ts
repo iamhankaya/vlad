@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -216,5 +217,39 @@ describe("game/mobile roles and short-writing rule", () => {
     expect(read("src/tasks/cloud.ts")).toContain("Kısa yaz");
     const c = read("CLAUDE.md");
     for (const r of ["game-developer", "game-director", "growth"]) expect(c, r).toContain(r);
+  });
+});
+
+describe("ponytail (vendored, developer + game-developer only)", () => {
+  const root = resolve(dir, "..");
+  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const SOURCE_BLOB = "d64edd32265ba21cbf5270158f04e97d96925f27"; // DietrichGebert/ponytail@09c434a skills/ponytail/SKILL.md
+
+  it("SKILL.md is byte-identical to the source blob; only SOURCE.md and LICENSE sit beside it", () => {
+    const body = Buffer.from(read(".claude/skills/ponytail/SKILL.md").replace(/\r\n/g, "\n"), "utf8");
+    const sha = createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
+    expect(sha).toBe(SOURCE_BLOB);
+    expect(readdirSync(resolve(root, ".claude/skills/ponytail")).sort()).toEqual(["LICENSE", "SKILL.md", "SOURCE.md"]);
+    const source = read(".claude/skills/ponytail/SOURCE.md");
+    for (const w of ["github.com/DietrichGebert/ponytail", "09c434ab73ca43761c5d8b0c5d341926c2fba710", SOURCE_BLOB, "MIT"]) expect(source, w).toContain(w);
+    expect(read(".claude/skills/ponytail/LICENSE")).toContain("MIT License");
+  });
+
+  it("only developer and game-developer list ponytail in skills", () => {
+    const { roles } = listRolesWithWarnings(dir);
+    expect(roles.filter((r) => r.skills.includes("ponytail")).map((r) => r.slug).sort()).toEqual(["developer", "game-developer"]);
+  });
+
+  it("both roles state the priority rules: TDD/gate first, tests for behavior change, full level only, skipped items in Açık noktalar", () => {
+    for (const r of ["developer", "game-developer"]) {
+      const body = read(`roles/${r}.md`);
+      for (const w of ["ponytail", "gate", "davranış değişikliği = test", "yalnız `full`", "vlad task ask", "### Açık noktalar"]) expect(body, `${r}: ${w}`).toContain(w);
+    }
+  });
+
+  it("CLAUDE.md notes the trial in the roles paragraph", () => {
+    const c = read("CLAUDE.md");
+    expect(c).toContain("ponytail");
+    expect(c).toMatch(/ponytail.*deneme/);
   });
 });
