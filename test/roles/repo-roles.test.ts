@@ -189,6 +189,13 @@ describe("game/mobile roles and short-writing rule", () => {
     for (const w of ["docs/review/", "--write-movie", "vlad task ask", "oynanış notu", "roadmap", "şimdi", "kaynak URL"]) expect(body, w).toContain(w);
   });
 
+  it("game roles generate visuals/icons with Codex, short video with Gemini, show the user first and note source/model", () => {
+    for (const r of ["game-developer", "game-director"]) {
+      const body = read(`roles/${r}.md`);
+      for (const w of ["codex exec", "Gemini", "kullanıcıya göster", "model notu"]) expect(body, `${r}: ${w}`).toContain(w);
+    }
+  });
+
   it("growth only drafts: no accounts, posts or contact", () => {
     const body = read("roles/growth.md");
     for (const w of ["ASO", "SEO", "Discord", "TikTok", "haftalık", "hesap açmaz", "paylaşım yapmaz", "iletişime geçmez"]) expect(body, w).toContain(w);
