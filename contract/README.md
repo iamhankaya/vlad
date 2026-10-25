@@ -71,3 +71,16 @@ Kotlin tarafı aynı dosyayı okuyup yukarıdaki adımları koşar (DER katılı
 - İptal imza baytları plan'da yoktu; güvenlik incelemesinde (VLAD) yukarıdaki biçime bağlandı.
 - Kapı kartı kimliği `gate-<görev id>` (görevden türetilir, depolanmaz) ve `Card.kind` enum'una `gate` eklendi: plan kapı kartının depolanmadığını söyler ama API kimliğini tanımlamaz.
 - `fixtures/api/*` `synthetic`tir (sunucu henüz yok); S6c `/home` fixture'ını gerçek CLI ile karşılaştırır.
+
+## Olay verisi (S6d)
+
+`Event.data` bir geçersiz kılma ipucudur: kimlik ve yeni durum taşır, başlık/rapor/yol taşımaz (kilit ekranı güvenli). İstemci `GET /home` ile yeniler.
+
+| `type` | `data` | Ne zaman |
+|---|---|---|
+| `card.opened` | `{card_id, project}` | Yeni açık kart |
+| `task.state` | `{task_id, project, state}` | Yeni görev ya da durum değişimi; `(görev, durum, updated)` başına tek olay |
+| `worker.progress` | `{task_id, pct}` | Aynı durumda ilerleme değişimi |
+| `quota.changed` | `{limited}` | Sınır durumu döndü |
+
+`chat.delta`, `chat.done`, `action.executed`, `grant.used` ilgili dilimlerde (S11, S9b, S10a) deftere yazılır. `seq` defterde artar; defter en çok 2000 olay tutar, eskiler atılır: bir istemcinin konumundan sonraki ilk olay `konum + 1` değilse olay kaçmıştır, `GET /home` ile yenilenir. SSE ve `/events` aynı `seq`'i kullanır; `GET /stream` Funnel gibi bir ara katman akışı taşımazsa `/events?after=` yoklanır.
