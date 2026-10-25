@@ -172,10 +172,29 @@ describe("security review fixes", () => {
       "Bash(vlad task log *)", "Bash(vlad task ask *)", "Bash(vlad task report *)", "Bash(vlad task progress *)",
     ]);
   });
+  it("launcher: separate kbDir is denied for Edit/Write and passed into the worker env", async () => {
+    const base = mkdtempSync(join(tmpdir(), "vlad-kbsep-"));
+    const kb = join(base, "vlad-kb");
+    mkdirSync(kb);
+    process.env.VLAD_KB_DIR = kb;
+    try {
+      const { ProcessLauncher } = await import("../../src/launcher/index.js");
+      const dir = mkdtempSync(join(tmpdir(), "vlad-sd-"));
+      const home = process.env.VLAD_HOME as string;
+      const r = await new ProcessLauncher({ scriptDir: dir, env: { PATH: "/bin", HOME: "/h", VLAD_HOME: home, VLAD_KB_DIR: kb }, exec: () => {} })
+        .launch({ taskId: "T20261025-59", cwd: "/w", prompt: "x", env: { VLAD_HOME: home }, title: "t" });
+      expect(r.ok).toBe(true);
+      const copy = JSON.parse(readFileSync(join(dir, "T20261025-59.settings.json"), "utf8")) as { permissions: { deny: string[] } };
+      for (const tool of ["Edit", "Write"]) for (const p of [kb, home]) expect(copy.permissions.deny).toContain(`${tool}(/${p}/**)`);
+      expect(readFileSync(join(dir, "T20261025-59.sh"), "utf8")).toContain(`'VLAD_KB_DIR=${kb}'`);
+    } finally {
+      delete process.env.VLAD_KB_DIR;
+    }
+  });
   it("records: worker scope rejects admin commands and other tasks", () => {
     const env = { VLAD_TASK_ID: "T20261025-59" };
     for (const c of ["task log", "task ask", "task report", "task progress", "task pr"]) expect(() => assertWorkerScope(c, "T20261025-59", env)).not.toThrow();
-    for (const c of ["quota set", "quota clear", "task set", "task answer", "card answer", "project note", "kb commit", "status"]) {
+    for (const c of ["quota set", "quota clear", "task set", "task answer", "card answer", "project note", "kb commit", "status", "grant add", "grant list", "grant revoke"]) {
       expect(() => assertWorkerScope(c, "T20261025-59", env)).toThrow(/yasak/);
     }
     expect(() => assertWorkerScope("task log", "T20261025-58", env)).toThrow(/kendi görevine/);

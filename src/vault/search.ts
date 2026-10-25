@@ -1,10 +1,10 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import { getVladHome } from "../kb/index.js";
+import { getVladHome, isSeparateKb, kbPaths } from "../kb/index.js";
 
 /**
  * Read-only vault access. Allowlist (paths are relative to VLAD_HOME, "/"-separated):
- *   kb/        except kb/inbox, kb/logs, kb/grants, kb/audit and any dot-entry
+ *   kb/        (the kb checkout, which may be its own repo: `kbPaths().kb`) except kb/inbox, kb/logs, kb/grants, kb/audit and any dot-entry
  *   vault/docs/
  * Only *.md files are readable. Every path (input and symlink target) is checked after
  * lower-casing, so case variants cannot reach a forbidden folder.
@@ -89,19 +89,42 @@ function homeReal(): string {
   return realpathSync.native(getVladHome());
 }
 
+/** Real root the virtual "kb/" prefix maps to: the kb checkout (may live outside VLAD_HOME). */
+function kbReal(): string {
+  return realpathSync.native(kbPaths().kb);
+}
+
+/** Directory a virtual path hangs under, plus the virtual segments that stay in front of the real remainder. */
+function locate(segs: string[]): { base: string; prefix: string[]; rest: string[] } {
+  if (denyKey(segs[0]) === "kb") return { base: kbReal(), prefix: ["kb"], rest: segs.slice(1) };
+  return { base: homeReal(), prefix: [], rest: segs };
+}
+
 /** Resolves an allowlisted path to its real file. Throws VaultError on any violation. */
 function resolveAllowed(input: string, want: "file" | "dir"): { rel: string; abs: string } {
   const segs = parseUserPath(input);
   if (!allowedZone(segs)) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
-  const home = homeReal();
+  const { base, prefix, rest } = locate(segs);
   let abs: string;
   try {
-    abs = realpathSync.native(join(home, ...segs));
+    abs = realpathSync.native(join(base, ...rest));
   } catch {
     throw new VaultError(`bulunamadı: ${segs.join("/")}`);
   }
-  if (abs !== home && !abs.startsWith(home + sep)) throw new VaultError("yol kök dışına çıkıyor");
-  const realRel = abs.slice(home.length + 1).split(sep);
+  const within = (root: string) => abs === root || abs.startsWith(root + sep);
+  let realRel: string[];
+  if (within(base)) {
+    realRel = [...prefix, ...abs.slice(base.length + 1).split(sep).filter(Boolean)];
+    // docs zone is rooted at VLAD_HOME: with a separate kb, <home>/kb is a stale leftover, never readable through a link
+    if (prefix.length === 0 && denyKey(realRel[0] ?? "") === "kb" && isSeparateKb()) throw new VaultError("yol kök dışına çıkıyor");
+  } else if (within(homeReal())) {
+    // a link that left the zone's root but stays in VLAD_HOME: judged by its home-relative path, and "kb/" there is
+    // never the kb checkout (only vault/docs can qualify), so a stale <home>/kb cannot be read through a link
+    realRel = abs.slice(homeReal().length + 1).split(sep);
+    if (denyKey(realRel[0] ?? "") === "kb") throw new VaultError("yol kök dışına çıkıyor");
+  } else {
+    throw new VaultError("yol kök dışına çıkıyor");
+  }
   if (!allowedZone(realRel)) throw new VaultError(`yol izin listesinde değil: ${segs.join("/")}`);
   const st = statSync(abs);
   if (want === "file" && !st.isFile()) throw new VaultError(`dosya değil: ${segs.join("/")}`);
@@ -235,7 +258,7 @@ function searchUnsafe(
   let bytes = 0;
   let truncated = false;
   const needle = fold(q);
-  const home = homeReal();
+  homeReal(); // a missing VLAD_HOME fails the whole search (generic "okunamadı"), not silently with no hits
   const zones = opts.zone ? [opts.zone as Zone] : ZONES;
   let hits: VaultHit[] = [];
   const rank = (a: VaultHit, b: VaultHit) => b.score - a.score || a.path.localeCompare(b.path);
@@ -245,7 +268,7 @@ function searchUnsafe(
   for (const z of [...zones].reverse()) {
     const root = ZONE_ROOT[z];
     try {
-      let absRoot = join(home, ...root.split("/"));
+      let absRoot = z === "kb" ? kbPaths().kb : join(homeReal(), ...root.split("/"));
       if (lstatSync(absRoot).isSymbolicLink()) absRoot = resolveAllowed(root, "dir").abs;
       stack.push({ rel: root, abs: absRoot, depth: 0 });
     } catch {

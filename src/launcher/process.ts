@@ -9,7 +9,7 @@ import { MODEL } from "./terminal.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
 /** Only these variables reach the worker (F-vlad-007: clean environment); nothing else of ours is inherited. */
-export const WORKER_ENV_KEYS = ["PATH", "HOME", "VLAD_HOME", "VLAD_TASK_ID", "VLAD_MACHINE"] as const;
+export const WORKER_ENV_KEYS = ["PATH", "HOME", "VLAD_HOME", "VLAD_KB_DIR", "VLAD_TASK_ID", "VLAD_MACHINE"] as const;
 /** Same as the task schema's `id`; the id lands in a unit name and file names. */
 const TASK_ID = /^T\d{8}-\d{2,}$/;
 
@@ -26,7 +26,7 @@ export const defaultSettingsPath = (): string =>
 export function workerEnv(req: LaunchRequest, env: NodeJS.ProcessEnv = process.env): [string, string][] {
   if (!TASK_ID.test(req.taskId)) throw new Error(`geçersiz görev kimliği: ${JSON.stringify(req.taskId)}`);
   const vals: Record<string, string | undefined> = {
-    PATH: env.PATH, HOME: env.HOME, VLAD_HOME: env.VLAD_HOME, ...req.env, VLAD_TASK_ID: req.taskId, VLAD_MACHINE: currentMachine(env),
+    PATH: env.PATH, HOME: env.HOME, VLAD_HOME: env.VLAD_HOME, VLAD_KB_DIR: env.VLAD_KB_DIR, ...req.env, VLAD_TASK_ID: req.taskId, VLAD_MACHINE: currentMachine(env),
   };
   const pairs: [string, string][] = [];
   for (const k of WORKER_ENV_KEYS) {

@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Ajv, type ValidateFunction } from "ajv";
 import addFormatsModule from "ajv-formats";
-import { kbPaths } from "./home.js";
+import { getVladHome } from "./home.js";
 
 const addFormats = ((addFormatsModule as any).default ?? addFormatsModule) as (a: Ajv) => Ajv;
 
-export type SchemaKind = "project" | "task" | "inbox" | "config" | "role" | "finding" | "audit" | "card" | "active";
+export type SchemaKind = "project" | "task" | "inbox" | "config" | "role" | "finding" | "audit" | "card" | "active" | "grant";
 
 export class ValidationError extends Error {
   constructor(public details: string[]) {
@@ -18,7 +18,7 @@ export class ValidationError extends Error {
 const cache = new Map<string, ValidateFunction>();
 
 function compiled(kind: SchemaKind, home?: string): ValidateFunction {
-  const file = join(kbPaths(home).schemas, `${kind}.schema.json`);
+  const file = join(home ?? getVladHome(), "schemas", `${kind}.schema.json`);
   let fn = cache.get(file);
   if (!fn) {
     const ajv = addFormats(new Ajv({ allErrors: true, strict: false }));
