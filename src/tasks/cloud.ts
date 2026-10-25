@@ -74,7 +74,7 @@ function kbOpening(task: Task, parent: Task | undefined): string {
       (deps.length ? `; girdi olarak bağımlı görevlerin \`## Kapanış raporu\` bölümleri: ${deps.map((d) => `\`<kb>/tasks/${d}.md\``).join(", ")}` : "") +
       `; \`<kb>/projects/${task.data.project}.md\` içinde \`## Çalışma notları\` (uy) ve frontmatter'daki \`gate\` (kapı komutu; rapordan önce çalıştır, sonucunu \`### Test sonuçları\`'na yaz).`,
     "3. kb klonu **salt okumadır**: commit/push yok, dosyaları değiştirme; yalnız VLAD mesajla isterse `git -C <kb> pull --ff-only`.",
-    "4. Yedek: add_repo/klon iki denemede başarısızsa `[VLAD:LOG #n] kb erişimi yok: <hata>` yaz, `[VLAD:ASK #n]` ile VLAD'dan görev metnini iste ve turunu bitir.",
+    `4. Yedek: add_repo/klon iki denemede (429 beklemesi dahil toplam iki) başarısızsa ya da \`tasks/${id}.md\` klonda yoksa \`[VLAD:LOG #n] kb erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan görev metnini iste ve turunu bitir.`,
   ].join("\n");
 }
 
@@ -113,9 +113,11 @@ function gateRules(gate: string | undefined, parentId: string | undefined): stri
   return out;
 }
 
-const PROTOCOL = (id: string, autonomy: string, vladSession?: string) => [
+const PROTOCOL = (id: string, autonomy: string, vladSession?: string, readonly = false) => [
   "## VLAD bulut protokolü",
-  "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
+  readonly
+    ? "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `<VLAD_HOME>/kb/` yollarını, `vlad task …` (log|ask|report) ve worktree adımlarını geçersiz kılar; görev dosyası ve kartı yalnızca kb klonundan (`<kb>/…`, salt okuma) okursun. Çelişkide bu protokol geçerlidir."
+    : "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
   `- Görev: ${id}. Çalışma branch'in \`vlad/${id}\`; commit'lerini yalnızca oraya push et (\`git push -u origin vlad/${id}\`).`,
   "- `master`'a veya başka bir branch'e push etme; merge etme; PR açma. `kb/` altına yazma; `vlad` CLI'ı ve `vlad-worker` skill'ini kullanma: rol metnindeki \"vlad-worker protokolünü uygula\" yerine bu protokol geçerlidir (tek doğru kaynak).",
   autonomy === "plan"
@@ -217,7 +219,7 @@ function buildCloudPrompt(
     } catch { /* reported as missing below */ }
     parts.push(`## Girdi: ${d} kapanış raporu\n${report && dep ? inlineReport(dep, report, base) : "(rapor yok)"}`);
   }
-  parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession));
+  parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession, readonly));
   return parts.join("\n\n");
 }
 
@@ -234,10 +236,11 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   const branch = `vlad/${id}`;
   let res: CloudLaunch;
   const warnings: string[] = [];
-  const kb = o.cloudKb ?? loadConfig().cloudKb ?? "readonly";
+  let kb: CloudKb = "readonly";
   const rawSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
   const vladSession = rawSession ? toSessionId(rawSession) : rawSession;
   try {
+    kb = o.cloudKb ?? loadConfig().cloudKb ?? "readonly";
     const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     const c = card(task.data.project);
     if (c.local_only) {

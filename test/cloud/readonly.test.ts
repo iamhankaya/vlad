@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/kb/index.js";
 import { writeProject } from "../../src/projects/store.js";
-import { createTask, prepareCloudLaunch, reportTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, prepareCloudLaunch, reportTask, setState } from "../../src/tasks/index.js";
 import { makeHome } from "../helpers.js";
 
 const ADD = "mcp__claude-code-remote__add_repo";
@@ -106,6 +106,29 @@ describe("readonly cloud prompt", () => {
     expect(r.extra_allowed_tools).toEqual([ADD, REG]);
     expect(r.next[0]).toContain("vlad kb commit --push");
     expect(r.next.findIndex((n) => n.includes("kb commit --push"))).toBeLessThan(r.next.findIndex((n) => n.startsWith("create_session(")));
+  });
+});
+
+describe("readonly details", () => {
+  it("o.cloudKb overrides the config; opening lists parent and dependency files; protocol keeps the task file readable", () => {
+    cfg({ cloudKb: "inline" });
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
+    const spec = createTask({ project: "alpha", title: "spec", kind: "research", body: "", parent: pipe.data.id });
+    const t = mk({ parent: pipe.data.id, dependsOn: [spec.data.id] });
+    const { prompt: p, kb_access } = prepareCloudLaunch(t.data.id, { cloudKb: "readonly", remoteBranch: () => "exists" });
+    expect(kb_access).toBe("readonly");
+    for (const f of [t.data.id, pipe.data.id, spec.data.id]) expect(p).toContain(`<kb>/tasks/${f}.md`);
+    expect(p).toContain("`<kb>/projects/alpha.md`");
+    expect(p).toContain("kb klonundan (`<kb>/…`, salt okuma) okursun");
+    expect(p).not.toContain("görev dosyası ve worktree adımlarını geçersiz kılar");
+    expect(p).toContain(`tasks/${t.data.id}.md\` klonda yoksa`);
+  });
+
+  it("an invalid cloudKb leaves the task queued with error set", () => {
+    const t = mk();
+    cfg({ cloudKb: "nope" });
+    expect(() => prepareCloudLaunch(t.data.id)).toThrow();
+    expect(getTask(t.data.id).data).toMatchObject({ state: "queued" });
   });
 });
 
