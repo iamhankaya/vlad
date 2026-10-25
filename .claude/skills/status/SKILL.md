@@ -9,12 +9,11 @@ description: Aktif görevlerin durumunu gösterir; onay bekleyen görevler için
 
 ## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
 
-Bulutta bu akış `kb/`'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) `master` ile eşitlen:
+kb ayrı private repoda (`iamhankaya/vlad-kb`; konum: `VLAD_KB_DIR` ya da `vlad.config.json`'daki `kbDir`). Bulutta bu akış kb'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) kb reposunu eşitle:
 ```
-git fetch origin master
-git merge origin/master
+git -C <kbDir> pull --ff-only
 ```
-Çakışma çıkarsa (`git merge --abort` ile temizle) **dur**, yazma; kullanıcıya hangi dosyaların çakıştığını bildir ve nasıl ilerleyeceğini sor. Yerelde (`CLAUDE_CODE_REMOTE` yok) bu adım atlanır.
+Çakışma/ff yapılamazsa **dur**, yazma; kullanıcıya durumu bildir ve nasıl ilerleyeceğini sor. kbDir bulutta yoksa (`vlad` komutları "kb deposu bulunamadı" der) kullanıcıya `add_repo iamhankaya/vlad-kb` + `git clone https://github.com/iamhankaya/vlad-kb <kbDir>` gerektiğini söyle ve dur. Yerelde (`CLAUDE_CODE_REMOTE` yok) bu adım atlanır.
 
 ## 1. Durumu oku
 

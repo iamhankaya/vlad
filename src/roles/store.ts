@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { kbPaths, readDoc, validate, type RoleData } from "../kb/index.js";
+import { getVladHome, readDoc, validate, type RoleData } from "../kb/index.js";
 
 export type Role = Omit<RoleData, "model"> & { file: string; skills: string[]; model: string | null };
 
@@ -13,7 +13,7 @@ function readRole(file: string, name: string): Role {
 }
 
 /** Valid roles in name order; unreadable or invalid files are skipped and reported as warnings. */
-export function listRolesWithWarnings(dir: string = kbPaths().roles): { roles: Role[]; warnings: string[] } {
+export function listRolesWithWarnings(dir: string = join(getVladHome(), "roles")): { roles: Role[]; warnings: string[] } {
   const roles: Role[] = [];
   const warnings: string[] = [];
   if (!existsSync(dir)) return { roles, warnings };
@@ -28,7 +28,7 @@ export function listRolesWithWarnings(dir: string = kbPaths().roles): { roles: R
 }
 
 export function getRole(slug: string): Role {
-  const dir = kbPaths().roles;
+  const dir = join(getVladHome(), "roles");
   const file = join(dir, `${slug}.md`);
   if (!/^[a-z][a-z0-9-]*$/.test(slug) || !existsSync(file)) {
     const known = listRolesWithWarnings(dir).roles.map((r) => r.slug);
