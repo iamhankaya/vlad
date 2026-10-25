@@ -42,9 +42,15 @@ describe("markSilentWorkers", () => {
     runningLocal(1);
     expect(stalledIds(probe({ alive: () => false }))).toEqual([]);
   });
-  it("stalls a living process whose transcript and task file are older than the silence limit", () => {
+  it("a living process gets 4x the silence limit (long build or permission prompt), then stalls", () => {
     const id = runningLocal(20);
-    expect(stalledIds(probe({ transcriptMtime: () => now.getTime() - 20 * MIN }))).toEqual([id]);
+    expect(stalledIds(probe({ transcriptMtime: () => now.getTime() - 20 * MIN }))).toEqual([]);
+    age(id, 61);
+    expect(stalledIds(probe({ transcriptMtime: () => now.getTime() - 61 * MIN }))).toEqual([id]);
+  });
+  it("silent past the limit with no process list (null) stalls", () => {
+    const id = runningLocal(20);
+    expect(stalledIds(probe({ alive: () => null, transcriptMtime: () => now.getTime() - 20 * MIN }))).toEqual([id]);
   });
   it("a fresh transcript keeps a task running even when the task file is old", () => {
     runningLocal(120);
@@ -53,8 +59,9 @@ describe("markSilentWorkers", () => {
   it("honors workerSilentMinutes from the config", () => {
     const id = runningLocal(20);
     const cfg = { ...defaultConfig(), workerSilentMinutes: 30 };
-    expect(stalledIds(probe({}), cfg)).toEqual([]);
-    expect(stalledIds(probe({}), { ...cfg, workerSilentMinutes: 10 })).toEqual([id]);
+    const unknown = probe({ alive: () => null });
+    expect(stalledIds(unknown, cfg)).toEqual([]);
+    expect(stalledIds(unknown, { ...cfg, workerSilentMinutes: 10 })).toEqual([id]);
   });
   it("process list unavailable (null) → only the silence rule applies", () => {
     runningLocal(10);

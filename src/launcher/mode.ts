@@ -5,7 +5,7 @@ export type LaunchMode = "cloud" | "wt" | "powershell" | "auto-terminal" | "noop
 
 /** F-vlad-064: VLAD_LAUNCHER=noop (set by vitest) forbids real terminals/processes unless VLAD_ALLOW_REAL_LAUNCHER=1. */
 export const realLauncherBlocked = (env: NodeJS.ProcessEnv = process.env): boolean =>
-  env.VLAD_LAUNCHER === "noop" && !env.VLAD_ALLOW_REAL_LAUNCHER;
+  env.VLAD_LAUNCHER === "noop" && env.VLAD_ALLOW_REAL_LAUNCHER !== "1";
 
 export function assertRealLauncherAllowed(env: NodeJS.ProcessEnv = process.env): void {
   if (realLauncherBlocked(env)) {

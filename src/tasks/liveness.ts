@@ -10,6 +10,7 @@ const MIN = 60_000;
 export const DEFAULT_SILENT_MINUTES = 15;
 // a worker process missing this long after the last sign of life counts as dead (a fresh launch needs a moment to show up)
 const NO_PROCESS_GRACE_MIN = 5;
+const LIVE_FACTOR = 4;
 
 export interface LivenessProbe {
   /** Is a process whose command line mentions the task id running? null → process list unavailable. */
@@ -55,7 +56,7 @@ export function defaultProbe(): LivenessProbe {
 /**
  * A local worker that stopped without reporting leaves its task `running` until `staleAfterHours`.
  * Marks it `stalled` sooner: no sign of life (task file update or transcript write) for
- * `workerSilentMinutes`, or, with no worker process mentioning the task id, for a short grace.
+ * `workerSilentMinutes` (4x that while a process mentions the task id), or, with no such process, for a short grace.
  * Cloud tasks, pipelines and tasks without a worktree are left alone; no-op outside Windows.
  */
 export function markSilentWorkers(
@@ -73,7 +74,9 @@ export function markSilentWorkers(
     probe ??= defaultProbe();
     const idle = now.getTime() - Math.max(updated, probe.transcriptMtime(wt) ?? 0);
     if (idle < graceMs) continue;
-    if (idle >= silentMs || probe.alive(t.data.id) === false) out.push(setState(t.data.id, "stalled"));
+    const alive = probe.alive(t.data.id);
+    // a live process may sit in a long build/test or at a permission prompt without writing anything: give it more room
+    if (alive === false || idle >= (alive ? LIVE_FACTOR * silentMs : silentMs)) out.push(setState(t.data.id, "stalled"));
   }
   return out;
 }

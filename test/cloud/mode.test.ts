@@ -73,6 +73,9 @@ describe("F-vlad-064: test launcher guard", () => {
   it("VLAD_ALLOW_REAL_LAUNCHER=1 lifts the guard", () => {
     expect(resolveLaunchMode("auto", "win32", { ...NOOP, VLAD_ALLOW_REAL_LAUNCHER: "1" })).toBe("auto-terminal");
   });
+  it("only VLAD_ALLOW_REAL_LAUNCHER=1 lifts it, not 0", () => {
+    expect(resolveLaunchMode("auto", "win32", { ...NOOP, VLAD_ALLOW_REAL_LAUNCHER: "0" })).toBe("noop");
+  });
   it("a real terminal start or window kill under the guard throws instead of spawning", async () => {
     const saved = { ...process.env };
     process.env.VLAD_LAUNCHER = "noop";
