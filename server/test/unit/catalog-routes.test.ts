@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { ReadCache } from "../../src/read/cache.ts";
-import { vaultPathProblem } from "../../src/read/catalog.ts";
+import { CACHE_MAX_ENTRIES, ReadCache } from "../../src/read/cache.ts";
+import { cleanWarnings, vaultPathProblem } from "../../src/read/catalog.ts";
 import { registerReadRoutes } from "../../src/read/routes.ts";
 import { runVlad } from "../../src/vlad/cli.ts";
 import { pairDevice, rig, signedCall } from "../helpers/client.ts";
@@ -44,6 +44,8 @@ const auth: any = async (req: any, reply: any) => {
 };
 
 const SECRET = "GIZLI-KELIME-9731";
+// values that live in front matter of kb files and must never reach a phone
+const LEAKS = ["/srv/vlad-worktrees/T20261025-99", "vlad/T20261025-99", "sess-3f9a0c-gizli", "/home/vladapi/projeler/gizli-proje", "npm run gizli-gate"];
 let app: FastifyInstance;
 let nowMs = 1_000_000;
 
@@ -72,6 +74,10 @@ beforeAll(async () => {
   await vlad(["project", "write", "vlad", "--file", write("p1.md", card)]);
   await vlad(["project", "write", "eski-proje", "--file", write("p2.md", bare)]);
 
+  // a task file and a card whose front matter carries server-side facts, plus a corrupt card
+  write("kb/tasks/T20261025-99.md", ["---", "id: T20261025-99", `worktree: ${LEAKS[0]}`, `branch: ${LEAKS[1]}`, `session_id: ${LEAKS[2]}`, "---", "", "## Tanım", "izleme notu imza", ""].join("\n"));
+  write("kb/projects/gizli-proje.md", ["---", "slug: gizli-proje", "name: Gizli", `path: ${LEAKS[3]}`, `gate: ${LEAKS[4]}`, "stack: [ts]", "status: active", "autonomy: plan", "last_activity: null", "last_scanned: null", "---", "", "## Özet", "yalnız bu görünür", ""].join("\n"));
+  write("kb/projects/bozuk.md", `---\npath: ${tmp}/kb/projects\n: : :\n---\n`);
   // readable memory
   write("kb/decisions.md", "# Kararlar\n\n## 2026-10-24\nSıkı kapı: imza zarfı kararı.\n\n```\n# kod içi başlık değil\n```\n");
   write("home/vault/docs/rehber.md", "# Rehber\n\n## Kurulum\nimza adımları\n");
@@ -117,7 +123,7 @@ describe("server: projects", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     check("listProjects", 200, body);
-    expect(body.projects.map((p: any) => p.slug)).toEqual(["eski-proje", "vlad"]);
+    expect(body.projects.map((p: any) => p.slug)).toEqual(["eski-proje", "gizli-proje", "vlad"]);
     expect(body.projects.find((p: any) => p.slug === "vlad")).toEqual({
       slug: "vlad", name: "VLAD", exposure: "internet", repo: "iamhankaya/vlad", open_tasks: 1, last_activity: null,
     });
@@ -229,6 +235,10 @@ describe("server: vault", () => {
       "symlink to inbox file": "kb/kisayol.md",
       "symlink out of tree": "kb/cikis.md",
       "docs symlink to audit": "vault/docs/denetim/2026-10.md",
+      "trailing dot": "kb/inbox./rapor.md",
+      "trailing space": "kb/logs /gunluk.md",
+      "ntfs stream": "kb/inbox::$DATA",
+      "8.3 name": "kb/INBOX~1/rapor.md",
       "case KB/INBOX": "KB/INBOX/rapor.md",
       "case Kb/LoGs": "Kb/LoGs/gunluk.md",
       "case kb/Audit": "kb/Audit/2026-10.md",
@@ -250,7 +260,7 @@ describe("server: vault", () => {
       if (r.statusCode === 400) check("readVaultFile", 400, r.json());
     }
     // the ones that must be refusals, not merely missing
-    const refused = ["traversal", "encoded", "double", "backslash", "null", "absolute", "symlink to inbox dir", "symlink to inbox file", "symlink out of tree", "case KB/INBOX", "case Kb/LoGs", "docs symlink to audit"];
+    const refused = ["trailing dot", "trailing space", "ntfs stream", "8.3 name", "traversal", "encoded", "double", "backslash", "null", "absolute", "symlink to inbox dir", "symlink to inbox file", "symlink out of tree", "case KB/INBOX", "case Kb/LoGs", "docs symlink to audit"];
     for (const name of refused) {
       const r = await file(attempts[name]);
       expect(r.statusCode, name).toBe(400);
@@ -267,8 +277,54 @@ describe("server: vault", () => {
     // the allowed neighbours are fine, so the refusals above are not a broken route
     expect((await file("kb/decisions.md")).statusCode).toBe(200);
     expect((await file("./kb//decisions.md")).statusCode).toBe(200);
-    expect((await file("kb/yok.md")).statusCode).toBe(404);
-    check("readVaultFile", 404, (await file("kb/yok.md")).json());
+    // a missing file answers like a forbidden one: 400 either way, so the status says nothing about what exists behind a name
+    const missing = await file("kb/yok.md");
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json()).toEqual((await file("kb/inbox/yok.md")).json());
+  });
+
+  it("kb front matter never reaches the API (file body, headings and search snippets)", async () => {
+    const task = (await file("kb/tasks/T20261025-99.md")).json();
+    check("readVaultFile", 200, task);
+    expect(task.content.trim()).toBe("## Tanım\nizleme notu imza");
+    expect(task.headings).toEqual(["Tanım"]);
+    const card = (await file("kb/projects/gizli-proje.md")).json();
+    expect(card.content.trim()).toBe("## Özet\nyalnız bu görünür");
+    expect((await get("/v1/projects/gizli-proje")).json().card_md).toBe("## Özet\nyalnız bu görünür");
+    // snippets: words that occur only in front matter are not found; words in the body are, and the snippet is a body line
+    for (const v of ["worktree", "session_id", "sess-3f9a0c", "vladapi", "gizli-gate", "slug:", "autonomy"]) {
+      const res = await search(v);
+      expect(res.statusCode, v).toBe(200);
+      expect(res.body, v).not.toContain("T20261025-99.md");
+      for (const l of LEAKS) expect(res.body, v).not.toContain(l);
+    }
+    const hit = (await search("izleme notu")).json().hits.find((h: any) => h.path === "kb/tasks/T20261025-99.md");
+    expect(hit.snippet).toBe("izleme notu imza");
+    // nothing from any response of the catalog carries a front matter value
+    for (const url of ["/v1/projects", "/v1/projects/gizli-proje", "/v1/findings", "/v1/vault/search?q=gizli", "/v1/vault/search?q=imza"]) {
+      const body = (await get(url)).body;
+      for (const l of LEAKS) expect(body, `${url} ${l}`).not.toContain(l);
+    }
+  });
+
+  it("warnings carry a file name and a fixed reason, never the CLI's text", async () => {
+    const res = (await get("/v1/projects")).json();
+    expect(res.warnings.some((w: string) => w.startsWith("bozuk.md:"))).toBe(true);
+    expect(JSON.stringify(res.warnings)).not.toContain(tmp);
+    expect(cleanWarnings(["x.md: ENOENT /srv/secret/x.md", "plain /etc/passwd"])).toEqual(["x.md: kayıt okunamadı", "kayıt okunamadı"]);
+  });
+
+  it("the read cache stays bounded for client-chosen keys", async () => {
+    const cache = new ReadCache(() => nowMs);
+    for (let i = 0; i < 10_000; i++) await cache.get(`vault read k${i}`, async () => i);
+    expect(cache.size).toBeLessThanOrEqual(CACHE_MAX_ENTRIES);
+    // recently used entries survive eviction; an expired entry is dropped when it is read again
+    await cache.get("keep", async () => 1);
+    for (let i = 0; i < 100; i++) { await cache.get("keep", async () => 2); await cache.get(`x${i}`, async () => i); }
+    expect(await cache.get("keep", async () => 3)).toBe(1);
+    nowMs += 5000;
+    expect(await cache.get("keep", async () => 4)).toBe(4);
+    expect(cache.size).toBeLessThanOrEqual(CACHE_MAX_ENTRIES);
   });
 
   it("vaultPathProblem agrees with the contract's examples", () => {
@@ -277,6 +333,7 @@ describe("server: vault", () => {
     expect(vaultPathProblem("../../etc/passwd")).toBe("traversal");
     expect(vaultPathProblem("kb/INBOX/x.md")).toBe("sensitive");
     expect(vaultPathProblem("kb/%2e%2e/x.md")).toBe("encoded");
+    for (const alias of ["kb/inbox./x.md", "kb/logs /x.md", "kb/inbox::$DATA", "kb/INBOX~1/x.md"]) expect(vaultPathProblem(alias), alias).toBe("alias");
   });
 
   it("server: kb/inbox and kb/logs forbidden at API", async () => {

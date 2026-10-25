@@ -1,5 +1,4 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { parse as parseYaml } from "yaml";
 import { runVlad, VladError } from "../vlad/cli.ts";
 import { ReadCache } from "./cache.ts";
 import type { ReadDeps, ReadHandler } from "./routes.ts";
@@ -35,6 +34,8 @@ export function vaultPathProblem(p: string): string | null {
   const segs = p.split("/").filter((s) => s !== "" && s !== ".");
   if (segs.length === 0) return "empty";
   if (segs.some((s) => s === "..")) return "traversal";
+  // Windows aliases of a real entry (`inbox.`, `logs `, `inbox::$DATA`, `INBOX~1`): never a name the vault lists, so refused outright
+  if (segs.some((s) => /[. ]$/.test(s) || s.includes(":") || /~[0-9]/.test(s))) return "alias";
   const low = segs.map(fold);
   if (low.some((s) => s.startsWith("."))) return "dotfile";
   if (low[0] === "kb") return low.length > 1 && DENIED_UNDER_KB.includes(low[1]) ? "sensitive" : null;
@@ -45,12 +46,15 @@ export function vaultPathProblem(p: string): string | null {
 /** CLI messages (Turkish, src/vault/search.ts) that mean "this request was refused", as opposed to a broken run. */
 const VAULT_REFUSED = /^(yol |dosya |dizin |yalnızca \.md|ikili dosya|geçersiz UTF|sorgu |geçersiz bölge)/;
 
-/** Text between the opening and closing `---` of a card, and what follows. */
-function splitCard(md: string): { front: Record<string, unknown>; body: string } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(md);
-  if (!m) return { front: {}, body: md };
-  const front = parseYaml(m[1]);
-  return { front: front && typeof front === "object" ? (front as Record<string, unknown>) : {}, body: m[2] };
+/**
+ * Warnings come from the CLI as `<file>: <message>`; the message can carry an fs error with an absolute path.
+ * The client gets the file name and a fixed reason only.
+ */
+export function cleanWarnings(ws: string[]): string[] {
+  return ws.map((w) => {
+    const m = /^([A-Za-z0-9._-]{1,100}\.(?:md|json|jsonl)):/.exec(w);
+    return m ? `${m[1]}: kayıt okunamadı` : "kayıt okunamadı";
+  });
 }
 
 // kb exposure is local | network | internet; the API has local | internet | none. Absent = nothing was ever asked = none.
@@ -103,7 +107,7 @@ export function catalogHandlers(deps: ReadDeps, cache: ReadCache): Record<"listP
         run<{ tasks: TaskData[]; warnings: string[] }>(["task", "list"]),
       ]);
       const open = openTasks(tasks.tasks);
-      return { projects: projects.projects.map((p) => summary(p, open)), warnings: [...projects.warnings, ...tasks.warnings] };
+      return { projects: projects.projects.map((p) => summary(p, open)), warnings: cleanWarnings([...projects.warnings, ...tasks.warnings]) };
     } catch (e) {
       return failure(reply, e, "Proje");
     }
@@ -119,8 +123,8 @@ export function catalogHandlers(deps: ReadDeps, cache: ReadCache): Record<"listP
       ]);
       const p = projects.projects.find((x) => x.slug === slug);
       if (!p) return err(reply, 404, "Proje bulunamadı.", { reason: "not_found" });
-      const file = await run<{ content: string }>(["vault", "read"], [`kb/projects/${slug}.md`]);
-      return { ...summary(p, openTasks(tasks.tasks)), card_md: splitCard(file.content).body.trim() };
+      const file = await run<{ content: string }>(["vault", "read", "--strip-front-matter"], [`kb/projects/${slug}.md`]);
+      return { ...summary(p, openTasks(tasks.tasks)), card_md: file.content.trim() };
     } catch (e) {
       return failure(reply, e, "Proje");
     }
@@ -140,7 +144,7 @@ export function catalogHandlers(deps: ReadDeps, cache: ReadCache): Record<"listP
         findings: r.findings.map((f) => ({
           id: f.id, project: f.project, severity: f.severity, status: f.state, title: f.title, ...(f.detail ? { detail: f.detail } : {}),
         })),
-        warnings: r.warnings,
+        warnings: cleanWarnings(r.warnings),
       };
     } catch (e) {
       return failure(reply, e, "Bulgu");
@@ -153,7 +157,7 @@ export function catalogHandlers(deps: ReadDeps, cache: ReadCache): Record<"listP
     if (!q || q.length > MAX_Q || q.includes("\0")) return err(reply, 400, "Geçersiz sorgu.", { field: "q" });
     if (zone === null || (zone !== undefined && !ZONES.includes(zone))) return err(reply, 400, "Geçersiz bölge.", { field: "zone" });
     try {
-      const r = await run<{ hits: { path: string; score: number; snippet: string }[] }>(["vault", "search", ...(zone ? [`--zone=${zone}`] : [])], [q]);
+      const r = await run<{ hits: { path: string; score: number; snippet: string }[] }>(["vault", "search", "--strip-front-matter", ...(zone ? [`--zone=${zone}`] : [])], [q]);
       return { hits: r.hits.map((h) => ({ path: h.path, score: h.score, snippet: h.snippet })) };
     } catch (e) {
       return failure(reply, e, "Dosya", { field: "q" });
@@ -165,9 +169,14 @@ export function catalogHandlers(deps: ReadDeps, cache: ReadCache): Record<"listP
     const bad = path === undefined || path === null ? "missing" : vaultPathProblem(path);
     if (bad) return err(reply, 400, "Yol izin listesinde değil.", { reason: "path_forbidden" });
     try {
-      const f = await run<{ path: string; content: string; headings: { text: string }[] }>(["vault", "read"], [path!]);
+      // normalized: `./kb//x.md` and `kb/x.md` are one cache entry
+      const norm = path!.split("/").filter((x) => x !== "" && x !== ".").join("/");
+      const f = await run<{ path: string; content: string; headings: { text: string }[] }>(["vault", "read", "--strip-front-matter"], [norm]);
       return { path: f.path, content: f.content, headings: f.headings.map((h) => h.text) };
     } catch (e) {
+      // A missing file and an allowed-looking path that resolves into a forbidden folder answer alike (400): the
+      // difference between 404 and 400 must not tell a caller whether something exists behind a name it cannot read.
+      if (e instanceof VladError && e.kind === "not_found") return err(reply, 400, "Yol izin listesinde değil.", { reason: "path_forbidden" });
       return failure(reply, e, "Dosya", { reason: "path_forbidden" });
     }
   };

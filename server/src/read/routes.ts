@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { runVladJson, VladError } from "../vlad/cli.ts";
 import { ReadCache } from "./cache.ts";
-import { catalogHandlers } from "./catalog.ts";
+import { catalogHandlers, cleanWarnings } from "./catalog.ts";
 import { gateCard, isWorker, toCard, toPipelines, toTask, toWorker } from "./map.ts";
 import type { CardData, GateProvider, TaskData } from "./types.ts";
 
@@ -76,7 +76,7 @@ export function readHandlers(deps: ReadDeps = {}): Record<ReadOp, ReadHandler> {
         active_vlad: active.active
           ? { machine: active.active.machine, since: active.active.since, heartbeat: active.active.heartbeat, mine: active.mine }
           : { machine: "", since: EPOCH, heartbeat: EPOCH, mine: false },
-        warnings: [...tasks.warnings, ...cards.warnings, ...quota.warnings, ...active.warnings],
+        warnings: cleanWarnings([...tasks.warnings, ...cards.warnings, ...quota.warnings, ...active.warnings]),
       };
     } catch (e) {
       return vladFailure(reply, e);
@@ -114,7 +114,7 @@ export function readHandlers(deps: ReadDeps = {}): Record<ReadOp, ReadHandler> {
   const listPipelines: ReadHandler = async (_req, reply) => {
     try {
       const tasks = await list<{ tasks: TaskData[]; warnings: string[] }>(["task", "list"]);
-      return { pipelines: toPipelines(tasks.tasks), warnings: tasks.warnings };
+      return { pipelines: toPipelines(tasks.tasks), warnings: cleanWarnings(tasks.warnings) };
     } catch (e) {
       return vladFailure(reply, e);
     }
