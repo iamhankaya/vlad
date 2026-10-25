@@ -8,4 +8,4 @@ if (!kbDir || !kbDir.startsWith("/")) {
   console.error("Kullanım: gen-chat-settings.ts <mutlak kb yolu> [<korunan mutlak yol>...]");
   process.exit(2);
 }
-process.stdout.write(JSON.stringify({ permissions: chatPermissions(kbDir, protect) }, null, 2) + "\n");
+process.stdout.write(JSON.stringify({ permissions: chatPermissions(kbDir, protect), disableAllHooks: true }, null, 2) + "\n");

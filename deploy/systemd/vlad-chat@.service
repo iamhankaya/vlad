@@ -5,8 +5,7 @@ Description=VLAD chat turn (sandboxed claude as vladchat)
 [Service]
 User=vladchat
 Group=vladchat
-# read access to the kb only (group vlad); kb is mounted read-only below
-SupplementaryGroups=vlad
+# no supplementary groups: the kb is readable through an ACL entry for vladchat (install.sh), never through group vlad
 StandardInput=socket
 StandardOutput=socket
 StandardError=journal
@@ -30,8 +29,13 @@ ProtectHome=yes
 # the kb is readable, never writable; the only writable tree is vladchat's own home (claude login, session files)
 ReadOnlyPaths=@KB_DIR@ @VLAD_HOME@
 ReadWritePaths=/var/lib/vladchat
+# user settings and memory files of the chat agent are root-owned empty files, bind-mounted read-only: the agent cannot plant hooks, rules or instructions that persist (install.sh creates them)
+ReadOnlyPaths=/var/lib/vladchat/.claude/settings.json /var/lib/vladchat/.claude/CLAUDE.md /var/lib/vladchat/CLAUDE.md
+# nothing the agent writes can be executed; binaries come from the root-owned trees only
+NoExecPaths=/var/lib/vladchat
+ExecPaths=/usr /opt /usr/local
 # the API's state (device ledger, App key, challenges) and the agent's worktrees/credentials do not exist for this unit
-InaccessiblePaths=/var/lib/vladapi -/var/lib/vlad/worktrees /home /root
+InaccessiblePaths=/var/lib/vladapi -/var/lib/vlad/worktrees /home /root -/run/tailscale -/run/dbus
 PrivateTmp=yes
 PrivateDevices=yes
 PrivateUsers=no
@@ -48,7 +52,11 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=no
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# network: the model API and DNS only. Loopback (the API on 8787), private ranges, the tailnet (100.64/10) and the metadata service are unreachable.
+# 127.0.0.53 is the resolver stub; allow overrides deny for that one address.
+RestrictAddressFamilies=AF_INET AF_INET6
+IPAddressDeny=localhost link-local multicast 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 fc00::/7 169.254.0.0/16
+IPAddressAllow=127.0.0.53
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources

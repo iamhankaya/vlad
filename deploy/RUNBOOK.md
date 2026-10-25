@@ -31,7 +31,7 @@ Kısaltmalar: **vlad** = ajan kullanıcısı (çalışanlar, `vlad` CLI), **vlad
 ### A.2 Ağ
 - **Güvenlik grubu: GELEN kural yok** (boş). Giden: hepsi (GitHub, Anthropic, Tailscale, Firebase).
 - SSH yalnız anahtarla, tercihen yalnız Tailscale içinden. Başlangıç erişimi için geçici olarak 22/tcp'yi **yalnız kendi çıkış adresine** aç, Tailscale çalışınca kuralı sil. Elastic IP gerekmez.
-- Örnek metadata: IMDSv2 zorunlu (`HttpTokens=required`), hop limit 1.
+- Örnek metadata: IMDSv2 zorunlu (`HttpTokens=required`), hop limit 1. **EC2 instance profile (IAM rolü) bağlanmaz**: sunucuda AWS kimliği olmamalı; sohbet ajanı ağ kısıtıyla (A.9) metadata hizmetine zaten ulaşamaz, bu ikinci katmandır.
 
 ### A.3 Kurulum betiğini çalıştır
 ```bash
@@ -40,7 +40,9 @@ sudo CLAUDE_CODE_VERSION=<kesin sürüm> deploy/install.sh
 ```
 - `VLAD_INSTALL_DRYRUN=1` ile önce ne yapacağını izle (root gerekmez).
 - Betik: kullanıcılar/gruplar, `enable-linger vlad`, Node 22 (NodeSource, imzalı apt deposu; **parmak izi ekrana yazılır**, resmî değerle elle karşılaştır ya da `NODE_KEY_FPR`/`GH_KEY_FPR`/`TS_KEY_FPR` ile sabitle), `gh`, Tailscale, sabit sürümlü `claude` (`/opt/claude-code`, root), kodu `/opt/vlad`'a root olarak kopyalar, `npm ci` + `npm audit --omit=dev --audit-level=high` (yüksek/kritik bulgu varsa durur; bilinçli karar `AUDIT_ALLOW=1` ve karar rapora yazılır), birimleri `@KB_DIR@`/`@VLAD_HOME@` doldurarak `/etc/systemd/system`'e koyar.
-- İsteğe bağlı: `HARDEN_SSH=1` (yalnız anahtarla giriş, `sshd -t` doğrular; **ikinci bir oturumu açık tut**).
+- İsteğe bağlı: `HARDEN_SSH=1` (`/etc/ssh/sshd_config.d/01-vlad.conf`; `sshd -t` ve `sshd -T` ile etkin değerleri doğrular, tutmazsa dosyayı geri alır; `SSH_ALLOW_USERS="admin"` ile `AllowUsers` eklenir; **ikinci bir oturumu açık tut**).
+- Üçüncü taraf apt anahtarlarının birincil parmak izleri betikte sabittir (`DEFAULT_*_KEY_FPR`) ve anahtarlıkta tek birincil anahtar aranır. **İlk gerçek koşudan önce bu değerleri üreticilerin yayımladığı parmak iziyle elle karşılaştır** (bu sürümde ağsız ortamda doğrulanamadı); tutmazsa kurulum durur, doğru değer `*_KEY_FPR` ile verilir.
+- `npm ci` ve `claude` kurulumu `--ignore-scripts` ile, root olarak ama yaşam döngüsü betiği çalıştırmadan yapılır; `npm audit` kilit dosyasına karşı kurulumdan ÖNCE koşar. `claude` bu haliyle açılmazsa kurulum durur; paketin kendi kurulum betiğini okuyup `CLAUDE_RUN_POSTINSTALL=1` ile bilinçli çalıştır.
 - Kilit dosyaları (`package-lock.json`, `server/package-lock.json`) commit'lidir; `npm ci` uyuşmazlıkta başarısız olur (kilit güncellemesi bilinçli bir PR işidir).
 
 ### A.4 Tailscale
@@ -62,7 +64,15 @@ sudo tailscale up --ssh=false          # kimlik doğrulama bağlantısını tara
 2. **PAT (vlad):** `sudo -u vlad gh auth login` (ince taneli PAT). Yetkiler, **kullanıcı kararı 2026-10-25**: proje repoları için `contents:write` + `pull_requests:write`; **`vlad-kb` için `contents:write`** (`kb-server` dalı push'u için; GitHub dal bazında daraltamaz). PAT ana dala yazamamalı: bölüm D'deki ruleset kod repoları için bunu zorlar, `vlad-kb` için ruleset yoktur (bilinçli risk kabulü; kapı kod düzeyinde: `promoteKb`).
 3. **Claude girişi (iki ayrı hesap oturumu, iki ayrı uid):**
    - `sudo -u vlad -H claude` → `/login` (çalışanlar için).
-   - `sudo -u vladchat -H env HOME=/var/lib/vladchat claude` → `/login` (sohbet için). İki kimlik **farklı dizinde** durur; sohbet ajanı çalışan kimliğini göremez.
+   - Sohbet için (`vladchat`), **sandbox içinde** (düz `sudo -u` ile değil):
+     ```bash
+     sudo systemd-run --pty --wait --collect -p User=vladchat -p Environment=HOME=/var/lib/vladchat \
+       -p NoNewPrivileges=yes -p ProtectSystem=strict -p ProtectHome=yes -p PrivateTmp=yes -p ReadWritePaths=/var/lib/vladchat \
+       -p InaccessiblePaths=/var/lib/vladapi -p InaccessiblePaths=-/run/tailscale -p RestrictAddressFamilies="AF_INET AF_INET6 AF_UNIX" \
+       -p IPAddressDeny="localhost link-local multicast 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10 fc00::/7" -p IPAddressAllow=127.0.0.53 \
+       /usr/local/bin/claude
+     ```
+     `/login` yap, çık. Giriş belgesi yalnız `/var/lib/vladchat/.claude/.credentials.json` içinde durur (ayar dosyasında değil). Giriş sırasında `settings.json`/`CLAUDE.md` salt okunur bağlı değildir: bittiğinde `install.sh`'ı yeniden çalıştırmak bunları boş ve root'a ait hale getirir (`ls -l /var/lib/vladchat/.claude`). İki kimlik **farklı dizinde** durur; sohbet ajanı çalışan kimliğini göremez.
    - Abonelik koşulları: otomatik/üretim kullanımı için geçerli olduğunu kullanıcı kontrol eder (D0.1 notu).
 4. **App anahtarı (vladapi):** `vlad-gate` private key dosyası → `/var/lib/vladapi/github-app.pem`, `chown vladapi:vladapi`, `chmod 0600`. `VLAD_GITHUB_APP_ID`, `VLAD_GITHUB_APP_INSTALLATION_ID` `/etc/vlad/vlad.env` içine (sır değil). Anahtarı komut geçmişine/loga/repoya koyma; scp ile `0600` yaz, sonra kaynağı sil.
 
@@ -98,9 +108,13 @@ Tasarım: `main.ts` `VLAD_CHAT_CLIENT` doluysa ve **güvenlik denetimi** geçers
 
 Akış: `vlad-api` (vladapi) → `chat-client` (`/usr/local/libexec/vlad/chat-client`) → soket → systemd `vlad-chat@.service` (uid `vladchat`) → `chat-turn` → `claude -p`.
 - `vladapi` **hiç `claude` çalıştırmaz**, `sudo`/setuid yok (API birimi `NoNewPrivileges=yes` kalır).
-- Soketi yalnız `vladapi` açabilir (0600); en çok 2 eşzamanlı bağlantı.
+- Soket `vladapi`ya ait, 0600 (`chatSandboxProblem` sahibi ve izni kontrol eder); istemci yolu sabittir (`/usr/local/libexec/vlad/chat-client`); en çok 2 eşzamanlı bağlantı.
 - Bayraklar `chat-turn` içinde sabittir; istemciden yalnız `--resume <id>` (regex doğrulamalı) gelir. İzinler `/etc/vlad/chat-settings.json` (root:root 0644) dosyasındadır; **install.sh bunu API'nin kullandığı `chatPermissions()` fonksiyonundan üretir** (tek kaynak). Deny listesi boşsa tur çalışmaz.
-- Sandbox (`vlad-chat@.service`): `NoNewPrivileges`, boş `CapabilityBoundingSet`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp/Devices`, `ReadOnlyPaths=kb + VLAD_HOME`, yazılabilir tek yer `/var/lib/vladchat`, `InaccessiblePaths=/var/lib/vladapi /home /root`, ağ yalnız AF_INET/AF_INET6/AF_UNIX, `SystemCallFilter=@system-service`, `RuntimeMaxSec=660`, `MemoryMax=1G`, `TasksMax=128`. **bwrap gerekmedi**: systemd sandbox'ı aynı kapsamı sağlar; ek bir kullanıcı alanı sandbox'ı (bwrap) ancak prova (S14c) bir eksik gösterirse eklenir.
+- **İzin modu:** `claude -p --permission-mode dontAsk`: yalnız izin listesi çalışır (`Read/Grep/Glob(kb)`, `Bash(vlad *)`); listede olmayan her araç sorulmadan reddedilir. Deny listesi ikinci katmandır. (`auto` kullanılmaz: `bash -c`, `python3 -`, `/dev/tcp` ile aşılırdı.) `chat-settings.json` `disableAllHooks: true` taşır; `chat-turn` bu alan yoksa çalışmaz.
+- **Ağ:** `IPAddressDeny` ile loopback (API 8787), link-local (IMDS 169.254.169.254), özel bloklar, tailnet (100.64/10) kapalı; yalnız çözümleyici saplaması `127.0.0.53` açık; `RestrictAddressFamilies=AF_INET AF_INET6`; `/run/tailscale`, `/run/dbus` erişilemez. Geri kalan internet açıktır. **İsteğe bağlı sıkılaştırma:** yalnız `api.anthropic.com` için izin listeli bir egress proxy (örn. ayrı küçük bir proxy birimi) ve birimde `IPAddressDeny=any` + proxy adresine `IPAddressAllow`; bu sürümde kurulmadı.
+- **Kalıcılık:** `~vladchat/.claude/settings.json`, `~vladchat/.claude/CLAUDE.md`, `~vladchat/CLAUDE.md` boş ve root'a ait, birimde `ReadOnlyPaths` ile bağlı; `NoExecPaths=/var/lib/vladchat`, `ExecPaths=/usr /opt /usr/local` (ajanın yazdığı hiçbir şey çalıştırılamaz). `--setting-sources user` kalır: `claude`'un bu bayrakta boş liste kabul edip etmediği burada doğrulanamadı (S14c); giriş belgesi ayar dosyasında olmadığı için `user` kaynağı kapatılsa da giriş çalışır, ama bu denenmedi. Şimdilik güvence: dosyalar boş ve salt okunur, hook'lar kapalı.
+- Sandbox (`vlad-chat@.service`): `NoNewPrivileges`, boş `CapabilityBoundingSet`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp/Devices`, `ReadOnlyPaths=kb + VLAD_HOME`, yazılabilir tek yer `/var/lib/vladchat`, `InaccessiblePaths=/var/lib/vladapi /home /root`, `SystemCallFilter=@system-service`, `RuntimeMaxSec=660`, `MemoryMax=1G`, `TasksMax=128`.
+- **kb erişimi:** `vladchat` `vlad` grubunda DEĞİLDİR; kb için yalnız okuma ACL'i vardır (`u:vladchat:rX`, default dahil). `/home/vlad` 0700. `vladapi` `vlad` grubundadır (kart/cevap yazımı `vlad` CLI ile, plan kararı); bu DAC düzeyinde yazma yetkisidir, tek kapı CLI + `withKbLock`tur. **bwrap gerekmedi**: systemd sandbox'ı aynı kapsamı sağlar; ek bir kullanıcı alanı sandbox'ı (bwrap) ancak prova (S14c) bir eksik gösterirse eklenir.
 - kb **salt okunur**: sohbet ajanı `vlad` ile okur; yazma gerektiren her şey (kart cevabı, görev) API'nin kendi yolundan (`vladapi` + `vlad` CLI) geçer. Bu yüzden prompt enjeksiyonu kb'ye yazamaz.
 - Bilinen sınır: API süreci bir turu iptal ederken (zaman aşımı) soketi kapatır; turun kendisini `RuntimeMaxSec` ve `KillMode=control-group` sonlandırır. İstemci tarafı SIGKILL'i başka uid'e iletmeye çalışmaz.
 - Kontrol (sunucuda):
@@ -114,7 +128,7 @@ Akış: `vlad-api` (vladapi) → `chat-client` (`/usr/local/libexec/vlad/chat-cl
 Kodda yapılmadı; **işletme maddesi**: sohbet ajanı bir `vlad` komutundan `active_elsewhere` (etkin VLAD başka makinede) ya da `kb_conflict` aldığında yeniden denemez, tahmin yürütmez; cevap "şu an etkin VLAD <makine>; yazma yapılamıyor" olur. Bu zaten kb'nin salt okunur olmasıyla (A.9) yazma yönünde kapalıdır. Okuma yönünde bayat veri riskine karşı: etkin VLAD başka makineye geçtiyse `GET /home` `active_vlad` bunu gösterir; sohbet cevabında "yerel kb eski olabilir" uyarısı sistem isteminin parçasıdır (S11 işi). Kodla zorlama ayrı bir faz olarak açık: bkz. rapordaki "Prova edilemeyenler/Açık".
 
 ### A.11 Dev çalışanı ana dala push edemez (F-vlad-030)
-Çalışan `deploy/claude/worker-settings.json` ile koşar (`--setting-sources user`, yalnız bu `--settings` dosyası; worktree içindeki ayar dosyası etkisizdir). Dosya: `git push origin vlad/*` **izinli**; `main`/`master` hedefli her push, `--force`, `+refspec`, `git -C … push`, `gh pr merge`, `gh api`, `curl/wget` **yasak** (yasak, izinden önce gelir). Bu kural tablosu `test/deploy/s14a.test.ts` içinde komut komut doğrulanır. **Zorlayıcı olan bu dosya değil, GitHub ruleset'idir** (bölüm D, `github/rulesets.sh` S14b): PAT ana dala yazamaz. Kart cevabının `session` sınıfında kalması bu koşula bağlıdır: ruleset doğrulanmadan (`doctor` yeşil + canary reddi, S14c) bunu "kanıtlandı" diye işaretleme.
+Çalışan `deploy/claude/worker-settings.json` ile koşar (`--setting-sources user`, yalnız bu `--settings` dosyası; worktree içindeki ayar dosyası etkisizdir). Dosya: yalnız `git push [-u] origin vlad/T*` **izinli**; ardına eklenen her şey yasak kalıplara takılır: refspec (`:`), her uzun seçenek (`--delete`, `--force`, `--mirror`, `--no-verify` …), `-f/-d/-o/-q/-n/-v`, `main`/`master`/`HEAD`/`refs/`/`+`/`@` içeren her şey, `;` `&` `|` `$(` zincirleri; ayrıca `git -C … push`, `gh pr merge`, `gh api`, `curl/wget` **yasak** (yasak, izinden önce gelir). Bu kural tablosu `test/deploy/s14a.test.ts` içinde komut komut doğrulanır. Kalan açıklar (kabul edilmiş, gizlenmedi): çalışan `node`/`npx` çalıştırabildiği için bir `child_process` ile `git push` komutunu bu kurallar görmeden çalıştırabilir; ve çalışanın ayar kopyası kendi uid'sine ait dizindedir (kaynak `/opt/vlad/deploy/claude/worker-settings.json` root'a aittir, kopya değildir), aynı uid ile değiştirilebilir. Bu yüzden **kapı: `doctor` yeşil + canary reddi kayıtlı olmadan sunucuda dev çalışan başlatılmaz** (S14b/S14c). Sunucuda `maxParallel: 0` ile kurup kapı geçince 2 yap. **Zorlayıcı olan bu dosya değil, GitHub ruleset'idir** (bölüm D, `github/rulesets.sh` S14b): PAT ana dala yazamaz. Kart cevabının `session` sınıfında kalması bu koşula bağlıdır: ruleset doğrulanmadan (`doctor` yeşil + canary reddi, S14c) bunu "kanıtlandı" diye işaretleme.
 
 ### A.12 İzleme
 - `journalctl -u vlad-api -u vlad-kbsync -u vlad-kbpromote -u 'vlad-chat@*' --since -1h`

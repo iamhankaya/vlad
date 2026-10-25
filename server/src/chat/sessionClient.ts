@@ -198,8 +198,8 @@ export function turnArgs(sessionId: string | null, kbDir: string, protect: strin
   const perm = chatPermissions(kbDir, protect);
   return [
     "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-    "--permission-mode", "auto",
-    "--settings", JSON.stringify({ permissions: perm }),
+    "--permission-mode", "dontAsk",
+    "--settings", JSON.stringify({ permissions: perm, disableAllHooks: true }),
     "--disallowedTools", ...perm.deny,
     ...(sessionId ? ["--resume", sessionId] : []),
   ];

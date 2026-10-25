@@ -219,9 +219,10 @@ describe("launcher: mode and permissions", () => {
       "Read(~/.config/**)", "Read(~/.claude/**)", "Read(//var/lib/vladapi/**)", "Read(**/.env*)"]) {
       expect(s.permissions.deny, d).toContain(d);
     }
-    expect(s.permissions.allow).toContain("Bash(git push origin vlad/*)");
+    // S14a review: the allow pattern is anchored on the task branch prefix; suffixes are caught by deny rules (test/deploy/s14a.test.ts)
+    expect(s.permissions.allow).toContain("Bash(git push origin vlad/T*)");
     expect(s.permissions.allow.filter((a) => a.startsWith("Bash(git push"))).toEqual([
-      "Bash(git push origin vlad/*)", "Bash(git push -u origin vlad/*)",
+      "Bash(git push origin vlad/T*)", "Bash(git push -u origin vlad/T*)",
     ]);
     expect(s.permissions.allow.some((a) => /gh |curl|wget/.test(a))).toBe(false);
   });

@@ -95,7 +95,7 @@ describe("server: chat turn runner", () => {
 
     const [c1, c2] = t.claude.calls();
     expect(c1!.argv).not.toContain("--resume");
-    expect(c1!.argv).toEqual(expect.arrayContaining(["-p", "--output-format", "stream-json", "--permission-mode", "auto"]));
+    expect(c1!.argv).toEqual(expect.arrayContaining(["-p", "--output-format", "stream-json", "--permission-mode", "dontAsk"]));
     expect(c1!.stdin).toBe("selam");
     expect(c2!.argv.slice(c2!.argv.indexOf("--resume"))).toEqual(["--resume", SID1]);
 
@@ -368,7 +368,7 @@ describe("server: chat turn runner", () => {
     expect(() => turnArgs("abcdefgh; rm -rf /", "/kb")).toThrow();
     expect(() => turnArgs(null, "kb")).toThrow(/absolute/);
     const argv = turnArgs(SID1, "/kb");
-    expect(argv.slice(0, 7)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "auto"]);
+    expect(argv.slice(0, 7)).toEqual(["-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-mode", "dontAsk"]);
     expect(argv.slice(-2)).toEqual(["--resume", SID1]);
   });
 
@@ -379,7 +379,7 @@ describe("server: chat turn runner", () => {
     const argv = t.claude.calls()[0]!.argv;
     const settings = JSON.parse(argv[argv.indexOf("--settings") + 1]!);
     const perm = chatPermissions(t.kb, [join(t.dir, "state")]);
-    expect(settings).toEqual({ permissions: perm }); // inline JSON, no file path
+    expect(settings).toEqual({ permissions: perm, disableAllHooks: true }); // inline JSON, no file path
     expect(argv[argv.indexOf("--settings") + 1]!.startsWith("{")).toBe(true); // JSON text, not a path to a file the agent could edit
     const dis = argv.slice(argv.indexOf("--disallowedTools") + 1, argv.indexOf("--resume") === -1 ? undefined : argv.indexOf("--resume"));
     expect(dis.slice(0, perm.deny.length)).toEqual(perm.deny); // same deny list as a flag: it holds even if settings were lost

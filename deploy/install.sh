@@ -8,9 +8,11 @@
 #   CLAUDE_CODE_VERSION  exact @anthropic-ai/claude-code version to install (no "latest": the install must be repeatable)
 #   KB_DIR               kb checkout            (default /var/lib/vlad/kb)
 #   VLAD_HOME_DIR        code root, root-owned  (default /opt/vlad)
-#   NODE_KEY_FPR / GH_KEY_FPR / TS_KEY_FPR   expected fingerprint of the apt signing key; when set, a mismatch aborts
+#   NODE_KEY_FPR / GH_KEY_FPR / TS_KEY_FPR   override the pinned apt signing key fingerprint (defaults below; a mismatch or a keyring with more
+#                        than one primary key aborts). Compare the defaults with the vendors' published values before the first real run.
 #   AUDIT_ALLOW=1        continue when `npm audit` reports high/critical findings (a decision, written in the report)
-#   HARDEN_SSH=1         install deploy/sshd/50-vlad.conf (key-only login); run `sshd -t` first, keep a second session open
+#   HARDEN_SSH=1         install deploy/sshd/01-vlad.conf (key-only login; sshd -T must show the values, else it is removed); SSH_ALLOW_USERS="a b" adds AllowUsers
+#   CLAUDE_RUN_POSTINSTALL=1  run the claude package's own install script (only if `claude --version` fails after the --ignore-scripts install)
 #   ENABLE_UNITS=1       enable the timers/sockets/services after install (otherwise the next steps are printed)
 set -euo pipefail
 
@@ -22,6 +24,10 @@ VLAD_HOME_DIR=${VLAD_HOME_DIR:-/opt/vlad}
 LIBEXEC=/usr/local/libexec/vlad
 UNIT_DIR=/etc/systemd/system
 ETC=/etc/vlad
+# pinned primary-key fingerprints of the vendor apt keys (override with *_KEY_FPR when a vendor rotates)
+DEFAULT_NODE_KEY_FPR=6F71F525282841EEDAF851B42F59B5F99B1BE0B4
+DEFAULT_GH_KEY_FPR=2C6106201985B60E6C7AC87323F3D4EA75716059
+DEFAULT_TS_KEY_FPR=2596A99EAAB33821893C0A79458CA832957F5868
 NODE_MIN_MAJOR=22
 NODE_MIN_MINOR=18 # native TypeScript type stripping (server runs "node src/main.ts")
 
@@ -62,18 +68,20 @@ add_repo() { # add_repo <name> <key url> <list line> <expected fingerprint or em
   local tmp; tmp=$(mktemp)
   curl -fsSL --proto '=https' --tlsv1.2 "$url" -o "$tmp"
   gpg --dearmor <"$tmp" >"$ring.new"
-  local got; got=$(gpg --show-keys --with-colons "$ring.new" | awk -F: '$1=="fpr"{print $10; exit}')
-  log "$name signing key fingerprint: $got"
-  if [[ -n $fpr && $got != "$fpr" ]]; then rm -f "$ring.new" "$tmp"; die "$name key fingerprint mismatch"; fi
+  local got n
+  n=$(gpg --show-keys --with-colons "$ring.new" | awk -F: '$1=="pub"{c++} END{print c+0}')
+  got=$(gpg --show-keys --with-colons "$ring.new" | awk -F: '$1=="fpr"{print $10; exit}')
+  log "$name signing key fingerprint: $got (primary keys: $n)"
+  if [[ $n != 1 || $got != "$fpr" ]]; then rm -f "$ring.new" "$tmp"; die "$name: keyring must hold exactly one primary key with fingerprint $fpr"; fi
   mv -f "$ring.new" "$ring"; chmod 644 "$ring"; rm -f "$tmp"
   printf '%s\n' "${line//@RING@/$ring}" >"/etc/apt/sources.list.d/$name.list"
 }
 add_repo nodesource https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
-  "deb [arch=$ARCH signed-by=@RING@] https://deb.nodesource.com/node_22.x nodistro main" "${NODE_KEY_FPR:-}"
+  "deb [arch=$ARCH signed-by=@RING@] https://deb.nodesource.com/node_22.x nodistro main" "${NODE_KEY_FPR:-$DEFAULT_NODE_KEY_FPR}"
 add_repo githubcli https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-  "deb [arch=$ARCH signed-by=@RING@] https://cli.github.com/packages stable main" "${GH_KEY_FPR:-}"
+  "deb [arch=$ARCH signed-by=@RING@] https://cli.github.com/packages stable main" "${GH_KEY_FPR:-$DEFAULT_GH_KEY_FPR}"
 add_repo tailscale https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg \
-  "deb [signed-by=@RING@] https://pkgs.tailscale.com/stable/ubuntu noble main" "${TS_KEY_FPR:-}"
+  "deb [signed-by=@RING@] https://pkgs.tailscale.com/stable/ubuntu noble main" "${TS_KEY_FPR:-$DEFAULT_TS_KEY_FPR}"
 run apt-get update -y
 run apt-get install -y --no-install-recommends nodejs gh tailscale
 
@@ -83,7 +91,8 @@ if [[ $DRY != 1 ]]; then
 fi
 
 # --- 2. users and groups: vlad (agent), vladapi (gate), vladchat (chat agent) ------------------------------------------------
-# Three uids, three trust levels. The kb is the only shared place (group vlad). vladapi and vladchat are members of group vlad only to read the kb.
+# Three uids, three trust levels. The kb is the only shared place. vladapi is in group vlad (it writes the kb through the `vlad` CLI, by design);
+# vladchat is NOT: it gets a read-only ACL entry on the kb (below).
 ensure_group() { getent group "$1" >/dev/null || run groupadd --system "$1"; }
 ensure_user() { # ensure_user <name> <home> <shell> <system 0|1>
   getent passwd "$1" >/dev/null && return 0
@@ -95,12 +104,11 @@ ensure_user vlad /home/vlad /bin/bash 0
 ensure_user vladapi /var/lib/vladapi /usr/sbin/nologin 1
 ensure_user vladchat /var/lib/vladchat /usr/sbin/nologin 1
 run usermod -aG vlad vladapi
-run usermod -aG vlad vladchat
 # the agent user must not be able to become the gate: no sudo, no shared group with vladapi/vladchat beyond `vlad`
 run chmod 0700 /var/lib/vladapi /var/lib/vladchat
 run chown vladapi:vladapi /var/lib/vladapi
 run chown vladchat:vladchat /var/lib/vladchat
-run chmod 0750 /home/vlad
+run chmod 0700 /home/vlad
 # umask 002 for the agent's login shells and its systemd user manager (workers); group-write on the kb is also forced by setgid + default ACL below
 put 0644 root:root /etc/profile.d/vlad-umask.sh <<'EOS'
 # VLAD: the agent user writes the shared kb with group write
@@ -114,6 +122,8 @@ kb_parent=$(dirname "$KB_DIR")
 run install -d -m 0755 -o root -g root "$kb_parent"
 run install -d -m 2770 -o vlad -g vlad "$KB_DIR"
 run setfacl -m g:vlad:rwx -m d:g:vlad:rwx -m d:u:vlad:rwx "$KB_DIR"
+# chat agent: read only, existing files and everything created later (default ACL)
+run setfacl -R -m u:vladchat:rX -m d:u:vladchat:rX "$KB_DIR"
 run install -d -m 0750 -o root -g vlad "$ETC"
 run install -d -m 0755 -o root -g root "$LIBEXEC"
 
@@ -128,23 +138,25 @@ run rsync -a --delete --chmod=Dgo-w,Fgo-w --chown=root:root \
 if [[ $DRY == 1 ]]; then
   echo "+ (cd $VLAD_HOME_DIR && npm ci && npm run build && npm prune --omit=dev)"
   echo "+ (cd $VLAD_HOME_DIR/server && npm ci --omit=dev)"
-  echo "+ npm audit --omit=dev --audit-level=high (root and server)"
+  echo "+ npm audit --package-lock-only --omit=dev --audit-level=high (root and server, before npm ci --ignore-scripts)"
 else
-  # as root, from a root-owned tree: no dependency script runs as a VLAD user
-  (cd "$VLAD_HOME_DIR" && npm ci --no-fund --no-audit && npm run build && npm prune --omit=dev --no-audit)
-  (cd "$VLAD_HOME_DIR/server" && npm ci --omit=dev --no-fund --no-audit)
+  # audit the lock files BEFORE anything is installed
   audit_rc=0
   for d in "$VLAD_HOME_DIR" "$VLAD_HOME_DIR/server"; do
-    (cd "$d" && npm audit --omit=dev --audit-level=high) || audit_rc=1
+    (cd "$d" && npm audit --package-lock-only --omit=dev --audit-level=high) || audit_rc=1
   done
   if ((audit_rc)); then
     [[ ${AUDIT_ALLOW:-0} == 1 ]] || die "npm audit: high/critical findings (decide, then re-run with AUDIT_ALLOW=1)"
     log "WARNING: npm audit findings accepted by AUDIT_ALLOW=1; record the decision"
   fi
+  # as root, but with --ignore-scripts: no dependency lifecycle script runs with root rights (the build needs none: tsc only)
+  (cd "$VLAD_HOME_DIR" && npm ci --ignore-scripts --no-fund --no-audit && npm run build && npm prune --omit=dev --ignore-scripts --no-audit)
+  (cd "$VLAD_HOME_DIR/server" && npm ci --omit=dev --ignore-scripts --no-fund --no-audit)
 fi
-run chown -R root:root "$VLAD_HOME_DIR"
-run chmod -R go-w "$VLAD_HOME_DIR"
+# everything except state/ (vlad's own subtree: kb conflict backups) is root-owned; a second run must not take state/ away from vlad
 run install -d -m 0700 -o vlad -g vlad "$VLAD_HOME_DIR/state"
+run find "$VLAD_HOME_DIR" -path "$VLAD_HOME_DIR/state" -prune -o -exec chown -h root:root {} +
+run find "$VLAD_HOME_DIR" -path "$VLAD_HOME_DIR/state" -prune -o -type l -prune -o -exec chmod go-w {} +
 if [[ ! -e $VLAD_HOME_DIR/vlad.config.json ]]; then
   # machine specifics (roots, worktreeDir, machines.<name>.kbPushBranch) are filled in by hand: RUNBOOK §A.6
   put 0644 root:root "$VLAD_HOME_DIR/vlad.config.json" <<EOS
@@ -174,15 +186,25 @@ EOS
 # --- 5. claude (pinned, root-owned prefix) --------------------------------------------------------------------------------------
 run install -d -m 0755 -o root -g root /opt/claude-code
 if [[ $DRY == 1 ]]; then
-  echo "+ npm install -g --prefix /opt/claude-code @anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+  echo "+ npm install -g --ignore-scripts --prefix /opt/claude-code @anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
 else
-  npm install -g --prefix /opt/claude-code --no-fund --no-audit "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+  npm install -g --ignore-scripts --prefix /opt/claude-code --no-fund --no-audit "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+  if ! /opt/claude-code/bin/claude --version >/dev/null 2>&1; then
+    [[ ${CLAUDE_RUN_POSTINSTALL:-0} == 1 ]] || die "claude does not start after the --ignore-scripts install; read the package's install script, then re-run with CLAUDE_RUN_POSTINSTALL=1"
+    log "running the claude package's own install script (CLAUDE_RUN_POSTINSTALL=1)"
+    npm rebuild --prefix /opt/claude-code -g "@anthropic-ai/claude-code" --no-fund
+  fi
 fi
 run ln -sfn /opt/claude-code/bin/claude /usr/local/bin/claude
 
 # --- 6. chat sandbox files (F-vlad-024) ---------------------------------------------------------------------------------------
 run install -m 0755 -o root -g root "$HERE/bin/vlad-chat-turn" "$LIBEXEC/chat-turn"
 run install -m 0755 -o root -g root "$HERE/bin/vlad-chat-client" "$LIBEXEC/chat-client"
+# the chat agent's user settings and memory files: empty, root-owned, bind-mounted read-only by vlad-chat@.service (no persistent hooks/rules/instructions)
+run install -d -m 0700 -o vladchat -g vladchat /var/lib/vladchat/.claude
+for f in /var/lib/vladchat/.claude/settings.json /var/lib/vladchat/.claude/CLAUDE.md /var/lib/vladchat/CLAUDE.md; do
+  if [[ $DRY == 1 ]]; then echo "+ empty root-owned $f (0444)"; else : >"$f"; chown root:root "$f"; chmod 0444 "$f"; fi
+done
 # the chat permissions come from the same function the API uses (chatPermissions), rendered once, root-owned
 if [[ $DRY == 1 ]]; then
   echo "+ node $VLAD_HOME_DIR/server/scripts/gen-chat-settings.ts $KB_DIR /var/lib/vladapi $VLAD_HOME_DIR > $ETC/chat-settings.json (root:root 0644)"
@@ -219,10 +241,21 @@ fi
 
 # --- 9. optional: ssh hardening, automatic security updates ------------------------------------------------------------------------
 if [[ ${HARDEN_SSH:-0} == 1 ]]; then
-  if [[ $DRY == 1 ]]; then echo "+ install sshd drop-in, sshd -t, systemctl reload ssh"
+  if [[ $DRY == 1 ]]; then echo "+ install 01-vlad.conf, sshd -t, verify sshd -T values, systemctl reload ssh"
   else
-    install -m 0644 -o root -g root "$HERE/sshd/50-vlad.conf" /etc/ssh/sshd_config.d/50-vlad.conf
-    sshd -t || { rm -f /etc/ssh/sshd_config.d/50-vlad.conf; die "sshd -t failed, drop-in removed"; }
+    # 01-: sshd takes the first value it sees, so this wins over 50-cloud-init.conf
+    dropin=/etc/ssh/sshd_config.d/01-vlad.conf
+    install -m 0644 -o root -g root "$HERE/sshd/01-vlad.conf" "$dropin"
+    if [[ -n ${SSH_ALLOW_USERS:-} ]]; then
+      local_re='^[a-z_][a-z0-9_ -]*$'
+      [[ $SSH_ALLOW_USERS =~ $local_re ]] || { rm -f "$dropin"; die "SSH_ALLOW_USERS: invalid"; }
+      printf 'AllowUsers %s\n' "$SSH_ALLOW_USERS" >>"$dropin"
+    fi
+    sshd -t || { rm -f "$dropin"; die "sshd -t failed, drop-in removed"; }
+    eff=$(sshd -T 2>/dev/null)
+    for want in "passwordauthentication no" "permitrootlogin no" "pubkeyauthentication yes" "kbdinteractiveauthentication no"; do
+      grep -qix "$want" <<<"$eff" || { rm -f "$dropin"; die "sshd -T does not show '$want' (another file wins?); drop-in removed"; }
+    done
     systemctl reload ssh
   fi
 fi

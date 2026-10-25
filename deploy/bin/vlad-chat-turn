@@ -21,6 +21,7 @@ esac
 
 [[ -r $settings ]] || { echo "chat-turn: settings missing: $settings" >&2; exit 78; }
 mapfile -t deny < <(jq -r '.permissions.deny[]' "$settings")
+jq -e '.disableAllHooks == true' "$settings" >/dev/null || { echo "chat-turn: disableAllHooks missing in settings, refusing to run" >&2; exit 78; }
 ((${#deny[@]} > 0)) || { echo "chat-turn: empty deny list, refusing to run" >&2; exit 78; }
 
 # cwd = kb (read-only mount); a clean environment, no inherited secrets
@@ -31,7 +32,7 @@ exec env -i \
   VLAD_HOME="${VLAD_HOME:?VLAD_HOME missing}" \
   VLAD_KB_DIR="$VLAD_KB_DIR" \
   claude -p --output-format stream-json --verbose --include-partial-messages \
-    --permission-mode auto --setting-sources user --strict-mcp-config \
+    --permission-mode dontAsk --setting-sources user --strict-mcp-config \
     --settings "$settings" \
     --disallowedTools "${deny[@]}" \
     "${resume[@]}"

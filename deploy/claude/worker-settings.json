@@ -13,8 +13,6 @@
       "Bash(git checkout*)",
       "Bash(git merge*)",
       "Bash(git fetch*)",
-      "Bash(git push origin vlad/*)",
-      "Bash(git push -u origin vlad/*)",
       "Bash(npm *)",
       "Bash(npx *)",
       "Bash(node *)",
@@ -24,7 +22,9 @@
       "Bash(vlad task log *)",
       "Bash(vlad task ask *)",
       "Bash(vlad task report *)",
-      "Bash(vlad task progress *)"
+      "Bash(vlad task progress *)",
+      "Bash(git push origin vlad/T*)",
+      "Bash(git push -u origin vlad/T*)"
     ],
     "deny": [
       "Bash(rm -rf*)",
@@ -86,7 +86,25 @@
       "Bash(rm -r*)",
       "Bash(rm --recursive*)",
       "Bash(git clean*)",
-      "Bash(npm publish*)"
+      "Bash(npm publish*)",
+      "Bash(git push*:*)",
+      "Bash(git push* --*)",
+      "Bash(git push* -f*)",
+      "Bash(git push* -d*)",
+      "Bash(git push* -o*)",
+      "Bash(git push* -q*)",
+      "Bash(git push* -n*)",
+      "Bash(git push* -v*)",
+      "Bash(git push*main*)",
+      "Bash(git push*master*)",
+      "Bash(git push*HEAD*)",
+      "Bash(git push*refs/*)",
+      "Bash(git push*@*)",
+      "Bash(git push*;*)",
+      "Bash(git push*&*)",
+      "Bash(git push*|*)",
+      "Bash(git push*$(*)",
+      "Bash(git push*`*)"
     ]
   }
 }

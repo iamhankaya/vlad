@@ -11,6 +11,9 @@ export interface FsProbe {
 }
 const realFs: FsProbe = { lstat: (p) => lstatSync(p), realpath: (p) => realpathSync(p) };
 
+/** The only client path the API will run (install.sh puts it there, root-owned). A configured path must equal it. */
+export const CHAT_CLIENT_PATH = "/usr/local/libexec/vlad/chat-client";
+
 /** Where systemd (vlad-chat.socket) listens; the client script connects here. */
 export const CHAT_SOCKET = "/run/vlad-chat/turn.sock";
 
@@ -21,8 +24,12 @@ const NOT_OWNER_ONLY = 0o022; // group or other write
  * hands the turn over is a root-owned file in root-owned directories (nothing the agent or the API user can swap) and the socket exists.
  * Returns why not, or null.
  */
-export function chatSandboxProblem(clientPath: string, fs: FsProbe = realFs, socketPath: string = CHAT_SOCKET): string | null {
+export function chatSandboxProblem(
+  clientPath: string, fs: FsProbe = realFs, socketPath: string = CHAT_SOCKET,
+  o: { expected?: string; uid?: number } = {},
+): string | null {
   if (!isAbsolute(clientPath)) return "VLAD_CHAT_CLIENT mutlak yol olmalı";
+  if (clientPath !== (o.expected ?? CHAT_CLIENT_PATH)) return `VLAD_CHAT_CLIENT sabit yol olmalı: ${o.expected ?? CHAT_CLIENT_PATH}`;
   let real: string;
   try { real = fs.realpath(clientPath); } catch { return `VLAD_CHAT_CLIENT yok: ${clientPath}`; }
   if (real !== clientPath) return "VLAD_CHAT_CLIENT symlink içeremez";
@@ -36,6 +43,10 @@ export function chatSandboxProblem(clientPath: string, fs: FsProbe = realFs, soc
   let sock: ReturnType<FsProbe["lstat"]>;
   try { sock = fs.lstat(socketPath); } catch { return `sohbet soketi yok: ${socketPath} (vlad-chat.socket etkin mi?)`; }
   if (!sock.isSocket()) return `${socketPath} bir soket değil`;
+  // the socket belongs to the API user and nobody else can connect (SocketUser=vladapi, SocketMode=0600)
+  const uid = o.uid ?? process.getuid?.();
+  if (uid !== undefined && sock.uid !== uid) return `${socketPath} bu kullanıcıya ait değil`;
+  if ((sock.mode & 0o077) !== 0) return `${socketPath} grup/başkası erişebilir (0600 olmalı)`;
   return null;
 }
 
@@ -47,6 +58,9 @@ export interface ChatWireOptions {
   log: (msg: string) => void;
   fs?: FsProbe;
   socketPath?: string;
+  /** Tests only. */
+  expectedClient?: string;
+  uid?: number;
 }
 
 /**
@@ -56,7 +70,7 @@ export interface ChatWireOptions {
 export function createChatRunner(o: ChatWireOptions): ChatTurnRunner | undefined {
   const client = o.env.VLAD_CHAT_CLIENT;
   if (!client) return undefined;
-  const problem = chatSandboxProblem(client, o.fs, o.socketPath);
+  const problem = chatSandboxProblem(client, o.fs, o.socketPath, { expected: o.expectedClient, uid: o.uid });
   if (problem) {
     o.log(`sohbet kapalı (501): ${problem}`);
     return undefined;

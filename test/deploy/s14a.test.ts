@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -27,6 +28,11 @@ describe("deploy: worker push rules (F-vlad-030)", () => {
     "git push --force origin vlad/T20261025-92", "git push -f origin vlad/T20261025-92", "git push origin +vlad/T20261025-92",
     "git push origin vlad/T20261025-92 main", "git -C /srv/wt push origin main", "git -C /srv/wt push origin vlad/T20261025-92",
     "git push --force-with-lease origin vlad/x", "gh pr merge 5", "gh api repos/o/r/git/refs -X POST",
+    // review S14a bulgu 3: suffixes after an allowed prefix
+    "git push origin vlad/T20261025-92:main -q", "git push origin vlad/T20261025-92 HEAD:main --no-verify", "git push origin vlad/T20261025-92 --delete main",
+    "git push origin vlad/T20261025-92 --delete other", "git push origin vlad/T20261025-92 -d x", "git push origin vlad/T20261025-92 --mirror",
+    "git push origin vlad/T20261025-92 --all", "git push origin vlad/T20261025-92 -o ci.skip", "git push origin vlad/T20261025-92 && git push origin HEAD:main",
+    "git push origin vlad/T20261025-92; git push origin x:refs/heads/main", "git push origin vlad/T20261025-92 $(echo :main)", "git push -f origin vlad/T20261025-92",
   ])("deploy: worker push/merge denied: %s", (cmd) => {
     expect(verdict(cmd)).toBe("deny");
   });
@@ -34,6 +40,10 @@ describe("deploy: worker push rules (F-vlad-030)", () => {
     for (const r of settings.permissions.allow) expect(r).not.toMatch(/^Bash\((git push\*|gh |curl|wget|\*)/);
     expect(verdict("git push")).not.toBe("allow");
     expect(verdict("curl https://example.invalid")).toBe("deny");
+  });
+  it("deploy: the enforcer is the ruleset, the runbook says no dev worker before doctor + canary", () => {
+    const rb = readFileSync(join(deploy, "RUNBOOK.md"), "utf8");
+    expect(rb).toMatch(/doctor.*canary.*dev çalışan|dev çalışan.*doctor.*canary/s);
   });
   it("deploy: no skip-permissions flag anywhere in deploy/", () => {
     const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
@@ -58,6 +68,21 @@ describe("deploy: systemd units", () => {
     expect(u).toMatch(/^InaccessiblePaths=.*\/var\/lib\/vladapi/m);
     expect(u).not.toMatch(/^ReadWritePaths=.*@KB_DIR@/m);
     expect(u).not.toMatch(/^User=(vlad|vladapi|root)$/m);
+  });
+  it("deploy: chat unit limits network and cannot run what the agent writes (review S14a bulgu 1-2)", () => {
+    const u = unit("vlad-chat@.service");
+    expect(u).toMatch(/^IPAddressDeny=.*localhost.*link-local.*100\.64\.0\.0\/10.*169\.254\.0\.0\/16/m);
+    expect(u).toMatch(/^RestrictAddressFamilies=AF_INET AF_INET6$/m);
+    expect(u).toMatch(/^InaccessiblePaths=.*-\/run\/tailscale.*-\/run\/dbus/m);
+    expect(u).toMatch(/^NoExecPaths=\/var\/lib\/vladchat$/m);
+    expect(u).toMatch(/^ExecPaths=\/usr \/opt \/usr\/local$/m);
+    expect(u).toMatch(/^ReadOnlyPaths=.*\/var\/lib\/vladchat\/\.claude\/settings\.json.*\/var\/lib\/vladchat\/CLAUDE\.md/m);
+    expect(u).not.toMatch(/SupplementaryGroups=vlad/m);
+  });
+  it("deploy: kbpromote carries the api hardening block and no readable home (review S14a bulgu 8)", () => {
+    const u = unit("vlad-kbpromote.service");
+    for (const d of ["CapabilityBoundingSet=", "RestrictAddressFamilies=AF_INET AF_INET6", "SystemCallFilter=@system-service", "RestrictNamespaces=yes", "ProtectKernelModules=yes", "LockPersonality=yes", "ProtectHome=yes"]) expect(u).toContain(d);
+    expect(u).not.toContain("ProtectHome=read-only");
   });
   it("deploy: only vladapi may connect to the chat socket", () => {
     const s = unit("vlad-chat.socket");
@@ -86,10 +111,14 @@ describe("deploy: install.sh dry run", () => {
     const r = run();
     expect(r.status, r.stderr).toBe(0);
     for (const need of [
-      "groupadd --system vladchat", "useradd --system --gid vladchat", "loginctl enable-linger vlad", "chown -R root:root /opt/vlad", "chmod -R go-w /opt/vlad",
+      "groupadd --system vladchat", "useradd --system --gid vladchat", "loginctl enable-linger vlad", "chown -h root:root", "go-w",
       "install -d -m 0700 -o vlad -g vlad /opt/vlad/state", "npm audit", "npm ci", "unit vlad-kbpromote.service", "unit vlad-kbsync.service", "unit vlad-chat@.service",
       "gen-chat-settings.ts", "@anthropic-ai/claude-code@1.2.3",
+      "npm install -g --ignore-scripts", "npm audit --package-lock-only", "setfacl -R -m u:vladchat:rX", "chmod 0700 /home/vlad",
+      "empty root-owned /var/lib/vladchat/.claude/settings.json",
     ]) expect(r.stdout, need).toContain(need);
+    expect(r.stdout).not.toMatch(/usermod -aG vlad vladchat/);
+    expect(r.stdout).not.toMatch(/chown -R root:root \/opt\/vlad/); // state/ stays vlad's on a second run
     expect(r.stdout).not.toMatch(/usermod -aG vladapi vlad|usermod -aG vladchat vlad/); // the agent user joins no gate group
   });
   it("deploy: refuses without a pinned claude version", () => {
@@ -113,6 +142,17 @@ describe("deploy: chat-turn wrapper (runs without claude; only the guards)", () 
   it("deploy: chat-turn refuses to run without the root-owned settings", () => {
     expect(go("NEW\nhi", { VLAD_CHAT_SETTINGS: "/nonexistent/chat-settings.json" }).status).toBe(78);
   });
+  it("deploy: chat-turn runs claude in dontAsk mode with hooks off (review S14a bulgu 1-2)", () => {
+    const t = readFileSync(turn, "utf8");
+    expect(t).toContain("--permission-mode dontAsk");
+    expect(t).not.toMatch(/--permission-mode (auto|acceptEdits|bypassPermissions)/);
+    expect(t).toContain("disableAllHooks");
+  });
+  it("deploy: chat-turn refuses settings without disableAllHooks", () => {
+    const f = join(mkdtempSync(join(tmpdir(), "chat-set-")), "s.json");
+    writeFileSync(f, JSON.stringify({ permissions: { deny: ["Bash(rm *)"] } }));
+    expect(go("NEW\nhi", { VLAD_CHAT_SETTINGS: f }).status).toBe(78);
+  });
   it("deploy: chat-client forwards only a valid --resume id", () => {
     const client = join(deploy, "bin", "vlad-chat-client");
     const r = spawnSync("bash", [client, "-p", "--resume", "bad id;x"], { input: "hi", encoding: "utf8", env: { PATH: process.env.PATH } });
@@ -129,7 +169,7 @@ describe("deploy: public repo hygiene", () => {
       const t = readFileSync(f, "utf8");
       expect(t, f).not.toMatch(/-----BEGIN [A-Z ]*PRIVATE KEY-----/);
       expect(t, f).not.toMatch(/\b(ghp_|github_pat_|gho_|ghs_|sk-ant-|AKIA|AIza)[A-Za-z0-9_-]{8,}/);
-      expect(t, f).not.toMatch(/\b(?!127\.0\.0\.1|0\.0\.0\.0)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/);
+      expect(t, f).not.toMatch(/\b(?!127\.0\.0\.1|0\.0\.0\.0|127\.0\.0\.53|169\.254\.169\.254)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b(?!\/\d)/);
       expect(t, f).not.toMatch(/\.ts\.net\b|\.compute\.amazonaws\.com|\.tailscale\.com\/[a-z]+\/[a-z0-9]{10}/);
     }
   });
