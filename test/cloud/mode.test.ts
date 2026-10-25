@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isCloudEnv } from "../../src/kb/index.js";
-import { resolveLaunchMode } from "../../src/launcher/index.js";
+import { closeWorkerWindow, defaultExec, resolveLaunchMode } from "../../src/launcher/index.js";
 import { validate } from "../../src/kb/index.js";
 import { defaultConfig } from "../../src/kb/index.js";
 import { makeHome } from "../helpers.js";
@@ -59,5 +59,29 @@ describe("schemas", () => {
     validate("project", { ...base, repo: "iamhankaya/vlad", local_only: true, local_only_reason: "WPF" });
     expect(() => validate("project", { ...base, repo: "not-a-repo" })).toThrow();
     expect(() => validate("project", { ...base, local_only: "yes" })).toThrow();
+  });
+});
+
+describe("F-vlad-064: test launcher guard", () => {
+  const NOOP = { VLAD_LAUNCHER: "noop" };
+  it("VLAD_LAUNCHER=noop beats auto/wt/powershell, but not cloud", () => {
+    expect(resolveLaunchMode("auto", "win32", NOOP)).toBe("noop");
+    expect(resolveLaunchMode("wt", "win32", NOOP)).toBe("noop");
+    expect(resolveLaunchMode("powershell", "linux", NOOP)).toBe("noop");
+    expect(resolveLaunchMode("cloud", "win32", NOOP)).toBe("cloud");
+  });
+  it("VLAD_ALLOW_REAL_LAUNCHER=1 lifts the guard", () => {
+    expect(resolveLaunchMode("auto", "win32", { ...NOOP, VLAD_ALLOW_REAL_LAUNCHER: "1" })).toBe("auto-terminal");
+  });
+  it("a real terminal start or window kill under the guard throws instead of spawning", async () => {
+    const saved = { ...process.env };
+    process.env.VLAD_LAUNCHER = "noop";
+    delete process.env.VLAD_ALLOW_REAL_LAUNCHER;
+    try {
+      await expect(defaultExec("powershell.exe", ["-Command", "exit 0"])).rejects.toThrow(/VLAD_LAUNCHER=noop/);
+      expect(() => closeWorkerWindow("T20260101-01")).toThrow(/VLAD_LAUNCHER=noop/);
+    } finally {
+      process.env = saved;
+    }
   });
 });

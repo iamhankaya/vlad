@@ -9,7 +9,7 @@ import { installGlobal } from "./install.js";
 import { commitKb } from "./kb/commit.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
-import { TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
@@ -187,7 +187,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   const cfg = loadConfig();
   let mode: LaunchMode;
   try {
-    mode = resolveLaunchMode(cfg.launcher);
+    // a dry run only prints the terminal command, so the test guard does not apply
+    mode = resolveLaunchMode(cfg.launcher, process.platform, o.dryRun ? { ...process.env, VLAD_LAUNCHER: "" } : process.env);
   } catch (e) {
     if (!o.dryRun) throw e; // a dry run only prints the terminal command, so it works anywhere
     mode = "auto-terminal";
@@ -200,7 +201,9 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
     return;
   }
   let last: LaunchResult | undefined;
-  const real = new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+  const real = mode === "noop"
+    ? new NoopLauncher()
+    : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   const t = await launchTask(id, { launcher, cfg });
   out(

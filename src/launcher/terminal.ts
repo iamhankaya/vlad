@@ -2,6 +2,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { assertRealLauncherAllowed } from "./mode.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
 // PowerShell treats typographic single quotes as quote characters too; double each one.
@@ -70,6 +71,7 @@ const WMI_CREATE =
   "exit [int]$r.ReturnValue";
 
 export function defaultExec(file: string, args: string[], cwd?: string): Promise<void> {
+  try { assertRealLauncherAllowed(); } catch (e) { return Promise.reject(e); }
   return new Promise((resolve, reject) => {
     execFile(
       "powershell.exe",
@@ -99,11 +101,19 @@ const KILL_WORKER =
 /** Closes the terminal of a task's worker (Windows only). Returns the killed process IDs. */
 export function closeWorkerWindow(taskId: string): number[] {
   if (process.platform !== "win32") return [];
+  assertRealLauncherAllowed();
   const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", KILL_WORKER], {
     encoding: "utf8", windowsHide: true, timeout: 20000, stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, VLAD_WORKER_SCRIPT: `\\vlad\\${taskId}.ps1`.toLowerCase() },
   });
   return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map(Number);
+}
+
+/** Starts nothing; used while VLAD_LAUNCHER=noop so tests can drive the launch flow without a terminal. */
+export class NoopLauncher implements Launcher {
+  async launch(): Promise<LaunchResult> {
+    return { ok: true, method: "noop", detail: "VLAD_LAUNCHER=noop" };
+  }
 }
 
 export class TerminalLauncher implements Launcher {
