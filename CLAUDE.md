@@ -70,3 +70,7 @@ Araştırma, özetleme, kod okuma gibi kısa ve repoda değişiklik gerektirmeye
 3. Sonucu `vlad task report <id> --file <md>` ile görev dosyasına yaz; ardından kullanıcıya özetle.
 
 Sonuç yalnızca sohbette kalmamalı; daima görev dosyasına yazılır.
+
+## Model dağıtımı
+
+Görev modeli sırası: görevin `model` alanı (`haiku|sonnet|opus`, `vlad task new --model`) ?? rolün `model`i ?? varsayılan; yerel launch (`claude --model`), bulut launch (`create_session.model`) ve research arka plan agent'ı aynı sırayı kullanır, `vlad task list --json` görev başına `effective_model`/`role_model` verir. `/delegate` taslağın faz tablosunda Model sütununu gösterir: varsayılan rolün modeli; Haiku yalnızca mekanik fazlarda (belge, eşitleme, arama, özet), kod yazan fazda değil; Opus yalnızca en kritik işte, gerekçesi taslakta yazılı ve kullanıcının açık onayıyla (`--model-reason` olmadan CLI reddeder). `vlad status` rolün modelinden sapan görev modelini gösterir.

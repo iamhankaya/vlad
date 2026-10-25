@@ -10,7 +10,7 @@ import { countInbox } from "../inbox/inbox.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
 import type { Role } from "../roles/store.js";
-import { getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
+import { effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
 const ALL_STATES: TaskState[] = [
@@ -118,6 +118,7 @@ export async function launchTask(
     return problems.join("; ");
   };
 
+  const model = effectiveModel(task.data, role);
   let failure: string | null = null;
   try {
     const res = await o.launcher.launch({
@@ -126,7 +127,7 @@ export async function launchTask(
       prompt: buildPrompt(task.file, task.data.autonomy, role),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
-      ...(role?.model ? { model: role.model } : {}),
+      ...(model ? { model } : {}),
     });
     if (!res.ok) failure = `launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`;
   } catch (e) {

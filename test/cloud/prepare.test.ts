@@ -64,6 +64,12 @@ describe("prepareCloudLaunch", () => {
     expect(g.data).toMatchObject({ state: "running", branch: `vlad/${t.data.id}`, worktree: null, error: null });
   });
 
+  it("task model overrides the role's model in create_session; no task model keeps the role's", () => {
+    expect(prepareCloudLaunch(mk("alpha", { model: "haiku" }).data.id).model).toBe("haiku");
+    expect(prepareCloudLaunch(mk("alpha", { model: "opus", modelReason: "kritik" }).data.id).model).toBe("opus");
+    expect(prepareCloudLaunch(mk().data.id).model).toBe("sonnet");
+  });
+
   it("inlines task sections, role file and the [VLAD:*] protocol", () => {
     const t = mk();
     const p = prepareCloudLaunch(t.data.id).prompt;

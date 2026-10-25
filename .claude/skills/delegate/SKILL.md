@@ -59,6 +59,12 @@ vlad project list --json
 
 **Dış API gerçek fixture'ı:** iş dış bir API/servis yanıtına dayanıyorsa `spec`/`plan` fazının Tanım'ına "plan öncesi gerçek yanıt örnekleri" ekle (analyst/architect gerçek yanıtı kaydedip raporda verir; yoksa kullanıcıdan alınacağını `### Açık noktalar`'a yazar). Taslakta örnek yoksa bunu uyarı olarak göster ve kullanıcıdan iste. Kabul ve unit testler kaydedilmiş gerçek fixture'a karşı yazılır; uydurma yanıt şekline değil.
 
+**Model dağıtımı:** her görev, `model` verilmezse rolünün modelinde çalışır (görevin modeli ?? rolün modeli ?? varsayılan). Taslağın faz tablosuna **Model** sütunu koy (rol modeli ya da seçtiğin sapma) ve kuralları uygula:
+- **Varsayılan:** rolün modeli; sütuna rolün modelini yaz, `--model` geçirme.
+- **Haiku:** mekanik/basit fazlarda (belge, eşitleme, arama, özet) seçebilirsin; **kod yazan fazda (developer `sözleşme`/`uygulama`, düzeltme) seçme**.
+- **Opus:** yalnızca en kritik işlerde (ör. güvenlik etkili tasarım, geri alınamaz veri işlemi). Gerekçesini taslakta yaz ve kullanıcının **açık onayını** al; gerekçesiz `--model opus` CLI'da reddedilir (`--model-reason` zorunlu). Onay yoksa Opus seçme.
+- Seçilen model rolün modelinden farklıysa `vlad task new` komutuna `--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]` ekle; aynıysa ekleme.
+
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
 - İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.
 - İşaretler çelişiyorsa veya gereksinim belirsizse taslaktan önce **kullanıcıya sor**: iki aday döngüyü artı/eksiyle göster (ör. "`özellik`: + spec ile kapsam netleşir, − bir faz ve bir kapı fazla; `kısa`: + hızlı, − gereksinim belirsizliği uygulamaya kalır") ve seçimini bekle.
@@ -79,6 +85,7 @@ Kullanıcıya şunu göster:
 **Döngü:** tek — <gerekçe, tek cümle>
 **Exposure:** <local|network|internet|belirsiz — kartta boş; kullanıcıya sorulmalı>
 **Rol:** <title> (`<slug>`) — <neden bu rol, tek cümle> | rol yok
+**Model:** <rolün modeli | haiku (mekanik iş) | opus — gerekçe: …; açık onay gerekir>
 **Başlık:** <kısa başlık>
 
 ## Tanım
@@ -113,13 +120,15 @@ Kullanıcıya şunu göster:
 <ilgili kararlar, dosyalar, kısıtlar; kaynak ID'leriyle>
 
 ### Fazlar
-| # | Faz | Rol | Tür | Bağımlılık |
-|---|---|---|---|---|
-| 1 | spec | Senior Analyst (`analyst`) | research | — |
-| 2 | sözleşme | Senior Developer (`developer`) | dev | 1 |
-| 3 | kabul | Senior Tester (`tester`) | dev | 2 |
-| 4 | uygulama | Senior Developer (`developer`) | dev | 2 |
-| 5 | doğrulama | Senior Tester (`tester`) | dev | 3, 4 |
+| # | Faz | Rol | Model | Tür | Bağımlılık |
+|---|---|---|---|---|---|
+| 1 | spec | Senior Analyst (`analyst`) | sonnet¹ | research | — |
+| 2 | sözleşme | Senior Developer (`developer`) | sonnet | dev | 1 |
+| 3 | kabul | Senior Tester (`tester`) | sonnet | dev | 2 |
+| 4 | uygulama | Senior Developer (`developer`) | sonnet | dev | 2 |
+| 5 | doğrulama | Senior Tester (`tester`) | sonnet | dev | 3, 4 |
+
+¹ Sütuna rolün modeli (ya da kuralların izin verdiği sapma) yazılır; sapma varsa tablonun altında gerekçesini yaz. Opus'u kullanıcı açıkça onaylamadan kullanma.
 
 ### Kapılar
 - Her fazın sonunda onay (`/status`): research fazı raporu kabul edilir, dev fazı entegrasyon branch'ine (`vlad/<çatı-id>`) merge edilir. Bağımlı fazlar ancak bundan sonra başlar.
@@ -133,7 +142,7 @@ Sonunda sor: "Bu pipeline'ı oluşturup ilk fazları başlatayım mı?" Bu onay 
 
 **`tek`:** Gövdeyi (`## Tanım`, `## Kabul kriterleri`, `## Bağlam`) geçici bir dosyaya yaz:
 ```
-vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--role <slug>] --body-file <geçici.md> --json
+vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--role <slug>] [--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]] --body-file <geçici.md> --json
 ```
 Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle. Rol bulunamazsa veya türle uyumsuzsa CLI hata verir ve görev oluşmaz; hatayı göster, taslağı düzelt. Sonra adım 5a (dev) veya 5b (research).
 
@@ -145,7 +154,7 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
    Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`).
 2. Fazlar, tablodaki **sırayla**. Her faz için gövde: `## Tanım` (fazın payı), `## Kabul kriterleri` (rolün `## Çıktı`'sı ve işin kriterlerinden bu faza düşenler), `## Bağlam` (çatı ID'si; "girdi: bağımlı olduğun görevlerin `## Kapanış raporu`"). Bağımlılık yalnızca **daha önce oluşturulmuş** fazlara verilir; tablodaki numaraları oluşan ID'lere çevir:
    ```
-   vlad task new --project <slug> --title "<başlık> — <faz>" --kind <dev|research> --role <slug> --parent <çatı-id> [--depends-on <id1,id2>] --phase <faz> --body-file <faz.md> --json
+   vlad task new --project <slug> --title "<başlık> — <faz>" --kind <dev|research> --role <slug> [--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]] --parent <çatı-id> [--depends-on <id1,id2>] --phase <faz> --body-file <faz.md> --json
    ```
    Bir faz hata verirse dur, hatayı göster; oluşanları kullanıcıya söyle (gerekirse `cancelled` yapılır).
 3. Başlatılabilir fazları al:
@@ -185,7 +194,7 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 ## 5b. research → arka plan agent'ı
 
 1. `vlad task set <id> running --json`
-2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Rolün `skills` listesi doluysa ardından: "İşe başlamadan şu skill'leri yükle: `<a>`, `<b>`. Yüklenemeyen olursa raporda belirt." Pipeline fazıysa ekle: "Önce bağımlı olduğun görevlerin `## Kapanış raporu` bölümünü oku: `kb/tasks/<dep-id>.md` …" (görevin `depends_on`'u). Agent sonucu Markdown olarak döndürür; dosya yazmaz. Arka plan agent'ını rolün `model`'iyle başlat (Agent aracının `model` parametresi; değer `vlad role list --json` çıktısından); rolsüz/boşsa varsayılan.
+2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Rolün `skills` listesi doluysa ardından: "İşe başlamadan şu skill'leri yükle: `<a>`, `<b>`. Yüklenemeyen olursa raporda belirt." Pipeline fazıysa ekle: "Önce bağımlı olduğun görevlerin `## Kapanış raporu` bölümünü oku: `kb/tasks/<dep-id>.md` …" (görevin `depends_on`'u). Agent sonucu Markdown olarak döndürür; dosya yazmaz. Arka plan agent'ını görevin modeliyle, yoksa rolün `model`'iyle başlat (Agent aracının `model` parametresi; değer `vlad task list --project <slug> --json` çıktısında görevin `effective_model` alanıdır, yoksa `vlad role list --json`); ikisi de boşsa varsayılan.
 3. Önemli ara adımlarda: `vlad task log <id> "<adım>"`
 4. Sonucu Markdown olarak geçici dosyaya yaz ve:
    ```
@@ -199,7 +208,7 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 `plan` fazı (architect, research) tek görev içinde sırayla yürür; "birlikte oturma" budur (spec §7):
 1. `vlad task set <id> running --json`
 2. **Taslak:** architect rolüyle arka plan agent'ı (5b'deki rol, skill ve `depends_on` cümleleriyle; girdi spec fazının raporu). Rolün `## Çıktı` başlıklarıyla taslak plan döndürür. Taslağı geçici dosyada tut; `vlad task log <id> "Plan taslağı hazır"`.
-   Bu adımdaki tüm arka plan agent'larını (taslak, eleştiri, son plan) kullandıkları rolün `model`'iyle başlat (Agent aracının `model` parametresi); rolsüz/boşsa varsayılan.
+   Bu adımdaki tüm arka plan agent'larını (taslak, eleştiri, son plan) kullandıkları rolün modeliyle başlat, plan görevinin kendi `model`'i varsa (`effective_model`) onunla (Agent aracının `model` parametresi); ikisi de boşsa varsayılan.
 3. **Eleştiri:** iki arka plan agent'ı paralel — biri `roles/developer.md`, biri `roles/tester.md` rol dosyasıyla. Prompt: spec raporu + taslak plan; "Rol dosyasından yalnızca rolün bakış açısını al; Yetki, iş akışı ve commit kuralları bu görevde geçerli değil. Kendi rolünün gözüyle eleştir: uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde. Kod yazma, dosya değiştirme, skill yükleme." Her biri için `vlad task log <id> "<Developer|Tester> eleştirisi: <kısa özet>"`.
 4. **Son plan:** architect agent'ına taslak + iki eleştiriyi ver; son planı ve `### Eleştiriler ve nasıl ele alındı` bölümünü yazdır.
 5. Rapora yalnızca son plan girer (ara ürünler log'da kalır): `vlad task report <id> --file <plan.md> --json`, sonra 5b adım 5.

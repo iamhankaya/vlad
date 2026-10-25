@@ -164,6 +164,17 @@ describe("launchTask", () => {
     expect(l.reqs.map((r) => r.model)).toEqual(["sonnet", undefined, undefined]);
   });
 
+  it("task model overrides the role's model; without a task model the role's model applies", async () => {
+    const file = writeRole("tester");
+    writeFileSync(file, readFileSync(file, "utf8").replace("summary: s\n", "summary: s\nmodel: sonnet\n"));
+    const l = fakeLauncher();
+    const a = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester", model: "haiku" });
+    await launchTask(a.data.id, { launcher: l, cfg });
+    const b = createTask({ project: "alpha", title: "x", kind: "dev", body: "", model: "opus", modelReason: "kritik" });
+    await launchTask(b.data.id, { launcher: l, cfg });
+    expect(l.reqs.map((r) => r.model)).toEqual(["haiku", "opus"]);
+  });
+
   it("prompt lists the role's skills, and has no skill sentence for an empty list", () => {
     const r = { title: "T", file: "r.md" };
     expect(buildPrompt("f.md", "commit", { ...r, skills: ["a:b", "c"] }))
