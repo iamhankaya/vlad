@@ -66,6 +66,21 @@ describe("checkKb", () => {
     expect(checkKb().foreign).toEqual([]);
   });
 
+  it("skips merge commits; ack <sha> does not acknowledge commits that landed after that head", () => {
+    checkKb({ ack: true });
+    run(other, "T", "checkout", "-q", "-b", "side");
+    run(other, "T", "commit", "-q", "--allow-empty", "-m", "kb: side");
+    run(other, "T", "checkout", "-q", "main");
+    commitIn(other, "Claude", "kb: main work");
+    run(other, "T", "merge", "-q", "--no-ff", "-m", "Merge branch side", "side");
+    run(other, "T", "push", "-q", "origin", "HEAD");
+    const first = checkKb();
+    expect(first.foreign).toEqual([]);
+    commitIn(other, "worker", "oops: later");
+    checkKb({ ack: first.head });
+    expect(checkKb().foreign.map((c) => c.subject)).toEqual(["oops: later"]);
+  });
+
   it("network failure -> warning, no foreign commits, no throw", () => {
     run(kb, "T", "remote", "set-url", "origin", join(tmpdir(), "vlad-no-such-remote"));
     const r = checkKb();

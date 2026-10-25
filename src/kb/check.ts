@@ -11,6 +11,8 @@ export interface ForeignCommit {
 
 export interface KbCheckResult {
   foreign: ForeignCommit[];
+  /** remote head the check covered; pass it to `--ack <sha>` so commits that landed since are not acknowledged unseen */
+  head?: string;
   warnings?: string[];
 }
 
@@ -23,10 +25,12 @@ const FALLBACK_COMMITS = 50;
  * remote branch since the last verified point without that prefix is foreign.
  * The verified point lives in `.git/vlad-kb-verified` (never committed). It advances only when nothing
  * foreign was found, or with `ack` once the user has seen the list, so a foreign commit is reported until acknowledged.
+ * Merge commits are skipped (the commits they bring are in the range). Only the upstream branch is checked and the
+ * prefix is a convention, so this is good-faith protection, not enforcement.
  * Author is reported but not judged: VLAD itself commits as several identities, and a worker can fake the prefix
  * (shortcut: prefix-only, upgrade to signed commits if that matters).
  */
-export function checkKb(o: { ack?: boolean } = {}): KbCheckResult {
+export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
   const paths = kbPaths();
   if (!isSeparateKb(paths.home)) return { foreign: [], warnings: ["kb ayrı depoda değil; yabancı commit kontrolü atlandı"] };
   const cwd = paths.kb;
@@ -46,20 +50,25 @@ export function checkKb(o: { ack?: boolean } = {}): KbCheckResult {
   let gitDir = git(cwd, ["rev-parse", "--git-dir"]).trim();
   if (!isAbsolute(gitDir)) gitDir = resolve(cwd, gitDir);
   const markerFile = join(gitDir, "vlad-kb-verified");
-  let range = ["-n", String(FALLBACK_COMMITS), ref];
+  let range = ["-n", String(FALLBACK_COMMITS), head];
   if (existsSync(markerFile)) {
     const marker = readFileSync(markerFile, "utf8").trim();
     try {
       git(cwd, ["merge-base", "--is-ancestor", marker, ref]);
-      range = [`${marker}..${ref}`];
+      range = [`${marker}..${head}`];
     } catch {
       warnings.push(`doğrulanan nokta (${marker.slice(0, 7)}) uzak dalın atası değil (force push / geçmiş yeniden yazılmış olabilir); son ${FALLBACK_COMMITS} commit incelendi`);
     }
   }
-  const foreign: ForeignCommit[] = git(cwd, ["log", "--format=%h%x09%an%x09%s", ...range])
+  const foreign: ForeignCommit[] = git(cwd, ["log", "--no-merges", "--format=%h%x09%an%x09%s", ...range])
     .split(/\r?\n/).filter(Boolean)
     .map((l) => { const [sha, author, ...s] = l.split("\t"); return { sha, author, subject: s.join("\t") }; })
     .filter((c) => !c.subject.startsWith("kb:"));
-  if (!foreign.length || o.ack) writeFileSync(markerFile, `${head}\n`);
-  return warnings.length ? { foreign, warnings } : { foreign };
+  let verified = head;
+  if (typeof o.ack === "string") {
+    verified = git(cwd, ["rev-parse", "--verify", `${o.ack}^{commit}`]).trim();
+    git(cwd, ["merge-base", "--is-ancestor", verified, head]);
+  }
+  if (!foreign.length || o.ack) writeFileSync(markerFile, `${verified}\n`);
+  return warnings.length ? { foreign, head, warnings } : { foreign, head };
 }

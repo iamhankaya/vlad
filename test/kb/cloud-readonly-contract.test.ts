@@ -18,7 +18,7 @@ describe("kb salt okuma: metin sözleşmesi (T20261026-20)", () => {
   it("status: ingest/status başında vlad kb check, --ack ve kb erişimi yok yanıtı", () => {
     const s = read(".claude/skills/status/SKILL.md");
     expect(s).toMatch(/vlad kb check --json/);
-    expect(s).toMatch(/vlad kb check --ack/);
+    expect(s).toMatch(/vlad kb check --ack <head>/);
     expect(s).toMatch(/\[VLAD:LOG\] kb erişimi yok/);
     expect(s).toMatch(/cloudKb: .inline./);
   });

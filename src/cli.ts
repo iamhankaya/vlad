@@ -375,13 +375,13 @@ def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak 
   out(o, r, lines.join("\n"));
 }).option("--push", "upstream'e push eder (yalnızca push edilmemiş commit'lerin hepsi kb/ ise)");
 def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) commit'leri listeler", (o: Opts) => {
-  const r = checkKb({ ack: !!o.ack });
+  const r = checkKb({ ack: o.ack as boolean | string | undefined });
   const lines = r.foreign.length
     ? [`yabancı commit: ${r.foreign.length}`, ...r.foreign.map((c) => `${c.sha} ${c.author}: ${c.subject}`)]
     : ["yabancı commit yok"];
   for (const w of r.warnings ?? []) lines.push(`uyarı: ${w}`);
   out(o, r, lines.join("\n"));
-}).option("--ack", "listelenen commit'leri görüldü say (doğrulanan noktayı ilerletir)");
+}).option("--ack [sha]", "görüldü say: doğrulanan noktayı ilerletir (sha verilirse `check` çıktısındaki head; sonradan gelenler işaretlenmez)");
 
 const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
 const session = program.command("session").description("VLAD oturum adı");
