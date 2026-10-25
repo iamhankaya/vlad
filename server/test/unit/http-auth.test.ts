@@ -48,14 +48,14 @@ describe("unsigned access", () => {
   it("garbage in each header is 401 and never crashes", async () => {
     const r = rig({ limits: { unpaired: [1000, 1000] } });
     const d = await pairDevice(r);
-    const good = d.headers(r.clock, "GET", "/v1/grants");
+    const good = d.headers(r.clock, "GET", "/v1/chat/history");
     for (const k of Object.keys(good) as (keyof typeof good)[]) {
       for (const bad of ["", "x", "é", "0".repeat(200), "a, b"]) {
-        const res = await r.app.inject({ method: "GET", url: "/v1/grants", headers: { ...good, [k]: bad } });
+        const res = await r.app.inject({ method: "GET", url: "/v1/chat/history", headers: { ...good, [k]: bad } });
         expect(res.statusCode, `${k}=${bad}`).toBe(401);
       }
       const { [k]: _omit, ...rest } = good;
-      expect((await r.app.inject({ method: "GET", url: "/v1/grants", headers: rest })).statusCode).toBe(401);
+      expect((await r.app.inject({ method: "GET", url: "/v1/chat/history", headers: rest })).statusCode).toBe(401);
     }
   });
 
@@ -176,7 +176,7 @@ describe("signed requests", () => {
   it("the window is +-120 s inclusive; +-121 s is rejected", async () => {
     const r = rig();
     const d = await pairDevice(r);
-    const at = (dt: number) => signedCall(r, d, "GET", "/v1/grants", undefined, { ts: r.clock.t + dt });
+    const at = (dt: number) => signedCall(r, d, "GET", "/v1/chat/history", undefined, { ts: r.clock.t + dt });
     expect((await at(120_000)).statusCode).toBe(501);
     expect((await at(-120_000)).statusCode).toBe(501);
     expect((await at(121_000)).statusCode).toBe(401);
@@ -188,22 +188,22 @@ describe("signed requests", () => {
     const d = await pairDevice(r);
     const nonce = "AAAAAAAAAAAAAAAAAAAAAA";
     const t0 = r.clock.t;
-    expect((await signedCall(r, d, "GET", "/v1/grants", undefined, { nonce })).statusCode).toBe(501);
-    expect((await signedCall(r, d, "GET", "/v1/grants", undefined, { nonce })).statusCode).toBe(401);
+    expect((await signedCall(r, d, "GET", "/v1/chat/history", undefined, { nonce })).statusCode).toBe(501);
+    expect((await signedCall(r, d, "GET", "/v1/chat/history", undefined, { nonce })).statusCode).toBe(401);
     r = r.restart();
-    expect((await signedCall(r, d, "GET", "/v1/grants", undefined, { nonce })).statusCode).toBe(401);
+    expect((await signedCall(r, d, "GET", "/v1/chat/history", undefined, { nonce })).statusCode).toBe(401);
     r.clock.t = t0 + 5 * 60_000 + 1;
     // same nonce much later: outside the replay TTL, but only reachable with a fresh ts
-    expect((await signedCall(r, d, "GET", "/v1/grants", undefined, { nonce })).statusCode).toBe(501);
+    expect((await signedCall(r, d, "GET", "/v1/chat/history", undefined, { nonce })).statusCode).toBe(501);
   });
 
   it("an invalid signature does not store its nonce (cache cannot be filled with garbage)", async () => {
     const r = rig();
     const d = await pairDevice(r);
     const nonce = "BBBBBBBBBBBBBBBBBBBBBB";
-    const bad = { ...d.headers(r.clock, "GET", "/v1/grants", "", { nonce }), "x-vlad-sig": "MEUCIQC" };
-    expect((await r.app.inject({ method: "GET", url: "/v1/grants", headers: bad })).statusCode).toBe(401);
-    expect((await signedCall(r, d, "GET", "/v1/grants", undefined, { nonce })).statusCode).toBe(501);
+    const bad = { ...d.headers(r.clock, "GET", "/v1/chat/history", "", { nonce }), "x-vlad-sig": "MEUCIQC" };
+    expect((await r.app.inject({ method: "GET", url: "/v1/chat/history", headers: bad })).statusCode).toBe(401);
+    expect((await signedCall(r, d, "GET", "/v1/chat/history", undefined, { nonce })).statusCode).toBe(501);
   });
 
   it("the signature binds method, raw target, query and body bytes", async () => {
@@ -221,30 +221,30 @@ describe("signed requests", () => {
     const r = rig();
     const d = await pairDevice(r);
     const call = (signed: string, sent: string, method: "GET" | "DELETE" = "GET") => r.app.inject({ method, url: sent, headers: d.headers(r.clock, method, signed) });
-    // a param route that is still unimplemented: DELETE /v1/grants/{id} (GET /v1/projects/{slug} has a handler since S12a)
+    // a param route that is still unimplemented (no GET one is left): DELETE /v1/grants/{id}, S10; GET /v1/projects/{slug} has a handler since S12a
     expect((await call("/v1/grants/a", "/v1/grants/a", "DELETE")).statusCode).toBe(501);
     expect((await call("/v1/grants/a%2Fb", "/v1/grants/a%2Fb", "DELETE")).statusCode).toBe(501);
     expect((await call("/v1/grants/a", "/v1/grants/a%2Fb", "DELETE")).statusCode).toBe(401);
-    expect((await call("/v1/grants", "/v1/grants/")).statusCode).toBe(401);
-    expect((await call("/v1/grants/", "/v1/grants/")).statusCode).toBe(404); // signed trailing slash: authenticated, then no such route
-    expect((await call("/v1/grants", "//v1/grants")).statusCode).toBe(401);
+    expect((await call("/v1/chat/history", "/v1/chat/history/")).statusCode).toBe(401);
+    expect((await call("/v1/chat/history/", "/v1/chat/history/")).statusCode).toBe(404); // signed trailing slash: authenticated, then no such route
+    expect((await call("/v1/chat/history", "//v1/chat/history")).statusCode).toBe(401);
     expect((await call("/v1/grants/a", "/v1/%67rants/a", "DELETE")).statusCode).toBe(401);
   });
 
   it("a duplicate query key is 400 bad_request; it says nothing about the caller", async () => {
     const r = rig();
     const d = await pairDevice(r);
-    for (const target of ["/v1/grants?a=1&a=2", "/v1/grants?a=1&%61=2"]) {
-      const res = await r.app.inject({ method: "GET", url: target, headers: d.headers(r.clock, "GET", "/v1/grants") });
+    for (const target of ["/v1/chat/history?a=1&a=2", "/v1/chat/history?a=1&%61=2"]) {
+      const res = await r.app.inject({ method: "GET", url: target, headers: d.headers(r.clock, "GET", "/v1/chat/history") });
       expect(res.statusCode).toBe(400);
     }
-    expect((await r.app.inject({ method: "GET", url: "/v1/grants?a=1&a=2" })).statusCode).toBe(400);
+    expect((await r.app.inject({ method: "GET", url: "/v1/chat/history?a=1&a=2" })).statusCode).toBe(400);
   });
 
   it("GET with a body is refused instead of hashing something the client did not sign", async () => {
     const r = rig();
     const d = await pairDevice(r);
-    const res = await r.app.inject({ method: "GET", url: "/v1/grants", headers: { ...d.headers(r.clock, "GET", "/v1/grants"), "content-type": "application/json" }, payload: "{}" });
+    const res = await r.app.inject({ method: "GET", url: "/v1/chat/history", headers: { ...d.headers(r.clock, "GET", "/v1/chat/history"), "content-type": "application/json" }, payload: "{}" });
     expect(res.statusCode).toBe(400);
   });
 
@@ -263,12 +263,12 @@ describe("signed requests", () => {
     const r = rig({ limits: { unpaired: [2, 0.001], paired: [3, 0.001] } });
     const d = await pairDevice(r); // consumes none of the unpaired bucket? it does (1 token)
     // exhaust the unpaired bucket with garbage
-    for (let i = 0; i < 5; i++) await r.app.inject({ method: "GET", url: "/v1/grants" });
-    const bad = await r.app.inject({ method: "GET", url: "/v1/grants" });
+    for (let i = 0; i < 5; i++) await r.app.inject({ method: "GET", url: "/v1/chat/history" });
+    const bad = await r.app.inject({ method: "GET", url: "/v1/chat/history" });
     expect(bad.statusCode).toBe(429);
     // a valid signature is not blocked by the unpaired bucket and is charged to its own bucket
     const codes = [] as number[];
-    for (let i = 0; i < 4; i++) codes.push((await signedCall(r, d, "GET", "/v1/grants")).statusCode);
+    for (let i = 0; i < 4; i++) codes.push((await signedCall(r, d, "GET", "/v1/chat/history")).statusCode);
     expect(codes).toEqual([501, 501, 501, 429]);
   });
 });
@@ -284,14 +284,14 @@ describe("device revocation", () => {
     const r = rig();
     const a = await pairDevice(r, "Phone A");
     const b = await pairDevice(r, "Phone B");
-    expect((await signedCall(r, b, "GET", "/v1/grants")).statusCode).toBe(501);
+    expect((await signedCall(r, b, "GET", "/v1/chat/history")).statusCode).toBe(501);
     const res = await revoke(r, a, b.id);
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true });
-    const after = await signedCall(r, b, "GET", "/v1/grants");
+    const after = await signedCall(r, b, "GET", "/v1/chat/history");
     expect(after.statusCode).toBe(401);
     expect(err(after).code).toBe("device_revoked");
-    expect((await signedCall(r, a, "GET", "/v1/grants")).statusCode).toBe(501);
+    expect((await signedCall(r, a, "GET", "/v1/chat/history")).statusCode).toBe(501);
   });
 
   it("an unknown caller with a bad signature learns only unauthorized (device_revoked needs a valid signature)", async () => {
@@ -299,8 +299,8 @@ describe("device revocation", () => {
     const a = await pairDevice(r, "Phone A");
     const b = await pairDevice(r, "Phone B");
     await revoke(r, a, b.id);
-    const forged = { ...b.headers(r.clock, "GET", "/v1/grants"), "x-vlad-sig": "MEUCIQC" };
-    const res = await r.app.inject({ method: "GET", url: "/v1/grants", headers: forged });
+    const forged = { ...b.headers(r.clock, "GET", "/v1/chat/history"), "x-vlad-sig": "MEUCIQC" };
+    const res = await r.app.inject({ method: "GET", url: "/v1/chat/history", headers: forged });
     expect(err(res).code).toBe("unauthorized");
   });
 
@@ -310,7 +310,7 @@ describe("device revocation", () => {
     const b = await pairDevice(r, "Phone B");
     const sessionSigned = JSON.stringify({ ts_ms: r.clock.t, signature: (await import("../helpers/client.ts")).signDer(a.session.priv, (await import("../../src/auth/canonical.ts")).revokeBytes({ device: b.id, signer: a.id, tsMs: r.clock.t })) });
     expect((await signedCall(r, a, "POST", `/v1/devices/${b.id}/revoke`, sessionSigned)).statusCode).toBe(401);
-    expect((await signedCall(r, b, "GET", "/v1/grants")).statusCode).toBe(501);
+    expect((await signedCall(r, b, "GET", "/v1/chat/history")).statusCode).toBe(501);
   });
 
   it("another device's approval key cannot revoke on a caller's behalf, and signer/target/ts are all bound", async () => {
@@ -323,7 +323,7 @@ describe("device revocation", () => {
     expect((await revoke(r, a, c.id, { bodyTs: r.clock.t + 1 })).statusCode).toBe(401); // body ts != header ts
     const forTarget = a.revokeBody(b.id, r.clock.t);
     expect((await signedCall(r, a, "POST", `/v1/devices/${c.id}/revoke`, forTarget)).statusCode).toBe(401); // signed for another target
-    expect((await signedCall(r, c, "GET", "/v1/grants")).statusCode).toBe(501);
+    expect((await signedCall(r, c, "GET", "/v1/chat/history")).statusCode).toBe(501);
   });
 
   it("(signer, ts) is single use; a replay with a new nonce is 401 even though the device is already revoked", async () => {
@@ -352,7 +352,7 @@ describe("device revocation", () => {
     const b = await pairDevice(r, "Phone B");
     await revoke(r, a, b.id);
     r = r.restart();
-    expect(err(await signedCall(r, b, "GET", "/v1/grants")).code).toBe("device_revoked");
+    expect(err(await signedCall(r, b, "GET", "/v1/chat/history")).code).toBe("device_revoked");
   });
 
   it("revoke body shape: extra fields or missing signature are 400", async () => {
@@ -367,7 +367,7 @@ describe("device revocation", () => {
 describe("trustProxy", () => {
   const hit = (port: number, xff: string) =>
     new Promise<number>((resolve, reject) => {
-      const q = httpRequest({ host: "127.0.0.1", port, path: "/v1/grants", headers: { "x-forwarded-for": xff } }, (res) => {
+      const q = httpRequest({ host: "127.0.0.1", port, path: "/v1/chat/history", headers: { "x-forwarded-for": xff } }, (res) => {
         res.resume();
         res.on("end", () => resolve(res.statusCode!));
       });
