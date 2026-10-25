@@ -30,8 +30,8 @@ export function registerGrant(program: Command): void {
     out(o, { id: g.data.id }, `devir yazıldı: ${g.data.id}`);
   }).requiredOption("--file <json>", "devir JSON (- = stdin)");
   def(grant, "list", "Devirleri listeler; bozuk dosya uyarı olur", (o: Opts) => {
-    const { grants, warnings } = listGrants({ active: Boolean(o.active) });
-    out(o, { grants: grants.map((g) => g.data), warnings }, [...grants.map((g) => grantLine(g.data)), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+    const { grants, warnings, revoked_ids } = listGrants({ active: Boolean(o.active) });
+    out(o, { grants: grants.map((g) => g.data), warnings, revoked_ids }, [...grants.map((g) => grantLine(g.data)), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
   }).option("--active", "yalnız iptal edilmemiş ve süresi dolmamışlar");
   defWrite(grant, "revoke <id>", "Devri iptal eder (geri alınamaz)", (id: string, o: Opts) => {
     const g = revokeGrant(id);

@@ -412,7 +412,8 @@ paths:
         Devir sunucu defterine (`grants.json`) yazılır, `kb/grants/` yalnız yansımadır ve kb'deki bir dosya devir sayılmaz.
         `tag_release`, `publish`, `delete`, `security`, `scope_change` şemada enum dışıdır ve ayrıca kodda
         `not_delegable` ile reddedilir. `signature`, `approval` anahtarıyla `grantSigningPayload()` baytları
-        (`src/grants/store.ts`; vektör: `signing-vectors.json` `grant`) üzerindedir. Süre en çok 30 gün.
+        (`src/grants/store.ts`; vektör: `signing-vectors.json` `grant`, v2 vektörleri `grant-v2-*`) üzerindedir. `payload_version` `v2`:
+        imza `project` ve `repo` alanlarını da kapsar (v1 yalnız eski vektörlerde kalır, sunucu kabul etmez). Süre en çok 30 gün.
       x-vlad-auth: session+approval
       requestBody:
         required: true
@@ -1184,6 +1185,14 @@ components:
       properties:
         type: { type: string, enum: [project, pipeline] }
         ref: { type: string, pattern: "^[A-Za-z0-9._-]+$" }
+    GrantProject:
+      type: string
+      description: Proje kartı slug'ı. İmzalıdır (payload v2); kullanım anında görevin projesi buna tam eşit olmalı.
+      pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"
+    GrantRepo:
+      type: string
+      description: Proje kartında kayıtlı repo (`o/r`). İmzalıdır (payload v2); kullanım anında kartın repo'su buna tam eşit olmalı.
+      pattern: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$"
     GrantAction:
       type: string
       description: Devredilebilir eylemler (kullanıcı kararı). Başkası enum dışıdır.
@@ -1194,10 +1203,12 @@ components:
     GrantCreateRequest:
       type: object
       additionalProperties: false
-      required: [id, scope, action, conditions, created, expires, max_uses, signature, payload_version]
+      required: [id, scope, project, repo, action, conditions, created, expires, max_uses, signature, payload_version]
       properties:
         id: { $ref: "#/components/schemas/GrantId" }
         scope: { $ref: "#/components/schemas/GrantScope" }
+        project: { $ref: "#/components/schemas/GrantProject" }
+        repo: { $ref: "#/components/schemas/GrantRepo" }
         action: { $ref: "#/components/schemas/GrantAction" }
         conditions:
           type: array
@@ -1210,7 +1221,7 @@ components:
         signature:
           description: '`approval` anahtarıyla `grantSigningPayload()` baytları üzerinde DER imza, base64url.'
           allOf: [{ $ref: "#/components/schemas/B64Url" }]
-        payload_version: { type: string, const: v1 }
+        payload_version: { type: string, const: v2 }
     GrantCreated:
       type: object
       additionalProperties: false
@@ -1220,10 +1231,12 @@ components:
     Grant:
       type: object
       additionalProperties: false
-      required: [id, scope, action, conditions, created, expires, max_uses, uses, status, device_id]
+      required: [id, scope, project, repo, action, conditions, created, expires, max_uses, uses, status, device_id]
       properties:
         id: { $ref: "#/components/schemas/GrantId" }
         scope: { $ref: "#/components/schemas/GrantScope" }
+        project: { $ref: "#/components/schemas/GrantProject" }
+        repo: { $ref: "#/components/schemas/GrantRepo" }
         action: { $ref: "#/components/schemas/GrantAction" }
         conditions:
           type: array

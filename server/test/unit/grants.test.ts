@@ -7,7 +7,7 @@ import type { TaskInfo } from "../../src/actions/service.ts";
 import type { DeviceRecord } from "../../src/auth/devices.ts";
 import { signDer, signedCall, TestDevice } from "../helpers/client.ts";
 import { CONTRACT_DIR } from "../helpers/contract.ts";
-import { FakeKb, mkWorld, PARENT, sha40, T1, T2, T3, T4, type GrantWorld } from "../helpers/grant-world.ts";
+import { FakeKb, mkWorld, PARENT, REPO2, sha40, T1, T2, T3, T4, type GrantWorld } from "../helpers/grant-world.ts";
 import { validator } from "../helpers/openapi.ts";
 
 const worlds: GrantWorld[] = [];
@@ -49,7 +49,7 @@ describe("server: POST /grants (signed by the phone)", () => {
     const list = await w.get("/v1/grants", a);
     expect(list.statusCode).toBe(200);
     expect(listSchema(list.json()), list.body).toEqual([]);
-    expect(list.json().grants).toEqual([{ id: "G-001", scope: body.scope, action: "merge_phase", conditions: ["ci_green"], created: body.created, expires: body.expires, max_uses: 5, uses: 0, status: "active", device_id: a.id }]);
+    expect(list.json().grants).toEqual([{ id: "G-001", scope: body.scope, project: "vlad", repo: "iamhankaya/vlad", action: "merge_phase", conditions: ["ci_green"], created: body.created, expires: body.expires, max_uses: 5, uses: 0, status: "active", device_id: a.id }]);
     expect(w.store().get("G-001")?.rec.device_id).toBe(a.id);
   });
 
@@ -106,7 +106,7 @@ describe("server: POST /grants (signed by the phone)", () => {
     const rec = { ...good, device_id: a.id } as GrantRecord;
     // a record that somehow holds a non-delegable action (written into the books or a hand-built list) is not honored by the evaluation
     const entry: GrantEntry = { rec: { ...rec, action: "tag_release" }, uses: [] };
-    const live: LiveChecks = { device: () => deviceRecord(a), ci: async () => true, findingsClear: async () => true, codexClear: async () => true, kbRevoked: new Set() };
+    const live: LiveChecks = { device: () => deviceRecord(a), ci: async () => true, findingsClear: async () => true, codexClear: async () => true, kbRevoked: new Set(), cardRepo: "iamhankaya/vlad" };
     const task = w.tasks.get(T1)!;
     const asKind = async (kind: string) => grantProblem(entry, task, kind, live, w.r.clock.t, true);
     expect(await asKind("tag_release")).toBe("not_delegable");
@@ -137,7 +137,10 @@ describe("server: POST /grants (signed by the phone)", () => {
       ["id G-1", { id: "G-1" }, 400],
       ["scope type other", { scope: { type: "everything" as never, ref: "vlad" } }, 400],
       ["scope ref with a slash", { scope: { type: "project", ref: "a/b" } }, 400],
-      ["payload_version v2", { payload_version: "v2" as never }, 400],
+      ["payload_version v1", { payload_version: "v1" as never }, 400],
+      ["project missing", { project: "" }, 400],
+      ["repo with a dot segment", { repo: "o/.." }, 400],
+      ["repo not o/r", { repo: "vlad" }, 400],
       ["expires not iso", { expires: "tomorrow" }, 400],
       ["expires with offset", { expires: "2099-01-01T00:00:00+03:00" }, 400],
       ["extra field device_id", { extra: { device_id: a.id } }, 400],
@@ -233,7 +236,7 @@ describe("server: grants carry out the gate card", () => {
   it("server: scope other project skipped", async () => {
     const w = await world();
     const a = await w.phone("A");
-    await w.create(a, { scope: { type: "project", ref: "other" } });
+    await w.create(a, { scope: { type: "project", ref: "other" }, project: "other", repo: REPO2 });
     expect(await w.engine().tryTask(T1)).toBeNull(); // project vlad
     untouched(w, T1);
     // a pipeline grant of another pipeline does not cover this phase either
@@ -582,11 +585,11 @@ describe("server: evaluateGrants (pure selection)", () => {
   device.id = "d-a";
   const now = 1_761_350_400_000;
   const mk = (over: Partial<GrantRecord> = {}): GrantEntry => {
-    const g = { id: "G-001", scope: { type: "project" as const, ref: "vlad" }, action: "merge_phase", conditions: ["ci_green"], created: new Date(now).toISOString(), expires: new Date(now + 3600_000).toISOString(), max_uses: 2, payload_version: "v1" as const, ...over };
+    const g = { id: "G-001", scope: { type: "project" as const, ref: "vlad" }, project: "vlad", repo: "o/r", action: "merge_phase", conditions: ["ci_green"], created: new Date(now).toISOString(), expires: new Date(now + 3600_000).toISOString(), max_uses: 2, payload_version: "v2" as const, ...over };
     return { rec: { ...g, signature: over.signature ?? signDer(device.approval.priv, Buffer.from(grantSigningPayload(g))), device_id: "d-a" }, uses: [] };
   };
   const dev = deviceRecord(device);
-  const live = (over: Partial<LiveChecks> = {}): LiveChecks => ({ device: (id) => (id === "d-a" ? dev : undefined), ci: async () => true, findingsClear: async () => true, codexClear: async () => false, kbRevoked: new Set(), ...over });
+  const live = (over: Partial<LiveChecks> = {}): LiveChecks => ({ device: (id) => (id === "d-a" ? dev : undefined), ci: async () => true, findingsClear: async () => true, codexClear: async () => false, kbRevoked: new Set(), cardRepo: "o/r", ...over });
   const task: TaskInfo = { id: T1, project: "vlad", state: "awaiting_approval", parent: PARENT, pr: { number: 42, repo: "o/r", base: `vlad/${PARENT}` } };
 
   it("picks the first grant in the list that applies and skips the rest", async () => {
@@ -610,7 +613,11 @@ describe("server: evaluateGrants (pure selection)", () => {
     expect(await why(mk(), live({ device: () => undefined }))).toBe("device_revoked");
     expect(await why(mk({ signature: "MEUCIQDXhRYJxO6hxH3BzQnRPztVYKk2yARJZpca4KS6B84H8gIgRN--_MgHBd5eIlOFYDB_yK5EDdvUI1mGifRPYlKXOqM" }))).toBe("grant_invalid");
     expect(await why({ ...mk(), uses: ["A-1", "A-2"] })).toBe("max_uses");
-    expect(await why(mk(), live(), { ...task, project: "x" })).toBe("scope_mismatch");
+    expect(await why(mk(), live(), { ...task, project: "x" })).toBe("project_mismatch");
+    expect(await why(mk(), live({ cardRepo: "o/other" }))).toBe("repo_mismatch");
+    expect(await why(mk(), live({ cardRepo: undefined }))).toBe("repo_mismatch");
+    expect(await why(mk({ scope: { type: "project", ref: "x" } }))).toBe("scope_mismatch");
+    expect(await why({ ...mk(), rec: { ...mk().rec, payload_version: "v1" as never } })).toBe("grant_invalid");
     expect(await why(mk({ scope: { type: "pipeline", ref: PARENT } }))).toBeNull();
     expect(await why(mk({ scope: { type: "pipeline", ref: T3 } }), live(), { ...task, id: T3, parent: null })).toBeNull(); // a root task is its own pipeline
     expect(await why(mk(), live(), task, "merge_final")).toBe("action_mismatch");

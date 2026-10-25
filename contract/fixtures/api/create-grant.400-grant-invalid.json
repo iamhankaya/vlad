@@ -13,6 +13,8 @@
         "type": "project",
         "ref": "vlad"
       },
+      "project": "vlad",
+      "repo": "iamhankaya/vlad",
       "action": "merge_phase",
       "conditions": [
         "ci_green"
@@ -21,7 +23,7 @@
       "expires": "2026-11-24T12:00:00Z",
       "max_uses": 5,
       "signature": "MEQCIBsuRmx77SzMWI8GER-3dwOYTpf3kY5zcgLD5TEph531AiBlycnHOMMZwsSiioaTQVgeOH2L6aUJQwzp_sL7T7HyPA",
-      "payload_version": "v1"
+      "payload_version": "v2"
     }
   },
   "response": {

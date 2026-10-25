@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { DeviceLedger, DeviceRecord } from "../auth/devices.ts";
 import { ensureDir, readJsonFile, writeJsonAtomic } from "../auth/files.ts";
@@ -13,34 +14,40 @@ export const GRANT_CONDITIONS = ["ci_green", "no_severe_findings", "codex_clear"
 export const GRANT_MAX_MS = 30 * 24 * 60 * 60 * 1000;
 /** `created` of a new grant may differ from the server clock by this much: an old signed request cannot be replayed into a fresh grant. */
 export const CREATED_WINDOW_MS = 5 * 60 * 1000;
-/** Grants kept in the books (revoked ones included): a device that went wild cannot grow the state file without bound. */
+/** Active grants (not revoked, not expired): a device that went wild cannot pile up live authority without bound. Dead ones do not count (they shrink to tombstones). */
 export const MAX_GRANTS = 200;
 
 /** A grant as the phone signed it, plus the device that signed (the one from the verified envelope, never from the body). */
 export type GrantRecord = {
   id: string;
   scope: { type: "project" | "pipeline"; ref: string };
+  /** Project card slug and the repo registered on it, both signed (v2): a use needs the card to say exactly this. */
+  project: string;
+  repo: string;
   action: string;
   conditions: string[];
   created: string;
   expires: string;
   max_uses: number;
   signature: string;
-  payload_version: "v1";
+  payload_version: "v2";
   device_id: string;
 };
 export type GrantEntry = { rec: GrantRecord; revoked_at?: string; /** Action ids that took a use. */ uses: string[] };
 export type GrantStatus = "active" | "expired" | "revoked" | "device_revoked" | "exhausted";
 
 /**
- * The exact string a device signs (`vlad-grant/v1\nid=..\n...`, no trailing newline; vector: `signing-vectors.json` `grant`). `conditions` are
- * sorted so the same grant always signs the same bytes. `device_id`, `revoked` and `payload_version` are not signed (the device comes from the envelope).
+ * The exact string a device signs (`vlad-grant/v2\nid=..\n...`, no trailing newline; vector: `signing-vectors.json` `grant`). `conditions` are
+ * sorted so the same grant always signs the same bytes. `project` and `repo` are signed; `device_id` and `revoked` are not (the device comes
+ * from the envelope). An input without `payload_version: "v2"` gives the historical v1 bytes (the old vectors only); the server accepts v2 alone.
  */
-export function grantSigningPayload(g: Pick<GrantRecord, "id" | "scope" | "action" | "conditions" | "created" | "expires" | "max_uses">): string {
+export function grantSigningPayload(g: Pick<GrantRecord, "id" | "scope" | "action" | "conditions" | "created" | "expires" | "max_uses"> & { project?: string; repo?: string; payload_version?: string }): string {
+  const v2 = g.payload_version === "v2";
   return [
-    "vlad-grant/v1",
+    v2 ? "vlad-grant/v2" : "vlad-grant/v1",
     `id=${g.id}`,
     `scope=${g.scope.type}:${g.scope.ref}`,
+    ...(v2 ? [`project=${g.project}`, `repo=${g.repo}`] : []),
     `action=${g.action}`,
     `conditions=${[...g.conditions].sort().join(",")}`,
     `created=${g.created}`,
@@ -65,9 +72,11 @@ export class GrantRefusal extends Error {
   }
 }
 
-const KEYS = ["id", "scope", "action", "conditions", "created", "expires", "max_uses", "signature", "payload_version"];
+const KEYS = ["id", "scope", "project", "repo", "action", "conditions", "created", "expires", "max_uses", "signature", "payload_version"];
 const ID = /^G-([0-9]{3}|[1-9][0-9]{3,})$/;
 const REF = /^[A-Za-z0-9._-]{1,200}$/;
+const PROJECT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+const REPO = /^(?!\.{1,2}\/)[A-Za-z0-9._-]+\/(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 const TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
@@ -92,6 +101,8 @@ export function parseGrantRequest(raw: unknown, nowMs: number): Omit<GrantRecord
   if (typeof raw.id !== "string" || !ID.test(raw.id)) throw new GrantRefusal(400, "bad_request", "bad_field", "id");
   const s = raw.scope;
   if (!isObj(s) || Object.keys(s).length !== 2 || (s.type !== "project" && s.type !== "pipeline") || typeof s.ref !== "string" || !REF.test(s.ref)) throw new GrantRefusal(400, "bad_request", "bad_field", "scope");
+  if (typeof raw.project !== "string" || !PROJECT.test(raw.project)) throw new GrantRefusal(400, "bad_request", "bad_field", "project");
+  if (typeof raw.repo !== "string" || raw.repo.length > 200 || !REPO.test(raw.repo)) throw new GrantRefusal(400, "bad_request", "bad_field", "repo");
   const c = raw.conditions;
   if (!Array.isArray(c) || c.length > GRANT_CONDITIONS.length || c.some((x) => typeof x !== "string" || !(GRANT_CONDITIONS as readonly string[]).includes(x)) || new Set(c).size !== c.length || !c.includes("ci_green")) {
     throw new GrantRefusal(400, "bad_request", "bad_field", "conditions");
@@ -99,7 +110,7 @@ export function parseGrantRequest(raw: unknown, nowMs: number): Omit<GrantRecord
   const created = parseTs(raw.created, "created");
   const expires = parseTs(raw.expires, "expires");
   if (!Number.isSafeInteger(raw.max_uses) || (raw.max_uses as number) < 1 || (raw.max_uses as number) > 1000) throw new GrantRefusal(400, "bad_request", "bad_field", "max_uses");
-  if (raw.payload_version !== "v1") throw new GrantRefusal(400, "bad_request", "bad_field", "payload_version");
+  if (raw.payload_version !== "v2") throw new GrantRefusal(400, "bad_request", "bad_field", "payload_version");
   if (!decodeB64url(raw.signature, 100)) throw new GrantRefusal(400, "bad_request", "bad_field", "signature");
 
   if (!(expires > created)) throw new GrantRefusal(422, "grant_invalid", "expires_before_created");
@@ -107,8 +118,8 @@ export function parseGrantRequest(raw: unknown, nowMs: number): Omit<GrantRecord
   if (Math.abs(created - nowMs) > CREATED_WINDOW_MS) throw new GrantRefusal(422, "grant_invalid", "created_out_of_window");
   if (expires <= nowMs) throw new GrantRefusal(422, "grant_invalid", "already_expired");
   return {
-    id: raw.id, scope: { type: s.type, ref: s.ref }, action, conditions: c as string[], created: raw.created as string, expires: raw.expires as string,
-    max_uses: raw.max_uses as number, signature: raw.signature as string, payload_version: "v1",
+    id: raw.id, scope: { type: s.type, ref: s.ref }, project: raw.project, repo: raw.repo, action, conditions: c as string[], created: raw.created as string, expires: raw.expires as string,
+    max_uses: raw.max_uses as number, signature: raw.signature as string, payload_version: "v2",
   };
 }
 
@@ -127,15 +138,19 @@ export class GrantStore {
   private readonly grantsFile: string;
   private readonly usesFile: string;
   private readonly byId = new Map<string, GrantEntry>();
+  /** Dead grants (revoked or expired) shrunk to what keeps them dead: their id and the hash of their signature. Never forgotten. */
+  private tombs: { id: string; sig: string }[] = [];
 
   constructor(stateDir: string) {
     ensureDir(stateDir);
     this.grantsFile = join(stateDir, "grants.json");
     this.usesFile = join(stateDir, "grant-uses.json");
     const uses = readJsonFile<{ uses: Record<string, string[]> }>(this.usesFile)?.uses ?? {};
-    for (const g of readJsonFile<{ grants: { rec: GrantRecord; revoked_at?: string }[] }>(this.grantsFile)?.grants ?? []) {
+    const saved = readJsonFile<{ grants: { rec: GrantRecord; revoked_at?: string }[]; tombstones?: { id: string; sig: string }[] }>(this.grantsFile);
+    for (const g of saved?.grants ?? []) {
       this.byId.set(g.rec.id, { rec: g.rec, ...(g.revoked_at ? { revoked_at: g.revoked_at } : {}), uses: [...(uses[g.rec.id] ?? [])] });
     }
+    this.tombs = saved?.tombstones ?? [];
   }
 
   get(id: string): GrantEntry | undefined {
@@ -145,14 +160,40 @@ export class GrantStore {
   entries(): GrantEntry[] {
     return [...this.byId.values()].sort((a, b) => a.rec.id.localeCompare(b.rec.id, "en", { numeric: true }));
   }
+  /** Why this id or signature cannot be taken again (seen before: live, dead, or shrunk to a tombstone), or null. */
+  taken(id: string, signature: string): "id_taken" | "signature_reused" | null {
+    const h = sigHash(signature);
+    if (this.byId.has(id) || this.tombs.some((t) => t.id === id)) return "id_taken";
+    if (this.tombs.some((t) => t.sig === h) || [...this.byId.values()].some((g) => sigHash(g.rec.signature) === h)) return "signature_reused";
+    return null;
+  }
   has(id: string, signature: string): boolean {
-    return this.byId.has(id) || [...this.byId.values()].some((g) => sigHash(g.rec.signature) === sigHash(signature));
+    return this.taken(id, signature) !== null;
   }
   get size(): number {
     return this.byId.size;
   }
+  get tombstones(): number {
+    return this.tombs.length;
+  }
+  private dead(g: GrantEntry, nowMs: number): boolean {
+    return !!g.revoked_at || nowMs >= Date.parse(g.rec.expires);
+  }
+  /** Grants that can still act: not revoked, not expired. */
+  activeCount(nowMs: number): number {
+    return this.entries().filter((g) => !this.dead(g, nowMs)).length;
+  }
 
-  add(rec: GrantRecord): void {
+  /** Stores a grant. Once the books hold {@link MAX_GRANTS} entries, dead ones that took no use shrink to tombstones first (a used one stays: its action may still be finishing). */
+  add(rec: GrantRecord, nowMs: number): void {
+    if (this.byId.size >= MAX_GRANTS) {
+      for (const g of this.entries()) {
+        if (this.dead(g, nowMs) && g.uses.length === 0) {
+          this.tombs.push({ id: g.rec.id, sig: sigHash(g.rec.signature) });
+          this.byId.delete(g.rec.id);
+        }
+      }
+    }
     this.byId.set(rec.id, { rec, uses: [] });
     this.saveGrants();
   }
@@ -187,7 +228,7 @@ export class GrantStore {
   }
 
   private saveGrants() {
-    writeJsonAtomic(this.grantsFile, { v: 1, grants: this.entries().map((g) => ({ rec: g.rec, ...(g.revoked_at ? { revoked_at: g.revoked_at } : {}) })) });
+    writeJsonAtomic(this.grantsFile, { v: 1, grants: this.entries().map((g) => ({ rec: g.rec, ...(g.revoked_at ? { revoked_at: g.revoked_at } : {}) })), tombstones: this.tombs });
   }
   private saveUses() {
     writeJsonAtomic(this.usesFile, { v: 1, uses: Object.fromEntries(this.entries().filter((g) => g.uses.length).map((g) => [g.rec.id, g.uses])) });
@@ -205,14 +246,16 @@ export type LiveChecks = {
   findingsClear: (project: string) => Promise<boolean>;
   /** Codex found nothing. There is no Codex here: unavailable is NOT clear (the card path stays open). */
   codexClear: (task: TaskInfo) => Promise<boolean>;
-  /** Grants revoked through the kb: reduces only. */
+  /** Grants the kb revokes, or that it cannot vouch for (see {@link GrantEngine}): reduces only. */
   kbRevoked: ReadonlySet<string>;
+  /** The repo registered on the project card right now. */
+  cardRepo: string | undefined;
 };
 
 export const scopeMatches = (scope: GrantRecord["scope"], task: Pick<TaskInfo, "id" | "project" | "parent">): boolean =>
   scope.type === "project" ? task.project === scope.ref : (task.parent ?? task.id) === scope.ref;
 
-/** Why `g` does not cover this task now (a stable key), or null. `forSelection` also refuses a grant whose uses are all taken. */
+/** Why `g` does not cover this task now (a stable key), or null. Project and repo must equal what was signed. `forSelection` also refuses a grant whose uses are all taken. */
 export async function grantProblem(g: GrantEntry, task: TaskInfo, kind: string, live: LiveChecks, nowMs: number, forSelection: boolean): Promise<string | null> {
   const r = g.rec;
   if ((NON_DELEGABLE_ACTIONS as readonly string[]).includes(r.action) || !(GRANT_ACTIONS as readonly string[]).includes(r.action)) return "not_delegable";
@@ -225,7 +268,10 @@ export async function grantProblem(g: GrantEntry, task: TaskInfo, kind: string, 
   if (nowMs >= expires) return "grant_expired";
   const dev = live.device(r.device_id);
   if (!dev || dev.revoked_at) return "device_revoked";
-  if (!signatureHolds(r, dev)) return "grant_invalid";
+  if (r.payload_version !== "v2" || !signatureHolds(r, dev)) return "grant_invalid";
+  // What the grant was signed for must be exactly what the kb says now: a re-pointed task or card gets no grant.
+  if (task.project !== r.project) return "project_mismatch";
+  if (live.cardRepo !== r.repo) return "repo_mismatch";
   if (!scopeMatches(r.scope, task)) return "scope_mismatch";
   if (forSelection && g.uses.length >= r.max_uses) return "max_uses";
   for (const c of r.conditions) {
@@ -255,8 +301,8 @@ export async function evaluateGrants(task: TaskInfo, grants: GrantEntry[], live:
 /** The kb side, all through the `vlad` CLI. Its content is never trusted as a grant; it only mirrors the books and may revoke. */
 export interface GrantKb {
   add(rec: GrantRecord): Promise<void>;
-  /** `revoked` as the kb says. */
-  list(): Promise<{ grants: { id: string; revoked: boolean }[]; warnings: string[] }>;
+  /** `revoked` as the kb says; `revoked_ids` are the kb's tombstones, valid whatever became of the grant file. */
+  list(): Promise<{ grants: { id: string; revoked: boolean }[]; revoked_ids: string[]; warnings: string[] }>;
   revoke(id: string): Promise<void>;
 }
 
@@ -265,8 +311,10 @@ export const vladGrantKb: GrantKb = {
     await runVlad(["grant", "add", "--file", "-"], { input: JSON.stringify({ ...rec, revoked: false }) });
   },
   async list() {
-    const r = await runVladJson<{ grants: { id: string; revoked?: boolean }[]; warnings?: string[] }>(["grant", "list"]);
-    return { grants: r.grants.map((g) => ({ id: g.id, revoked: g.revoked === true })), warnings: r.warnings ?? [] };
+    const r = await runVladJson<{ grants: { id: string; revoked?: boolean }[]; warnings?: string[]; revoked_ids?: string[] }>(["grant", "list"]);
+    // A CLI that does not report tombstones cannot vouch for revocations: fail closed rather than assume none.
+    if (!Array.isArray(r.revoked_ids)) throw new Error("vlad grant list: revoked_ids yok (eski CLI)");
+    return { grants: r.grants.map((g) => ({ id: g.id, revoked: g.revoked === true })), revoked_ids: r.revoked_ids, warnings: r.warnings ?? [] };
   },
   async revoke(id) {
     if (!ID.test(id)) throw new Error("geçersiz devir id'si");
@@ -275,9 +323,16 @@ export const vladGrantKb: GrantKb = {
 };
 
 const SLUG = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
-const vladFindingsClear = async (project: string): Promise<boolean> => {
+/** Clear = the CLI listed no open/deferred critical or high finding AND had nothing to complain about (a damaged finding file may hide one). */
+export const vladFindingsClear = (log: (m: string) => void) => async (project: string): Promise<boolean> => {
   if (!SLUG.test(project)) return false;
-  const r = await runVladJson<{ findings: unknown[] }>(["finding", "list", `--project=${project}`, "--state=open,deferred", "--severity=kritik,yüksek"]);
+  const kb = process.env.VLAD_KB_DIR ?? (process.env.VLAD_HOME ? join(process.env.VLAD_HOME, "kb") : undefined);
+  if (kb && !existsSync(join(kb, "findings"))) log(`findings klasörü yok: ${join(kb, "findings")} (hiç bulgu kaydı yok sayılıyor)`);
+  const r = await runVladJson<{ findings: unknown[]; warnings?: string[] }>(["finding", "list", `--project=${project}`, "--state=open,deferred", "--severity=kritik,yüksek"]);
+  if ((r.warnings?.length ?? 0) > 0) {
+    log(`findings uyarısı, no_severe_findings sağlanmadı: ${r.warnings!.join("; ")}`);
+    return false;
+  }
   return r.findings.length === 0;
 };
 const vladAwaiting = async (): Promise<string[]> => {
@@ -326,7 +381,7 @@ export class GrantEngine {
     this.d = d;
     this.store = d.store;
     this.kb = d.config?.kb ?? vladGrantKb;
-    this.findings = d.config?.findingsClear ?? vladFindingsClear;
+    this.findings = d.config?.findingsClear ?? vladFindingsClear((m) => this.log(m));
     this.codex = d.config?.codexClear ?? (async () => false);
   }
 
@@ -341,8 +396,9 @@ export class GrantEngine {
       if (!dev || dev.revoked_at) throw new GrantRefusal(401, "device_revoked", "device_revoked");
       // Signature checked here again: the books never hold a grant that does not verify against its device's approval key.
       if (!signatureHolds(g, dev)) throw new GrantRefusal(422, "grant_invalid", "bad_signature");
-      if (this.store.has(g.id, g.signature)) throw new GrantRefusal(409, "bad_request", this.store.get(g.id) ? "id_taken" : "signature_reused");
-      if (this.store.size >= MAX_GRANTS) throw new GrantRefusal(409, "bad_request", "too_many_grants");
+      const taken = this.store.taken(g.id, g.signature);
+      if (taken) throw new GrantRefusal(409, "bad_request", taken);
+      if (this.store.activeCount(this.d.now()) >= MAX_GRANTS) throw new GrantRefusal(409, "bad_request", "too_many_grants");
       const rec: GrantRecord = { ...g, device_id: deviceId };
       try {
         await this.kb.add(rec);
@@ -350,7 +406,7 @@ export class GrantEngine {
         this.log(`grant add (kb): ${(e as Error).message}`);
         throw new GrantRefusal(503, "bad_request", "kb_unavailable");
       }
-      this.store.add(rec);
+      this.store.add(rec, this.d.now());
       return { id: rec.id };
     });
     this.creating = run.catch(() => {});
@@ -383,14 +439,14 @@ export class GrantEngine {
     let kbRevoked = new Set<string>();
     try {
       const k = await this.kb.list();
-      kbRevoked = new Set(k.grants.filter((x) => x.revoked).map((x) => x.id));
+      kbRevoked = this.revokedBy(k);
       warnings.push(...k.warnings);
       for (const x of k.grants) if (!this.store.get(x.id)) warnings.push(`kb'de kayıtsız devir yok sayıldı: ${x.id}`);
     } catch {
       warnings.push("kb devir listesi okunamadı");
     }
     const grants = this.store.entries().map((g) => ({
-      id: g.rec.id, scope: g.rec.scope, action: g.rec.action, conditions: g.rec.conditions, created: g.rec.created, expires: g.rec.expires,
+      id: g.rec.id, scope: g.rec.scope, project: g.rec.project, repo: g.rec.repo, action: g.rec.action, conditions: g.rec.conditions, created: g.rec.created, expires: g.rec.expires,
       max_uses: g.rec.max_uses, uses: g.uses.length, status: this.statusOf(g, kbRevoked), device_id: g.rec.device_id,
     }));
     return { grants, warnings };
@@ -398,17 +454,30 @@ export class GrantEngine {
 
   // ---- use
 
+  /**
+   * What the kb takes away: grants it marks revoked, its tombstoned ids (valid even when the grant file is damaged or gone), and, when it
+   * complains about anything at all (`warnings`), every grant of the books it does not list: it may be the damaged file that was revoked.
+   */
+  private revokedBy(k: Awaited<ReturnType<GrantKb["list"]>>): Set<string> {
+    const out = new Set([...k.grants.filter((g) => g.revoked).map((g) => g.id), ...k.revoked_ids]);
+    if (k.warnings.length > 0) {
+      const listed = new Set(k.grants.map((g) => g.id));
+      for (const g of this.store.entries()) if (!listed.has(g.rec.id)) out.add(g.rec.id);
+    }
+    return out;
+  }
+
   private async kbRevoked(): Promise<Set<string>> {
     try {
-      return new Set((await this.kb.list()).grants.filter((g) => g.revoked).map((g) => g.id));
+      return this.revokedBy(await this.kb.list());
     } catch {
       // The kb cannot say whether a grant was revoked there: nothing is done on its authority meanwhile.
       throw new ActionError(503, "bad_request", "github_unavailable");
     }
   }
 
-  private live(kbRevoked: ReadonlySet<string>, ci: LiveChecks["ci"]): LiveChecks {
-    return { device: (id) => this.d.devices.get(id), ci, findingsClear: this.findings, codexClear: this.codex, kbRevoked };
+  private live(kbRevoked: ReadonlySet<string>, ci: LiveChecks["ci"], cardRepo: string | undefined): LiveChecks {
+    return { device: (id) => this.d.devices.get(id), ci, findingsClear: this.findings, codexClear: this.codex, kbRevoked, cardRepo };
   }
 
   private pickOf(g: GrantEntry): GrantPick {
@@ -433,11 +502,16 @@ export class GrantEngine {
     if (!g.uses.includes(actionId)) throw new ActionError(409, "grant_invalid", g.revoked_at ? "grant_revoked" : "grant_use_missing");
     let why: string | null;
     try {
-      why = await grantProblem(g, task, f.kind!, this.live(kbRevoked, async () => true), this.d.now(), false);
+      const card = await this.d.projects(task.project);
+      why = await grantProblem(g, task, f.kind!, this.live(kbRevoked, async () => true, card?.repo), this.d.now(), false);
     } catch {
       throw new ActionError(503, "bad_request", "github_unavailable");
     }
     if (why) throw new ActionError(409, "grant_invalid", why);
+    // The awaits above gave a revocation time to land: look at the books and the device once more, synchronously, right before saying yes.
+    if (this.store.get(grantId)?.revoked_at) throw new ActionError(409, "grant_invalid", "grant_revoked");
+    const dev = this.d.devices.get(g.rec.device_id);
+    if (!dev || dev.revoked_at) throw new ActionError(409, "grant_invalid", "device_revoked");
   }
 
   /**
@@ -451,10 +525,10 @@ export class GrantEngine {
     if (!card?.repo) return null;
     const { kind } = gateKindOf(task, card);
     // Cheap test first: with no grant of this kind and scope in the books, GitHub is never asked.
-    if (!this.store.entries().some((g) => g.rec.action === kind && scopeMatches(g.rec.scope, task))) return null;
+    if (!this.store.entries().some((g) => this.statusOf(g) === "active" && g.rec.action === kind && scopeMatches(g.rec.scope, task))) return null;
     const kbRevoked = await this.kbRevoked();
     return this.d.svc.executeGranted(taskId, async (facts) => {
-      const g = await evaluateGrants(facts.task, this.store.entries(), this.live(kbRevoked, async () => true /* executeGranted looked: green */), this.d.now());
+      const g = await evaluateGrants(facts.task, this.store.entries(), this.live(kbRevoked, async () => true /* executeGranted looked: green */, facts.repo), this.d.now());
       return g ? this.pickOf(g) : null;
     });
   }

@@ -81,11 +81,11 @@ describe("server: contract fixtures parse", () => {
   });
 
   it("create-grant fixture reuses the signed grant vector", () => {
-    const g = readJson("signing-vectors.json").grant.find((v: any) => v.id === "grant-valid");
+    const g = readJson("signing-vectors.json").grant.find((v: any) => v.id === "grant-v2-valid");
     const body = readJson("fixtures", "api", "create-grant.200.json").request.body;
     expect(body.signature).toBe(g.signature_b64u);
-    expect({ id: body.id, scope: body.scope, action: body.action, created: body.created, expires: body.expires, max_uses: body.max_uses }).toEqual({
-      id: g.input.id, scope: g.input.scope, action: g.input.action, created: g.input.created, expires: g.input.expires, max_uses: g.input.max_uses,
+    expect({ id: body.id, scope: body.scope, project: body.project, repo: body.repo, action: body.action, created: body.created, expires: body.expires, max_uses: body.max_uses }).toEqual({
+      id: g.input.id, scope: g.input.scope, project: g.input.project, repo: g.input.repo, action: g.input.action, created: g.input.created, expires: g.input.expires, max_uses: g.input.max_uses,
     });
   });
 });

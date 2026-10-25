@@ -225,6 +225,9 @@ export interface GrantData {
   /** `G-<NNN>`; widens past 999. */
   id: string;
   scope: { type: "project" | "pipeline"; ref: string };
+  /** Project card slug and its registered repo (`o/r`): signed, and compared for equality at every use (v2). */
+  project: string;
+  repo: string;
   action: GrantAction;
   /** Always includes `ci_green`. */
   conditions: GrantCondition[];
@@ -235,5 +238,5 @@ export interface GrantData {
   /** Device whose `approval` key signed the grant. */
   device_id: string;
   signature: string;
-  payload_version: "v1";
+  payload_version: "v2";
 }

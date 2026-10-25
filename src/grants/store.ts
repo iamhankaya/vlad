@@ -13,15 +13,20 @@ const FUTURE_SKEW_MS = 5 * 60 * 1000;
 const grantFile = (id: string) => join(kbPaths().grants, `${id}.md`);
 
 /**
- * The exact string a device signs (`vlad-grant/v1\nid=..\n...`, no trailing newline). `conditions` are sorted so
+ * The exact string a device signs (`vlad-grant/v2\nid=..\n...`, no trailing newline). `conditions` are sorted so
  * the same grant always signs the same bytes; `revoked` and `device_id` are not signed (revocation is a
- * server-side reduction, the device comes from the signed envelope). Pure: S10a verifies against this.
+ * server-side reduction, the device comes from the signed envelope). `project` and `repo` ARE signed (v2): a grant
+ * binds the project card and repo it was given for. Without `payload_version` (the historical v1 vectors of
+ * `contract/signing-vectors.json`) the old format without those two lines is produced; new records are v2 only.
+ * Pure: S10a verifies against this.
  */
-export function grantSigningPayload(g: Pick<GrantData, "id" | "scope" | "action" | "conditions" | "created" | "expires" | "max_uses">): string {
+export function grantSigningPayload(g: Pick<GrantData, "id" | "scope" | "action" | "conditions" | "created" | "expires" | "max_uses"> & { project?: string; repo?: string; payload_version?: string }): string {
+  const v2 = g.payload_version === "v2";
   return [
-    "vlad-grant/v1",
+    v2 ? "vlad-grant/v2" : "vlad-grant/v1",
     `id=${g.id}`,
     `scope=${g.scope.type}:${g.scope.ref}`,
+    ...(v2 ? [`project=${g.project}`, `repo=${g.repo}`] : []),
     `action=${g.action}`,
     `conditions=${[...g.conditions].sort().join(",")}`,
     `created=${g.created}`,
@@ -109,10 +114,11 @@ export function addGrant(raw: unknown, now: Date = new Date()): Grant {
 }
 
 /** Grants in id order; `active` keeps those neither revoked nor expired and already created at `now`. */
-export function listGrants(f: { active?: boolean; now?: Date } = {}): { grants: Grant[]; warnings: string[] } {
+export function listGrants(f: { active?: boolean; now?: Date } = {}): { grants: Grant[]; warnings: string[]; revoked_ids: string[] } {
   const { grants, warnings } = readAll();
   const now = (f.now ?? new Date()).getTime();
-  return { grants: f.active ? grants.filter((g) => !g.data.revoked && Date.parse(g.data.created) <= now && Date.parse(g.data.expires) > now) : grants, warnings };
+  // Tombstoned ids are reported on their own: a revoked grant whose file is damaged or gone is not in `grants` but must stay revoked.
+  return { grants: f.active ? grants.filter((g) => !g.data.revoked && Date.parse(g.data.created) <= now && Date.parse(g.data.expires) > now) : grants, warnings, revoked_ids: [...tombstones().ids].sort() };
 }
 
 /**

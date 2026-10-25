@@ -88,8 +88,8 @@ export const MERGEABLE_ATTEMPTS = 3;
 export const MERGEABLE_WAIT_MS = 2000;
 export const PRUNE_AFTER_MS = 24 * 3600_000;
 
-/** Failures that decide nothing about the merge: the action stays `checked` and the same approval may be sent again. */
-const RETRYABLE = new Set(["github_unavailable", "bookkeeping_failed"]);
+/** Failures that decide nothing about the merge (`merger_unknown`: who merged cannot be told right now): the action stays `checked` and the same approval may be sent again. */
+const RETRYABLE = new Set(["github_unavailable", "bookkeeping_failed", "merger_unknown"]);
 
 const TASK_ID = /^T[0-9]{8}-[0-9]{2,}$/;
 
@@ -482,8 +482,10 @@ export class ActionService {
     if (!TASK_ID.test(taskId)) throw new ActionError(400, "bad_request", "task_required");
     return this.d.store.withLock(`prepare:${taskId}`, async () => {
       this.observeClock();
+      // An unfinished grant action (`approved`: GitHub was out of reach; `checked`: bookkeeping missing) is finished by {@link resumeGranted}, never by a second one.
       for (const oid of this.byTask.get(taskId) ?? []) {
-        if (this.d.store.get(oid)?.state === "checked") throw new ActionError(409, "bad_request", "action_in_flight", { action_id: oid });
+        const o = this.d.store.get(oid);
+        if (o?.state === "checked" || (o?.grant && o.state === "approved")) throw new ActionError(409, "bad_request", "action_in_flight", { action_id: oid });
       }
       const { task, repo, prNo, base, kind } = await this.target(taskId);
       const pull = await this.read(() => this.d.reader.getPull(repo, prNo));
@@ -538,11 +540,22 @@ export class ActionService {
         continue;
       }
       try {
-        await this.runGranted(rec.action_id, sel);
+        // Under the task's lock like every other way into the exit: an event, a sweep and a person never run one task at once.
+        await this.d.store.withLock(`prepare:${rec.task_id}`, () => this.runGranted(rec.action_id, sel));
         n++;
       } catch { /* kept for the next round, or failed for good; the reason is on the record */ }
     }
     return n;
+  }
+
+  /** True unless GitHub says, right now, that the PR exists and is not merged. */
+  private async mergedOrUnknown(f: Record<string, string>): Promise<boolean> {
+    try {
+      const p = await this.d.reader.getPull(f.repo!, Number(f.pr));
+      return !p || p.merged;
+    } catch {
+      return true;
+    }
   }
 
   /** `approved|checked -> merged` for a grant record: the tail of {@link approve} with the grant's guard in place of a signature. */
@@ -576,10 +589,11 @@ export class ActionService {
         return out(result);
       } catch (e) {
         const err = e instanceof ActionError ? e : new ActionError(502, "bad_request", "execute_failed");
-        // Nothing merged and nothing will: the use goes back. An unreachable GitHub/kb (or bookkeeping after the merge) keeps both the use and the record.
+        // An unreachable GitHub/kb (or bookkeeping after the merge) keeps both the use and the record. A final refusal ends the action; the use
+        // goes back only when the PR is seen NOT merged right now (a merge that happened, or cannot be ruled out, stays counted).
         if (!RETRYABLE.has(String(err.details?.reason)) && err.status !== 503) {
           this.settle(actionId, "failed", err.message);
-          sel.release(actionId);
+          if (!(await this.mergedOrUnknown(f))) sel.release(actionId);
         }
         throw err;
       } finally {

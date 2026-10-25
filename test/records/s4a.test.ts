@@ -27,6 +27,8 @@ const CREATED = iso(T0);
 const grant = (over: Record<string, unknown> = {}) => ({
   id: "G-001",
   scope: { type: "project", ref: "vlad" },
+  project: "vlad",
+  repo: "iamhankaya/vlad",
   action: "merge_phase",
   conditions: ["ci_green", "no_severe_findings"],
   created: CREATED,
@@ -34,7 +36,7 @@ const grant = (over: Record<string, unknown> = {}) => ({
   max_uses: 3,
   revoked: false,
   device_id: "D-1",
-  payload_version: "v1",
+  payload_version: "v2",
   ...over,
   // one signature per grant, as in life (a revoke tombstones the signature too)
   signature: (over.signature as string | undefined) ?? `c2ln-${over.id ?? "G-001"}`,
@@ -76,7 +78,7 @@ describe("records: grant", () => {
 
   it("records: grant rejects malformed records", () => {
     for (const bad of [
-      grant({ id: "G-1" }), grant({ max_uses: 0 }), grant({ max_uses: 1.5 }), grant({ payload_version: "v2" }),
+      grant({ id: "G-1" }), grant({ max_uses: 0 }), grant({ max_uses: 1.5 }), grant({ payload_version: "v1" }), grant({ repo: "a/../b" }), grant({ repo: "x" }), grant({ project: "" }),
       grant({ scope: { type: "repo", ref: "x" } }), grant({ scope: { type: "project", ref: "a\nb" } }),
       grant({ extra: 1 }), grant({ created: "yesterday" }), grant({ signature: "" }), grant({ device_id: "" }),
     ]) {
@@ -116,16 +118,29 @@ describe("records: grant", () => {
     const g = grant({ conditions: ["no_severe_findings", "ci_green"] }) as never;
     expect(grantSigningPayload(g)).toBe(
       [
-        "vlad-grant/v1", "id=G-001", "scope=project:vlad", "action=merge_phase", "conditions=ci_green,no_severe_findings",
+        "vlad-grant/v2", "id=G-001", "scope=project:vlad", "project=vlad", "repo=iamhankaya/vlad", "action=merge_phase", "conditions=ci_green,no_severe_findings",
         `created=${CREATED}`, `expires=${plus(7 * DAY)}`, "max_uses=3",
       ].join("\n"),
     );
     // unsigned/untouched fields do not change the bytes; signed ones do
     expect(grantSigningPayload({ ...(g as object), revoked: true, device_id: "D-9", signature: "x" } as never)).toBe(grantSigningPayload(g));
-    for (const change of [{ id: "G-002" }, { max_uses: 4 }, { action: "merge_final" }, { scope: { type: "pipeline", ref: "vlad" } }, { expires: plus(DAY) }]) {
+    for (const change of [{ id: "G-002" }, { max_uses: 4 }, { project: "other" }, { repo: "iamhankaya/other" }, { action: "merge_final" }, { scope: { type: "pipeline", ref: "vlad" } }, { expires: plus(DAY) }]) {
       expect(grantSigningPayload({ ...(g as object), ...change } as never)).not.toBe(grantSigningPayload(g));
     }
     expect(grantSigningPayload(g).endsWith("\n")).toBe(false);
+  });
+
+  it("records: grant list reports tombstoned ids on their own, also when the file is damaged or gone", () => {
+    addGrant(grant({ id: "G-001" }));
+    addGrant(grant({ id: "G-002" }));
+    revokeGrant("G-001");
+    revokeGrant("G-002");
+    writeFileSync(join(grantDir(), "G-001.md"), "---\nid: G-001\n---\n"); // damaged
+    rmSync(join(grantDir(), "G-002.md")); // deleted
+    const r = listGrants();
+    expect(r.grants).toEqual([]);
+    expect(r.warnings).toHaveLength(1);
+    expect(r.revoked_ids).toEqual(["G-001", "G-002"]);
   });
 
   it("records: grant created in the future rejected; list --active needs created <= now", () => {

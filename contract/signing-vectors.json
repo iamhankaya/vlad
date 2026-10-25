@@ -32,6 +32,16 @@
       "id": "session-c",
       "note": "TEST ONLY: third device session key (query vector)",
       "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEt4tiNLD38_MiesTpwmNEnboA4FXv_qG-LKBea0W5MRLxpPuBKDx4olTwq_dIaXNTeDrn9Lwq14jOSK3icfhNjQ"
+    },
+    {
+      "id": "approval-g2",
+      "note": "TEST ONLY: device approval key (grant v2 vectors)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEylehJ_x-XcpRTB7jPrP9x8ub-6YdoyzOYUnvd_J_HCNsYf7-zO_WXgxSFDgss1OBDSpu7w2YB8nVheXoNPEI7A"
+    },
+    {
+      "id": "session-g2",
+      "note": "TEST ONLY: device session key (grant v2 vectors)",
+      "spki_b64u": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEB469RI24-Za5x62sqVg0pYvQED_ndFqbLmXePDpbRRDPxJt4EJ06voYaokdE8UYk5IUtC88hjZceqvq_8eIjTg"
     }
   ],
   "canonical_query": [
@@ -692,6 +702,110 @@
       },
       "payload": "vlad-grant/v1\nid=G-001\nscope=project:vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
       "signature_b64u": "MEUCIQD2Hnmuf1na7IZCQDU1zyqngthci3AaDzlaBfaYqknbpAIgEUYYt5_BuK5yhIqBe6Yia1c-wsEHBJeaqxPa3zmW6uY",
+      "expect_valid": false
+    },
+    {
+      "id": "grant-v2-valid",
+      "description": "v2: approval key signs project and repo too",
+      "key_id": "approval-g2",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "project": "vlad",
+        "repo": "iamhankaya/vlad",
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 5,
+        "payload_version": "v2"
+      },
+      "payload": "vlad-grant/v2\nid=G-001\nscope=project:vlad\nproject=vlad\nrepo=iamhankaya/vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
+      "signature_b64u": "MEUCIQDkRiufm9hpwJeirPmKWCFbSmGhLH5JXK3pjQk8cTBkegIgKQdEkQ_gClXthmhf2f_4CRE_F05xMXMIhrro3YqVD1I",
+      "expect_valid": true
+    },
+    {
+      "id": "grant-v2-tampered-repo",
+      "description": "repo changed after signing",
+      "key_id": "approval-g2",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "project": "vlad",
+        "repo": "iamhankaya/other",
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 5,
+        "payload_version": "v2"
+      },
+      "payload": "vlad-grant/v2\nid=G-001\nscope=project:vlad\nproject=vlad\nrepo=iamhankaya/other\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
+      "signature_b64u": "MEUCIQDh4Jvvh9n-m_JFQuT5wXFhB3hfDjiTk2O3Jzbl4Q6K8QIgV0Xk_AygHh6EVrvQ5DHrVn5tyYbeYx5W9SBXxOiiDQE",
+      "expect_valid": false
+    },
+    {
+      "id": "grant-v2-tampered-project",
+      "description": "project changed after signing",
+      "key_id": "approval-g2",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "project": "other",
+        "repo": "iamhankaya/vlad",
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 5,
+        "payload_version": "v2"
+      },
+      "payload": "vlad-grant/v2\nid=G-001\nscope=project:vlad\nproject=other\nrepo=iamhankaya/vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
+      "signature_b64u": "MEUCIQCzacwGxa3u64LpOjtV8wvgsQwMsgqGkpZdBfJ2GhEXNwIgAXvt6oukmCGPeScIc__WucApCFCRMWk7Cs2DumbR2mM",
+      "expect_valid": false
+    },
+    {
+      "id": "grant-v2-session-key",
+      "description": "signed by the session key, not the approval key",
+      "key_id": "approval-g2",
+      "input": {
+        "id": "G-001",
+        "scope": {
+          "type": "project",
+          "ref": "vlad"
+        },
+        "project": "vlad",
+        "repo": "iamhankaya/vlad",
+        "action": "merge_phase",
+        "conditions": [
+          "no_severe_findings",
+          "ci_green"
+        ],
+        "created": "2026-10-25T12:00:00Z",
+        "expires": "2026-11-24T12:00:00Z",
+        "max_uses": 5,
+        "payload_version": "v2"
+      },
+      "payload": "vlad-grant/v2\nid=G-001\nscope=project:vlad\nproject=vlad\nrepo=iamhankaya/vlad\naction=merge_phase\nconditions=ci_green,no_severe_findings\ncreated=2026-10-25T12:00:00Z\nexpires=2026-11-24T12:00:00Z\nmax_uses=5",
+      "signature_b64u": "MEUCIQD6QBbwgxgwVKmFxebCGU9V6J8dWArMSxd2eqmW6XVpyAIgYUFbKqk9ogJk7Ae5cWRgEJH01P5jUBswMDxC-_-wCMY",
       "expect_valid": false
     }
   ],

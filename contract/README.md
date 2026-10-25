@@ -55,7 +55,7 @@ Bir tüketicinin yapması gerekenler:
 - **Challenge**: `vlad-approve/v1` + `action_id, kind, repo, pr, base, head_sha, task, nonce, exp` satırları (`anahtar=değer`) bu sırayla; değer alfabesi `[A-Za-z0-9._/#:-]` ve alana özgü kalıp; eksik/fazla alan, farklı sıra, satır sonu enjeksiyonu, sonda `\n` reddedilir. `exp` unix saniye; `now >= exp` reddedilir.
 - **İptal** (`revokeBytes`): `vlad-revoke/v1\ndevice=<hedef>\nsigner=<çağıran cihaz>\nts=<ts_ms>`, `approval` anahtarıyla. Sunucu kuralları (S6b): `signer == X-Vlad-Device`, `ts_ms == X-Vlad-Ts`, ±120 sn, `(signer, ts)` tek kullanım; ihlal `401`. Gövdede cihaz kimliği yoktur; `POST /actions/{id}/approve` gövdesinde de yoktur: cihaz yalnız `X-Vlad-Device` başlığıdır.
 - **Devir tekilliği/iptali (S10a)** imza baytına değil `id` ve payload hash'ine bağlanır (imza biçimi esnemez ama tekillik anahtarı imza olmamalı; low-S zorunluluğu malleability'yi zaten kapatır).
-- **Devir**: `vlad-grant/v1\nid=..\nscope=<type>:<ref>\naction=..\nconditions=<sıralı,virgüllü>\ncreated=..\nexpires=..\nmax_uses=..`.
+- **Devir (v2)**: `vlad-grant/v2\nid=..\nscope=<type>:<ref>\nproject=<slug>\nrepo=<o/r>\naction=..\nconditions=<sıralı,virgüllü>\ncreated=..\nexpires=..\nmax_uses=..`. Sunucu yalnız v2 kabul eder; `grant-valid` gibi v1 vektörleri (`input.payload_version` yok) tarihsel olarak kalır, v2 vektörleri `grant-v2-*` (anahtarlar `approval-g2`, `session-g2`) eklenmiştir.
 
 ### Tüketici eşlemesi
 

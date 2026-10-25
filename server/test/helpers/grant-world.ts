@@ -24,21 +24,26 @@ export class FakeKb implements GrantKb {
   added: GrantRecord[] = [];
   /** What `vlad grant list` returns: also files nobody signed. */
   files: { id: string; revoked: boolean }[] = [];
+  /** The kb's tombstones, reported whatever became of the file. */
+  revokedIds: string[] = [];
   warnings: string[] = [];
   revoked: string[] = [];
   failAdd = false;
   failList = false;
+  onList?: () => Promise<void> | void;
   async add(rec: GrantRecord) {
     if (this.failAdd) throw new Error("kb meşgul");
     this.added.push(structuredClone(rec));
     this.files.push({ id: rec.id, revoked: false });
   }
   async list() {
+    await this.onList?.();
     if (this.failList) throw new Error("kb okunamadı");
-    return { grants: structuredClone(this.files), warnings: [...this.warnings] };
+    return { grants: structuredClone(this.files), revoked_ids: [...this.revokedIds], warnings: [...this.warnings] };
   }
   async revoke(id: string) {
     this.revoked.push(id);
+    this.revokedIds.push(id);
     const f = this.files.find((x) => x.id === id);
     if (f) f.revoked = true;
   }
@@ -49,6 +54,8 @@ export class FakeOps implements VladOps {
   auditCalls = 0;
   failAudit = 0;
   launched: string[] = [];
+  /** Phases the pipeline would start after a merge (`vlad task ready`). */
+  readyIds: string[] = [];
   private readonly tasks: Map<string, TaskInfo>;
   constructor(tasks: Map<string, TaskInfo>) {
     this.tasks = tasks;
@@ -65,7 +72,7 @@ export class FakeOps implements VladOps {
     this.tasks.get(id)!.state = "done";
   }
   async ready() {
-    return [];
+    return [...this.readyIds];
   }
   async launch(id: string) {
     this.launched.push(id);
@@ -74,7 +81,7 @@ export class FakeOps implements VladOps {
 
 export type GrantOver = Partial<Omit<GrantRecord, "device_id">>;
 
-export async function mkWorld(o: { kb?: FakeKb; dir?: string } = {}) {
+export async function mkWorld(o: { kb?: FakeKb; dir?: string; mergerLogin?: () => Promise<string | undefined> } = {}) {
   const kb = o.kb ?? new FakeKb();
   const tasks = new Map<string, TaskInfo>();
   const gh = new Map<string, FakeGithubHttp>();
@@ -114,9 +121,10 @@ export async function mkWorld(o: { kb?: FakeKb; dir?: string } = {}) {
     const t = tasks.get(id);
     return t ? structuredClone(t) : null;
   };
-  const projects = async (slug: string) => (slug === "vlad" ? { repo: REPO, default_branch: "master" } : slug === "other" ? { repo: REPO2, default_branch: "master" } : null);
+  const cards: Record<string, { repo: string; default_branch: string }> = { vlad: { repo: REPO, default_branch: "master" }, other: { repo: REPO2, default_branch: "master" } };
+  const projects = async (slug: string) => (cards[slug] ? { ...cards[slug]! } : null);
   const world = {
-    kb, tasks, gh, ops, proxied, severe: new Set<string>(), codex: false, sleeps: [] as number[], logs: [] as string[],
+    kb, tasks, gh, ops, proxied, cards, severe: new Set<string>(), codex: false, findingsCalls: 0, onFindings: undefined as undefined | ((n: number) => void), sleeps: [] as number[], logs: [] as string[],
   };
   const sleep = async (ms: number) => void world.sleeps.push(ms);
   let r!: Rig;
@@ -127,14 +135,17 @@ export async function mkWorld(o: { kb?: FakeKb; dir?: string } = {}) {
       actions: {
         reader, tasks: taskSource, projects, sleep, policy: { prepareIntervalMs: 0, allowBlocked: true, appId: APP_ID },
         execute: createExecutor({
-          reader, writer: new GithubWriter(client), tasks: taskSource, ops, now: () => r.clock.t, sleep, appId: APP_ID, mergerLogin: "vlad-gate[bot]",
+          reader, writer: new GithubWriter(client), tasks: taskSource, ops, now: () => r.clock.t, sleep, appId: APP_ID, ...(o.mergerLogin ? { resolveMergerLogin: o.mergerLogin } : { mergerLogin: "vlad-gate[bot]" }),
           appendEvent: (type, data, key) => r.app.vladEvents.ledger.append(type, data, key),
         }),
       },
       grants: {
         kb,
         log: (m: string) => world.logs.push(m),
-        findingsClear: async (project) => !world.severe.has(project),
+        findingsClear: async (project) => {
+          world.onFindings?.(++world.findingsCalls);
+          return !world.severe.has(project);
+        },
         codexClear: async () => world.codex,
         listAwaiting: async () => [...tasks.values()].filter((t) => t.state === "awaiting_approval").map((t) => t.id),
       },
@@ -149,8 +160,8 @@ export async function mkWorld(o: { kb?: FakeKb; dir?: string } = {}) {
   const grantBody = (d: TestDevice, over: GrantOver & { sig?: string; extra?: Record<string, unknown> } = {}) => {
     const { sig, extra, ...rest } = over;
     const g = {
-      id: "G-001", scope: { type: "project" as const, ref: "vlad" }, action: "merge_phase", conditions: ["ci_green"], created: iso(r.clock.t), expires: iso(r.clock.t + DAY),
-      max_uses: 5, payload_version: "v1" as const, ...rest,
+      id: "G-001", scope: { type: "project" as const, ref: "vlad" }, project: "vlad", repo: REPO, action: "merge_phase", conditions: ["ci_green"], created: iso(r.clock.t), expires: iso(r.clock.t + DAY),
+      max_uses: 5, payload_version: "v2" as const, ...rest,
     };
     return { ...g, signature: sig ?? signDer(d.approval.priv, Buffer.from(grantSigningPayload(g))), ...extra };
   };

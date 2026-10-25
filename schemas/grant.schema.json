@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "scope", "action", "conditions", "created", "expires", "max_uses", "revoked", "device_id", "signature", "payload_version"],
+  "required": ["id", "scope", "project", "repo", "action", "conditions", "created", "expires", "max_uses", "revoked", "device_id", "signature", "payload_version"],
   "properties": {
     "id": { "type": "string", "pattern": "^G-(\\d{3}|[1-9]\\d{3,})$" },
     "scope": {
@@ -14,6 +14,8 @@
         "ref": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" }
       }
     },
+    "project": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$" },
+    "repo": { "type": "string", "pattern": "^(?!\\.{1,2}/)[A-Za-z0-9._-]+/(?!\\.{1,2}$)[A-Za-z0-9._-]+$" },
     "action": { "enum": ["merge_phase", "merge_final"] },
     "conditions": {
       "type": "array",
@@ -27,6 +29,6 @@
     "revoked": { "type": "boolean" },
     "device_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]+$" },
     "signature": { "type": "string", "pattern": "^[A-Za-z0-9+/_=-]+$" },
-    "payload_version": { "const": "v1" }
+    "payload_version": { "const": "v2" }
   }
 }

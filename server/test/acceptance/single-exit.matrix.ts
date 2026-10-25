@@ -101,14 +101,14 @@ export class FakeGrantKb {
     this.added.push(structuredClone(rec));
   }
   async list() {
-    return { grants: [] as { id: string; revoked: boolean }[], warnings: [] as string[] };
+    return { grants: [] as { id: string; revoked: boolean }[], revoked_ids: [] as string[], warnings: [] as string[] };
   }
   async revoke() {}
 }
 
 /** Kontrattaki (`signing-vectors.json` `grant`) imzalı bayt dizisi; sunucu koduna bakılmadan yazıldı. */
-export const grantPayload = (g: { id: string; scope: { type: string; ref: string }; action: string; conditions: string[]; created: string; expires: string; max_uses: number }) =>
-  ["vlad-grant/v1", `id=${g.id}`, `scope=${g.scope.type}:${g.scope.ref}`, `action=${g.action}`, `conditions=${[...g.conditions].sort().join(",")}`, `created=${g.created}`, `expires=${g.expires}`, `max_uses=${g.max_uses}`].join("\n");
+export const grantPayload = (g: { id: string; scope: { type: string; ref: string }; project: string; repo: string; action: string; conditions: string[]; created: string; expires: string; max_uses: number }) =>
+  ["vlad-grant/v2", `id=${g.id}`, `scope=${g.scope.type}:${g.scope.ref}`, `project=${g.project}`, `repo=${g.repo}`, `action=${g.action}`, `conditions=${[...g.conditions].sort().join(",")}`, `created=${g.created}`, `expires=${g.expires}`, `max_uses=${g.max_uses}`].join("\n");
 
 export type WorldOpts = { policy?: { allowBlocked?: boolean; prepareIntervalMs?: number; maxBadSignatures?: number } };
 
@@ -233,8 +233,8 @@ export class World {
   /** `p` cihazı adına imzalı devir gövdesi (varsayılan: onun approval anahtarıyla, kapsam proje `widgets`, şimdi → +1 gün). */
   grantBody(p: Phone, over: Record<string, unknown> = {}, key: "approval" | "session" = "approval", fn: typeof signLowS = signLowS) {
     const g: any = {
-      id: "G-001", scope: { type: "project", ref: "widgets" }, action: "merge_phase", conditions: ["ci_green"],
-      created: new Date(this.clock.t).toISOString(), expires: new Date(this.clock.t + 86_400_000).toISOString(), max_uses: 3, payload_version: "v1", ...over,
+      id: "G-001", scope: { type: "project", ref: "widgets" }, project: "widgets", repo: REPO, action: "merge_phase", conditions: ["ci_green"],
+      created: new Date(this.clock.t).toISOString(), expires: new Date(this.clock.t + 86_400_000).toISOString(), max_uses: 3, payload_version: "v2", ...over,
     };
     return { ...g, signature: over.signature ?? fn(p[key].priv, grantPayload(g)) };
   }
