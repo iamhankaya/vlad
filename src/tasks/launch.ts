@@ -90,6 +90,27 @@ export function ensureIntegration(
   return { repo, branch, worktree };
 }
 
+/**
+ * F-vlad-063: the integration worktrees of a pipeline, one per project its phases run in (plus the
+ * pipeline's own). Derived, not recorded: the pipeline task's `worktree` only covers its own project.
+ */
+export function integrationWorktrees(
+  parentId: string, cfg: VladConfig,
+): { project: string; repo: string; branch: string; worktree: string }[] {
+  const projects = new Set([getTask(parentId).data.project]);
+  for (const c of listTasks({ parent: parentId })) projects.add(c.data.project);
+  const branch = `vlad/${parentId}`;
+  const out: { project: string; repo: string; branch: string; worktree: string }[] = [];
+  for (const project of projects) {
+    // a phase project whose card is gone must not block listing or cleanup of the rest
+    if (!existsSync(join(kbPaths().projects, `${project}.md`))) continue;
+    const repo = projectPath(project);
+    const worktree = worktreePath(cfg, repo, parentId);
+    if (!out.some((w) => w.worktree === worktree)) out.push({ project, repo, branch, worktree });
+  }
+  return out;
+}
+
 /** Opens worktree + branch, starts the launcher and moves the task to `running`. */
 export async function launchTask(
   id: string,
@@ -178,11 +199,18 @@ export async function launchTask(
  */
 export function cleanupTask(
   id: string,
-  o: { closeWorker?: (taskId: string) => void } = {},
+  o: { closeWorker?: (taskId: string) => void; cfg?: VladConfig } = {},
 ): void {
   const t = getTask(id);
   if (t.data.state !== "done" && t.data.state !== "cancelled") {
     throw new Error(`cleanup yalnızca done/cancelled görevde yapılır (${t.data.state}): ${id}`);
+  }
+  if (t.data.kind === "pipeline" && o.cfg) {
+    // integration worktrees of the other projects the phases ran in (F-vlad-063); the own one is handled below
+    for (const w of integrationWorktrees(id, o.cfg)) {
+      if (w.worktree === t.data.worktree || !existsSync(w.worktree)) continue;
+      removeTaskWorktree(w.repo, w.worktree, id);
+    }
   }
   const wt = t.data.worktree;
   if (!wt) return;

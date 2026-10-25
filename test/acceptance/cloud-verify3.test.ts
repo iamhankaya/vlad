@@ -14,6 +14,8 @@ const SHA = "b".repeat(40);
 beforeEach(() => {
   home = makeHome();
   writeCard(home, "alpha", { repo: "iamhankaya/vlad" });
+  // launcher "auto" opens a real local terminal on Windows; this file exercises the cloud path (F-vlad-062)
+  writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
   id = newTask(home);
   forceRunning(home, id);
 });
