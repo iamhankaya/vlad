@@ -126,6 +126,7 @@ export async function launchTask(
       prompt: buildPrompt(task.file, task.data.autonomy, role),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
+      tap: true,
       ...(role?.model ? { model: role.model } : {}),
     });
     if (!res.ok) failure = `launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`;

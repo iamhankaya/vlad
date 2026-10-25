@@ -21,7 +21,10 @@
       "Bash(tsc*)",
       "Bash(vitest*)",
       "Bash(./gradlew -PskipAndroid=true*)",
-      "Bash(vlad *)"
+      "Bash(vlad task log *)",
+      "Bash(vlad task ask *)",
+      "Bash(vlad task report *)",
+      "Bash(vlad task progress *)"
     ],
     "deny": [
       "Bash(rm -rf*)",

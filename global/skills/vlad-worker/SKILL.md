@@ -49,7 +49,9 @@ Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:
 ```
 vlad task ask <id> "<soru, seçenekleriyle>"
 ```
-Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyasının `## Sorular` bölümüne `**Cevap:**` olarak yazılır; bildirim gelince veya kullanıcı söyleyince dosyayı yeniden oku.
+Ardından **bildirim gönder** (adım 7) ve cevabı bekle.
+
+**Sunucu modu (Linux, `systemd-run` ile açılan headless çalışan):** `vlad task ask`'tan sonra turunu hemen bitir; süreç çıkar ve görev `blocked` kalır. Cevap `vlad task answer` ile yazılınca VLAD `vlad task relaunch <id>` ile oturumunu `--resume` eder ve cevabı prompt olarak verir; kaldığın yerden devam et. Çıktın `vlad worker tap` ile süzülür (`session_id`, son adım, kota); bunun için ek bir şey yapma. Cevap görev dosyasının `## Sorular` bölümüne `**Cevap:**` olarak yazılır; bildirim gelince veya kullanıcı söyleyince dosyayı yeniden oku.
 
 ## 5. Commit ve sınırlar
 

@@ -97,6 +97,13 @@
    "source": "Claude Code 2.1.310 headless (bulut çalışanı ortamı)",
    "captured_at": "2026-10-24",
    "command": "claude -p \"Sadece 'merhaba' de.\" --output-format stream-json --verbose --max-turns 2"
+  },
+  {
+   "file": "claude-stream-json/limit-event.synthetic.jsonl",
+   "kind": "synthetic",
+   "source": "elle yazıldı; gerçek sınır olayı yakalanamadı (D0A d0-notlar: 'Limit aşılmış biçim gözlenemedi')",
+   "captured_at": "2026-10-25",
+   "command": "yok (sentetik); gerçek kayıt: sınır dolunca claude -p ... --output-format stream-json --verbose"
   }
  ],
  "not_captured": [
