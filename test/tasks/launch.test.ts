@@ -10,6 +10,7 @@ import { addFinding } from "../../src/findings/store.js";
 import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
+import { trustKey } from "../../src/tasks/trust.js";
 import { makeHome } from "../helpers.js";
 
 function git(cwd: string, ...args: string[]) {
@@ -465,6 +466,40 @@ x
     expect(existsSync(bwt)).toBe(false);
     expect(existsSync(awt)).toBe(false);
     expect(git(beta, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
+  });
+});
+
+describe("worktree trust (~/.claude.json)", () => {
+  const trusted = () => JSON.parse(readFileSync(process.env.VLAD_CLAUDE_JSON!, "utf8")).projects ?? {};
+  beforeEach(() => {
+    process.env.VLAD_CLAUDE_JSON = join(mkdtempSync(join(tmpdir(), "vlad-cj-")), "claude.json");
+  });
+
+  it("launch trusts the worktree before the launcher runs", async () => {
+    const t = mk();
+    let seen: unknown;
+    const l: Launcher = { async launch(r) { seen = trusted()[trustKey(r.cwd)]; return { ok: true, method: "fake" }; } };
+    await launchTask(t.data.id, { launcher: l, cfg });
+    expect(seen).toMatchObject({ hasTrustDialogAccepted: true });
+  });
+
+  it("an unwritable claude.json only warns, the launch still succeeds", async () => {
+    writeFileSync(process.env.VLAD_CLAUDE_JSON!, "{broken");
+    const t = mk();
+    const r = await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    expect(r.data.state).toBe("running");
+    expect(readFileSync(process.env.VLAD_CLAUDE_JSON!, "utf8")).toBe("{broken");
+  });
+
+  it("cleanup removes the trust record of the removed worktree", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    setState(t.data.id, "awaiting_approval");
+    setState(t.data.id, "done");
+    const wt = getTask(t.data.id).data.worktree!;
+    expect(trusted()[trustKey(wt)]).toBeDefined();
+    cleanupTask(t.data.id, { closeWorker: () => {} });
+    expect(trusted()[trustKey(wt)]).toBeUndefined();
   });
 });
 
