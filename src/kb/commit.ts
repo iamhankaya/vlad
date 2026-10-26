@@ -14,7 +14,7 @@ function missingIgnores(kbDir: string): string[] {
   return KB_GITIGNORE.filter((l) => !have.has(l));
 }
 
-function git(cwd: string, args: string[]): string {
+export function git(cwd: string, args: string[]): string {
   try {
     return execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", windowsHide: true });
   } catch (e) {

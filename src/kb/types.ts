@@ -12,6 +12,8 @@ export type TaskState =
 export type ProjectStatus = "active" | "paused" | "archived";
 /** Who can reach the system: sizes the architect's `### Sistem tasarımı`. Unrelated to `local_only`. */
 export type Exposure = "local" | "network" | "internet";
+/** How a cloud worker gets its task text: clones vlad-kb read-only, or receives it inline in the prompt. */
+export type CloudKb = "readonly" | "inline";
 export type Launcher = "auto" | "wt" | "powershell" | "cloud";
 
 /** kb/projects/<slug>.md frontmatter (spec 5.1) */
@@ -137,5 +139,7 @@ export interface VladConfig {
   worktreeDir: string;
   /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
   kbDir?: string;
+  /** Cloud worker kb access; absent → `readonly`. */
+  cloudKb?: CloudKb;
   projects: Record<string, { autonomy?: Autonomy }>;
 }

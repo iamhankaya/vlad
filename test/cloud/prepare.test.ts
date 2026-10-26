@@ -26,6 +26,8 @@ x
 let home: string;
 beforeEach(() => {
   home = makeHome();
+  // these tests pin the inline prompt; the readonly default is covered in readonly.test.ts
+  writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ cloudKb: "inline" }));
   mkdirSync(join(home, "roles"), { recursive: true });
   writeFileSync(join(home, "roles", "developer.md"), `---
 slug: developer
