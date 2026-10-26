@@ -9,8 +9,16 @@ export interface ForeignCommit {
   subject: string;
 }
 
+export interface SuspiciousCommit extends ForeignCommit {
+  files: string[];
+}
+
 export interface KbCheckResult {
+  /** false when the check could not run (no network, no upstream, kb not a separate repo): "nothing foreign" is then unknown */
+  checked: boolean;
   foreign: ForeignCommit[];
+  /** commits (any prefix) that touch the kb root `CLAUDE.md`, `.claude/` or `.github/`: files that load into sessions or CI */
+  suspicious: SuspiciousCommit[];
   /** remote head the check covered; pass it to `--ack <sha>` so commits that landed since are not acknowledged unseen */
   head?: string;
   warnings?: string[];
@@ -18,33 +26,46 @@ export interface KbCheckResult {
 
 /** Without a verified point only the newest commits are inspected: older history predates the `kb:` rule. */
 const FALLBACK_COMMITS = 50;
+const SENSITIVE = /^(CLAUDE\.md|\.claude\/|\.github\/)/;
+const SHA_RE = /^[0-9a-f]{7,40}$/;
+const UNCHECKED = "KONTROL YAPILAMADI";
+
+/** `--strict`: a foreign/suspicious commit or an unchecked run fails the command (default exit stays 0). */
+export function kbCheckExitCode(r: KbCheckResult, strict: boolean): number {
+  return strict && (!r.checked || r.foreign.length || r.suspicious.length) ? 1 : 0;
+}
+
+const unchecked = (why: string): KbCheckResult => ({ checked: false, foreign: [], suspicious: [], warnings: [`${UNCHECKED}: ${why}`] });
 
 /**
  * Cloud workers get the kb read-only by protocol only (the platform does not stop their pushes), and
  * only VLAD writes through `vlad kb commit`, whose subject always starts with `kb:`. Any commit on the
  * remote branch since the last verified point without that prefix is foreign.
  * The verified point lives in `.git/vlad-kb-verified` (never committed). It advances only when nothing
- * foreign was found, or with `ack` once the user has seen the list, so a foreign commit is reported until acknowledged.
+ * foreign was found, or with `ack` (a sha, the `head` of a check the user saw) once the user has seen the lists, so a foreign commit is reported until acknowledged.
  * Merge commits are skipped (the commits they bring are in the range). Only the upstream branch is checked and the
  * prefix is a convention, so this is good-faith protection, not enforcement.
  * Author is reported but not judged: VLAD itself commits as several identities, and a worker can fake the prefix
  * (shortcut: prefix-only, upgrade to signed commits if that matters).
  */
 export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
+  if (o.ack !== undefined && (typeof o.ack !== "string" || !SHA_RE.test(o.ack))) {
+    throw new Error("--ack bir commit sha'sı ister (7-40 hex); `vlad kb check --json` çıktısındaki head değerini ver");
+  }
   const paths = kbPaths();
-  if (!isSeparateKb(paths.home)) return { foreign: [], warnings: ["kb ayrı depoda değil; yabancı commit kontrolü atlandı"] };
+  if (!isSeparateKb(paths.home)) return unchecked("kb ayrı depoda değil; yabancı commit kontrolü atlandı");
   const cwd = paths.kb;
   const warnings: string[] = [];
   try {
     git(cwd, ["fetch", "-q"]);
   } catch (e) {
-    return { foreign: [], warnings: [`fetch başarısız, kontrol atlandı: ${(e as Error).message}`] };
+    return unchecked(`fetch başarısız, kontrol atlandı: ${(e as Error).message}`);
   }
   let ref: string;
   try {
     ref = git(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]).trim();
   } catch {
-    return { foreign: [], warnings: ["kb dalının upstream'i yok; kontrol atlandı"] };
+    return unchecked("kb dalının upstream'i yok; kontrol atlandı");
   }
   const head = git(cwd, ["rev-parse", ref]).trim();
   let gitDir = git(cwd, ["rev-parse", "--git-dir"]).trim();
@@ -60,15 +81,19 @@ export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
       warnings.push(`doğrulanan nokta (${marker.slice(0, 7)}) uzak dalın atası değil (force push / geçmiş yeniden yazılmış olabilir); son ${FALLBACK_COMMITS} commit incelendi`);
     }
   }
-  const foreign: ForeignCommit[] = git(cwd, ["log", "--no-merges", "--format=%h%x09%an%x09%s", ...range])
-    .split(/\r?\n/).filter(Boolean)
-    .map((l) => { const [sha, author, ...s] = l.split("\t"); return { sha, author, subject: s.join("\t") }; })
-    .filter((c) => !c.subject.startsWith("kb:"));
-  let verified = head;
-  if (typeof o.ack === "string") {
-    verified = git(cwd, ["rev-parse", "--verify", `${o.ack}^{commit}`]).trim();
-    git(cwd, ["merge-base", "--is-ancestor", verified, head]);
-  }
-  if (!foreign.length || o.ack) writeFileSync(markerFile, `${verified}\n`);
-  return warnings.length ? { foreign, head, warnings } : { foreign, head };
+  const commits = git(cwd, ["log", "--no-merges", "--name-only", "--format=%x00%h%x09%an%x09%s", ...range])
+    .split("\0").filter(Boolean)
+    .map((chunk) => {
+      const [head1, ...files] = chunk.split(/\r?\n/).filter(Boolean);
+      const [sha, author, ...s] = head1.split("\t");
+      return { sha, author, subject: s.join("\t"), files };
+    });
+  const foreign: ForeignCommit[] = commits.filter((c) => !c.subject.startsWith("kb:")).map(({ files: _f, ...c }) => c);
+  const suspicious: SuspiciousCommit[] = commits.filter((c) => c.files.some((f) => SENSITIVE.test(f)))
+    .map((c) => ({ ...c, files: c.files.filter((f) => SENSITIVE.test(f)) }));
+  const verified = git(cwd, ["rev-parse", "--verify", `${o.ack ?? head}^{commit}`]).trim();
+  if (o.ack) git(cwd, ["merge-base", "--is-ancestor", verified, head]);
+  if ((!foreign.length && !suspicious.length) || o.ack) writeFileSync(markerFile, `${verified}
+`);
+  return { checked: true, foreign, suspicious, head, ...(warnings.length ? { warnings } : {}) };
 }

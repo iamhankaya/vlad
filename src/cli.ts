@@ -6,7 +6,7 @@ import { Command, CommanderError } from "commander";
 import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
-import { checkKb } from "./kb/check.js";
+import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
@@ -374,14 +374,17 @@ def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak 
   if (r.warning) lines.push(`uyarı: ${r.warning}`);
   out(o, r, lines.join("\n"));
 }).option("--push", "upstream'e push eder (yalnızca push edilmemiş commit'lerin hepsi kb/ ise)");
-def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) commit'leri listeler", (o: Opts) => {
-  const r = checkKb({ ack: o.ack as boolean | string | undefined });
+def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a dokunan commit'leri listeler", (o: Opts) => {
+  const r = checkKb({ ack: o.ack as string | undefined });
   const lines = r.foreign.length
     ? [`yabancı commit: ${r.foreign.length}`, ...r.foreign.map((c) => `${c.sha} ${c.author}: ${c.subject}`)]
     : ["yabancı commit yok"];
+  if (r.suspicious.length) lines.push(`şüpheli dosya değişikliği: ${r.suspicious.length}`, ...r.suspicious.map((c) => `${c.sha} ${c.author}: ${c.subject} [${c.files.join(", ")}]`));
   for (const w of r.warnings ?? []) lines.push(`uyarı: ${w}`);
   out(o, r, lines.join("\n"));
-}).option("--ack [sha]", "görüldü say: doğrulanan noktayı ilerletir (sha verilirse `check` çıktısındaki head; sonradan gelenler işaretlenmez)");
+  process.exitCode = kbCheckExitCode(r, !!o.strict);
+}).option("--ack <sha>", "görüldü say: doğrulanan noktayı `check` çıktısındaki head'e ilerletir (sonradan gelenler işaretlenmez)")
+  .option("--strict", "yabancı/şüpheli commit varsa ya da kontrol yapılamadıysa 1 ile çık");
 
 const sessionFile = () => join(kbPaths().kb, "vlad-session.txt");
 const session = program.command("session").description("VLAD oturum adı");
