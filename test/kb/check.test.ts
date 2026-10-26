@@ -118,7 +118,40 @@ describe("checkKb", () => {
     expect(() => checkKb({ ack: "--all" })).toThrow(/sha/);
   });
 
-  it("flags commits touching root CLAUDE.md, .claude/ or .github/ as suspicious, whatever their prefix, until acked", () => {
+  it("an author name carrying a tab and kb: cannot masquerade as the subject prefix", () => {
+    ackHead();
+    writeFileSync(join(other, "z.md"), "z");
+    run(other, "T", "add", ".");
+    execFileSync("git", ["commit", "-q", "-m", "evil"], { cwd: other, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "x	kb: foo", GIT_AUTHOR_EMAIL: "x@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" } });
+    run(other, "T", "push", "-q", "origin", "HEAD");
+    expect(checkKb().foreign.map((c) => c.subject)).toEqual(["evil"]);
+  });
+
+  it("flags nested CLAUDE.md, .claude/, CLAUDE.local.md, .mcp.json, AGENTS.md and files moved out of .claude/", () => {
+    ackHead();
+    const put = (file: string, msg: string) => {
+      mkdirSync(dirname(join(other, file)), { recursive: true });
+      writeFileSync(join(other, file), msg);
+      run(other, "T", "add", ".");
+      run(other, "T", "commit", "-q", "-m", `kb: ${msg}`);
+      run(other, "T", "push", "-q", "origin", "HEAD");
+    };
+    put("projects/CLAUDE.md", "n1");
+    put("tasks/.claude/settings.json", "n2");
+    put("CLAUDE.local.md", "n3");
+    put(".mcp.json", "n4");
+    put("AGENTS.md", "n5");
+    put(".claude/x.md", "n6");
+    ackHead();
+    run(other, "T", "mv", ".claude/x.md", "plain.md");
+    run(other, "T", "commit", "-q", "-m", "kb: move out");
+    run(other, "T", "push", "-q", "origin", "HEAD");
+    expect(checkKb().suspicious.map((c) => c.subject)).toEqual(["kb: move out"]);
+    ackHead();
+    expect(checkKb().suspicious).toEqual([]);
+  });
+
+  it("flags commits touching CLAUDE.md, .claude/ or .github/ as suspicious, whatever their prefix, until acked", () => {
     ackHead();
     const touch = (cwd: string, who: string, file: string, subject: string) => {
       mkdirSync(dirname(join(cwd, file)), { recursive: true });
@@ -130,15 +163,16 @@ describe("checkKb", () => {
     touch(other, "VLAD", "CLAUDE.md", "kb: legit-looking");
     touch(other, "VLAD", ".claude/skills/x/SKILL.md", "kb: skill");
     touch(other, "VLAD", ".github/workflows/a.yml", "kb: wf");
-    touch(other, "VLAD", "docs/CLAUDE.md", "kb: nested is not root");
+    touch(other, "VLAD", "docs/CLAUDE.md", "kb: nested");
     const r = checkKb();
     expect(r.foreign).toEqual([]);
     expect(r.suspicious?.map((c) => [c.subject, c.files])).toEqual([
+      ["kb: nested", ["docs/CLAUDE.md"]],
       ["kb: wf", [".github/workflows/a.yml"]],
       ["kb: skill", [".claude/skills/x/SKILL.md"]],
       ["kb: legit-looking", ["CLAUDE.md"]],
     ]);
-    expect(checkKb().suspicious).toHaveLength(3);
+    expect(checkKb().suspicious).toHaveLength(4);
     ackHead();
     expect(checkKb().suspicious).toEqual([]);
   });

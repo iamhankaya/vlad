@@ -17,7 +17,7 @@ export interface KbCheckResult {
   /** false when the check could not run (no network, no upstream, kb not a separate repo): "nothing foreign" is then unknown */
   checked: boolean;
   foreign: ForeignCommit[];
-  /** commits (any prefix) that touch the kb root `CLAUDE.md`, `.claude/` or `.github/`: files that load into sessions or CI */
+  /** commits (any prefix) that touch `CLAUDE.md`/`CLAUDE.local.md`/`AGENTS.md`/`.mcp.json` or `.claude/`/`.github/` at any depth: files that load into sessions or CI */
   suspicious: SuspiciousCommit[];
   /** remote head the check covered; pass it to `--ack <sha>` so commits that landed since are not acknowledged unseen */
   head?: string;
@@ -26,7 +26,7 @@ export interface KbCheckResult {
 
 /** Without a verified point only the newest commits are inspected: older history predates the `kb:` rule. */
 const FALLBACK_COMMITS = 50;
-const SENSITIVE = /^(CLAUDE\.md|\.claude\/|\.github\/)/;
+const SENSITIVE = /(^|\/)(CLAUDE(\.local)?\.md|AGENTS\.md|\.mcp\.json)$|(^|\/)\.(claude|github)\//;
 const SHA_RE = /^[0-9a-f]{7,40}$/;
 const UNCHECKED = "KONTROL YAPILAMADI";
 
@@ -81,12 +81,13 @@ export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
       warnings.push(`doğrulanan nokta (${marker.slice(0, 7)}) uzak dalın atası değil (force push / geçmiş yeniden yazılmış olabilir); son ${FALLBACK_COMMITS} commit incelendi`);
     }
   }
-  const commits = git(cwd, ["log", "--no-merges", "--name-only", "--format=%x00%h%x09%an%x09%s", ...range])
-    .split("\0").filter(Boolean)
+  const commits = git(cwd, ["log", "--no-merges", "--no-renames", "--name-only", "--format=%x01%h%x00%s%x00%an", ...range])
+    .split("\x01").filter(Boolean)
     .map((chunk) => {
       const [head1, ...files] = chunk.split(/\r?\n/).filter(Boolean);
-      const [sha, author, ...s] = head1.split("\t");
-      return { sha, author, subject: s.join("\t"), files };
+      // fields split on NUL (git forbids it in names and subjects), so an author name cannot fake the subject prefix
+      const [sha, subject, author] = head1.split("\0");
+      return { sha, author, subject, files };
     });
   const foreign: ForeignCommit[] = commits.filter((c) => !c.subject.startsWith("kb:")).map(({ files: _f, ...c }) => c);
   const suspicious: SuspiciousCommit[] = commits.filter((c) => c.files.some((f) => SENSITIVE.test(f)))
