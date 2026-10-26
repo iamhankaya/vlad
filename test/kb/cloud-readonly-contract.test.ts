@@ -49,7 +49,7 @@ describe("kb salt okuma: metin sözleşmesi (T20261026-20)", () => {
 
   it("CLAUDE.md: salt okuma + vlad kb check cümlesi ve komut listesi", () => {
     const c = read("CLAUDE.md");
-    expect(c).toMatch(/Bulut çalışanları kb'yi salt okuma ekler; yazma yalnız VLAD'dır ve yabancı commit `vlad kb check` ile izlenir/);
+    expect(c).toMatch(/`cloudKb: "readonly"` yalnız açıkça seçilirse kb salt okuma eklenir; yazma yalnız VLAD'dır ve yabancı commit `vlad kb check` ile izlenir/);
     expect(c).toMatch(/`vlad kb commit\|check`/);
   });
 
