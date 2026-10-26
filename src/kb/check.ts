@@ -43,7 +43,7 @@ const unchecked = (why: string): KbCheckResult => ({ checked: false, foreign: []
  * remote branch since the last verified point without that prefix is foreign.
  * The verified point lives in `.git/vlad-kb-verified` (never committed). It advances only when nothing
  * foreign was found, or with `ack` (a sha, the `head` of a check the user saw) once the user has seen the lists, so a foreign commit is reported until acknowledged.
- * Merge commits are skipped (the commits they bring are in the range). Only the upstream branch is checked and the
+ * Merge commits are not judged foreign (the commits they bring are in the range), but files a merge itself changed (`--cc`) are checked for sensitive paths. Only the upstream branch is checked and the
  * prefix is a convention, so this is good-faith protection, not enforcement.
  * Author is reported but not judged: VLAD itself commits as several identities, and a worker can fake the prefix
  * (shortcut: prefix-only, upgrade to signed commits if that matters).
@@ -81,7 +81,8 @@ export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
       warnings.push(`doğrulanan nokta (${marker.slice(0, 7)}) uzak dalın atası değil (force push / geçmiş yeniden yazılmış olabilir); son ${FALLBACK_COMMITS} commit incelendi`);
     }
   }
-  const commits = git(cwd, ["log", "--no-merges", "--no-renames", "--name-only", "--format=%x01%h%x00%s%x00%an", ...range])
+  // evil merge: --cc lists only files a merge itself changed vs all parents (what its side branches brought is in the normal commits)
+  const parse = (extra: string[]) => git(cwd, ["log", ...extra, "--no-renames", "--name-only", "--format=%x01%h%x00%s%x00%an", ...range])
     .split("\x01").filter(Boolean)
     .map((chunk) => {
       const [head1, ...files] = chunk.split(/\r?\n/).filter(Boolean);
@@ -89,8 +90,10 @@ export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
       const [sha, subject, author] = head1.split("\0");
       return { sha, author, subject, files };
     });
+  const commits = parse(["--no-merges"]);
+  const merges = parse(["--merges", "--cc"]);
   const foreign: ForeignCommit[] = commits.filter((c) => !c.subject.startsWith("kb:")).map(({ files: _f, ...c }) => c);
-  const suspicious: SuspiciousCommit[] = commits.filter((c) => c.files.some((f) => SENSITIVE.test(f)))
+  const suspicious: SuspiciousCommit[] = [...commits, ...merges].filter((c) => c.files.some((f) => SENSITIVE.test(f)))
     .map((c) => ({ ...c, files: c.files.filter((f) => SENSITIVE.test(f)) }));
   const verified = git(cwd, ["rev-parse", "--verify", `${o.ack ?? head}^{commit}`]).trim();
   if (o.ack) git(cwd, ["merge-base", "--is-ancestor", verified, head]);

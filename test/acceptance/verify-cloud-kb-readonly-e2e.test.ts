@@ -228,9 +228,8 @@ describe("vlad kb check: CLI süreci, gerçek uzak depo", { timeout: 60_000 }, (
     expect(JSON.parse(r.out).checked).toBe(false);
   });
 
-  // Bilinen açık (T20261026-22 raporu, orta): `--no-merges` yüzünden merge commit'inin kendisine eklenen (evil merge)
-  // CLAUDE.md görünmez; aralıktaki hiçbir normal commit ona dokunmaz. Düzeltilince `it.fails` kırılır → `it`'e çevir.
-  it.fails("EVIL MERGE: merge commit'ine gizlenen CLAUDE.md suspicious çıkmalı", () => {
+  // F-vlad-069: merge commit'inin kendisine eklenen (evil merge) CLAUDE.md da suspicious olmalı.
+  it("EVIL MERGE: merge commit'ine gizlenen CLAUDE.md suspicious çıkmalı", () => {
     check();
     git(worker, "T", "checkout", "-q", "-b", "side");
     writeFileSync(join(worker, "a.md"), "x\n");
