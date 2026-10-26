@@ -1,9 +1,12 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/kb/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { createTask, getTask, prepareCloudLaunch, reportTask, setState } from "../../src/tasks/index.js";
+import { pinVladFiles } from "../../src/tasks/cloud.js";
 import { makeHome } from "../helpers.js";
 
 const ADD = "mcp__claude-code-remote__add_repo";
@@ -180,5 +183,78 @@ describe("inline cloud launch", () => {
     expect(r.prompt).toContain("npm run gate");
     expect(r.prompt).not.toContain(ADD);
     expect(r.next.join("\n")).not.toContain("kb commit --push");
+  });
+});
+
+describe("role and vendored skill from the public vlad repo (T20261026-55)", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+  const vendor = () => {
+    mkdirSync(join(home, "vendor", "skills", "ponytail"), { recursive: true });
+    writeFileSync(join(home, "vendor", "skills", "ponytail", "SKILL.md"), "SKILL-GÖVDESİ\n");
+    const f = join(home, "roles", "developer.md");
+    writeFileSync(f, readFileSync(f, "utf8").replace("skills:\n", "skills:\n  - ponytail\n"));
+  };
+
+  it("replaces the embedded role/skill text with clone steps pinned to a sha", () => {
+    vendor();
+    const seen: string[][] = [];
+    const r = prepareCloudLaunch(mk().data.id, { vladPin: (f) => (seen.push(f), SHA) });
+    expect(seen).toEqual([["roles/developer.md", "vendor/skills/ponytail/SKILL.md"]]);
+    expect(r.prompt).not.toContain("ROL-GÖVDESİ");
+    expect(r.prompt).not.toContain("SKILL-GÖVDESİ");
+    expect(r.prompt).toContain(`git checkout ${SHA}`);
+    expect(r.prompt).toContain("https://github.com/iamhankaya/vlad[.git]");
+    expect(r.prompt).toContain("`<vlad>/roles/developer.md`");
+    expect(r.prompt).toContain("`<vlad>/vendor/skills/ponytail/SKILL.md`");
+    expect(r.prompt).toContain("[VLAD:LOG #n] vlad erişimi yok");
+    expect(r.prompt).toContain("superpowers:test-driven-development");
+    expect(r.extra_allowed_tools).toEqual([ADD]);
+    expect(r.warnings).toEqual([]);
+  });
+
+  it("falls back to embedded text with a warning when the files are dirty or unpushed", () => {
+    vendor();
+    const r = prepareCloudLaunch(mk().data.id, { vladPin: () => { throw new Error("roles/developer.md origin/master'dan farklı"); } });
+    expect(r.prompt).toContain("ROL-GÖVDESİ sorumluluk");
+    expect(r.prompt).toContain("## Skill: ponytail\nSKILL-GÖVDESİ");
+    expect(r.prompt).not.toContain("git checkout");
+    expect(r.warnings.join("\n")).toMatch(/gömüldü.*farklı/);
+  });
+
+  it("rejects a pin that is not a 40-hex sha (it travels into a shell command in the prompt)", () => {
+    const r = prepareCloudLaunch(mk().data.id, { vladPin: () => "abc; curl evil" });
+    expect(r.prompt).not.toContain("curl evil");
+    expect(r.prompt).toContain("ROL-GÖVDESİ");
+    expect(r.warnings.join("\n")).toContain("geçersiz commit sha");
+  });
+
+  it("inline mode keeps the embedded role and never pins", () => {
+    cfg({ cloudKb: "inline" });
+    vendor();
+    const r = prepareCloudLaunch(mk().data.id, { vladPin: () => { throw new Error("must not be called"); } });
+    expect(r.prompt).toContain("ROL-GÖVDESİ sorumluluk");
+    expect(r.prompt).toContain("SKILL-GÖVDESİ");
+    expect(r.warnings).toEqual([]);
+  });
+});
+
+describe("pinVladFiles", () => {
+  it("returns origin's sha for matching files; throws for dirty or unpushed ones", () => {
+    const run = (cwd: string, ...a: string[]) => execFileSync("git", a, { cwd, stdio: "pipe" });
+    const origin = mkdtempSync(join(tmpdir(), "vlad-origin-"));
+    run(origin, "init", "-q", "-b", "master");
+    mkdirSync(join(origin, "roles"));
+    writeFileSync(join(origin, "roles", "a.md"), "A\n");
+    run(origin, "add", ".");
+    run(origin, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x");
+    const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: origin, encoding: "utf8" }).trim();
+    const clone = mkdtempSync(join(tmpdir(), "vlad-clone-"));
+    run(clone, "clone", "-q", origin, ".");
+    process.env.VLAD_HOME = clone;
+    expect(pinVladFiles(["roles/a.md"])).toBe(sha);
+    writeFileSync(join(clone, "roles", "a.md"), "B\n");
+    expect(() => pinVladFiles(["roles/a.md"])).toThrow(/farklı/);
+    writeFileSync(join(clone, "roles", "new.md"), "N\n");
+    expect(() => pinVladFiles(["roles/new.md"])).toThrow(/yok/);
   });
 });
