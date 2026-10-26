@@ -139,7 +139,7 @@ export interface VladConfig {
   worktreeDir: string;
   /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
   kbDir?: string;
-  /** Cloud worker kb access; absent → `readonly`. */
+  /** Cloud worker kb access; absent → `inline`. */
   cloudKb?: CloudKb;
   projects: Record<string, { autonomy?: Autonomy }>;
 }

@@ -15,6 +15,7 @@ let home: string;
 const cfg = (o: object) => writeFileSync(join(home, "vlad.config.json"), JSON.stringify(o));
 beforeEach(() => {
   home = makeHome();
+  cfg({ cloudKb: "readonly" });
   mkdirSync(join(home, "roles"), { recursive: true });
   writeFileSync(join(home, "roles", "developer.md"), `---
 slug: developer
@@ -53,8 +54,9 @@ const body = "## Tanım\nTANIM-METNİ\n\n## Kabul kriterleri\n- [ ] KRİTER\n\n#
 const mk = (o: object = {}) => createTask({ project: "alpha", title: "İş", kind: "dev", body, role: "developer", ...o });
 
 describe("cloudKb config", () => {
-  it("defaults to readonly; accepts inline; rejects other values", () => {
-    expect(loadConfig(home).cloudKb ?? "readonly").toBe("readonly");
+  it("defaults to inline; accepts inline; rejects other values", () => {
+    cfg({});
+    expect(loadConfig(home).cloudKb ?? "inline").toBe("inline");
     cfg({ cloudKb: "inline" });
     expect(loadConfig(home).cloudKb).toBe("inline");
     cfg({ cloudKb: "nope" });
@@ -100,6 +102,13 @@ describe("readonly cloud prompt", () => {
 
   it("stays under 15 KB for a sample task", () => {
     expect(Buffer.byteLength(prepareCloudLaunch(mk().data.id).prompt)).toBeLessThan(15 * 1024);
+  });
+
+  it("defaults to inline when cloudKb is absent (F-vlad-078)", () => {
+    cfg({});
+    const r = prepareCloudLaunch(mk().data.id);
+    expect(r.kb_access).toBe("inline");
+    expect(r.extra_allowed_tools).toEqual([]);
   });
 
   it("extra_allowed_tools, kb_access and the push step in next", () => {

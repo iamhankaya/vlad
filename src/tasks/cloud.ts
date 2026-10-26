@@ -54,7 +54,7 @@ export interface CloudLaunchOptions {
   remoteBranch?: (repo: string, branch: string) => RemoteBranchState;
   /** The launching VLAD's own session id (`CLAUDE_CODE_REMOTE_SESSION_ID`); the worker notifies it on finishing. */
   vladSession?: string;
-  /** Overrides `cloudKb` from vlad.config.json (default `readonly`). */
+  /** Overrides `cloudKb` from vlad.config.json (default `inline`). */
   cloudKb?: CloudKb;
   /** Commit of the public vlad repo that holds `files` unchanged; throws when there is none (default: `pinVladFiles`). */
   vladPin?: (files: string[]) => string;
@@ -316,11 +316,11 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   const branch = `vlad/${id}`;
   let res: CloudLaunch;
   const warnings: string[] = [];
-  let kb: CloudKb = "readonly";
+  let kb: CloudKb = "inline";
   const rawSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
   const vladSession = rawSession ? toSessionId(rawSession) : rawSession;
   try {
-    kb = o.cloudKb ?? loadConfig().cloudKb ?? "readonly";
+    kb = o.cloudKb ?? loadConfig().cloudKb ?? "inline";
     const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     assertPathSafe(task);
     const c = card(task.data.project);

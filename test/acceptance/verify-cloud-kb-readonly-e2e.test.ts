@@ -41,9 +41,9 @@ function pipeline() {
   return { parent, dep, phase };
 }
 
-describe("launch (varsayılan readonly): CLI uçtan uca", { timeout: 60_000 }, () => {
-  it("kip yazılmamışsa readonly: görev/not/gate prompt'ta yok, açılış adımları var, yalnız add_repo izni, kb push adımı create_session'dan önce", () => {
-    cfg({});
+describe("launch (cloudKb: readonly): CLI uçtan uca", { timeout: 60_000 }, () => {
+  it("cloudKb: readonly açıkça verilince: görev/not/gate prompt'ta yok, açılış adımları var, yalnız add_repo izni, kb push adımı create_session'dan önce", () => {
+    cfg({ cloudKb: "readonly" });
     const id = mk();
     const r = launchCli(id);
     expect(r.code, r.err).toBe(0);
@@ -64,6 +64,14 @@ describe("launch (varsayılan readonly): CLI uçtan uca", { timeout: 60_000 }, (
     expect(taskState(home, id)).toBe("running");
   });
 
+  it("kip yazılmamışsa inline (F-vlad-078): kb_access inline, izin yok", () => {
+    cfg({});
+    const j = JSON.parse(launchCli(mk()).out);
+    expect(j.kb_access).toBe("inline");
+    expect(j.extra_allowed_tools).toEqual([]);
+    expect(j.prompt).toContain(BODY);
+  });
+
   it("cloudKb: inline eski çıktıyı verir: görev, not ve gate satır içi, izin yok, kb push adımı yok", () => {
     cfg({ cloudKb: "inline" });
     const id = mk();
@@ -79,7 +87,7 @@ describe("launch (varsayılan readonly): CLI uçtan uca", { timeout: 60_000 }, (
   });
 
   it("geçersiz cloudKb değeri: çıkış 1, görev queued kalır ve error yazılır", () => {
-    cfg({});
+    cfg({ cloudKb: "readonly" });
     const id = mk();
     cfg({ cloudKb: "yazilabilir" });
     const r = launchCli(id);
@@ -89,7 +97,7 @@ describe("launch (varsayılan readonly): CLI uçtan uca", { timeout: 60_000 }, (
   });
 
   it("yol kaçışı: bağımlılık kimliği '../' içeriyorsa launch reddedilir, görev queued kalır", () => {
-    cfg({});
+    cfg({ cloudKb: "readonly" });
     const id = mk();
     const f = taskFile(home, id);
     writeFileSync(f, readFileSync(f, "utf8").replace(/^phase:.*$/m, "$&").replace("\n---\n", "\ndepends_on:\n  - ../../x\n---\n"));
@@ -102,7 +110,7 @@ describe("launch (varsayılan readonly): CLI uçtan uca", { timeout: 60_000 }, (
 
 describe("pipeline fazı (readonly): çatı ve bağımlı rapor kb'den okunur, prompt'a girmez", { timeout: 60_000 }, () => {
   it("açılış adımları çatı ve bağımlı dosyaları sayar; çatı/bağımlı içerik ve gate sızmaz; inline kipte çatı+rapor gömülür", () => {
-    cfg({});
+    cfg({ cloudKb: "readonly" });
     const { parent, dep, phase } = pipeline();
     const ro = prepareCloudLaunch(phase, { remoteBranch: () => "exists" });
     expect(ro.kb_access).toBe("readonly");
@@ -124,7 +132,7 @@ describe("pipeline fazı (readonly): çatı ve bağımlı rapor kb'den okunur, p
 
 describe("sözleşme: launch çıktısı ↔ settings.json ↔ skill'ler", () => {
   it("extra_allowed_tools, .claude/settings.json izin listesiyle birebir; register_repo_root hiçbirinde yok", () => {
-    cfg({});
+    cfg({ cloudKb: "readonly" });
     const j = JSON.parse(launchCli(mk()).out);
     const allow = JSON.parse(readFileSync(join(root, ".claude", "settings.json"), "utf8")).permissions.allow as string[];
     expect([...allow].sort()).toEqual([...j.extra_allowed_tools].sort());
@@ -132,7 +140,7 @@ describe("sözleşme: launch çıktısı ↔ settings.json ↔ skill'ler", () =>
   });
 
   it("çalışanın yedek işareti (kb erişimi yok) status ve delegate skill'lerinde tanınan metinle aynı", () => {
-    cfg({});
+    cfg({ cloudKb: "readonly" });
     const { prompt } = JSON.parse(launchCli(mk()).out);
     expect(prompt).toMatch(/\[VLAD:LOG #n\] kb erişimi yok/);
     const status = readFileSync(join(root, ".claude", "skills", "status", "SKILL.md"), "utf8");
