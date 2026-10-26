@@ -17,7 +17,7 @@ let home: string;
 beforeAll(build, 120000);
 beforeEach(() => { home = makeHome(); });
 
-const setLauncher = (launcher: string) => writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher }));
+const setLauncher = (launcher: string) => writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher, cloudKb: "inline" }));
 const launch = (id: string, env: Record<string, string | undefined>) => vlad(home, ["task", "launch", id, "--json"], { env });
 const onLinux = process.platform === "linux";
 

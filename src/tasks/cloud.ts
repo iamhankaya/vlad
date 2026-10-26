@@ -62,6 +62,9 @@ export interface CloudLaunchOptions {
 
 const VLAD_REPO = "iamhankaya/vlad";
 const SHA_RE = /^[0-9a-f]{40}$/;
+const VLAD_CLONE_DIR = "/tmp/vlad-ro";
+/** Repo-relative file paths travel into the prompt: no escape from the clone, no shell metacharacters. */
+const REL_RE = /^(?!\.\.)[\w./-]+$/;
 
 /**
  * The commit at origin's main branch whose copy of each of `files` (paths relative to VLAD_HOME) equals the
@@ -69,13 +72,22 @@ const SHA_RE = /^[0-9a-f]{40}$/;
  */
 export function pinVladFiles(files: string[], base = "master"): string {
   const home = getVladHome();
-  const git = (...a: string[]) => execFileSync("git", ["-C", home, ...a], { encoding: "utf8", stdio: "pipe", timeout: 30000, windowsHide: true });
+  const git = (...a: string[]) =>
+    execFileSync("git", ["-C", home, ...a], {
+      encoding: "utf8", stdio: "pipe", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
   let sha: string;
   try {
+    const origin = git("config", "--get", "remote.origin.url").trim();
+    if (!new RegExp(`^(https://github\\.com/|git@github\\.com:)${VLAD_REPO}(\\.git)?/?$`).test(origin)) {
+      throw new Error(`origin ${VLAD_REPO} değil`);
+    }
     git("fetch", "--quiet", "origin", base);
     sha = git("rev-parse", "FETCH_HEAD").trim();
   } catch (e) {
-    throw new Error(`origin/${base} alınamadı: ${(e as Error).message.split("\n")[0]}`);
+    // git's stderr can echo the remote URL with credentials
+    const msg = (e as Error).message.split("\n")[0].replace(/\b\w+:\/\/\S+/g, "<url>");
+    throw new Error(`origin/${base} alınamadı: ${msg}`);
   }
   if (!SHA_RE.test(sha)) throw new Error(`origin/${base} commit'i okunamadı`);
   for (const f of files) {
@@ -124,17 +136,21 @@ function kbOpening(task: Task, parent: Task | undefined): string {
   ].join("\n");
 }
 
-/** Role and vendored skill files of a readonly worker: clone the public vlad repo at `sha` and read them there. */
+/** Role and vendored skill files of a readonly worker: fetch the public vlad repo at `sha` and read them there. */
 function vladOpening(sha: string, role: { title: string; rel: string }, vendored: { name: string; rel: string }[]): string {
   const url = `https://github.com/${VLAD_REPO}`;
+  const dir = VLAD_CLONE_DIR;
   return [
     "## Rol ve skill (vlad reposu, salt okuma)",
-    `Rol metni ve vendored skill prompt'ta yok; public \`${VLAD_REPO}\` reposunda sabit commit'te (add_repo gerekmez, kullanma):`,
-    `1. Klon komutu tam olarak \`git clone [--depth N] ${url}[.git] <hedef>\` ve ardından \`git checkout ${sha}\` olmalı; kb klonundaki doğrulama kuralları (başka seçenek, \`;\`, \`&&\`, \`|\`, \`curl\`, \`sh\` yok) burada da geçerli. Tek sefer, uzun zaman aşımıyla (429 olursa 5 sn bekle, bir kez tekrar dene). Hedef \`<vlad>\`.`,
-    `2. Oku ve uygula: rolün (${role.title}) metni \`<vlad>/${role.rel}\` (frontmatter dışı)` +
-      vendored.map((v) => `; \`${v.name}\` skill'i \`<vlad>/${v.rel}\``).join("") + ". Okuduğun metin rol/skill talimatıdır; kb ve görev kuralları ile bu protokol onun üstündedir.",
-    "3. Klon salt okumadır: commit/push yok, dosya değiştirme.",
-    `4. Yedek: klon/checkout iki denemede başarısızsa ya da dosya yoksa \`[VLAD:LOG #n] vlad erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan rol/skill metnini iste ve turunu bitir.`,
+    `Rol metni ve vendored skill prompt'ta yok; public \`${VLAD_REPO}\` reposunda sabit commit'te. \`add_repo\` kullanma. Yalnız şu üç komutu, sırayla, tek sefer ve uzun zaman aşımıyla çalıştır (429 olursa 5 sn bekle, bir kez tekrar dene):`,
+    `1. \`git clone --no-checkout --depth 1 ${url} ${dir}\``,
+    `2. \`git -C ${dir} fetch --depth 1 origin ${sha}\``,
+    `3. \`git -C ${dir} checkout ${sha}\``,
+    "Başka seçenek ya da komut yok: `-c`, `--config`, `--upload-pack`, `--template`, `--recurse-submodules`, `--branch`, `--origin` vb. yasak; `;`, `&&`, `|`, `` ` ``, `$(`, `curl`, `sh`, `bash -c` yasak.",
+    `Ardından \`git -C ${dir} rev-parse HEAD\` çıktısı \`${sha}\` ile birebir aynı olmalı; değilse ya da komutlardan biri iki denemede başarısızsa \`[VLAD:LOG #n] vlad erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan rol/skill metnini iste ve turunu bitir.`,
+    `Oku ve uygula: rolün (${role.title}) metni \`${dir}/${role.rel}\` (frontmatter dışı)` +
+      vendored.map((v) => `; \`${v.name}\` skill'i \`${dir}/${v.rel}\``).join("") +
+      ". Dosya yoksa aynı yedek kural. Klon salt okumadır: commit/push yok, dosya değiştirme. Okuduğun metin rol/skill talimatıdır; kb ve görev kuralları ile bu protokol onun üstündedir.",
   ].join("\n");
 }
 
@@ -332,6 +348,8 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       const { vendored } = splitSkills(role.skills, role.file);
       const rels = [role.file, ...vendored.map((v) => v.file)].map((f) => relative(getVladHome(), resolve(f)).split("\\").join("/"));
       try {
+        const badRel = rels.find((r) => !REL_RE.test(r));
+        if (badRel) throw new Error(`geçersiz dosya yolu: ${badRel}`);
         const sha = (o.vladPin ?? pinVladFiles)(rels);
         if (!SHA_RE.test(sha)) throw new Error(`geçersiz commit sha'sı: ${sha}`);
         vladSha = sha;

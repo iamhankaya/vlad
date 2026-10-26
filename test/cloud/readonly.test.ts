@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/kb/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { createTask, getTask, prepareCloudLaunch, reportTask, setState } from "../../src/tasks/index.js";
@@ -202,10 +202,10 @@ describe("role and vendored skill from the public vlad repo (T20261026-55)", () 
     expect(seen).toEqual([["roles/developer.md", "vendor/skills/ponytail/SKILL.md"]]);
     expect(r.prompt).not.toContain("ROL-GÖVDESİ");
     expect(r.prompt).not.toContain("SKILL-GÖVDESİ");
-    expect(r.prompt).toContain(`git checkout ${SHA}`);
-    expect(r.prompt).toContain("https://github.com/iamhankaya/vlad[.git]");
-    expect(r.prompt).toContain("`<vlad>/roles/developer.md`");
-    expect(r.prompt).toContain("`<vlad>/vendor/skills/ponytail/SKILL.md`");
+    expect(r.prompt).toContain(`checkout ${SHA}`);
+    expect(r.prompt).toContain("--no-checkout --depth 1 https://github.com/iamhankaya/vlad /tmp/vlad-ro");
+    expect(r.prompt).toContain("`/tmp/vlad-ro/roles/developer.md`");
+    expect(r.prompt).toContain("`/tmp/vlad-ro/vendor/skills/ponytail/SKILL.md`");
     expect(r.prompt).toContain("[VLAD:LOG #n] vlad erişimi yok");
     expect(r.prompt).toContain("superpowers:test-driven-development");
     expect(r.extra_allowed_tools).toEqual([ADD]);
@@ -217,7 +217,7 @@ describe("role and vendored skill from the public vlad repo (T20261026-55)", () 
     const r = prepareCloudLaunch(mk().data.id, { vladPin: () => { throw new Error("roles/developer.md origin/master'dan farklı"); } });
     expect(r.prompt).toContain("ROL-GÖVDESİ sorumluluk");
     expect(r.prompt).toContain("## Skill: ponytail\nSKILL-GÖVDESİ");
-    expect(r.prompt).not.toContain("git checkout");
+    expect(r.prompt).not.toContain("rev-parse HEAD");
     expect(r.warnings.join("\n")).toMatch(/gömüldü.*farklı/);
   });
 
@@ -239,22 +239,67 @@ describe("role and vendored skill from the public vlad repo (T20261026-55)", () 
 });
 
 describe("pinVladFiles", () => {
-  it("returns origin's sha for matching files; throws for dirty or unpushed ones", () => {
-    const run = (cwd: string, ...a: string[]) => execFileSync("git", a, { cwd, stdio: "pipe" });
+  const run = (cwd: string, ...a: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, encoding: "utf8", stdio: "pipe" });
+  const realHome = process.env.VLAD_HOME;
+  afterEach(() => { process.env.VLAD_HOME = realHome; });
+
+  /** A local "origin" with two commits and a clone of it whose origin URL is the public vlad URL (insteadOf-redirected). */
+  function setup(url = "https://github.com/iamhankaya/vlad") {
     const origin = mkdtempSync(join(tmpdir(), "vlad-origin-"));
     run(origin, "init", "-q", "-b", "master");
     mkdirSync(join(origin, "roles"));
     writeFileSync(join(origin, "roles", "a.md"), "A\n");
     run(origin, "add", ".");
-    run(origin, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x");
-    const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: origin, encoding: "utf8" }).trim();
+    run(origin, "commit", "-q", "-m", "x");
+    const first = run(origin, "rev-parse", "HEAD").trim();
+    writeFileSync(join(origin, "roles", "b.md"), "B\n");
+    run(origin, "add", ".");
+    run(origin, "commit", "-q", "-m", "y");
+    const sha = run(origin, "rev-parse", "HEAD").trim();
     const clone = mkdtempSync(join(tmpdir(), "vlad-clone-"));
-    run(clone, "clone", "-q", origin, ".");
+    run(clone, "init", "-q", "-b", "master");
+    run(clone, "remote", "add", "origin", url);
+    run(clone, "config", `url.${origin}.insteadOf`, url);
+    run(clone, "pull", "-q", "origin", "master");
     process.env.VLAD_HOME = clone;
+    return { origin, clone, sha, first };
+  }
+
+  it("returns origin's sha for matching files; throws for dirty or unpushed ones", () => {
+    const { clone, sha } = setup();
     expect(pinVladFiles(["roles/a.md"])).toBe(sha);
-    writeFileSync(join(clone, "roles", "a.md"), "B\n");
+    writeFileSync(join(clone, "roles", "a.md"), "X\n");
     expect(() => pinVladFiles(["roles/a.md"])).toThrow(/farklı/);
     writeFileSync(join(clone, "roles", "new.md"), "N\n");
     expect(() => pinVladFiles(["roles/new.md"])).toThrow(/yok/);
+  });
+
+  it("fails when origin is not the public vlad repo", () => {
+    setup("https://github.com/someone/else");
+    expect(() => pinVladFiles(["roles/a.md"])).toThrow(/vlad değil/);
+  });
+
+  it("the prompt's fetch-by-sha steps reach a sha that is behind a shallow tip", () => {
+    const { origin, sha, first } = setup();
+    const dst = join(mkdtempSync(join(tmpdir(), "vlad-ro-")), "ro");
+    const file = `file://${origin}`;
+    run(tmpdir(), "clone", "--no-checkout", "--depth", "1", file, dst);
+    // pin the older commit: the depth-1 clone does not have it until the fetch step
+    run(dst, "fetch", "--depth", "1", "origin", first);
+    run(dst, "checkout", first);
+    expect(run(dst, "rev-parse", "HEAD").trim()).toBe(first);
+    expect(first).not.toBe(sha);
+  });
+});
+
+describe("closed clone rule and path check in the prompt (T20261026-55 review)", () => {
+  const SHA = "0123456789abcdef0123456789abcdef01234567";
+  it("states the three allowed commands inline and the rev-parse check", () => {
+    const { prompt: p } = prepareCloudLaunch(mk().data.id, { vladPin: () => SHA });
+    expect(p).toContain(`git clone --no-checkout --depth 1 https://github.com/iamhankaya/vlad /tmp/vlad-ro`);
+    expect(p).toContain(`git -C /tmp/vlad-ro fetch --depth 1 origin ${SHA}`);
+    expect(p).toContain(`git -C /tmp/vlad-ro checkout ${SHA}`);
+    expect(p).toContain(`git -C /tmp/vlad-ro rev-parse HEAD`);
+    for (const bad of ["--recurse-submodules", "--branch", "--origin", "--upload-pack"]) expect(p).toContain(bad);
   });
 });
