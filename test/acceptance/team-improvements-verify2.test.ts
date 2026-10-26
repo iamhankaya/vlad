@@ -84,7 +84,7 @@ describe("BUG-1 uçtan uca: 3 haneli görev ID'leri", { timeout: 30_000 }, () =>
 
 describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task launch --json` bulut prompt'u", { timeout: 30_000 }, () => {
   const launch = (extra: string[] = [], card: Record<string, string> = {}) => {
-    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud", cloudKb: "inline" }));
     writeRoles(home);
     writeCard(home, "alpha", { repo: "iamhankaya/vlad", ...card });
     const id = newTask(home, ["--role", "tester", ...extra]);
@@ -95,7 +95,7 @@ describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task la
   const newParent = () => json(["task", "new", "--project", "alpha", "--title", "P", "--kind", "pipeline", "--json"]).id as string;
 
   it("gate + pipeline fazı: `## Proje kapısı` ve `## Entegrasyon öncesi kontrol` ikisi de, doğru içerikle", () => {
-    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud", cloudKb: "inline" }));
     writeRoles(home);
     writeCard(home, "alpha", { repo: "iamhankaya/vlad", gate: '"npm run build && npm test"' });
     const parent = newParent();
@@ -130,7 +130,7 @@ describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task la
   });
 
   it("yalnız parent (gate yok): entegrasyon kontrolü var, kapı bölümü yok", () => {
-    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud", cloudKb: "inline" }));
     writeRoles(home);
     writeCard(home, "alpha", { repo: "iamhankaya/vlad" });
     const parent = newParent();
@@ -142,7 +142,7 @@ describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task la
 
   it("3 haneli çatı ID'si prompt'ta tam yazılır (git merge vlad/T…-100)", () => {
     bumpCounterTo99();
-    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud" }));
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "cloud", cloudKb: "inline" }));
     writeRoles(home);
     const parent = newParent();
     expect(parent).toBe(`T${ymd()}-100`);

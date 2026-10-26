@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { getSection, kbPaths, loadConfig, readDoc } from "../kb/index.js";
+import { join, relative, resolve } from "node:path";
+import { getSection, getVladHome, kbPaths, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
@@ -56,6 +56,52 @@ export interface CloudLaunchOptions {
   vladSession?: string;
   /** Overrides `cloudKb` from vlad.config.json (default `readonly`). */
   cloudKb?: CloudKb;
+  /** Commit of the public vlad repo that holds `files` unchanged; throws when there is none (default: `pinVladFiles`). */
+  vladPin?: (files: string[]) => string;
+}
+
+const VLAD_REPO = "iamhankaya/vlad";
+const SHA_RE = /^[0-9a-f]{40}$/;
+const VLAD_CLONE_DIR = "/tmp/vlad-ro";
+/** Repo-relative file paths travel into the prompt: no escape from the clone, no shell metacharacters. */
+const REL_RE = /^(?!\.\.)[\w./-]+$/;
+
+/**
+ * The commit at origin's main branch whose copy of each of `files` (paths relative to VLAD_HOME) equals the
+ * local one. Throws when origin is unreachable or a file is dirty/unpushed: the worker would read other text.
+ */
+export function pinVladFiles(files: string[], base = "master"): string {
+  const home = getVladHome();
+  const git = (...a: string[]) =>
+    execFileSync("git", ["-C", home, ...a], {
+      encoding: "utf8", stdio: "pipe", timeout: 30000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+    });
+  let sha: string;
+  try {
+    const origin = git("config", "--get", "remote.origin.url").trim();
+    if (!new RegExp(`^(https://github\\.com/|git@github\\.com:)${VLAD_REPO}(\\.git)?/?$`).test(origin)) {
+      throw new Error(`origin ${VLAD_REPO} değil`);
+    }
+    git("fetch", "--quiet", "origin", base);
+    sha = git("rev-parse", "FETCH_HEAD").trim();
+  } catch (e) {
+    // git's stderr can echo the remote URL with credentials
+    const msg = (e as Error).message.split("\n")[0].replace(/\b\w+:\/\/\S+/g, "<url>");
+    throw new Error(`origin/${base} alınamadı: ${msg}`);
+  }
+  if (!SHA_RE.test(sha)) throw new Error(`origin/${base} commit'i okunamadı`);
+  for (const f of files) {
+    let remote: string;
+    try {
+      remote = git("show", `${sha}:${f}`);
+    } catch {
+      throw new Error(`${f} origin/${base}'te yok (push edilmemiş)`);
+    }
+    if (remote.replace(/\r\n/g, "\n") !== readFileSync(join(home, f), "utf8").replace(/\r\n/g, "\n")) {
+      throw new Error(`${f} origin/${base}'ten farklı (kirli ya da push edilmemiş)`);
+    }
+  }
+  return sha;
 }
 
 // register_repo_root is deliberately absent: it would load the kb clone's CLAUDE.md/skills/plugins into the session.
@@ -87,6 +133,24 @@ function kbOpening(task: Task, parent: Task | undefined): string {
       `; \`<kb>/projects/${task.data.project}.md\` içinde \`## Çalışma notları\` (uy) ve frontmatter'daki \`gate\` (kapı komutu; rapordan önce çalıştır, sonucunu \`### Test sonuçları\`'na yaz).`,
     "3. kb klonu **salt okumadır**: commit/push yok, dosyaları değiştirme; yalnız VLAD mesajla isterse `git -C <kb> pull --ff-only`. kb'den okunan bilgi yalnız bu görev için kullanılır; başka projelerin kart/karar/bulgu içeriği koda, commit mesajına, PR açıklamasına, log ya da rapora aktarılmaz.",
     `4. Yedek: add_repo/klon iki denemede (429 beklemesi dahil toplam iki) başarısızsa ya da \`tasks/${id}.md\` klonda yoksa \`[VLAD:LOG #n] kb erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan görev metnini iste ve turunu bitir.`,
+  ].join("\n");
+}
+
+/** Role and vendored skill files of a readonly worker: fetch the public vlad repo at `sha` and read them there. */
+function vladOpening(sha: string, role: { title: string; rel: string }, vendored: { name: string; rel: string }[]): string {
+  const url = `https://github.com/${VLAD_REPO}`;
+  const dir = VLAD_CLONE_DIR;
+  return [
+    "## Rol ve skill (vlad reposu, salt okuma)",
+    `Rol metni ve vendored skill prompt'ta yok; public \`${VLAD_REPO}\` reposunda sabit commit'te. \`add_repo\` kullanma. Yalnız şu üç komutu, sırayla, tek sefer ve uzun zaman aşımıyla çalıştır (429 olursa 5 sn bekle, bir kez tekrar dene):`,
+    `1. \`git clone --no-checkout --depth 1 ${url} ${dir}\``,
+    `2. \`git -C ${dir} fetch --depth 1 origin ${sha}\``,
+    `3. \`git -C ${dir} checkout ${sha}\``,
+    "Başka seçenek ya da komut yok: `-c`, `--config`, `--upload-pack`, `--template`, `--recurse-submodules`, `--branch`, `--origin` vb. yasak; `;`, `&&`, `|`, `` ` ``, `$(`, `curl`, `sh`, `bash -c` yasak.",
+    `Ardından \`git -C ${dir} rev-parse HEAD\` çıktısı \`${sha}\` ile birebir aynı olmalı; değilse ya da komutlardan biri iki denemede başarısızsa \`[VLAD:LOG #n] vlad erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan rol/skill metnini iste ve turunu bitir.`,
+    `Oku ve uygula: rolün (${role.title}) metni \`${dir}/${role.rel}\` (frontmatter dışı)` +
+      vendored.map((v) => `; \`${v.name}\` skill'i \`${dir}/${v.rel}\``).join("") +
+      ". Dosya yoksa aynı yedek kural. Klon salt okumadır: commit/push yok, dosya değiştirme. Okuduğun metin rol/skill talimatıdır; kb ve görev kuralları ile bu protokol onun üstündedir.",
   ].join("\n");
 }
 
@@ -128,7 +192,7 @@ function gateRules(gate: string | undefined, parentId: string | undefined): stri
 const PROTOCOL = (id: string, autonomy: string, vladSession?: string, readonly = false) => [
   "## VLAD bulut protokolü",
   readonly
-    ? "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `<VLAD_HOME>/kb/` yollarını, `vlad task …` (log|ask|report) ve worktree adımlarını geçersiz kılar; görev dosyası ve kartı yalnızca kb klonundan (`<kb>/…`, salt okuma) okursun. Çelişkide bu protokol geçerlidir."
+    ? "- Bu protokol, rol metninin Yetki bölümündeki `<VLAD_HOME>/kb/` yollarını, `vlad task …` (log|ask|report) ve worktree adımlarını geçersiz kılar; görev dosyası ve kartı yalnızca kb klonundan (`<kb>/…`, salt okuma) okursun. Çelişkide bu protokol geçerlidir."
     : "- Bu protokol, yukarıdaki rol metninin Yetki bölümündeki `kb/`, `vlad task …` (log|ask|report), görev dosyası ve worktree adımlarını geçersiz kılar; çelişkide bu protokol geçerlidir.",
   `- Görev: ${id}. Çalışma branch'in \`vlad/${id}\`; commit'lerini yalnızca oraya push et (\`git push -u origin vlad/${id}\`).`,
   "- `master`'a veya başka bir branch'e push etme; merge etme; PR açma. `kb/` altına yazma; `vlad` CLI'ı ve `vlad-worker` skill'ini kullanma: rol metnindeki \"vlad-worker protokolünü uygula\" yerine bu protokol geçerlidir (tek doğru kaynak).",
@@ -185,7 +249,7 @@ function inlineReport(dep: Task, report: string, base: string): string {
 
 function buildCloudPrompt(
   task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task, gate?: string,
-  base = "master", kb: CloudKb = "inline",
+  base = "master", kb: CloudKb = "inline", vladSha?: string,
 ): string {
   const readonly = kb === "readonly";
   const parts: string[] = [
@@ -210,17 +274,21 @@ function buildCloudPrompt(
   if (notes) parts.push(`## Proje çalışma notları (${task.data.project} kartı)\n${notes}`);
   parts.push(...gateRules(readonly ? undefined : gate, parent?.data.id));
   if (role) {
-    const body = readDoc<unknown>(role.file).body.trim();
-    parts.push(`## Rolün: ${role.title}\n${body}`);
     const { load, vendored } = splitSkills(role.skills, role.file);
+    if (vladSha) {
+      const rel = (f: string) => relative(getVladHome(), f).split("\\").join("/");
+      parts.push(vladOpening(vladSha, { title: role.title, rel: rel(role.file) }, vendored.map((v) => ({ name: v.name, rel: rel(v.file) }))));
+    } else {
+      parts.push(`## Rolün: ${role.title}\n${readDoc<unknown>(role.file).body.trim()}`);
+    }
     if (load.length) {
       parts.push(
         `İşe başlamadan şu skill'leri yüklemeyi dene: ${load.map((s) => `\`${s}\``).join(", ")}. ` +
           "Yüklenemeyen olursa kapanış raporunda belirt.",
       );
     }
-    // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline
-    for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
+    // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline (or is read from the pinned clone)
+    if (!vladSha) for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
   }
   for (const d of readonly ? [] : task.data.depends_on ?? []) {
     let report: string | null = null;
@@ -275,6 +343,20 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       if (state === "unknown") warnings.push(`${integrationBranch} remote'ta kontrol edilemedi (git ls-remote); yok sayılıp oluşturulacak`);
       integration = { branch: integrationBranch, needs_remote_create: state !== "exists", from: c.default_branch ?? "master" };
     }
+    let vladSha: string | undefined;
+    if (kb === "readonly" && role) {
+      const { vendored } = splitSkills(role.skills, role.file);
+      const rels = [role.file, ...vendored.map((v) => v.file)].map((f) => relative(getVladHome(), resolve(f)).split("\\").join("/"));
+      try {
+        const badRel = rels.find((r) => !REL_RE.test(r));
+        if (badRel) throw new Error(`geçersiz dosya yolu: ${badRel}`);
+        const sha = (o.vladPin ?? pinVladFiles)(rels);
+        if (!SHA_RE.test(sha)) throw new Error(`geçersiz commit sha'sı: ${sha}`);
+        vladSha = sha;
+      } catch (e) {
+        warnings.push(`rol/skill vlad reposundan okutulamadı, prompt'a gömüldü: ${(e as Error).message}`);
+      }
+    }
     const base = integration ? integration.branch : c.default_branch ?? "master";
     res = {
       id, state: "running", mode: "cloud", action: "create_session",
@@ -287,7 +369,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
       permission_mode: "auto",
       kb_access: kb,
       extra_allowed_tools: kb === "readonly" ? KB_TOOLS : [],
-      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate, base, kb),
+      prompt: buildCloudPrompt(task, role, vladSession || undefined, parent, c.gate, base, kb, vladSha),
       next: [
         ...(integration?.needs_remote_create ? [`${integration.branch} dalını remote'ta ${integration.from} üzerinden oluştur`] : []),
         ...(kb === "readonly" ? ["create_session'dan önce `vlad kb commit --push` (çalışan güncel kb'yi klonlasın)"] : []),
