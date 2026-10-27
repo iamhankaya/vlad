@@ -16,6 +16,7 @@ import { markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe } from "./liveness.js";
 import { effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
 import type { Task } from "./store.js";
+import { trustWorktree, untrustWorktree } from "./trust.js";
 
 const ALL_STATES: TaskState[] = [
   "queued", "running", "blocked", "stalled", "awaiting_approval", "done", "failed", "cancelled",
@@ -168,6 +169,10 @@ export async function launchTask(
     return problems.join("; ");
   };
 
+  // a worktree missing from ~/.claude.json parks the worker on the "Quick safety check" screen
+  const trustWarning = trustWorktree(wt);
+  if (trustWarning) console.error(`uyarı: ${trustWarning}`);
+
   const model = effectiveModel(task.data, role);
   let failure: string | null = null;
   try {
@@ -185,6 +190,7 @@ export async function launchTask(
   }
   if (failure) {
     const cleanup = undo();
+    untrustWorktree(wt);
     if (cleanup) failure += `; temizlik başarısız: ${cleanup}`;
     recordError(id, failure);
     throw new Error(failure);
@@ -227,6 +233,8 @@ export function cleanupTask(
     }
     removeTaskWorktree(projectPath(t.data.project), wt, id);
   }
+  const trustWarning = untrustWorktree(wt);
+  if (trustWarning) console.error(`uyarı: ${trustWarning}`);
   t.data.worktree = null;
   saveTask(t);
 }
