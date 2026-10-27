@@ -7,6 +7,7 @@
   "kbDir": "../vlad-kb",
   "worktreeDir": "{repo}-wt",
   "projects": {
-    "watchparty": { "autonomy": "commit" }
+    "watchparty": { "autonomy": "commit" },
+    "ashen-bastion": { "autonomy": "pr" }
   }
 }
