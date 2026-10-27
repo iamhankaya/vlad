@@ -10,12 +10,12 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the eleven roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
+  it("the twelve roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
       analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory",
-      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", tester: "executor",
+      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", "security-reviewer": "advisory", tester: "executor",
     });
     for (const r of roles) {
       expect(Array.isArray(r.skills), `${r.slug} skills`).toBe(true);
@@ -24,6 +24,14 @@ describe("repo roles/", () => {
       const body = readFileSync(r.file, "utf8");
       for (const h of ["## Sorumluluk", "## Yetki", "## Kaynaklar", "## Çıktı"]) expect(body, `${r.slug} ${h}`).toContain(h);
     }
+  });
+
+  it("security-reviewer is advisory, loads security-audit in guidance mode and never pushes", () => {
+    const { roles } = listRolesWithWarnings(dir);
+    const r = roles.find((x) => x.slug === "security-reviewer");
+    expect(r?.skills).toContain("security-audit");
+    const body = readFileSync(r!.file, "utf8");
+    for (const w of ["guidance", "### Bulgular", "### Kapsam", "### Açık noktalar", "exposure"]) expect(body, w).toContain(w);
   });
 
   it("architect carries ### Sistem tasarımı scaled by exposure; analyst carries ### Sistem etkisi", () => {
