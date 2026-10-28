@@ -17,6 +17,10 @@ const GATE_SKILLS = ["second-opinion", "integrate"];
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 const SKILL_MD = /([^/\\]+)[/\\]SKILL\.md$/i;
 
+// a command line is split at ; && || | and newlines; a segment is a push only if it starts with `git [-C dir] push`
+const GIT_SPLIT = /&&|\|\||[;|\n]/;
+const GIT_PUSH = /^\s*git\s+(?:-[cC]\s+\S+\s+)*push\b/;
+
 export interface TranscriptScan { loaded: Record<string, number>; pushed: boolean }
 
 /** Counts `Skill` tool calls and `SKILL.md` reads (vendored skills are read, not loaded) by bare skill name; notes a `git push`. */
@@ -36,7 +40,7 @@ export function scanTranscript(jsonl: string): TranscriptScan {
       else if (p.name === "Read" && typeof p.input?.file_path === "string") {
         const m = SKILL_MD.exec(p.input.file_path);
         if (m) count(m[1]);
-      } else if (p.name === "Bash" && /\bgit\b.*\bpush\b/.test(String(p.input?.command ?? ""))) pushed = true;
+      } else if (p.name === "Bash" && String(p.input?.command ?? "").split(GIT_SPLIT).some((c) => GIT_PUSH.test(c))) pushed = true;
     }
   }
   return { loaded, pushed };

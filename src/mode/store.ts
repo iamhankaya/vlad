@@ -11,7 +11,9 @@ const file = () => join(kbPaths().kb, "mode.json");
 function read(): ModeFile {
   try {
     const o = JSON.parse(readFileSync(file(), "utf8")) as Partial<ModeFile>;
-    return { night: o.night ?? null, watch: o.watch === true };
+    const n = o.night;
+    const night = n && typeof n.until === "string" ? { ...n, projects: Array.isArray(n.projects) ? n.projects : [], note: n.note ?? null } : null;
+    return { night, watch: o.watch === true };
   } catch {
     return { night: null, watch: false }; // missing or corrupt file = mode off
   }
@@ -45,8 +47,8 @@ export function setNight(o: { until: string; projects?: string[]; note?: string 
   return night;
 }
 
-export function setWatch(on: boolean): void {
-  write({ ...read(), watch: on });
+export function setWatch(on: boolean, now: Date = new Date()): void {
+  write({ night: modeStatus(now).night, watch: on }); // an elapsed window is dropped here, not announced a second time
 }
 
 export function setOff(): void {
@@ -70,8 +72,8 @@ export function expireMode(now: Date): boolean {
 export function modeLine(now: Date): string | null {
   const s = modeStatus(now);
   if (s.night) {
-    const hm = s.night.until.slice(11, 16);
-    return `gece modu etkin (${hm}'e kadar${s.night.projects.length ? `; ${s.night.projects.join(", ")}` : ""}${s.night.note ? `; ${s.night.note}` : ""}), bekçi açık`;
+    const until = s.night.until.slice(5, 16).replace("T", " "); // MM-DD HH:MM: a window that rolled into tomorrow shows
+    return `gece modu etkin (${until}'e kadar${s.night.projects.length ? `; ${s.night.projects.join(", ")}` : ""}${s.night.note ? `; ${s.night.note}` : ""}), bekçi açık`;
   }
   if (s.expired) return "gece modu bitti: yetki penceresi doldu, sormadan merge yok";
   return s.watch ? "bekçi modu açık" : null;

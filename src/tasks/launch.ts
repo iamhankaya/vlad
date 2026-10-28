@@ -303,7 +303,7 @@ export function statusSummary(
     ...markSilentWorkers(now, cfg, probe, platform),
   ].map((t) => t.data.id);
   const mode = modeLine(now);
-  expireMode(now); // an elapsed window is reported once, then cleared
+  try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
   for (const t of tasks) counts[t.data.state]++;
