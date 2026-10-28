@@ -81,10 +81,11 @@ describe("/digest SKILL.md: kullanıcı onayı kuralı (T20261026-01)", () => {
 describe("/status SKILL.md: projeler arası kapı (F-vlad-063)", () => {
   const md = read(".claude/skills/status/SKILL.md");
 
-  it("merge kapısı projeler arası fazı ve integration_worktrees alanını anlatır", () => {
-    expect(md).toMatch(/\*\*Projeler arası fazda\*\*/);
-    expect(md).toContain("integration_worktrees");
-    expect(md).toMatch(/\{project, repo, branch, worktree\}/);
+  it("merge kapısı projeler arası fazı ve integration_worktrees alanını anlatır (yordam `integrate` skill'inde)", () => {
+    const integrate = read(".claude/skills/integrate/SKILL.md");
+    expect(md).toContain("`integrate`");
+    expect(integrate).toMatch(/\*\*Çok projeli/);
+    expect(integrate).toContain("integration_worktrees");
   });
 
   it("son kapı her projede ayrı doğrulama; cleanup tüm projeleri kapsar", () => {

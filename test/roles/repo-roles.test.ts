@@ -166,17 +166,19 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     const delegate = read(".claude/skills/delegate/SKILL.md");
     expect(delegate).toContain("Erken (ara) denetim");
     expect(delegate).toContain("Güvenlik incelemesi");
-    expect(delegate).toContain("security-review");
+    expect(delegate).toContain("security-reviewer");
     expect(read("roles/designer.md")).toContain("ara denetim");
     expect(read("roles/developer.md")).toMatch(/Chromium\/Playwright/);
     const status = read(".claude/skills/status/SKILL.md");
     expect(status).toContain("Güvenlik incelemesi");
-    expect(status).toContain("security-review");
+    expect(status).toContain("security-reviewer");
     expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
   });
 
   it("security review is tiered: critical/high blocks, lower go to findings, 1 round, exception tied to the finding", () => {
-    for (const f of [".claude/skills/status/SKILL.md", ".claude/skills/delegate/SKILL.md"]) {
+    // single source: status holds the rule, delegate only points to it (T20261028-15)
+    expect(read(".claude/skills/delegate/SKILL.md")).toMatch(/\/status[^.]*Kademeli güvenlik kuralı/);
+    for (const f of [".claude/skills/status/SKILL.md"]) {
       const t = read(f);
       expect(t, f).toContain("Kademeli güvenlik kuralı");
       expect(t, f).toMatch(/kritik\/yüksek[^.]*merge/);

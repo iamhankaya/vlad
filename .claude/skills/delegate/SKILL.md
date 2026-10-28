@@ -55,7 +55,7 @@ vlad project list --json
 
 **Dağıtım/altyapıya dokunuyorsa `prova` fazını ekle** (iş dağıtım betiğini, CI tanımını, Dockerfile/compose/systemd'yi veya altyapıyı değiştiriyorsa; yoksa ekleme): `prova` (devops, dev, bağımlılık: `uygulama`) — `doğrulama` ile paralel ya da canlıya alma kapısından önce. Devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail/SIGPIPE, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder; Docker yoksa neyi prova edemediğini raporlar. Kırmızı prova canlıya almayı engeller (`/status` son kapı).
 
-**Güvenlik incelemesi:** bir faz auth, yetki, oturum veya veri silmeye dokunuyorsa, ya da VLAD güvenlik etkili bir kararı otonom verecekse (ör. SEC-08 (b) türü seçim), ilgili fazın Tanım'ına "rapordan sonra kısa güvenlik incelemesi" ekle ve taslakta ayrıca belirt. İnceleme arka plan agent'ıyla ya da `security-review` skill'iyle yapılır; bulgular fazın kapısında gösterilir (`/status`). **Kademeli güvenlik kuralı:** kritik/yüksek bulgu varsa merge yok, değişiklik isteği (düzeltme fazı); orta/düşük/bilgi bulgular için değişiklik turu açılmaz: `vlad finding add` ile kaydedilir (deferred ya da open) ve son kapı listesine girer, faz merge edilebilir; faz başına en çok 1 güvenlik değişiklik turu, ikinci turda kalan yüksek bulgu kullanıcıya sorulur. İstisna (bulguya bağlı): orta bulgu yalnız şu iki koşul birlikte sağlanırsa tur açar: kartın `exposure`'ı `internet` ve bulgu dışarıdan doğrudan istismar edilebilir (kimlik doğrulamasız erişim, sır/anahtar sızıntısı, imza/onay atlatma, yetki yükseltme). Bu tür bir kararı kullanıcıya sormadan verme: gerekçesiyle taslağa yaz.
+**Güvenlik incelemesi:** bir faz auth, yetki, oturum veya veri silmeye dokunuyorsa ya da VLAD güvenlik etkili bir kararı otonom verecekse, ilgili fazın Tanım'ına "rapordan sonra kısa güvenlik incelemesi" ekle ve taslakta ayrıca belirt. İnceleme `security-reviewer` rolüyle arka plan agent'ı olarak yapılır (`security-audit` skill'i, guidance modu). Bulguların nasıl ele alınacağı (kritik/yüksek durdurur, orta/düşük kaydedilir, `exposure` istisnası) `/status`'taki Kademeli güvenlik kuralıdır; burada tekrarlanmaz. Bu tür bir kararı kullanıcıya sormadan verme: gerekçesiyle taslağa yaz.
 
 **Dış API gerçek fixture'ı:** iş dış bir API/servis yanıtına dayanıyorsa `spec`/`plan` fazının Tanım'ına "plan öncesi gerçek yanıt örnekleri" ekle (analyst/architect gerçek yanıtı kaydedip raporda verir; yoksa kullanıcıdan alınacağını `### Açık noktalar`'a yazar). Taslakta örnek yoksa bunu uyarı olarak göster ve kullanıcıdan iste. Kabul ve unit testler kaydedilmiş gerçek fixture'a karşı yazılır; uydurma yanıt şekline değil.
 
@@ -152,7 +152,7 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
    vlad task new --project <slug> --title "<başlık>" --kind pipeline --body-file <çatı.md> --json
    ```
    Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`).
-2. Fazlar, tablodaki **sırayla**. Her faz için gövde: `## Tanım` (fazın payı), `## Kabul kriterleri` (rolün `## Çıktı`'sı ve işin kriterlerinden bu faza düşenler), `## Bağlam` (çatı ID'si; "girdi: bağımlı olduğun görevlerin `## Kapanış raporu`"). Bağımlılık yalnızca **daha önce oluşturulmuş** fazlara verilir; tablodaki numaraları oluşan ID'lere çevir:
+2. Fazlar, tablodaki **sırayla**. Her faz için gövde: `## Tanım` (fazın payı), `## Kabul kriterleri` (rolün `## Çıktı`'sı ve işin kriterlerinden bu faza düşenler), `## Bağlam` (çatı ID'si; "girdi: bağımlı olduğun görevlerin `## Kapanış raporu`"). Bağımlılık yalnızca **daha önce oluşturulmuş** fazlara verilir; tablodaki numaraları oluşan ID'lere çevir (sonradan değiştirmek gerekirse `vlad task deps <id> --set|--add|--remove|--clear`, yalnız `queued` fazda):
    ```
    vlad task new --project <slug> --title "<başlık> — <faz>" --kind <dev|research> --role <slug> [--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]] --parent <çatı-id> [--depends-on <id1,id2>] --phase <faz> --body-file <faz.md> --json
    ```
@@ -166,6 +166,8 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
 
 ## 5a. dev → çalışanı başlat
 
+Yetki, entegrasyon, CI tur kuralı ve gerçek kaynak koruması launch prompt'una **otomatik girer** ("VLAD standart blokları", `src/tasks/blocks.ts`); görev Tanım'ına elle yazma.
+
 Önce bildirim kanalını hazırla: `ListAgents` çalıştır, ilk satırdaki `This session is <ad>` adını al ve `vlad session register <ad>` çalıştır (açılışta yapıldıysa da tekrar etmek zararsızdır). Böylece çalışan bitince sana `SendMessage` atabilir.
 
 Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bash aracıyla değil. Pencere WMI (`Win32_Process.Create`) ile açılır ve bu çağrı Bash aracından çalıştırılınca başarısız olur (kod 8):
@@ -177,6 +179,8 @@ vlad task launch <id> --json
 - Pipeline fazı (`parent` dolu): ilk fazda entegrasyon branch'i `vlad/<çatı-id>` ve worktree'si (`<worktreeDir>/<çatı-id>`) açılır, çatı `running` olur; fazın branch'i entegrasyon branch'inden açılır. Kullanıcıya ikisini de göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.
 - `--dry-run` önizleme değildir: worktree + branch oluşturur ve görevi terminal açmadan `running` yapar (yalnızca test içindir). Bu yüzden "önce dry-run ile göster" diye kullanma.
+
+**İzin kalıpları:** çalışanın `git push origin vlad/<id>` ya da `gh run watch` komutu izin sınıflandırıcısından reddediliyorsa kullanıcıdan `settings.json`'a `Bash(git push origin vlad/*)` ve `Bash(gh run:*)` kalıplarını eklemesini iste; kalıbı sen yazmazsın, çalışan da kendi izin ayarını değiştirmez. Kurallar `vlad-worker` skill'inde tek kaynaktır.
 
 ### 5a-cloud. Bulut modu (VLAD bulutta çalışıyorsa)
 
@@ -211,9 +215,11 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 2. **Taslak:** architect rolüyle arka plan agent'ı (5b'deki rol, skill ve `depends_on` cümleleriyle; girdi spec fazının raporu). Rolün `## Çıktı` başlıklarıyla taslak plan döndürür. Taslağı geçici dosyada tut; `vlad task log <id> "Plan taslağı hazır"`.
    Bu adımdaki tüm arka plan agent'larını (taslak, eleştiri, son plan) kullandıkları rolün modeliyle başlat, plan görevinin kendi `model`'i varsa (`effective_model`) onunla (Agent aracının `model` parametresi); ikisi de boşsa varsayılan.
 3. **Eleştiri:** iki arka plan agent'ı paralel — biri `roles/developer.md`, biri `roles/tester.md` rol dosyasıyla. Prompt: spec raporu + taslak plan; "Rol dosyasından yalnızca rolün bakış açısını al; Yetki, iş akışı ve commit kuralları bu görevde geçerli değil. Kendi rolünün gözüyle eleştir: uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde. Kod yazma, dosya değiştirme, skill yükleme." Her biri için `vlad task log <id> "<Developer|Tester> eleştirisi: <kısa özet>"`.
-   **Codex eleştirisi (3. göz):** iki agent'la paralel, Codex'e de aynı eleştiri talimatını ver: taslağı ve spec raporunu geçici bir dosyaya yaz, `codex exec -m gpt-6-astra -c model_reasoning_effort="medium" -c 'windows.sandbox="unelevated"' -s read-only -C <proje-yolu> -o <çıktı.md> "<plan taslağı + yukarıdaki eleştiri talimatı>"` (PowerShell aracıyla) çalıştır (Windows'ta `-c` bayrağı şart: onsuz sandbox tüm komutları "blocked by policy" ile reddeder ve repo okunamaz), `<çıktı.md>`'yi oku ve `vlad task log <id> "Codex eleştirisi: <kısa özet>"` yaz. Model yoksa/komut model nedeniyle başarısızsa `-m` ve `model_reasoning_effort` olmadan (varsayılan modelle) bir kez daha dene ve bunu `vlad task log`'a yaz; Codex kurulu değilse (`codex --version` hata verir) veya yine başarısız olursa atla; bunu log'a ve plan raporuna "Codex eleştirisi alınamadı: <neden>" diye yaz.
+   **Codex eleştirisi (3. göz):** iki agent'la paralel, `second-opinion` skill'ini mod `plan` ile uygula (komut, model, yedek ve loglama orada). Skill yüklenemezse eleştiri adımı durur ve kullanıcıya söylenir.
 4. **Son plan:** architect agent'ına taslak + eleştirileri (developer, tester, varsa Codex) ver; son planı ve `### Eleştiriler ve nasıl ele alındı` bölümünü yazdır.
 5. Rapora yalnızca son plan girer (ara ürünler log'da kalır): `vlad task report <id> --file <plan.md> --json`, sonra 5b adım 5.
+
+**Safeguard kesintisi:** architect/Sonnet agent'ı güvenlik filtresiyle kesilirse aynı taslağı kısa, temiz bir bağlamla yeniden iste (yalnız girdi raporu + görev dosyası). İkinci kesintide taslağı Codex tek başına yazsın (`second-opinion` skill'i) ve `vlad task log <id> "Safeguard kesintisi: <ne>"` düş.
 
 ## 7. Danışman yan görevleri
 

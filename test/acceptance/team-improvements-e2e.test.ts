@@ -299,7 +299,7 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
   });
   it("her faz adı için ya bir rol çıktısı ya spec satırı vardır; roller kind'ı CLAUDE.md'deki gruplarla uyuşur", () => {
     const claude = read("CLAUDE.md");
-    const advisory = ["finans", "pazarlama", "growth", "analyst", "architect"];
+    const advisory = ["finans", "pazarlama", "growth", "analyst", "architect", "security-reviewer"];
     const executor = ["developer", "tester", "designer", "devops", "game-developer", "game-director"];
     for (const r of advisory) expect(read(`roles/${r}.md`), r).toMatch(/^kind: advisory$/m);
     for (const r of executor) expect(read(`roles/${r}.md`), r).toMatch(/^kind: executor$/m);

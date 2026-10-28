@@ -59,8 +59,16 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 
 - Yalnızca `vlad/<id>` branch'inde commit'le.
 - `autonomy: pr` ise: `git push -u origin vlad/<id>` ve `gh pr create`.
-- **Asla merge etme. Asla başka bir branch'e push etme.** `autonomy: commit` veya `plan` ise hiç push etme.
-- Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e asla merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et.
+- **Asla entegrasyon/ana branch'e merge etme. Asla `vlad/<id>` dışında bir branch'e push etme.** `autonomy: commit` veya `plan` ise hiç push etme.
+- Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. Tek serbest olan, entegrasyon branch'ini **kendi dalına** almaktır (adım 6). `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et; push sonrası CI'ı `ci-triage` skill'iyle izle (yüklü değilse görev prompt'undaki "VLAD standart blokları" yeterlidir).
+
+**Boşta bekleme:** uzun bir bekleme (CI, kullanıcı cevabı) için oturumu tüketme. Tek bir `gh run watch` kullan, yoklama döngüsü kurma; bellek/oturum uyarısı ya da ~20 dk sessizlik olursa bekleyişi bırak, `vlad task log <id> "bekliyor: <ne>"` yaz ve raporla ya da `vlad task ask` ile sor.
+
+**CI tur kuralı:** kendi kırmızını düzeltip yeniden push edebilirsin; aynı neden ikinci kez kırmızı çıkarsa dur ve `vlad task ask` ile sor. Entegrasyon dalından gelen (kendi değişikliğin olmayan) kırmızı tur sayılmaz: düzeltmeye çalışma, `### Açık noktalar`'a yaz.
+
+**visual-proof:** görünür bir değişiklik (UI, oyun sahnesi, çıktı biçimi) yaptıysan rapordan önce önce/sonra kanıtını aynı senaryoyla üret (ekran görüntüsü ya da kare yolu), raporun `### Test sonuçları`'nda ver; görüntüyü commit'leme. Üretemiyorsan "öz-kontrol yapılamadı" yaz.
+
+**İzin kalıpları:** Claude Code'un izin sınıflandırıcısı bilinen komutları reddedebilir: `git push origin vlad/<id>` ya da `gh run watch` reddedilirse komutu başka biçimde zorlama, `vlad task ask` ile sor; kullanıcı `settings.json`'a `Bash(git push origin vlad/*)` benzeri kalıp ekler (çalışan kendi izin ayarını değiştirmez). Safeguard/oturum kesintisinde iş kaybolmasın diye checkpoint kuralını (WIP commit + "kaldığım yer") uygula.
 
 ## 6. Kapanış raporu
 
@@ -73,6 +81,7 @@ Değişiklik turunda (VLAD düzeltme isteyip seni sürdürdüyse) rapor yine **t
 Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
 ### Yapılanlar
+(developer/game-developer: sonuna tek **Ölçüm satırı**: `Ölçüm: dosya=<n> satır=+<a>/-<d> yeni_test=<n> ci_tur=<n> review_bulgusu=<n>`; `/digest` bunları sayar)
 ### Test sonuçları
 (çalıştırılan komutlar ve sonuçları; kartta `gate` varsa önce o)
 ### Kabul kriterleri
