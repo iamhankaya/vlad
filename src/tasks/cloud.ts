@@ -4,6 +4,8 @@ import { join, relative, resolve } from "node:path";
 import { getSection, getVladHome, kbPaths, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
+import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
+import type { BlockCtx } from "./blocks.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState, unmetDependencies } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -172,21 +174,11 @@ function workNotes(slug: string): string | null {
   return getSection(readDoc<ProjectCard>(file).body, "## Çalışma notları") || null;
 }
 
-/** Gate command and (in a pipeline) the pre-integration check; the cloud worker cannot read the card or vlad-worker. */
-function gateRules(gate: string | undefined, parentId: string | undefined): string[] {
-  const out: string[] = [];
-  if (gate) {
-    out.push(
-      `## Proje kapısı\nProjenin kapı komutu: \`${gate}\`. Rapordan önce çalıştır, sonucunu \`### Test sonuçları\`'na yaz.`,
-    );
-  }
-  if (parentId) {
-    out.push(
-      `## Entegrasyon öncesi kontrol\nRapordan önce entegrasyon branch'ini kendi branch'ine al: \`git fetch origin vlad/${parentId}\` + \`git merge vlad/${parentId}\`. ` +
-        "Ardından lint + gate/tam testi koş. Çakışma ya da kırmızı varsa çözmeye çalışıp kapsamı genişletme; `### Test sonuçları` ve `### Açık noktalar`'da raporla.",
-    );
-  }
-  return out;
+/** The card's gate command; the cloud worker cannot read the card. The pipeline pre-integration check lives in blocks.ts. */
+function gateRules(gate: string | undefined): string[] {
+  return gate
+    ? [`## Proje kapısı\nProjenin kapı komutu: \`${gate}\`. Rapordan önce çalıştır, sonucunu \`### Test sonuçları\`'na yaz.`]
+    : [];
 }
 
 const PROTOCOL = (id: string, autonomy: string, vladSession?: string, readonly = false) => [
@@ -272,7 +264,7 @@ function buildCloudPrompt(
   }
   const notes = readonly ? null : workNotes(task.data.project);
   if (notes) parts.push(`## Proje çalışma notları (${task.data.project} kartı)\n${notes}`);
-  parts.push(...gateRules(readonly ? undefined : gate, parent?.data.id));
+  parts.push(...gateRules(readonly ? undefined : gate));
   if (role) {
     const { load, vendored } = splitSkills(role.skills, role.file);
     if (vladSha) {
@@ -299,6 +291,12 @@ function buildCloudPrompt(
     } catch { /* reported as missing below */ }
     parts.push(`## Girdi: ${d} kapanış raporu\n${report && dep ? inlineReport(dep, report, base) : "(rapor yok)"}`);
   }
+  parts.push(
+    [
+      `## ${BLOCKS_HEADING}`,
+      ...standardBlocks({ taskId: task.data.id, autonomy: task.data.autonomy as BlockCtx["autonomy"], parent: parent?.data.id ?? null, mode: "cloud" }),
+    ].join("\n"),
+  );
   parts.push(PROTOCOL(task.data.id, task.data.autonomy, vladSession, readonly));
   return parts.join("\n\n");
 }

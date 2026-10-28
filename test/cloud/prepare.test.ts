@@ -169,7 +169,8 @@ describe("prepareCloudLaunch", () => {
       const { pipe, prompt } = setup(big + "\nTam metin: docs/spec/x.md\n");
       const p = prompt();
       expect(p).toContain(`Tam metin \`vlad/${pipe.data.id}\` branch'inde: \`docs/spec/x.md\``);
-      expect(p.length).toBeLessThan(big.length / 2);
+      // the prompt also carries the standard blocks (~2.5 KB), so the bound is not half of the report any more
+      expect(p.length).toBeLessThan(big.length * 0.7);
     });
 
     it("over the limit with report_file in the frontmatter", () => {
