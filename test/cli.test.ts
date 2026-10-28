@@ -212,6 +212,21 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     const l = JSON.parse(vlad(["task", "list", "--parent", p, "--json"]).out);
     expect(l.tasks.map((t: { id: string; depends_on: string[] }) => [t.id, t.depends_on])).toEqual([[a, []], [b, [a]]]);
   });
+  it("task deps: --set/--clear, json shape, one mode required, cycle error leaves stderr JSON", () => {
+    const newTask = (...a: string[]) => JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "T", ...a, "--json"]).out).id as string;
+    const p = newTask("--kind", "pipeline");
+    const a = newTask("--kind", "research", "--parent", p);
+    const b = newTask("--kind", "research", "--parent", p, "--depends-on", a);
+    const r = JSON.parse(vlad(["task", "deps", b, "--set", `${a}, `, "--json"]).out);
+    expect(r).toEqual({ id: b, previous: [a], depends_on: [a], changed: false, dependencies_satisfied: false, warnings: [] });
+    const c = JSON.parse(vlad(["task", "deps", b, "--clear", "--json"]).out);
+    expect(c).toMatchObject({ depends_on: [], changed: true, dependencies_satisfied: true, warnings: [`faz bağımlılıksız kaldı: ${b}`] });
+    expect(vlad(["task", "deps", b, "--json"]).code).toBe(1);
+    expect(vlad(["task", "deps", a, "--set", b, "--json"]).code).toBe(0);
+    const cyc = vlad(["task", "deps", b, "--set", a, "--json"]);
+    expect(cyc.code).toBe(1);
+    expect(JSON.parse(cyc.err).error).toMatch(/döngü/);
+  });
   it("task session sets session_id without changing state", () => {
     const id = mkTask();
     const r = vlad(["task", "session", id, "sess-123", "--json"]);

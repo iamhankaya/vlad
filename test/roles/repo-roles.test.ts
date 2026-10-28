@@ -10,12 +10,12 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the eleven roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
+  it("the twelve roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
       analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory",
-      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", tester: "executor",
+      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", "security-reviewer": "advisory", tester: "executor",
     });
     for (const r of roles) {
       expect(Array.isArray(r.skills), `${r.slug} skills`).toBe(true);
@@ -24,6 +24,14 @@ describe("repo roles/", () => {
       const body = readFileSync(r.file, "utf8");
       for (const h of ["## Sorumluluk", "## Yetki", "## Kaynaklar", "## Çıktı"]) expect(body, `${r.slug} ${h}`).toContain(h);
     }
+  });
+
+  it("security-reviewer is advisory, loads security-audit in guidance mode and never pushes", () => {
+    const { roles } = listRolesWithWarnings(dir);
+    const r = roles.find((x) => x.slug === "security-reviewer");
+    expect(r?.skills).toContain("security-audit");
+    const body = readFileSync(r!.file, "utf8");
+    for (const w of ["guidance", "### Bulgular", "### Kapsam", "### Açık noktalar", "exposure"]) expect(body, w).toContain(w);
   });
 
   it("architect carries ### Sistem tasarımı scaled by exposure; analyst carries ### Sistem etkisi", () => {
@@ -158,17 +166,19 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     const delegate = read(".claude/skills/delegate/SKILL.md");
     expect(delegate).toContain("Erken (ara) denetim");
     expect(delegate).toContain("Güvenlik incelemesi");
-    expect(delegate).toContain("security-review");
+    expect(delegate).toContain("security-reviewer");
     expect(read("roles/designer.md")).toContain("ara denetim");
     expect(read("roles/developer.md")).toMatch(/Chromium\/Playwright/);
     const status = read(".claude/skills/status/SKILL.md");
     expect(status).toContain("Güvenlik incelemesi");
-    expect(status).toContain("security-review");
+    expect(status).toContain("security-reviewer");
     expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
   });
 
   it("security review is tiered: critical/high blocks, lower go to findings, 1 round, exception tied to the finding", () => {
-    for (const f of [".claude/skills/status/SKILL.md", ".claude/skills/delegate/SKILL.md"]) {
+    // single source: status holds the rule, delegate only points to it (T20261028-15)
+    expect(read(".claude/skills/delegate/SKILL.md")).toMatch(/\/status[^.]*Kademeli güvenlik kuralı/);
+    for (const f of [".claude/skills/status/SKILL.md"]) {
       const t = read(f);
       expect(t, f).toContain("Kademeli güvenlik kuralı");
       expect(t, f).toMatch(/kritik\/yüksek[^.]*merge/);

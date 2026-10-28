@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   appendToSection, autonomyFor, CLOUD_ID_FLOOR, getSection, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
-  setSection, validate, writeDoc,
+  setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskModel, TaskState } from "../kb/index.js";
 import { getRole, type Role } from "../roles/store.js";
@@ -48,12 +48,129 @@ function checkLinks(o: { kind: TaskKind; role?: string | null; parent?: string |
   }
   if (deps.length && !o.parent) throw new Error("bağımlılık için --parent gerekli");
   if (!o.parent) return;
-  const p = getTask(o.parent);
-  if (p.data.kind !== "pipeline") throw new Error(`${o.parent} bir pipeline görevi değil (${p.data.kind})`);
-  if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${o.parent} ${p.data.state}; yeni faz eklenemez`);
+  assertParentOpen(o.parent, "yeni faz eklenemez");
+  assertDepsInPipeline(o.parent, deps);
+}
+
+/** The pipeline task `parent` must exist, be a pipeline and not be closed. */
+function assertParentOpen(parent: string, consequence: string): Task {
+  const p = getTask(parent);
+  if (p.data.kind !== "pipeline") throw new Error(`${parent} bir pipeline görevi değil (${p.data.kind})`);
+  if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parent} ${p.data.state}; ${consequence}`);
+  return p;
+}
+
+function assertDepsInPipeline(parent: string, deps: string[]): void {
   for (const d of deps) {
-    if (getTask(d).data.parent !== o.parent) throw new Error(`bağımlılık ${d} aynı pipeline'da değil`);
+    if (getTask(d).data.parent !== parent) throw new Error(`bağımlılık ${d} aynı pipeline'da değil`);
   }
+}
+
+const TASK_ID = /^T\d{8}-\d{2,}$/;
+
+/** Dependencies of `t` that are not done yet (a missing task counts as unmet). */
+export function unmetDependencies(t: Task): string[] {
+  return (t.data.depends_on ?? []).filter((d) => {
+    try { return getTask(d).data.state !== "done"; } catch { return true; }
+  });
+}
+
+export type DepsMode = { set?: string[]; add?: string[]; remove?: string[]; clear?: boolean };
+
+/**
+ * Changes `depends_on` of a queued pipeline phase. Everything is checked before the single write;
+ * an unchanged list writes nothing. The state machine is not touched.
+ */
+export function setDependencies(
+  id: string, mode: DepsMode,
+): { task: Task; previous: string[]; changed: boolean; warnings: string[] } {
+  const modes = [mode.set, mode.add, mode.remove, mode.clear ? true : undefined].filter((m) => m !== undefined);
+  if (modes.length !== 1) throw new Error("tam olarak biri gerekli: --set | --add | --remove | --clear");
+  if (mode.set && !mode.set.length) throw new Error("--set boş olamaz; bağımlılıkları kaldırmak için --clear kullan");
+  for (const x of [id, ...(mode.set ?? []), ...(mode.add ?? []), ...(mode.remove ?? [])]) {
+    if (!TASK_ID.test(x)) throw new Error(`geçersiz görev ID'si: ${x}`);
+  }
+  const t = getTask(id);
+  if (t.data.kind === "pipeline") throw new Error(`pipeline görevinin bağımlılığı olmaz: ${id}`);
+  if (!t.data.parent) throw new Error(`bağımlılık için --parent gerekli (${id} bir pipeline fazı değil)`);
+  const parent = t.data.parent;
+  assertParentOpen(parent, "bağımlılık değiştirilemez");
+  if (t.data.state !== "queued") throw new Error(`bağımlılık yalnızca queued fazda değiştirilir (${id} ${t.data.state})`);
+
+  const previous = t.data.depends_on ?? [];
+  const warnings: string[] = [];
+  let next: string[];
+  if (mode.clear) next = [];
+  else if (mode.set) next = mode.set;
+  else if (mode.add) next = [...previous, ...mode.add];
+  else {
+    for (const r of mode.remove!) if (!previous.includes(r)) warnings.push(`bağımlılıkta yoktu: ${r}`);
+    next = previous.filter((d) => !mode.remove!.includes(d));
+  }
+  next = [...new Set(next)];
+
+  // only the dependencies that are new need checking: an old one may be done/cancelled by now
+  for (const d of next.filter((x) => !previous.includes(x))) {
+    if (d === id) throw new Error(`görev kendine bağlanamaz: ${id}`);
+    let dep: Task;
+    try { dep = getTask(d); } catch { throw new Error(`bağımlılık bulunamadı: ${d}`); }
+    if (dep.data.kind === "pipeline") {
+      if (d === parent) throw new Error(`bağımlılık ${d} aynı pipeline'da değil`);
+      throw new Error(`bağımlılık bir pipeline görevi olamaz: ${d}`);
+    }
+    assertDepsInPipeline(parent, [d]);
+    if (dep.data.state === "cancelled") throw new Error(`bağımlılık iptal edilmiş, asla done olmaz: ${d}`);
+  }
+  for (const d of next) {
+    if (d !== id && getTask(d).data.state === "failed") {
+      warnings.push(`bağımlılık failed: ${d}; yeniden queued/done olana kadar faz hazır olmaz`);
+    }
+  }
+  if (next.length === previous.length && next.every((d, i) => d === previous[i])) {
+    return { task: t, previous, changed: false, warnings };
+  }
+  if (!next.length) warnings.push(`faz bağımlılıksız kaldı: ${id}`);
+
+  // cycle check over the whole pipeline; an unreadable task file means the graph is incomplete (fail closed)
+  const { tasks, warnings: unreadable } = listTasksWithWarnings({ parent });
+  if (unreadable.length) {
+    throw new Error(`bağımlılık grafı eksik okundu (${unreadable[0]}); döngü denetimi yapılamaz`);
+  }
+  const deps = new Map(tasks.map((x) => [x.data.id, x.data.depends_on ?? []]));
+  deps.set(id, next);
+  const path = findPath(deps, next, id);
+  if (path) throw new Error(`döngü: ${[id, ...path].join(" -> ")}`);
+
+  // re-read just before writing: the store has no lock, so a state change in between must not be overwritten
+  const fresh = getTask(id);
+  if (fresh.data.state !== "queued") throw new Error(`bağımlılık yalnızca queued fazda değiştirilir (${id} ${fresh.data.state})`);
+  if (JSON.stringify(fresh.data.depends_on ?? []) !== JSON.stringify(previous)) {
+    throw new Error(`bağımlılık başka bir çağrıyla değişti (${id}); tekrar dene`);
+  }
+  fresh.data.depends_on = next;
+  fresh.body = appendToSection(fresh.body, "## İlerleme", `- ${nowIso()} bağımlılık: [${previous.join(",")}] -> [${next.join(",")}]`);
+  saveTask(fresh);
+  return { task: fresh, previous, changed: true, warnings };
+}
+
+/** Path from one of `starts` to `target` along depends_on edges (the path ends at `target`), or null. */
+function findPath(deps: Map<string, string[]>, starts: string[], target: string): string[] | null {
+  const seen = new Set<string>();
+  const walk = (cur: string, path: string[]): string[] | null => {
+    if (cur === target) return path;
+    if (seen.has(cur)) return null;
+    seen.add(cur);
+    for (const d of deps.get(cur) ?? []) {
+      const r = walk(d, [...path, d]);
+      if (r) return r;
+    }
+    return null;
+  };
+  for (const s of starts) {
+    const r = walk(s, [s]);
+    if (r) return r;
+  }
+  return null;
 }
 
 export type Task = { data: TaskData; body: string; file: string };
@@ -139,7 +256,7 @@ export function createTask(
     validate("task", data);
     const file = taskFile(id);
     try {
-      writeFileSync(file, serializeDoc(data, body), { encoding: "utf8", flag: "wx" });
+      writeFileAtomic(file, serializeDoc(data, body), { exclusive: true });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") {
         n++;
@@ -218,6 +335,10 @@ export function readyWithLimit(
 export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {}): Task {
   const t = getTask(id);
   assertTransition(t.data.state, to);
+  if (to === "running" && t.data.state === "queued") {
+    const unmet = unmetDependencies(t);
+    if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
+  }
   t.data = { ...t.data, ...patch, state: to };
   saveTask(t);
   // the first phase to start also starts its pipeline, whether it is a dev or a research phase

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, lstatSync, readdirSync, realpathSync, unlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { VladConfig } from "../kb/index.js";
 
 /** Runs git; returns untrimmed stdout, or null on error/timeout. */
@@ -107,7 +107,60 @@ export function attachWorktree(repo: string, dir: string, branch: string): void 
   mustGit(repo, ["worktree", "add", dir, branch]);
 }
 
+/** Thrown when junctions/symlinks inside a worktree could not be safely detached; nothing is deleted then. */
+export class ReparseCleanupError extends Error {}
+
+const MAX_SCAN_DIRS = 200_000;
+
+/**
+ * Junctions/symlinks inside `dir` (directories only, no file lstat). Never descends into a link.
+ * `.git` as a plain file (worktree pointer) is skipped; a link or directory named `.git` is not.
+ */
+export function reparsePoints(dir: string): string[] {
+  const found: string[] = [];
+  const stack = [dir];
+  let seen = 0;
+  while (stack.length) {
+    const cur = stack.pop()!;
+    if (++seen > MAX_SCAN_DIRS) throw new ReparseCleanupError(`tarama sınırı aşıldı (${MAX_SCAN_DIRS} dizin): ${dir}`);
+    let entries;
+    try {
+      entries = readdirSync(cur, { withFileTypes: true });
+    } catch (e) {
+      throw new ReparseCleanupError(`dizin taranamadı: ${cur}: ${(e as Error).message}`);
+    }
+    for (const ent of entries) {
+      const p = join(cur, ent.name);
+      // lstat reports a Windows junction as a symbolic link too
+      if (ent.isFile() && !ent.isSymbolicLink()) continue;
+      let st;
+      try { st = lstatSync(p); } catch (e) {
+        throw new ReparseCleanupError(`okunamadı: ${p}: ${(e as Error).message}`);
+      }
+      if (st.isSymbolicLink()) found.push(p);
+      else if (st.isDirectory()) stack.push(p);
+    }
+  }
+  return found;
+}
+
+
+/** Detaches every link inside `dir` (the link only, never its target). Refuses when `dir` itself is a link. */
+export function unlinkReparsePoints(dir: string, unlink: (p: string) => void = unlinkSync): void {
+  if (lstatSync(dir).isSymbolicLink()) throw new ReparseCleanupError(`kök bir bağlantı: ${dir}`);
+  for (const p of reparsePoints(dir)) {
+    try { unlink(p); } catch (e) {
+      throw new ReparseCleanupError(`bağlantı kaldırılamadı: ${p}: ${(e as Error).message}`);
+    }
+  }
+  // a link created between the first scan and now (shrinks, does not close, the race)
+  const left = reparsePoints(dir);
+  if (left.length) throw new ReparseCleanupError(`bağlantılar kaldırıldıktan sonra yenileri çıktı: ${left.join(", ")}`);
+}
+
+/** Removes the worktree; links inside it are detached first because git on Windows follows junctions and deletes their targets (F-vlad-083). */
 export function removeWorktree(repo: string, dir: string): void {
+  if (existsSync(dir)) unlinkReparsePoints(dir);
   mustGit(repo, ["worktree", "remove", "--force", dir]);
 }
 

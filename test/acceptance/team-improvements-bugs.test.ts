@@ -52,7 +52,7 @@ describe("BUG-3: bulut prompt'u kartın `gate` komutunu ve entegrasyon öncesi k
   it("pipeline fazında prompt entegrasyon branch'ini (vlad/<çatı>) rapordan önce merge etme kuralını içerir", () => {
     const pid = JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "P", "--kind", "pipeline", "--body-file", "-", "--json"], "## Tanım\nx\n", CLOUD_ENV).out).id;
     const p = prompt(["--parent", pid, "--phase", "kabul"]);
-    expect(p).toContain(`git merge vlad/${pid}`);
+    expect(p).toContain("git merge FETCH_HEAD");
   });
 });
 

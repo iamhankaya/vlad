@@ -108,7 +108,7 @@ describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task la
     expect(p).toContain("### Test sonuçları");
     expect(p).toContain("## Entegrasyon öncesi kontrol");
     expect(p).toContain(`git fetch origin vlad/${parent}`);
-    expect(p).toContain(`git merge vlad/${parent}`);
+    expect(p).toContain("git merge FETCH_HEAD");
     expect(p).toMatch(/lint/);
     expect(p).toMatch(/[Çç]akışma/);
     // sıra: kapı ve kontrol protokolden önce gelir (protokol tek doğru kaynak olarak sonda)
@@ -148,7 +148,7 @@ describe.runIf(process.platform === "linux")("BUG-3 uçtan uca: gerçek `task la
     expect(parent).toBe(`T${ymd()}-100`);
     const phase = newTask(home, ["--role", "tester", "--parent", parent, "--phase", "kabul"]);
     const p = JSON.parse(vlad(["task", "launch", phase, "--json"], undefined, CLOUD_ENV).out).prompt as string;
-    expect(p).toContain(`git merge vlad/${parent}`);
+    expect(p).toContain("git merge FETCH_HEAD");
   });
 });
 

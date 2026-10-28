@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
@@ -8,7 +8,7 @@ import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
-import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
+import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
@@ -17,7 +17,7 @@ import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
   TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setState, statusSummary, unknownTaskRefs,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -252,6 +252,19 @@ def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, sta
   const t = setState(id, state as TaskState);
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
 });
+def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod)", (id: string, o: Opts) => {
+  const ids = (v: unknown) => (v === undefined ? undefined : String(v).split(",").map((x) => x.trim()).filter(Boolean));
+  const r = setDependencies(id, { set: ids(o.set), add: ids(o.add), remove: ids(o.remove), clear: o.clear ? true : undefined });
+  const dependsOn = r.task.data.depends_on ?? [];
+  const satisfied = unmetDependencies(r.task).length === 0;
+  out(o, { id, previous: r.previous, depends_on: dependsOn, changed: r.changed, dependencies_satisfied: satisfied, warnings: r.warnings },
+    [`${id} bağımlılık: ${dependsOn.join(",") || "yok"} (önceki: ${r.previous.join(",") || "yok"})`,
+      ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+})
+  .option("--set <ids>", "bağımlılıkları bu listeyle değiştir (virgülle ayrılmış)")
+  .option("--add <ids>", "listeye ekle")
+  .option("--remove <ids>", "listeden çıkar")
+  .option("--clear", "tüm bağımlılıkları kaldır");
 def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", (id: string, o: Opts) => {
   const r = resumeInfo(id);
   out(o, r, r.mode === "local"
@@ -392,7 +405,7 @@ def(session, "register <ad>", "Oturum adını kb/vlad-session.txt'ye yazar", (na
   if (!name.trim()) throw new Error("oturum adı boş olamaz");
   const file = sessionFile();
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, name.trim() + "\n", "utf8");
+  writeFileAtomic(file, name.trim() + "\n");
   out(o, { name: name.trim() }, `kaydedildi: ${name.trim()}`);
 });
 def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {

@@ -37,6 +37,7 @@ function pipeline() {
   const f = join(home, "dep.md");
   writeFileSync(f, `### Yapılanlar\n- ${DEP_REPORT}\n`);
   expect(vlad(home, ["task", "report", dep, "--file", f]).code).toBe(0);
+  expect(vlad(home, ["task", "set", dep, "done"]).code).toBe(0); // launch requires finished dependencies
   const phase = mk(["--parent", parent, "--phase", "kabul", "--depends-on", dep]);
   return { parent, dep, phase };
 }
@@ -115,7 +116,7 @@ describe("pipeline fazı (readonly): çatı ve bağımlı rapor kb'den okunur, p
     const ro = prepareCloudLaunch(phase, { remoteBranch: () => "exists" });
     expect(ro.kb_access).toBe("readonly");
     expect(ro.integration).toMatchObject({ branch: `vlad/${parent}`, needs_remote_create: false });
-    for (const m of [`tasks/${phase}.md`, `tasks/${parent}.md`, `tasks/${dep}.md`, `git merge vlad/${parent}`]) expect(ro.prompt, m).toContain(m);
+    for (const m of [`tasks/${phase}.md`, `tasks/${parent}.md`, `tasks/${dep}.md`, "git merge FETCH_HEAD"]) expect(ro.prompt, m).toContain(m);
     for (const m of ["CATI-METNI-ISARETI", DEP_REPORT, BODY, NOTE, GATE]) expect(ro.prompt, m).not.toContain(m);
 
     // aynı fazı inline'a çevirince eski içerik geri gelir (kipler arası sızıntı/regresyon kontrolü)

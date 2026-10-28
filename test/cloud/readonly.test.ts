@@ -70,6 +70,7 @@ describe("readonly cloud prompt", () => {
     const spec = createTask({ project: "alpha", title: "spec", kind: "research", body: "", parent: pipe.data.id });
     setState(spec.data.id, "running");
     reportTask(spec.data.id, "### Amaç\nSPEC-RAPORU");
+    setState(spec.data.id, "done"); // a phase only launches once its dependencies are done
     const t = mk({ parent: pipe.data.id, dependsOn: [spec.data.id] });
     const r = prepareCloudLaunch(t.data.id, { remoteBranch: () => "exists" });
     for (const s of ["TANIM-METNİ", "KRİTER", "BAĞLAM-METNİ", "CATI-METNİ", "SPEC-RAPORU", "NOT-METNİ", "npm run gate"]) {
@@ -163,6 +164,7 @@ describe("readonly details", () => {
     cfg({ cloudKb: "inline" });
     const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
     const spec = createTask({ project: "alpha", title: "spec", kind: "research", body: "", parent: pipe.data.id });
+    setState(spec.data.id, "running"); setState(spec.data.id, "awaiting_approval"); setState(spec.data.id, "done");
     const t = mk({ parent: pipe.data.id, dependsOn: [spec.data.id] });
     const { prompt: p, kb_access } = prepareCloudLaunch(t.data.id, { cloudKb: "readonly", remoteBranch: () => "exists" });
     expect(kb_access).toBe("readonly");

@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { writeFileAtomic } from "./atomic.js";
 import { git } from "./commit.js";
 import { isSeparateKb, kbPaths } from "./home.js";
 
@@ -97,7 +98,6 @@ export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
     .map((c) => ({ ...c, files: c.files.filter((f) => SENSITIVE.test(f)) }));
   const verified = git(cwd, ["rev-parse", "--verify", `${o.ack ?? head}^{commit}`]).trim();
   if (o.ack) git(cwd, ["merge-base", "--is-ancestor", verified, head]);
-  if ((!foreign.length && !suspicious.length) || o.ack) writeFileSync(markerFile, `${verified}
-`);
+  if ((!foreign.length && !suspicious.length) || o.ack) writeFileAtomic(markerFile, `${verified}\n`);
   return { checked: true, foreign, suspicious, head, ...(warnings.length ? { warnings } : {}) };
 }
