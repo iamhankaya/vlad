@@ -288,9 +288,11 @@ export function saveTask(task: Task): void {
 export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
   const current = autonomyFor(cfg, task.data.project);
   if (task.data.autonomy === current) return null;
-  const previous = task.data.autonomy;
-  task.data.autonomy = current;
-  saveTask(task);
+  // re-read right before writing: a running worker may have appended a log line since `task` was read
+  const fresh = getTask(task.data.id);
+  const previous = fresh.data.autonomy;
+  fresh.data.autonomy = task.data.autonomy = current;
+  saveTask(fresh);
   return previous;
 }
 

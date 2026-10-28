@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { getSection, loadConfig } from "../kb/index.js";
 import { currentBranch, runGitRaw } from "../git/git.js";
+import { standardBlocks } from "./blocks.js";
 import { getTask, syncAutonomy } from "./store.js";
 
 const TAIL = 5;
@@ -48,7 +49,10 @@ export function resumeInfo(id: string): LocalResume | CloudResume {
   }
   const stale = syncAutonomy(t, loadConfig());
   const authority = `Yetki seviyen: \`${t.data.autonomy}\`` +
-    (stale ? ` (config'ten güncellendi; önceki: ${stale}, eskisini unut)` : "") + ".";
+    (stale
+      ? ` (config'ten güncellendi; önceki: ${stale}; bu satır en son gelen yetkidir). ` +
+        standardBlocks({ taskId: id, autonomy: t.data.autonomy, parent: t.data.parent ?? null, mode: "local" })[0]
+      : ".");
   const branch = `vlad/${id}`;
   const tail = logTail(t.body);
   const tailText = tail.length ? tail.join("\n") : "(ilerleme kaydı yok)";

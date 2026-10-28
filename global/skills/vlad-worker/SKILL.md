@@ -26,7 +26,7 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 
 ## 2. Çalış (yetki seviyene göre)
 
-- Yetki seviyen launch prompt'undaki değerdir (config'ten güncel okunur); görev dosyası frontmatter'ıyla çelişirse prompt'a uy, çelişkiyi `vlad task log` ile yaz, sorma.
+- Yetki seviyen launch prompt'undaki değerdir (config'ten güncel okunur); görev dosyası frontmatter'ıyla çelişirse prompt'a (resume mesajında en son gelen yetki satırına) uy, çelişkiyi `vlad task log` ile yaz, sorma.
 - `autonomy: plan` → Yalnızca plan yaz, kod yazma. Planı `vlad task report` ile onaya sun (adım 6) ve dur.
 - `autonomy: commit` / `pr` → Mevcut iş akışını kullan: brainstorming/plan → TDD → review. Kabul kriterlerinin her birini karşıla.
 
@@ -54,7 +54,7 @@ Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:
 ```
 vlad task ask <id> "<soru, seçenekleriyle>"
 ```
-Ardından **bildirim gönder** (adım 7; zorunlu) ve cevabı bekle. Cevap görev dosyasının `## Sorular` bölümüne `**Cevap:**` olarak yazılır; bildirim gelince veya kullanıcı söyleyince dosyayı yeniden oku.
+Ardından **bildirim gönder** (adım 7; gönder, olmazsa logla) ve cevabı bekle. Cevap görev dosyasının `## Sorular` bölümüne `**Cevap:**` olarak yazılır; bildirim gelince veya kullanıcı söyleyince dosyayı yeniden oku.
 
 ## 5. Commit ve sınırlar
 
@@ -69,7 +69,7 @@ Ardından **bildirim gönder** (adım 7; zorunlu) ve cevabı bekle. Cevap görev
 
 **visual-proof:** görünür bir değişiklik (UI, oyun sahnesi, çıktı biçimi) yaptıysan rapordan önce önce/sonra kanıtını aynı senaryoyla üret (ekran görüntüsü ya da kare yolu), raporun `### Test sonuçları`'nda ver; görüntüyü commit'leme. Üretemiyorsan "öz-kontrol yapılamadı" yaz.
 
-**İzin kalıpları:** `settings.json` izin kuralları komutun tamamıyla eşleşir (`Bash(git push origin vlad/*)`, `Bash(git push -u origin vlad/*)`, `Bash(gh run list|view|watch|rerun|download *)`, `Bash(gh workflow run * --ref vlad/*)`). Bu yüzden push ve `gh run`/`gh workflow run` komutlarını tek başına çalıştır; `cd <dizin> &&` ya da `&&`/`;` zinciri kurma (dizin için `git -C <yol>`). Reddedilirse komutu başka biçimde zorlama, `vlad task ask` ile sor; VLAD kullanıcı onayıyla push eder (çalışan kendi izin ayarını değiştirmez). Safeguard/oturum kesintisinde iş kaybolmasın diye checkpoint kuralını (WIP commit + "kaldığım yer") uygula.
+**İzin kalıpları:** `settings.json` izin kuralları komutun tamamıyla eşleşir (her biri ayrı kural: `Bash(git push origin vlad/*)`, `Bash(git push -u origin vlad/*)`, `Bash(gh run list *)`, `Bash(gh run view *)`, `Bash(gh run watch *)`, `Bash(gh run rerun *)`, `Bash(gh run download *)`, `Bash(gh workflow run * --ref vlad/*)`; `gh workflow run` yalnız görev istiyorsa). Bu yüzden push ve `gh run`/`gh workflow run` komutlarını tek başına çalıştır; `cd <dizin> &&` ya da `&&`/`;` zinciri kurma (dizin için `git -C <yol>`). Reddedilirse komutu başka biçimde zorlama, `vlad task ask` ile sor; VLAD kullanıcı onayıyla push eder (çalışan kendi izin ayarını değiştirmez). Safeguard/oturum kesintisinde iş kaybolmasın diye checkpoint kuralını (WIP commit + "kaldığım yer") uygula.
 
 ## 6. Kapanış raporu
 
