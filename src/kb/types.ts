@@ -35,6 +35,8 @@ export interface ProjectCard {
   local_only_reason?: string;
   /** Single gate command of the project (e.g. `scripts/gate.sh`); absent → no gate defined. */
   gate?: string;
+  /** Repo skills (`.claude/skills`) workers of this project should load when they fit the task; named in the launch prompt, checked by `vlad audit skills`. */
+  skills?: string[];
   last_activity: string | null;
   last_scanned: string | null;
 }

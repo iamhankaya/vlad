@@ -7,6 +7,8 @@ export type BlockCtx = {
   autonomy: "plan" | "commit" | "pr";
   parent: string | null; // pipeline task id; null = not a pipeline phase
   mode: "local" | "cloud";
+  /** Repo skills named on the project card; listed for local workers only (a cloud worker clones the repo and sees them itself). */
+  projectSkills?: string[];
 };
 
 export const BLOCKS_HEADING = "VLAD standart blokları:";
@@ -61,5 +63,8 @@ export function standardBlocks(ctx: BlockCtx): string[] {
     return ["Yetki (autonomy plan): kod yazma, push/merge yok; yalnız raporla.", realSource(mode)];
   }
   const authority = mode === "cloud" ? cloudAuthority(id, autonomy) : autonomy === "pr" ? prLocal(id) : commitLocal(id);
-  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), realSource(mode)];
+  const repoSkills = mode === "local" && ctx.projectSkills?.length
+    ? [`Projenin repo skill'leri: ${ctx.projectSkills.map((s) => `\`${s}\``).join(", ")}. Göreve uyanları Skill aracıyla yükle; yüklemediysen nedenini kapanış raporuna yaz.`]
+    : [];
+  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, realSource(mode)];
 }
