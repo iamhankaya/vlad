@@ -1,8 +1,8 @@
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { dirname, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
@@ -11,7 +11,7 @@ import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSumma
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { trustKey } from "../../src/tasks/trust.js";
-import { makeHome } from "../helpers.js";
+import { assertInside, makeHome, makeJunction } from "../helpers.js";
 
 function git(cwd: string, ...args: string[]) {
   return execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
@@ -619,5 +619,40 @@ describe("statusSummary", () => {
     const s = statusSummary(cfg, new Date());
     expect(s.failed.map((t) => t.data.id).sort()).toEqual([a.data.id, b.data.id].sort());
     expect(s.failed.map((t) => t.data.id)).not.toContain(c.data.id);
+  });
+});
+
+describe("F-vlad-083/ cleanup never follows a junction out of the worktree", () => {
+  let root: string; // fixture root = dir holding repo, wt and the junction target
+  let ext: string;
+  beforeEach(() => {
+    root = dirname(repo);
+    ext = join(root, "ext-node-modules");
+    mkdirSync(join(ext, "deep"), { recursive: true });
+    writeFileSync(join(ext, "keep.txt"), "k");
+    writeFileSync(join(ext, "deep", "keep2.txt"), "k2");
+  });
+  afterEach(() => {
+    assertInside(root, ext);
+    rmSync(ext, { recursive: true, force: true });
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  async function doneTaskWithLink(): Promise<{ id: string; wt: string }> {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(t.data.id).data.worktree!;
+    makeJunction(join(wt, "node_modules"), ext, root);
+    setState(t.data.id, "awaiting_approval");
+    setState(t.data.id, "done");
+    return { id: t.data.id, wt };
+  }
+
+  it("removes the link but leaves the target's files (junction/symlink)", async () => {
+    const { id, wt } = await doneTaskWithLink();
+    cleanupTask(id, { closeWorker: () => {} });
+    expect(existsSync(wt)).toBe(false);
+    expect(existsSync(join(ext, "keep.txt"))).toBe(true);
+    expect(existsSync(join(ext, "deep", "keep2.txt"))).toBe(true);
   });
 });

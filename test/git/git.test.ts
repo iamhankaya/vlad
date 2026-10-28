@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   addWorktree, attachWorktree, branchExists, changedFiles, currentBranch, headSha, isRepo,
-  recentCommits, removeWorktree, runGit, worktreePath,
+  recentCommits, removeWorktree, reparsePoints, ReparseCleanupError, runGit, unlinkReparsePoints, worktreePath,
 } from "../../src/git/git.js";
 import type { VladConfig } from "../../src/kb/index.js";
+import { assertInside, makeFixtureRoot, makeJunction } from "../helpers.js";
 
 function git(cwd: string, ...args: string[]) {
   execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe" });
@@ -87,5 +88,67 @@ describe("git helpers", () => {
   it("worktreePath substitutes {repo}", () => {
     const cfg = { worktreeDir: "{repo}-wt" } as VladConfig;
     expect(worktreePath(cfg, "C:\\dev\\watchparty", "T20261015-01")).toBe("C:\\dev\\watchparty-wt\\T20261015-01");
+  });
+});
+
+describe("F-vlad-083/ reparse points", () => {
+  let root: string;
+  afterEach(() => {
+    assertInside(root, root);
+    unlinkReparsePoints(root);
+    rmSync(root, { recursive: true, force: true });
+  });
+  const setup = () => {
+    root = makeFixtureRoot();
+    const wt = join(root, "w ğüş");
+    const target = join(root, "target");
+    mkdirSync(wt); mkdirSync(join(target, "deep"), { recursive: true });
+    writeFileSync(join(target, "deep", "k.txt"), "k");
+    return { wt, target };
+  };
+
+  it("lists links without descending into them, skips a .git file", () => {
+    const { wt, target } = setup();
+    writeFileSync(join(wt, ".git"), "gitdir: x");
+    mkdirSync(join(wt, "src"));
+    makeJunction(join(wt, "src", "nm"), target, root);
+    expect(reparsePoints(wt)).toEqual([join(wt, "src", "nm")]);
+  });
+
+  it("counts a link named .git as a link", () => {
+    const { wt, target } = setup();
+    makeJunction(join(wt, ".git"), target, root);
+    expect(reparsePoints(wt)).toEqual([join(wt, ".git")]);
+  });
+
+  it("detaches links but keeps their targets", () => {
+    const { wt, target } = setup();
+    makeJunction(join(wt, "nm"), target, root);
+    unlinkReparsePoints(wt);
+    expect(existsSync(join(wt, "nm"))).toBe(false);
+    expect(existsSync(join(target, "deep", "k.txt"))).toBe(true);
+  });
+
+  it("refuses when the root itself is a link", () => {
+    const { wt, target } = setup();
+    const link = join(root, "rootlink");
+    makeJunction(link, wt, root);
+    expect(() => unlinkReparsePoints(link)).toThrow(ReparseCleanupError);
+    expect(existsSync(target)).toBe(true);
+  });
+
+  it("fails closed: an unlink error throws, so removeWorktree never reaches git", () => {
+    const { wt, target } = setup();
+    makeJunction(join(wt, "nm"), target, root);
+    expect(() => unlinkReparsePoints(wt, () => { throw new Error("EPERM"); })).toThrow(ReparseCleanupError);
+    expect(() => removeWorktree(wt, join(wt, "nm"))).toThrow(ReparseCleanupError);
+    expect(existsSync(join(target, "deep", "k.txt"))).toBe(true);
+  });
+
+  it("throws when a new link shows up after the unlink pass", () => {
+    const { wt, target } = setup();
+    makeJunction(join(wt, "nm"), target, root);
+    // the injected unlink is a no-op, as if a process re-created the link right away
+    expect(() => unlinkReparsePoints(wt, () => {})).toThrow(/yenileri çıktı/);
   });
 });

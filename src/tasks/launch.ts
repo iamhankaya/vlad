@@ -1,8 +1,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
-  addWorktree, attachWorktree, branchExists, isWorktree, remoteBranchExists, removeWorktree, runGit, worktreeBranch,
-  worktreePath,
+  addWorktree, attachWorktree, branchExists, isWorktree, ReparseCleanupError, remoteBranchExists, removeWorktree, runGit,
+  unlinkReparsePoints, worktreeBranch, worktreePath,
 } from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
@@ -247,9 +247,16 @@ export function cleanupTask(
 function removeTaskWorktree(repo: string, wt: string, id: string): void {
   try {
     if (isWorktree(repo, wt)) removeWorktree(repo, wt);
-    else rmSync(wt, { recursive: true, force: true });
+    else { unlinkReparsePoints(wt); rmSync(wt, { recursive: true, force: true }); }
   } catch (e) {
+    // fail-closed: links that could not be detached must never reach the retry/rmSync fallback below
+    if (e instanceof ReparseCleanupError) {
+      throw new Error(
+        `worktree bağlantıları kaldırılamadı, silme yapılmadı: ${wt}. \`vlad task cleanup ${id}\` ile tekrar dene. (${e.message})`,
+      );
+    }
     try {
+      unlinkReparsePoints(wt); // git may have failed before touching links; the fallback must not follow one either
       rmSync(wt, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     } catch {
       /* reported below */
