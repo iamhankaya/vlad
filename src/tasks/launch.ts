@@ -15,7 +15,7 @@ import type { Role } from "../roles/store.js";
 import { markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe } from "./liveness.js";
 import {
-  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState, unmetDependencies,
+  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState, syncAutonomy, unmetDependencies,
 } from "./store.js";
 import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
@@ -139,6 +139,9 @@ export async function launchTask(
   if (task.data.kind !== "dev") throw new Error(`yalnızca dev görevleri başlatılır (kind=${task.data.kind}): ${id}`);
   const unmet = unmetDependencies(task);
   if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
+
+  const stale = syncAutonomy(task, o.cfg);
+  if (stale) console.error(`uyarı: ${id} yetkisi config'ten güncellendi (${stale} → ${task.data.autonomy})`);
 
   const branch = `vlad/${id}`;
   let repo: string;

@@ -115,9 +115,9 @@ describe("prepareCloudLaunch", () => {
   });
   it("autonomy plan forbids pushing in the prompt", () => {
     const t = mk();
-    const g = getTask(t.data.id);
-    writeFileSync(g.file, readBack(g.file).replace("autonomy: commit", "autonomy: plan"));
-    expect(prepareCloudLaunch(t.data.id).prompt).toContain("push etme");
+    writeFileSync(join(process.env.VLAD_HOME!, "vlad.config.json"), JSON.stringify({ projects: { alpha: { autonomy: "plan" } } }));
+    expect(prepareCloudLaunch(t.data.id).prompt).toContain("Yetki (autonomy plan)");
+    expect(getTask(t.data.id).data.autonomy).toBe("plan");
   });
 
   it("pipeline phase: base is vlad/<parent>, needs_remote_create until the branch is recorded, dependency reports inlined", () => {

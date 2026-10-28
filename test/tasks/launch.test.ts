@@ -56,6 +56,17 @@ function fakeLauncher(ok = true): Launcher & { reqs: LaunchRequest[] } {
 const mk = (kind: "dev" | "research" = "dev") => createTask({ project: "alpha", title: "İlk görev", kind, body: "## Tanım\nx\n" });
 
 describe("launchTask", () => {
+  it("reads autonomy from config at launch: stale frontmatter is refreshed and the prompt block follows config", async () => {
+    const t = mk();
+    expect(t.data.autonomy).toBe("commit");
+    cfg.projects.alpha = { autonomy: "pr" };
+    const l = fakeLauncher();
+    const r = await launchTask(t.data.id, { launcher: l, cfg });
+    expect(r.data.autonomy).toBe("pr");
+    expect(getTask(t.data.id).data.autonomy).toBe("pr");
+    expect(l.reqs[0].prompt).toContain("Yetki seviyen: `pr`");
+    expect(l.reqs[0].prompt).toContain("Yetki (autonomy pr)");
+  });
   it("creates worktree, runs launcher and sets running", async () => {
     const t = mk();
     const l = fakeLauncher();

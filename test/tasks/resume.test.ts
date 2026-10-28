@@ -44,6 +44,15 @@ describe("resumeInfo", () => {
     expect(r.prompt).not.toContain("adım 2");
     expect(r.log_tail).toHaveLength(5);
   });
+  it("local: autonomy is re-read from config; a changed value is written back and flagged in the prompt", () => {
+    run();
+    writeFileSync(join(process.env.VLAD_HOME!, "vlad.config.json"), JSON.stringify({ projects: { p: { autonomy: "pr" } } }));
+    const r = resumeInfo(id);
+    if (r.mode !== "local") throw new Error("local bekleniyordu");
+    expect(getTask(id).data.autonomy).toBe("pr");
+    expect(r.prompt).toContain("Yetki seviyen: `pr`");
+    expect(r.prompt).toContain("commit");
+  });
   it("local: stalled tasks resume too; dirty tree is reported, not refused", () => {
     run();
     setState(id, "stalled");
