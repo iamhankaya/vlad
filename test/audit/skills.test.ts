@@ -76,7 +76,7 @@ describe("auditSkills", () => {
   });
 
   it("project card skills are expected too", () => {
-    writeFileSync(join(kbPaths().projects, "alpha.md"), "---
+    writeFileSync(join(kbPaths().projects, "alpha.md"), `---
 slug: alpha
 name: A
 path: x
@@ -87,7 +87,7 @@ skills: [ab-test-ve-kapi]
 last_activity: null
 last_scanned: null
 ---
-");
+`);
     const id = task(w("C:", "w", "e"));
     transcript(w("C:", "w", "e"), [skill("vlad-worker")]);
     expect(auditSkills({ configDir: cfgDir }).tasks.find((t) => t.id === id)).toMatchObject({ expected: ["vlad-worker", "ab-test-ve-kapi"], missing: ["ab-test-ve-kapi"] });

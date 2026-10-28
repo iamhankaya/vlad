@@ -156,5 +156,5 @@ describe("test ortamında gerçek launcher reddi", () => {
     const r = vlad(home, ["task", "launch", id, "--dry-run", "--json"], { env: { VLAD_LAUNCHER: "noop" } });
     expect(r.err).not.toMatch(/ENOENT.*claude/);
     expect(countClaude()).toBe(before);
-  });
+  }, 120_000); // two full process listings (PowerShell) outlast 30 s under suite load
 });

@@ -57,7 +57,7 @@ Son kapı (`vlad/<çatı-id>` → ana branch) ayrı bir PR ve ayrı açık onayd
 
 ### Kapı doğrulaması (`gate`)
 
-Kapı yordamı (gate koşusu, ön kontrol, ingest-preview, kayıt dosyası yeniden üretimi, merge adımları) `integrate` skill'inde tek kaynaktır: kapı eyleminden önce `integrate` skill'ini yükle ve uygula. Skill yüklenemezse kapı eylemi **durur** ve kullanıcıya söylenir; sessiz yedek yok. Kırmızı gate'te merge önerme. **Merge, push ve PR yine açık onay ister.**
+Kapı yordamı (gate koşusu, ön kontrol, ingest-preview, kayıt dosyası yeniden üretimi, merge adımları) `integrate` skill'inde tek kaynaktır: kapı eyleminden önce `integrate` skill'ini **Skill aracıyla yükle** (komutları ezberden/kopyadan koşma) ve uygula. Skill yüklenemezse kapı eylemi **durur** ve kullanıcıya söylenir; sessiz yedek yok. Kırmızı gate'te merge önerme. **Merge, push ve PR yine açık onay ister.**
 
 ## 2. `awaiting_approval` görevler
 
@@ -113,7 +113,7 @@ vlad task ready --parent <çatı-id> --json
 - **`prova` fazı varsa** (devops; `### Prova matrisi`, `### Bulunan hatalar`, `### Prova edilemeyenler` bölümlerini göster): kırmızı senaryo veya çözülmemiş bulunan hata varsa canlıya alma/dağıtım önerme; önce düzeltme fazı öner. `Prova edilemeyenler` doluysa kalan riski kullanıcıya açıkça söyle.
 - **Dispatch iş akışı kontrolü:** pipeline `workflow_dispatch` iş akışı eklediyse dosyanın ana dalda olduğunu doğrula (`git -C <proje-yolu> cat-file -e <ana-dal>:<iş-akışı-yolu>`); yalnız entegrasyon dalında varsa merge/PR önermeden önce kullanıcıya "yalnız dispatch iş akışı ana dalda yok" de.
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
-- **Codex review (3. göz):** ana branch'e merge/PR'dan önce `second-opinion` skill'ini mod `review` ile uygula (komut, model, yedek, loglama orada). Kritik/yüksek bulgu varsa merge/PR önerme, düzeltme fazı öner; orta/düşük/bilgi `vlad finding add` ile kaydedilip kapıda listelenir. Skill yüklenemezse kapı eylemi durur ve kullanıcıya söylenir.
+- **Codex review (3. göz):** ana branch'e merge/PR'dan önce `second-opinion` skill'ini **Skill aracıyla yükle**, mod `review` ile uygula (komutu elle kopyalama; komut, model, yedek, loglama orada). Kritik/yüksek bulgu varsa merge/PR önerme, düzeltme fazı öner; orta/düşük/bilgi `vlad finding add` ile kaydedilip kapıda listelenir. Skill yüklenemezse kapı eylemi durur ve kullanıcıya söylenir.
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
 - Çatı birden çok projede faz çalıştırdıysa (`integration_worktrees` birden fazla satır) kapı doğrulamasını, diff özetini ve merge/PR'ı **her projenin** entegrasyon worktree'sinde ayrı ayrı yap ve sun; son kapı onayı projeler arası ortak tek karardır.
 - Diff özeti: `git -C <çatı worktree> log --oneline main..HEAD` ve `git -C <çatı worktree> diff --stat main...HEAD`.
@@ -126,6 +126,12 @@ Seçenekler (açık onay):
 
 1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
 
+### Gece / yetki modu ve bekçi
+
+Başta `vlad mode status` bak (özet satırında da görünür). **Gece modu etkinse** (`vlad mode night --until …`, projeler/not kullanıcı sözüdür) pencere boyunca faz ve son kapı merge'ü sormadan yapılır; kapı yordamı (`integrate`, gate, `second-opinion`) yine koşar. Durdurma koşulları: kritik/yüksek bulgu, kırmızı gate/CI, ürün yönü/kanal değişikliği, geri alınamaz/veri silen eylem; bunlarda dur ve kullanıcıya sor. Pencere dolunca `vlad status` "gece modu bitti" der ve sormadan merge biter. Push/PR yetkisi modun parçası değildir; yalnız kartı/hafızada verilen ayrı yetki varsa (ör. `autonomy: pr` dalı) geçerlidir.
+
+**Bekçi** (gece modu açıkken ya da `vlad mode watch on`): kendini 20–30 dk arayla uyandır (`/loop` dinamik ya da `ScheduleWakeup`). Her uyanışta `vlad task idle --minutes 30 --json`; listelenen her görev için `gh run list --branch <branch> --limit 1` ile CI'a bak. CI bitmiş ama rapor yoksa, soru `answer`'lanmış ama çalışan sürmemişse ya da 30 dk değişiklik yoksa çalışanı `SendMessage` ile dürt ve `vlad task log <id> "bekçi: dürtüldü (<neden>)"` yaz. Yeni `awaiting_approval`/`blocked` varsa bu skill'in akışını işlet. Bekçiyi `vlad mode off` ya da pencerenin bitişi kapatır.
+
 ### Retro (son kapıdan sonra)
 
 Çatı `done` olunca kısa bir retro yap (2–5 dakikalık özet; uzun rapor yazma). Kaynak: çatı ve faz görev dosyaları (`## İlerleme`, `## Sorular`, `## Kapanış raporu`), `failed`/`cancelled` fazlar, geri alınan merge'ler, kırmızı gate koşuları.
@@ -136,8 +142,9 @@ Seçenekler (açık onay):
    ```
    Notlar kartın `## Çalışma notları` bölümüne tarihli madde olarak eklenir; çalışanlar ve roller işe başlarken bunu okur. Aynı ders zaten notlardaysa ekleme.
 3. **Rol düzeyindeki** dersler (bir rolün sorumluluk/yetki/çıktı kuralı değişmeli) kartı değil `roles/<slug>.md`'yi ilgilendirir: bunları kullanıcıya **öneri** olarak sun (hangi rol, hangi satır, neden). Onaylanırsa `roles/` değişikliği ayrı bir görev olarak `/delegate` ile açılır; VLAD rol dosyasını kendisi düzenlemez.
-4. Retroda ortaya çıkan, düzeltilmemiş sorunları bulgu olarak kaydet: `vlad finding add --project <slug> --severity <…> --source <çatı-id> --title "<…>" --json`.
-5. Sonunda `vlad kb commit "retro <çatı-id>" --push --json`.
+4. Skill kullanımı: `vlad audit skills --since <çatı-tarihi> --json` çıktısından kısa tablo ver (görev başına beklenen/yüklenen/eksik; VLAD'ın `second-opinion`/`integrate` eksiği dahil). Tekrarlayan eksik rol/skill düzeyindeyse `roles/` önerisi, projeye özgüyse kartın `skills` listesi ya da `vlad project note` olur.
+5. Retroda ortaya çıkan, düzeltilmemiş sorunları bulgu olarak kaydet: `vlad finding add --project <slug> --severity <…> --source <çatı-id> --title "<…>" --json`.
+6. Sonunda `vlad kb commit "retro <çatı-id>" --push --json`.
 
 **Faz `failed`/`cancelled`:** bağımlı fazlar `queued` kalır. Ağaçta göster ve seçenekleri sun:
 - **Fazı yeniden oluştur:** aynı faz/rol/bağımlılıkla yeni görev (`/delegate` adım 4). Eski faza bağlı `queued` fazları iptal etmeden yeni ID'ye bağla: `vlad task deps <bağımlı-id> --set <yeni-id,…>` (yalnız `queued` fazda; doğrulama ve döngü kontrolü CLI'dadır).

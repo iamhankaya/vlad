@@ -127,4 +127,6 @@ Yalnızca `kb/` commit'lenir (inbox ve loglar `.gitignore`'da). Hata verirse kul
 
 ## Kullanıcıya göster
 
+Skill kullanımı: `vlad audit skills --since <son digest tarihi> --json` çıktısının özet oranını ve eksik olanları tek satırda ekle (ayrıntı `/status` retrosundadır).
+
 Proje başına 1–3 satırlık özet, kaydedilen bulgular (kritik/yüksek vurgulu), eklenen kararlar, açık konulardaki değişiklikler ve işlenen rapor sayısı. `task_id` taşıyan ve görevi hâlâ `running` görünen raporlar varsa `/status` öner.
