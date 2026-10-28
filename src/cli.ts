@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
@@ -8,7 +8,7 @@ import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
-import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError } from "./kb/index.js";
+import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
@@ -405,7 +405,7 @@ def(session, "register <ad>", "Oturum adını kb/vlad-session.txt'ye yazar", (na
   if (!name.trim()) throw new Error("oturum adı boş olamaz");
   const file = sessionFile();
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, name.trim() + "\n", "utf8");
+  writeFileAtomic(file, name.trim() + "\n");
   out(o, { name: name.trim() }, `kaydedildi: ${name.trim()}`);
 });
 def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {

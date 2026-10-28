@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   appendToSection, autonomyFor, CLOUD_ID_FLOOR, getSection, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
-  setSection, validate, writeDoc,
+  setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskModel, TaskState } from "../kb/index.js";
 import { getRole, type Role } from "../roles/store.js";
@@ -256,7 +256,7 @@ export function createTask(
     validate("task", data);
     const file = taskFile(id);
     try {
-      writeFileSync(file, serializeDoc(data, body), { encoding: "utf8", flag: "wx" });
+      writeFileAtomic(file, serializeDoc(data, body), { exclusive: true });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") {
         n++;

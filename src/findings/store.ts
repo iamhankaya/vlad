@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc } from "../kb/index.js";
+import { kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
 import type { FindingData, FindingSeverity, FindingState } from "../kb/index.js";
 
 export type Finding = { data: FindingData; body: string; file: string };
@@ -56,7 +56,7 @@ export function addFinding(
     validate("finding", data);
     const file = findingFile(id);
     try {
-      writeFileSync(file, serializeDoc(data, body), { encoding: "utf8", flag: "wx" });
+      writeFileAtomic(file, serializeDoc(data, body), { exclusive: true });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "EEXIST") {
         n++;

@@ -1,7 +1,7 @@
-import { appendFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { runGitRaw } from "../git/git.js";
-import { kbPaths, nowIso, readDoc, validate, type InboxRecord } from "../kb/index.js";
+import { kbPaths, nowIso, readDoc, validate, writeFileAtomic, type InboxRecord } from "../kb/index.js";
 import { inferProject } from "./project.js";
 import { parseTranscript } from "./transcript.js";
 
@@ -178,7 +178,7 @@ export async function main(stdinText?: string, stdin?: NodeJS.ReadableStream): P
       mkdirSync(p.inbox, { recursive: true });
       const ts = nowIso().slice(0, 19).replace(/[-:]/g, "");
       const safeId = record.session_id.replace(/[^A-Za-z0-9_-]/g, "_");
-      writeFileSync(join(p.inbox, `${ts}-${safeId}.json`), JSON.stringify(record, null, 2), "utf8");
+      writeFileAtomic(join(p.inbox, `${ts}-${safeId}.json`), JSON.stringify(record, null, 2));
     }
   } catch (err) {
     logError(err);
