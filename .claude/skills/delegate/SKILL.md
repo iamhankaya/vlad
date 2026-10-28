@@ -133,6 +133,7 @@ Kullanıcıya şunu göster:
 ### Kapılar
 - Her fazın sonunda onay (`/status`): research fazı raporu kabul edilir, dev fazı entegrasyon branch'ine (`vlad/<çatı-id>`) merge edilir. Bağımlı fazlar ancak bundan sonra başlar.
 - Son kapı: tüm fazlar bitince `vlad/<çatı-id>` ana branch'e merge (veya push + PR) — ayrıca onaylanır.
+- **`workflow_dispatch` ön koşulu:** pipeline yeni bir `workflow_dispatch` iş akışı ekliyorsa (dispatch yalnız ana daldaki iş akışı dosyasını görür), iş akışı dosyası `sözleşme` fazından önce ayrı bir onayla ana dala alınır; taslağa bu adımı ayrı satır olarak yaz.
 ```
 Örnek tablo `özellik` döngüsüdür (karakterizasyon ve kabul tek tester fazında). Faz adları: `spec`, `tasarım`, `plan`, `sözleşme`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`. Rol başlıklarını `vlad role list --json`'dan al. Faz tablosu döngü şablonundan gelir; işe göre faz ekleyip çıkarabilirsin (gerekçesiyle).
 
@@ -170,6 +171,8 @@ Yetki, entegrasyon, CI tur kuralı ve gerçek kaynak koruması launch prompt'una
 
 Önce bildirim kanalını hazırla: `ListAgents` çalıştır, ilk satırdaki `This session is <ad>` adını al ve `vlad session register <ad>` çalıştır (açılışta yapıldıysa da tekrar etmek zararsızdır). Böylece çalışan bitince sana `SendMessage` atabilir.
 
+**Boşta aboneliği:** her launch'tan ve her çalışana `SendMessage` ile uyandırmadan sonra o çalışan için `notify_when_idle: true` aboneliği kur. Idle bildirimi gelince görev dosyasını oku (`vlad task list --json`); durum değişmemişse (hâlâ `running`, yeni `## İlerleme` yok) çalışanı `SendMessage` ile dürt ("görev dosyasına bak, sonraki adıma geç"); `blocked`/`awaiting_approval` ise `/status`.
+
 Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bash aracıyla değil. Pencere WMI (`Win32_Process.Create`) ile açılır ve bu çağrı Bash aracından çalıştırılınca başarısız olur (kod 8):
 
 ```
@@ -180,7 +183,7 @@ vlad task launch <id> --json
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.
 - `--dry-run` önizleme değildir: worktree + branch oluşturur ve görevi terminal açmadan `running` yapar (yalnızca test içindir). Bu yüzden "önce dry-run ile göster" diye kullanma.
 
-**İzin kalıpları:** çalışanın `git push origin vlad/<id>` ya da `gh run watch` komutu izin sınıflandırıcısından reddediliyorsa kullanıcıdan `settings.json`'a `Bash(git push origin vlad/*)` ve `Bash(gh run:*)` kalıplarını eklemesini iste; kalıbı sen yazmazsın, çalışan da kendi izin ayarını değiştirmez. Kurallar `vlad-worker` skill'inde tek kaynaktır.
+**İzin kalıpları:** çalışanın push ve `gh run`/`gh workflow run` komutları tek başına koşar ve `settings.json` kalıplarıyla eşleşir (kalıp listesi `vlad-worker` skill'inde tek kaynaktır). Reddedilirse çalışan `ask` ile sorar; kullanıcı onayıyla push/dispatch'i `git -C <worktree> …` / `gh` ile sen yaparsın. Kalıbı sen yazmazsın, çalışan da kendi izin ayarını değiştirmez.
 
 ### 5a-cloud. Bulut modu (VLAD bulutta çalışıyorsa)
 

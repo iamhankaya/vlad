@@ -6,7 +6,7 @@ import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
-import { effectiveModel, roleFor, getTask, saveTask, setState, unmetDependencies } from "./store.js";
+import { effectiveModel, roleFor, getTask, saveTask, setState, syncAutonomy, unmetDependencies } from "./store.js";
 import type { Task } from "./store.js";
 
 /** What VLAD hands to `create_session` for a cloud worker (`vlad task launch --json`, cloud mode). */
@@ -310,6 +310,8 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   const task = getTask(id);
   if (task.data.state !== "queued") throw new Error(`görev queued değil (${task.data.state}): ${id}`);
   if (task.data.kind !== "dev") throw new Error(`yalnızca dev görevleri başlatılır (kind=${task.data.kind}): ${id}`);
+
+  syncAutonomy(task, loadConfig());
 
   const branch = `vlad/${id}`;
   let res: CloudLaunch;

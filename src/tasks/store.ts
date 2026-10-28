@@ -4,7 +4,7 @@ import {
   appendToSection, autonomyFor, CLOUD_ID_FLOOR, getSection, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
   setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
-import type { TaskData, TaskKind, TaskModel, TaskState } from "../kb/index.js";
+import type { TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
 import { getRole, type Role } from "../roles/store.js";
 import { assertTransition } from "./state.js";
 
@@ -279,6 +279,21 @@ export function saveTask(task: Task): void {
   task.data.updated = nowIso();
   validate("task", task.data);
   writeDoc(task.file, task.data, task.body);
+}
+
+/**
+ * The task's `autonomy` froze at creation; config is the authority. Rewrites a stale frontmatter value
+ * and returns the previous one (null when unchanged).
+ */
+export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
+  const current = autonomyFor(cfg, task.data.project);
+  if (task.data.autonomy === current) return null;
+  // re-read right before writing: a running worker may have appended a log line since `task` was read
+  const fresh = getTask(task.data.id);
+  const previous = fresh.data.autonomy;
+  fresh.data.autonomy = task.data.autonomy = current;
+  saveTask(fresh);
+  return previous;
 }
 
 export function listTasksWithWarnings(

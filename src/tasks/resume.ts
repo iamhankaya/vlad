@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
-import { getSection } from "../kb/index.js";
+import { getSection, loadConfig } from "../kb/index.js";
 import { currentBranch, runGitRaw } from "../git/git.js";
-import { getTask } from "./store.js";
+import { standardBlocks } from "./blocks.js";
+import { getTask, syncAutonomy } from "./store.js";
 
 const TAIL = 5;
 
@@ -46,6 +47,12 @@ export function resumeInfo(id: string): LocalResume | CloudResume {
   if (t.data.state !== "running" && t.data.state !== "stalled") {
     throw new Error(`yalnızca running/stalled görev sürdürülür (${t.data.state}): ${id}`);
   }
+  const stale = syncAutonomy(t, loadConfig());
+  const authority = `Yetki seviyen: \`${t.data.autonomy}\`` +
+    (stale
+      ? ` (config'ten güncellendi; önceki: ${stale}; bu satır en son gelen yetkidir). ` +
+        standardBlocks({ taskId: id, autonomy: t.data.autonomy, parent: t.data.parent ?? null, mode: "local" })[0]
+      : ".");
   const branch = `vlad/${id}`;
   const tail = logTail(t.body);
   const tailText = tail.length ? tail.join("\n") : "(ilerleme kaydı yok)";
@@ -58,6 +65,7 @@ export function resumeInfo(id: string): LocalResume | CloudResume {
     const dirty = dirtyPaths(wt);
     const prompt = [
       `VLAD görev ${id} kaldığı yerden sürdürülüyor.`,
+      authority,
       `Çalışma dizinin: ${wt} (branch ${branch}). Ana dizinde veya başka bir worktree'de ÇALIŞMA; önce bu dizine geç.`,
       "Önce `git status` ve `git branch --show-current` ile branch'i ve kaydedilmemiş değişiklikleri doğrula.",
       dirty.length
@@ -73,6 +81,7 @@ export function resumeInfo(id: string): LocalResume | CloudResume {
   if (sid) {
     const message = [
       `VLAD görev ${id} kaldığı yerden sürdürülüyor.`,
+      authority,
       `Önce \`git status\` ve \`git branch --show-current\` ile \`${branch}\` üzerinde olduğunu ve kaydedilmemiş değişiklikleri doğrula; yanlış dizindeysen doğru checkout'a geç.`,
       `Son ilerleme kayıtları:\n${tailText}`,
       "Kaldığın yerden devam et; protokol işaretlerini ([VLAD:LOG #n] …) kaldığın numaradan sürdür.",
