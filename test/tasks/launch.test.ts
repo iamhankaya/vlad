@@ -656,3 +656,18 @@ describe("F-vlad-083/ cleanup never follows a junction out of the worktree", () 
     expect(existsSync(join(ext, "deep", "keep2.txt"))).toBe(true);
   });
 });
+
+describe("deps/ launch enforcement", () => {
+  it("refuses a phase whose dependency is not done, with no side effects, then launches once it is", async () => {
+    const p = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" });
+    const dep = createTask({ project: "alpha", title: "d", kind: "dev", body: "", parent: p.data.id });
+    const x = createTask({ project: "alpha", title: "x", kind: "dev", body: "", parent: p.data.id, dependsOn: [dep.data.id] });
+    const l = fakeLauncher();
+    await expect(launchTask(x.data.id, { launcher: l, cfg })).rejects.toThrow(`bağımlılıklar tamamlanmadı: ${dep.data.id}`);
+    expect(l.reqs).toHaveLength(0);
+    expect(existsSync(worktreePath(cfg, repo, x.data.id))).toBe(false);
+    expect(getTask(x.data.id).data.state).toBe("queued");
+    setState(dep.data.id, "running"); setState(dep.data.id, "awaiting_approval"); setState(dep.data.id, "done");
+    expect((await launchTask(x.data.id, { launcher: l, cfg })).data.state).toBe("running");
+  });
+});

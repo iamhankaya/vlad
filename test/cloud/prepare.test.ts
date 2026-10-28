@@ -282,3 +282,13 @@ describe("cloud task id range", () => {
     expect(mk().data.id).toMatch(/-51$/);
   });
 });
+
+describe("deps/ prepareCloudLaunch enforcement", () => {
+  it("refuses while a dependency is not done and leaves the task queued", () => {
+    const p = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" });
+    const dep = mk("alpha", { parent: p.data.id });
+    const x = mk("alpha", { parent: p.data.id, dependsOn: [dep.data.id] });
+    expect(() => prepareCloudLaunch(x.data.id, { remoteBranch: () => "exists" })).toThrow(`bağımlılıklar tamamlanmadı: ${dep.data.id}`);
+    expect(getTask(x.data.id).data.state).toBe("queued");
+  });
+});

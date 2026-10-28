@@ -14,7 +14,9 @@ import { splitSkills } from "../roles/store.js";
 import type { Role } from "../roles/store.js";
 import { markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe } from "./liveness.js";
-import { effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
+import {
+  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState, unmetDependencies,
+} from "./store.js";
 import type { Task } from "./store.js";
 import { trustWorktree, untrustWorktree } from "./trust.js";
 
@@ -125,6 +127,8 @@ export async function launchTask(
   const task = getTask(id);
   if (task.data.state !== "queued") throw new Error(`görev queued değil (${task.data.state}): ${id}`);
   if (task.data.kind !== "dev") throw new Error(`yalnızca dev görevleri başlatılır (kind=${task.data.kind}): ${id}`);
+  const unmet = unmetDependencies(task);
+  if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
 
   const branch = `vlad/${id}`;
   let repo: string;

@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { getSection, getVladHome, kbPaths, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
-import { effectiveModel, roleFor, getTask, saveTask, setState } from "./store.js";
+import { effectiveModel, roleFor, getTask, saveTask, setState, unmetDependencies } from "./store.js";
 import type { Task } from "./store.js";
 
 /** What VLAD hands to `create_session` for a cloud worker (`vlad task launch --json`, cloud mode). */
@@ -323,6 +323,8 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
     kb = o.cloudKb ?? loadConfig().cloudKb ?? "inline";
     const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     assertPathSafe(task);
+    const unmet = unmetDependencies(task);
+    if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
     const c = card(task.data.project);
     if (c.local_only) {
       throw new Error(`proje ${c.slug} yalnızca yerel çalışır${c.local_only_reason ? ` (${c.local_only_reason})` : ""}; bulutta başlatılamaz`);
