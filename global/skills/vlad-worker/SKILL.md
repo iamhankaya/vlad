@@ -26,6 +26,7 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 
 ## 2. Çalış (yetki seviyene göre)
 
+- Yetki seviyen launch prompt'undaki değerdir (config'ten güncel okunur); görev dosyası frontmatter'ıyla çelişirse prompt'a uy, çelişkiyi `vlad task log` ile yaz, sorma.
 - `autonomy: plan` → Yalnızca plan yaz, kod yazma. Planı `vlad task report` ile onaya sun (adım 6) ve dur.
 - `autonomy: commit` / `pr` → Mevcut iş akışını kullan: brainstorming/plan → TDD → review. Kabul kriterlerinin her birini karşıla.
 
@@ -53,7 +54,7 @@ Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:
 ```
 vlad task ask <id> "<soru, seçenekleriyle>"
 ```
-Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyasının `## Sorular` bölümüne `**Cevap:**` olarak yazılır; bildirim gelince veya kullanıcı söyleyince dosyayı yeniden oku.
+Ardından **bildirim gönder** (adım 7; zorunlu) ve cevabı bekle. Cevap görev dosyasının `## Sorular` bölümüne `**Cevap:**` olarak yazılır; bildirim gelince veya kullanıcı söyleyince dosyayı yeniden oku.
 
 ## 5. Commit ve sınırlar
 
@@ -62,13 +63,13 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 - **Asla entegrasyon/ana branch'e merge etme. Asla `vlad/<id>` dışında bir branch'e push etme; `--force` yok.** `autonomy: commit` veya `plan` ise hiç push etme.
 - Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. Başka hiçbir merge serbest değildir; tek istisna entegrasyon branch'ini **kendi dalına** almaktır (adım 6). `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et; push sonrası CI'ı `ci-triage` skill'iyle izle (yüklü değilse görev prompt'undaki "VLAD standart blokları" yeterlidir).
 
-**Boşta bekleme:** uzun bir bekleme (CI, kullanıcı cevabı) için oturumu tüketme. Tek bir `gh run watch` kullan, yoklama döngüsü kurma; bellek/oturum uyarısı ya da ~20 dk sessizlik olursa bekleyişi bırak, `vlad task log <id> "bekliyor: <ne>"` yaz ve raporla ya da `vlad task ask` ile sor.
+**Boşta bekleme:** uzun bir bekleme (CI, kullanıcı cevabı) için oturumu tüketme. Tek bir `gh run watch` kullan, yoklama döngüsü kurma. `gh run watch` bitince (yeşil ya da kırmızı) **aynı turda** sonraki adıma geç: yeşilse raporu yaz (adım 6) ve bildirimi gönder (adım 7), kırmızıysa `ci-triage`. "İzliyorum" diyerek turu asla bitirme. Bellek/oturum uyarısı ya da ~20 dk sessizlik olursa bekleyişi bırak, `vlad task log <id> "bekliyor: <ne>"` yaz ve raporla ya da `vlad task ask` ile sor.
 
 **CI tur kuralı:** kendi kırmızını düzeltip yeniden push edebilirsin; aynı neden ikinci kez kırmızı çıkarsa dur ve `vlad task ask` ile sor. Entegrasyon dalından gelen (kendi değişikliğin olmayan) kırmızı tur sayılmaz: düzeltmeye çalışma, `### Açık noktalar`'a yaz.
 
 **visual-proof:** görünür bir değişiklik (UI, oyun sahnesi, çıktı biçimi) yaptıysan rapordan önce önce/sonra kanıtını aynı senaryoyla üret (ekran görüntüsü ya da kare yolu), raporun `### Test sonuçları`'nda ver; görüntüyü commit'leme. Üretemiyorsan "öz-kontrol yapılamadı" yaz.
 
-**İzin kalıpları:** Claude Code'un izin sınıflandırıcısı bilinen komutları reddedebilir: `git push origin vlad/<id>` ya da `gh run watch` reddedilirse komutu başka biçimde zorlama, `vlad task ask` ile sor; kullanıcı `settings.json`'a `Bash(git push origin vlad/*)` benzeri kalıp ekler (çalışan kendi izin ayarını değiştirmez). Safeguard/oturum kesintisinde iş kaybolmasın diye checkpoint kuralını (WIP commit + "kaldığım yer") uygula.
+**İzin kalıpları:** `settings.json` izin kuralları komutun tamamıyla eşleşir (`Bash(git push origin vlad/*)`, `Bash(git push -u origin vlad/*)`, `Bash(gh run list|view|watch|rerun|download *)`, `Bash(gh workflow run * --ref vlad/*)`). Bu yüzden push ve `gh run`/`gh workflow run` komutlarını tek başına çalıştır; `cd <dizin> &&` ya da `&&`/`;` zinciri kurma (dizin için `git -C <yol>`). Reddedilirse komutu başka biçimde zorlama, `vlad task ask` ile sor; VLAD kullanıcı onayıyla push eder (çalışan kendi izin ayarını değiştirmez). Safeguard/oturum kesintisinde iş kaybolmasın diye checkpoint kuralını (WIP commit + "kaldığım yer") uygula.
 
 ## 6. Kapanış raporu
 
@@ -107,7 +108,7 @@ Durum değiştiğinde (soru sordun, rapor yazdın):
    `SendMessage({to: "<ad>", message: "VLAD görev <id>: <state> — görev dosyasına bak"})`
    (`<state>`: `blocked`, `awaiting_approval` veya `failed`).
 
-Bildirim yalnızca bir dürtmedir; asıl bilgi görev dosyasındadır. Bildirim gönderilemezse VLAD durumu `/status` ile dosyadan okur — bu bir hata değildir.
+Bildirim yalnızca bir dürtmedir; asıl bilgi görev dosyasındadır. Bildirim gönderilemezse (hedef yok, `SendMessage` hatası) `vlad task log <id> "bildirim gönderilemedi: <neden>"` yaz; VLAD durumu `/status` ile dosyadan okur — bu bir hata değildir.
 
 ## Hata durumu
 
