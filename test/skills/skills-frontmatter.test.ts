@@ -65,6 +65,16 @@ describe("skills/ references and de-duplication", () => {
     expect(s).not.toContain("merge --no-ff");
   });
 
+  it("integration-branch merge precondition applies only to pipeline dev phases (parent set), not single tasks", () => {
+    for (const f of [".claude/skills/integrate/SKILL.md", ".claude/skills/status/SKILL.md"]) {
+      const t = read(f);
+      const line = t.split(/\r?\n/).find((l) => l.includes("entegrasyon branch'i merge + lint + gate"));
+      expect(line, f).toBeDefined();
+      expect(line, f).toMatch(/parent/);
+      expect(line, f).toMatch(/tek görev/i);
+    }
+  });
+
   it("the tiered security rule lives only in status; delegate and the security-reviewer role refer to it", () => {
     expect(read(".claude/skills/status/SKILL.md")).toContain("Kademeli güvenlik kuralı");
     expect(read(".claude/skills/delegate/SKILL.md")).not.toContain("**Kademeli güvenlik kuralı:**");
