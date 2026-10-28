@@ -2,7 +2,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
-import { getVladHome, kbPaths, readDoc } from "../kb/index.js";
+import { worktreePath } from "../git/git.js";
+import { getVladHome, kbPaths, loadConfig, readDoc } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
 import { getRole } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
@@ -61,6 +62,11 @@ function cardSkills(project: string): string[] {
   try { return existsSync(file) ? (readDoc<ProjectCard>(file).data.skills ?? []).map(bare) : []; } catch { return []; }
 }
 
+function derivedWorktree(project: string, id: string): string | null {
+  const file = join(kbPaths().projects, `${project}.md`);
+  try { return existsSync(file) ? worktreePath(loadConfig(), readDoc<ProjectCard>(file).data.path, id) : null; } catch { return null; }
+}
+
 export interface TaskAudit {
   id: string; project: string; role: string | null; transcript: boolean;
   expected: string[]; loaded: string[]; missing: string[];
@@ -85,7 +91,8 @@ export function auditSkills(o: { configDir?: string; since?: string; project?: s
 
   const tasks: TaskAudit[] = [];
   for (const t of all) {
-    const wt = t.data.worktree;
+    // `task cleanup` empties the field; the path is still derivable from the card and `worktreeDir`
+    const wt = t.data.worktree ?? (t.data.kind === "dev" && t.data.state !== "queued" ? derivedWorktree(t.data.project, t.data.id) : null);
     if (t.data.kind === "pipeline" || !wt) continue;
     const scan = scanDir(dirOf(wt));
     const base = { id: t.data.id, project: t.data.project, role: t.data.role ?? null };
