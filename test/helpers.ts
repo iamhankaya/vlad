@@ -1,6 +1,6 @@
-import { cpSync, mkdirSync, mkdtempSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -19,4 +19,36 @@ export function makeHome(): string {
   process.env.VLAD_HOME = home;
   delete process.env.VLAD_KB_DIR;
   return home;
+}
+
+/** Canonical (8.3-expanded) throwaway root; every destructive test step must stay inside it. */
+export function makeFixtureRoot(): string {
+  return realpathSync.native(mkdtempSync(join(tmpdir(), "vlad-t-")));
+}
+
+/** Throws unless `p` (or its nearest existing ancestor) resolves inside `root`. */
+export function assertInside(root: string, p: string): void {
+  let cur = resolve(p);
+  const tail: string[] = [];
+  while (!existsSync(cur) && dirname(cur) !== cur) { tail.unshift(basename(cur)); cur = dirname(cur); }
+  const real = join(realpathSync.native(cur), ...tail);
+  const rel = relative(realpathSync.native(root), real);
+  if (rel.startsWith("..") || isAbsolute(rel)) throw new Error(`fixture kökü dışında: ${p}`);
+}
+
+/** Directory junction (Windows) or dir symlink; both ends must be inside `root`. */
+export function makeJunction(link: string, target: string, root: string): void {
+  assertInside(root, link);
+  assertInside(root, target);
+  try {
+    symlinkSync(target, link, process.platform === "win32" ? "junction" : "dir");
+  } catch (e) {
+    throw new Error(`junction oluşturulamadı: ${(e as Error).message}`);
+  }
+}
+
+/** Best-effort removal of a test's temp dir (a locked file must not fail the test). Links are detached, never followed. */
+export function rmTemp(p: string | undefined): void {
+  if (!p) return;
+  try { rmSync(p, { recursive: true, force: true }); } catch { /* left for the OS temp cleanup */ }
 }

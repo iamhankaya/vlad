@@ -34,7 +34,7 @@ describe("config", () => {
     expect(cfg).toEqual({
       roots: ["C:\\dev"], ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
       staleAfterHours: 6, launcher: "auto", kbDir: "../vlad-kb", worktreeDir: "{repo}-wt",
-      projects: { watchparty: { autonomy: "commit" } },
+      projects: { watchparty: { autonomy: "commit" }, "ashen-bastion": { autonomy: "pr" } },
     });
   });
   it("uses schemas of the given home, not VLAD_HOME", () => {

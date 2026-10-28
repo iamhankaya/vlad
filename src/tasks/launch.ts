@@ -1,8 +1,8 @@
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
-  addWorktree, attachWorktree, branchExists, isWorktree, remoteBranchExists, removeWorktree, runGit, worktreeBranch,
-  worktreePath,
+  addWorktree, attachWorktree, branchExists, isWorktree, ReparseCleanupError, remoteBranchExists, removeWorktree, runGit,
+  unlinkReparsePoints, worktreeBranch, worktreePath,
 } from "../git/git.js";
 import { readDoc, kbPaths } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
@@ -14,8 +14,12 @@ import { splitSkills } from "../roles/store.js";
 import type { Role } from "../roles/store.js";
 import { markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe } from "./liveness.js";
-import { effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState } from "./store.js";
+import {
+  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState, unmetDependencies,
+} from "./store.js";
 import type { Task } from "./store.js";
+import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
+import type { BlockCtx } from "./blocks.js";
 import { trustWorktree, untrustWorktree } from "./trust.js";
 
 const ALL_STATES: TaskState[] = [
@@ -41,7 +45,15 @@ function recordError(id: string, msg: string): void {
 
 export function buildPrompt(
   taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
+  ctx?: { taskId: string; parent: string | null },
 ): string {
+  const core = promptCore(taskFile, autonomy, role);
+  if (!ctx) return core;
+  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local" });
+  return [core, BLOCKS_HEADING, ...blocks].join("\n\n");
+}
+
+function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] }): string {
   const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
@@ -125,6 +137,8 @@ export async function launchTask(
   const task = getTask(id);
   if (task.data.state !== "queued") throw new Error(`görev queued değil (${task.data.state}): ${id}`);
   if (task.data.kind !== "dev") throw new Error(`yalnızca dev görevleri başlatılır (kind=${task.data.kind}): ${id}`);
+  const unmet = unmetDependencies(task);
+  if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
 
   const branch = `vlad/${id}`;
   let repo: string;
@@ -179,7 +193,7 @@ export async function launchTask(
     const res = await o.launcher.launch({
       taskId: id,
       cwd: wt,
-      prompt: buildPrompt(task.file, task.data.autonomy, role),
+      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
@@ -247,11 +261,19 @@ export function cleanupTask(
 function removeTaskWorktree(repo: string, wt: string, id: string): void {
   try {
     if (isWorktree(repo, wt)) removeWorktree(repo, wt);
-    else rmSync(wt, { recursive: true, force: true });
+    else { unlinkReparsePoints(wt); rmSync(wt, { recursive: true, force: true }); }
   } catch (e) {
+    // fail-closed: links that could not be detached must never reach the retry/rmSync fallback below
+    if (e instanceof ReparseCleanupError) {
+      throw new Error(
+        `worktree bağlantıları kaldırılamadı, silme yapılmadı: ${wt}. \`vlad task cleanup ${id}\` ile tekrar dene. (${e.message})`,
+      );
+    }
     try {
+      unlinkReparsePoints(wt); // git may have failed before touching links; the fallback must not follow one either
       rmSync(wt, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-    } catch {
+    } catch (e2) {
+      if (e2 instanceof ReparseCleanupError) throw new Error(`worktree bağlantıları kaldırılamadı, silme yapılmadı: ${wt}. (${e2.message})`);
       /* reported below */
     }
     runGit(repo, ["worktree", "prune"]);

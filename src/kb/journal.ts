@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { writeFileAtomic } from "./atomic.js";
 import { kbPaths } from "./home.js";
 import { nowIso } from "./time.js";
 
@@ -8,7 +9,7 @@ function appendBlock(file: string, text: string, initial = ""): void {
   mkdirSync(dirname(file), { recursive: true });
   const cur = existsSync(file) ? readFileSync(file, "utf8") : initial;
   const base = cur.replace(/\s+$/, "");
-  writeFileSync(file, `${base ? base + "\n\n" : ""}${text.replace(/\s+$/, "")}\n`, "utf8");
+  writeFileAtomic(file, `${base ? base + "\n\n" : ""}${text.replace(/\s+$/, "")}\n`);
 }
 
 /** Spec 5.4: appends a `### <date> — <project> — <title>` block to kb/decisions.md. */

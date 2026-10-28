@@ -169,7 +169,8 @@ describe("prepareCloudLaunch", () => {
       const { pipe, prompt } = setup(big + "\nTam metin: docs/spec/x.md\n");
       const p = prompt();
       expect(p).toContain(`Tam metin \`vlad/${pipe.data.id}\` branch'inde: \`docs/spec/x.md\``);
-      expect(p.length).toBeLessThan(big.length / 2);
+      // the prompt also carries the standard blocks (~2.5 KB), so the bound is not half of the report any more
+      expect(p.length).toBeLessThan(big.length * 0.7);
     });
 
     it("over the limit with report_file in the frontmatter", () => {
@@ -280,5 +281,15 @@ describe("cloud task id range", () => {
   it("createTask uses the cloud range", () => {
     process.env.CLAUDE_CODE_REMOTE = "true";
     expect(mk().data.id).toMatch(/-51$/);
+  });
+});
+
+describe("deps/ prepareCloudLaunch enforcement", () => {
+  it("refuses while a dependency is not done and leaves the task queued", () => {
+    const p = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" });
+    const dep = mk("alpha", { parent: p.data.id });
+    const x = mk("alpha", { parent: p.data.id, dependsOn: [dep.data.id] });
+    expect(() => prepareCloudLaunch(x.data.id, { remoteBranch: () => "exists" })).toThrow(`bağımlılıklar tamamlanmadı: ${dep.data.id}`);
+    expect(getTask(x.data.id).data.state).toBe("queued");
   });
 });
