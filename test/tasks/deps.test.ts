@@ -1,17 +1,20 @@
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
-import { makeHome } from "../helpers.js";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { makeHome, rmTemp } from "../helpers.js";
 import { createTask, getTask, setDependencies, setState, unmetDependencies } from "../../src/tasks/index.js";
 
 const D = new Date(2026, 9, 15, 10, 0, 0);
 let pipe: string;
+let home: string;
 const phase = (title: string, dependsOn: string[] = [], parent = pipe) =>
   createTask({ project: "p", title, kind: "dev", body: "## Tanım\nx\n", parent, dependsOn }, D).data.id;
 
 beforeEach(() => {
-  makeHome();
+  home = makeHome();
   pipe = createTask({ project: "p", title: "çatı", kind: "pipeline", body: "" }, D).data.id;
 });
+
+afterEach(() => rmTemp(home));
 
 const raw = (id: string) => readFileSync(getTask(id).file);
 

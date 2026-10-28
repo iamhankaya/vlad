@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,4 +45,10 @@ export function makeJunction(link: string, target: string, root: string): void {
   } catch (e) {
     throw new Error(`junction oluşturulamadı: ${(e as Error).message}`);
   }
+}
+
+/** Best-effort removal of a test's temp dir (a locked file must not fail the test). Links are detached, never followed. */
+export function rmTemp(p: string | undefined): void {
+  if (!p) return;
+  try { rmSync(p, { recursive: true, force: true }); } catch { /* left for the OS temp cleanup */ }
 }

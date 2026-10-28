@@ -11,7 +11,7 @@ import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSumma
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { trustKey } from "../../src/tasks/trust.js";
-import { assertInside, makeHome, makeJunction } from "../helpers.js";
+import { assertInside, makeHome, makeJunction, rmTemp } from "../helpers.js";
 
 function git(cwd: string, ...args: string[]) {
   return execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
@@ -20,8 +20,10 @@ function git(cwd: string, ...args: string[]) {
 let repo: string;
 let cfg: VladConfig;
 
+let home: string;
+afterEach(() => { rmTemp(dirname(repo)); rmTemp(home); });
 beforeEach(() => {
-  makeHome();
+  home = makeHome();
   const base = mkdtempSync(join(tmpdir(), "vlad-launch-"));
   repo = join(base, "alpha");
   mkdirSync(repo);
