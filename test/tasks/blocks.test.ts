@@ -68,3 +68,18 @@ describe("blocks/ buildPrompt", () => {
     }
   });
 });
+
+describe("blocks/ project repo skills", () => {
+  it("lists the card's skills by name for local non-plan workers, nothing without them", () => {
+    const t = text({ autonomy: "commit", projectSkills: ["ab-test-ve-kapi", "godot-ui"] });
+    expect(t).toContain("`ab-test-ve-kapi`, `godot-ui`");
+    expect(t).toMatch(/Skill aracıyla yükle/);
+    expect(text({ autonomy: "commit" })).not.toContain("Projenin repo skill");
+    expect(text({ autonomy: "commit", projectSkills: [] })).not.toContain("Projenin repo skill");
+    expect(text({ autonomy: "plan", projectSkills: ["x"] })).not.toContain("Projenin repo skill");
+    expect(text({ autonomy: "commit", mode: "cloud", projectSkills: ["x"] })).not.toContain("Projenin repo skill");
+  });
+  it("buildPrompt carries them through ctx", () => {
+    expect(buildPrompt("f.md", "commit", undefined, { taskId: ID, parent: null, projectSkills: ["ab-test-ve-kapi"] })).toContain("`ab-test-ve-kapi`");
+  });
+});

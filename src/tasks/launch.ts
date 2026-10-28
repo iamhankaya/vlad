@@ -20,6 +20,7 @@ import {
 import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
+import { expireMode, modeLine } from "../mode/store.js";
 import { trustWorktree, untrustWorktree } from "./trust.js";
 
 const ALL_STATES: TaskState[] = [
@@ -45,11 +46,11 @@ function recordError(id: string, msg: string): void {
 
 export function buildPrompt(
   taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
-  ctx?: { taskId: string; parent: string | null },
+  ctx?: { taskId: string; parent: string | null; projectSkills?: string[] },
 ): string {
   const core = promptCore(taskFile, autonomy, role);
   if (!ctx) return core;
-  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local" });
+  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local", projectSkills: ctx.projectSkills });
   return [core, BLOCKS_HEADING, ...blocks].join("\n\n");
 }
 
@@ -196,7 +197,7 @@ export async function launchTask(
     const res = await o.launcher.launch({
       taskId: id,
       cwd: wt,
-      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null }),
+      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
@@ -295,12 +296,14 @@ export function statusSummary(
   platform?: NodeJS.Platform,
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
-  undigested: number; openSevereFindings: number;
+  undigested: number; openSevereFindings: number; mode: string | null;
 } {
   const newlyStalled = [
     ...markStale(now, cfg.staleAfterHours),
     ...markSilentWorkers(now, cfg, probe, platform),
   ].map((t) => t.data.id);
+  const mode = modeLine(now);
+  try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
   for (const t of tasks) counts[t.data.state]++;
@@ -312,5 +315,6 @@ export function statusSummary(
     inbox: countInbox(),
     undigested: tasks.filter((t) => t.data.state === "done" && !t.data.digested).length,
     openSevereFindings: countOpenSevere(),
+    mode,
   };
 }

@@ -4,6 +4,9 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
+import { auditSkills } from "./audit/skills.js";
+import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
+import { idleTasks } from "./tasks/liveness.js";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
@@ -301,6 +304,12 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
   .option("--project <slug>", "proje slug'ı")
   .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
   .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
+def(task, "idle", "Uzun süredir güncellenmeyen running/blocked görevler (bekçi modu dürtmesi için)", (o: Opts) => {
+  const minutes = Number(o.minutes);
+  if (!(minutes >= 0)) throw new Error(`geçersiz --minutes: ${o.minutes}`);
+  const tasks = idleTasks(new Date(), minutes);
+  out(o, { minutes, tasks }, tasks.map((t) => `${t.id}  ${t.state.padEnd(8)} ${t.idle_minutes} dk  ${t.branch ?? "-"}  ${t.last_log ?? ""}`).join("\n"));
+}).option("--minutes <n>", "en az bu kadar dakikadır sessiz", "30");
 def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
   const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel);
   const lines = [
@@ -321,7 +330,8 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
     const line =
       `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
       `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)` +
-      (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "");
+      (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
+      (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
       process.stdout.write(JSON.stringify({
@@ -334,11 +344,56 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
     return;
   }
   const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];
+  if (s.mode) lines.push(`mod: ${s.mode}`);
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
   out(o, { ...s, active: s.active.map(withModel), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
 }).option("--summary", "tek satır özet")
   .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");
+
+const mode = program.command("mode").description("Gece / bekçi modu (yetki penceresi kb/mode.json)");
+const modeText = (now: Date) => modeLine(now) ?? "mod kapalı";
+def(mode, "night", "Gece (yetki) modunu açar: pencere boyunca faz ve son kapı merge'ü sormadan", (o: Opts) => {
+  const night = setNight({
+    until: o.until as string, note: o.note as string | undefined,
+    projects: o.projects ? String(o.projects).split(",").map((x) => x.trim()).filter(Boolean) : undefined,
+  });
+  out(o, { night }, modeText(new Date()));
+})
+  .requiredOption("--until <HH:MM|ISO>", "bitiş: sıradaki HH:MM ya da ISO tarih-saat")
+  .option("--projects <a,b>", "yetkinin geçtiği projeler (boş = hepsi)")
+  .option("--note <metin>", "kullanıcının verdiği kapsam notu");
+def(mode, "watch <on|off>", "Bekçi modu: gece modundan bağımsız aç/kapat", (v: string, o: Opts) => {
+  if (v !== "on" && v !== "off") throw new Error("on ya da off ver");
+  setWatch(v === "on");
+  out(o, modeStatus(new Date()), modeText(new Date()));
+});
+def(mode, "off", "Gece ve bekçi modunu kapatır", (o: Opts) => {
+  setOff();
+  out(o, modeStatus(new Date()), "mod kapalı");
+});
+def(mode, "status", "Mod durumu (biten pencere bir kez bildirilir, sonra temizlenir)", (o: Opts) => {
+  const now = new Date();
+  const s = modeStatus(now);
+  const line = modeText(now);
+  expireMode(now);
+  out(o, { ...s, line }, line);
+});
+
+const audit = program.command("audit").description("Denetimler");
+def(audit, "skills", "Görev oturum kayıtlarından beklenen/yüklenen/eksik skill denetimi", (o: Opts) => {
+  const r = auditSkills({ since: o.since as string | undefined, project: o.project as string | undefined });
+  const lines = r.tasks.map((t) => t.transcript
+    ? `${t.id}  ${t.project}  ${t.loaded.length}/${t.expected.length}${t.missing.length ? `  eksik: ${t.missing.join(", ")}` : ""}`
+    : `${t.id}  ${t.project}  (oturum kaydı yok)`);
+  const vl = Object.entries(r.vlad.loaded).map(([k, v]) => `${k}×${v}`).join(", ") || "-";
+  lines.push(`VLAD: yüklenen ${vl}${r.vlad.missing.length ? `; eksik: ${r.vlad.missing.join(", ")}` : ""}`);
+  const { summary: m } = r;
+  lines.push(`özet: ${m.audited}/${m.tasks} görevin kaydı var, ${m.loaded}/${m.expected} beklenen skill yüklendi${m.rate === null ? "" : ` (%${Math.round(m.rate * 100)})`}`);
+  out(o, r, lines.join("\n"));
+})
+  .option("--since <tarih>", "bu tarihten sonra oluşturulan görevler")
+  .option("--project <slug>", "yalnızca bu proje");
 
 const inbox = program.command("inbox").description("Oturum raporları");
 def(inbox, "list", "İşlenmemiş raporlar", (o: Opts) => {

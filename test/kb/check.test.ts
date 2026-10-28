@@ -66,7 +66,7 @@ describe("checkKb", () => {
     commitIn(other, "T", "legacy: pre-kb history");
     for (let i = 0; i < 52; i++) commitIn(other, "Claude", `kb: n${i}`);
     expect(checkKb().foreign).toEqual([]);
-  });
+  }, 120_000); // 54 git commits take far longer than the default 30 s while the full suite loads the machine (F-vlad-086)
 
   it("skips merge commits; ack <sha> does not acknowledge commits that landed after that head", () => {
     ackHead();

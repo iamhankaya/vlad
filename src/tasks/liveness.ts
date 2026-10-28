@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { VladConfig } from "../kb/index.js";
+import { getSection } from "../kb/index.js";
+import type { TaskState, VladConfig } from "../kb/index.js";
 import { listTasks, setState } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -19,9 +20,12 @@ export interface LivenessProbe {
   transcriptMtime(worktree: string): number | null;
 }
 
-/** Newest `*.jsonl` mtime under `<claude config>/projects/<worktree slug>/`; claude maps every non-alphanumeric path char to `-`. */
+/** Claude names a project dir after its path with every non-alphanumeric char mapped to `-`. */
+export const claudeProjectDir = (path: string): string => path.replace(/[^A-Za-z0-9]/g, "-");
+
+/** Newest `*.jsonl` mtime under `<claude config>/projects/<worktree slug>/`. */
 export function transcriptMtime(worktree: string, configDir: string = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")): number | null {
-  const dir = join(configDir, "projects", worktree.replace(/[^A-Za-z0-9]/g, "-"));
+  const dir = join(configDir, "projects", claudeProjectDir(worktree));
   try {
     const times = readdirSync(dir).filter((f) => f.endsWith(".jsonl")).map((f) => statSync(join(dir, f)).mtimeMs);
     return times.length ? Math.max(...times) : null;
@@ -79,4 +83,21 @@ export function markSilentWorkers(
     if (alive === false || idle >= (alive ? LIVE_FACTOR * silentMs : silentMs)) out.push(setState(t.data.id, "stalled"));
   }
   return out;
+}
+
+export interface IdleTask {
+  id: string; state: TaskState; project: string; title: string; idle_minutes: number; branch: string | null; last_log: string | null;
+}
+
+/** Running/blocked dev tasks whose file has not changed for `minutes`, longest idle first: the watch mode nudges these. */
+export function idleTasks(now: Date, minutes: number): IdleTask[] {
+  const out: IdleTask[] = [];
+  for (const t of listTasks({ state: ["running", "blocked"] })) {
+    if (t.data.kind === "pipeline") continue;
+    const idle = Math.floor((now.getTime() - Date.parse(t.data.updated)) / MIN);
+    if (!(idle >= minutes)) continue;
+    const log = (getSection(t.body, "## İlerleme") ?? "").split("\n").filter(Boolean).pop() ?? null;
+    out.push({ id: t.data.id, state: t.data.state, project: t.data.project, title: t.data.title, idle_minutes: idle, branch: t.data.branch ?? null, last_log: log });
+  }
+  return out.sort((a, b) => b.idle_minutes - a.idle_minutes);
 }
