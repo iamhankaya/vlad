@@ -18,10 +18,10 @@ const realSource = (mode: BlockCtx["mode"]): string =>
   }kayıt defterine ve canlı hesaplara dokunma, silme ya da boşaltma; silme gerektiren testte önce hedefin geçici dizin olduğunu doğrula (\`realpath\` ile).`;
 
 const prLocal = (id: string): string =>
-  `Yetki (autonomy pr, VLAD ve kullanıcı onaylı, karar 2026-10-28): yalnız \`vlad/${id}\` dalını \`git push -u origin vlad/${id}\` ile push edebilir ve CI'ı ` +
+  `Yetki (autonomy pr): yalnız \`vlad/${id}\` dalını \`git push -u origin vlad/${id}\` ile push edebilir ve CI'ı ` +
   `\`gh run list --branch vlad/${id}\` / \`gh run watch <run-id> --exit-status\` ile izleyebilirsin. Yasak: başka dala push, \`--force\`, ana veya entegrasyon dalına merge/PR, ` +
   "ana dala dokunma, kb dosyalarını doğrudan düzenleme (yerelde yalnız `vlad task log/ask/report` CLI'ı). " +
-  `PR yalnız pipeline dışı görevde \`gh pr create --head vlad/${id}\`; pipeline fazında PR açma. ` +
+  `Merge'süz PR (kaynak dal vlad/${id}) yalnız pipeline dışı görevde \`gh pr create --head vlad/${id}\`; pipeline fazında PR açma. ` +
   "CI: tek bir `gh run watch` kullan (yoklama döngüsü kurma); bellek/oturum uyarısı ya da 20 dk sessizlik olursa izlemeyi bırak, " +
   `\`vlad task log ${id} "CI: <run-id> izleniyor/bekliyor"\` yaz ve raporla; boşta bekleyerek oturum tüketme. ` +
   "CI tur kuralı: kırmızıyı düzeltip yeniden push edersin, ama aynı neden ikinci kez kırmızı çıkarsa dur ve " +

@@ -144,6 +144,9 @@ export function setDependencies(
   // re-read just before writing: the store has no lock, so a state change in between must not be overwritten
   const fresh = getTask(id);
   if (fresh.data.state !== "queued") throw new Error(`bağımlılık yalnızca queued fazda değiştirilir (${id} ${fresh.data.state})`);
+  if (JSON.stringify(fresh.data.depends_on ?? []) !== JSON.stringify(previous)) {
+    throw new Error(`bağımlılık başka bir çağrıyla değişti (${id}); tekrar dene`);
+  }
   fresh.data.depends_on = next;
   fresh.body = appendToSection(fresh.body, "## İlerleme", `- ${nowIso()} bağımlılık: [${previous.join(",")}] -> [${next.join(",")}]`);
   saveTask(fresh);

@@ -92,11 +92,12 @@ describe("git helpers", () => {
 });
 
 describe("F-vlad-083/ reparse points", () => {
-  let root: string;
+  let root: string | undefined;
   afterEach(() => {
-    assertInside(root, root);
+    if (!root) return;
     unlinkReparsePoints(root);
     rmSync(root, { recursive: true, force: true });
+    root = undefined;
   });
   const setup = () => {
     root = makeFixtureRoot();

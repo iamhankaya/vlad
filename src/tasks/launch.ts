@@ -272,7 +272,8 @@ function removeTaskWorktree(repo: string, wt: string, id: string): void {
     try {
       unlinkReparsePoints(wt); // git may have failed before touching links; the fallback must not follow one either
       rmSync(wt, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-    } catch {
+    } catch (e2) {
+      if (e2 instanceof ReparseCleanupError) throw new Error(`worktree bağlantıları kaldırılamadı, silme yapılmadı: ${wt}. (${e2.message})`);
       /* reported below */
     }
     runGit(repo, ["worktree", "prune"]);
