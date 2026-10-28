@@ -59,8 +59,8 @@ Ardından **bildirim gönder** (adım 7) ve cevabı bekle. Cevap görev dosyası
 
 - Yalnızca `vlad/<id>` branch'inde commit'le.
 - `autonomy: pr` ise: `git push -u origin vlad/<id>` ve `gh pr create`.
-- **Asla entegrasyon/ana branch'e merge etme. Asla `vlad/<id>` dışında bir branch'e push etme.** `autonomy: commit` veya `plan` ise hiç push etme.
-- Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. Tek serbest olan, entegrasyon branch'ini **kendi dalına** almaktır (adım 6). `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et; push sonrası CI'ı `ci-triage` skill'iyle izle (yüklü değilse görev prompt'undaki "VLAD standart blokları" yeterlidir).
+- **Asla entegrasyon/ana branch'e merge etme. Asla `vlad/<id>` dışında bir branch'e push etme; `--force` yok.** `autonomy: commit` veya `plan` ise hiç push etme.
+- Pipeline fazında da aynı: entegrasyon branch'ine (`vlad/<parent>`) ya da ana branch'e merge etme, PR açma; entegrasyonu VLAD kullanıcı onayıyla yapar. Başka hiçbir merge serbest değildir; tek istisna entegrasyon branch'ini **kendi dalına** almaktır (adım 6). `autonomy: pr` olsa bile yalnızca `vlad/<id>`'yi push et; push sonrası CI'ı `ci-triage` skill'iyle izle (yüklü değilse görev prompt'undaki "VLAD standart blokları" yeterlidir).
 
 **Boşta bekleme:** uzun bir bekleme (CI, kullanıcı cevabı) için oturumu tüketme. Tek bir `gh run watch` kullan, yoklama döngüsü kurma; bellek/oturum uyarısı ya da ~20 dk sessizlik olursa bekleyişi bırak, `vlad task log <id> "bekliyor: <ne>"` yaz ve raporla ya da `vlad task ask` ile sor.
 
