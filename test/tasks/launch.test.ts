@@ -650,6 +650,17 @@ describe("F-vlad-083/ cleanup never follows a junction out of the worktree", () 
     return { id: t.data.id, wt };
   }
 
+  it("fails closed when the worktree dir itself is a link: nothing is deleted, the record stays", async () => {
+    const { id, wt } = await doneTaskWithLink();
+    rmSync(join(wt, "node_modules"), { recursive: true, force: true }); // detaches the link only
+    rmSync(wt, { recursive: true, force: true });
+    makeJunction(wt, ext, root); // e.g. a stray junction left where the worktree was
+    expect(() => cleanupTask(id, { closeWorker: () => {} })).toThrow(/bağlantıları kaldırılamadı, silme yapılmadı/);
+    expect(existsSync(join(ext, "keep.txt"))).toBe(true);
+    expect(existsSync(join(ext, "deep", "keep2.txt"))).toBe(true);
+    expect(getTask(id).data.worktree).toBe(wt);
+  });
+
   it("removes the link but leaves the target's files (junction/symlink)", async () => {
     const { id, wt } = await doneTaskWithLink();
     cleanupTask(id, { closeWorker: () => {} });
