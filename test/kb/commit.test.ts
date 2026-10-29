@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { commitKb } from "../../src/kb/commit.js";
+import { commitKb, git as kbGit } from "../../src/kb/commit.js";
 import { makeHome } from "../helpers.js";
 
 const ident = {
@@ -102,5 +102,14 @@ describe("commitKb", () => {
 
   it("rejects an empty message", () => {
     expect(() => commitKb("  ")).toThrow(/mesaj/);
+  });
+});
+
+describe("F-vlad-073/ git helper network safety", () => {
+  it("runs git with GIT_TERMINAL_PROMPT=0", () => {
+    expect(kbGit(process.cwd(), ["-c", "alias.e=!echo $GIT_TERMINAL_PROMPT", "e"]).trim()).toBe("0");
+  });
+  it("kills a call that outlives timeoutMs", () => {
+    expect(() => kbGit(process.cwd(), ["-c", "alias.s=!sleep 5", "s"], 200)).toThrow(/git .* başarısız/);
   });
 });

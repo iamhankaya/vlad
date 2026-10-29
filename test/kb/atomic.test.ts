@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addDecision, writeDoc, writeFileAtomic } from "../../src/kb/index.js";
@@ -47,5 +47,30 @@ describe("F-vlad-084/ atomic kb writes", () => {
   it("addDecision still appends through the atomic path", () => {
     addDecision({ project: "p", title: "t", body: "b" });
     expect(existsSync(join(home, "kb", "decisions", "p.md"))).toBe(true);
+  });
+
+  it("retries a rename that fails with a transient EPERM (target open on Windows, F-vlad-091)", () => {
+    const f = join(home, "a.md");
+    writeFileSync(f, "old");
+    let calls = 0;
+    writeFileAtomic(f, "new", { rename: (a, b) => { if (calls++ < 2) throw Object.assign(new Error("EPERM"), { code: "EPERM" }); renameSync(a, b); } });
+    expect(calls).toBe(3);
+    expect(readFileSync(f, "utf8")).toBe("new");
+    expect(leftovers(home)).toEqual([]);
+  });
+
+  it("gives up on a persistent EPERM, keeps the old content and leaves no temp file", () => {
+    const f = join(home, "a.md");
+    writeFileSync(f, "old");
+    expect(() => writeFileAtomic(f, "new", { rename: () => { throw Object.assign(new Error("EPERM"), { code: "EPERM" }); } })).toThrow(/EPERM/);
+    expect(readFileSync(f, "utf8")).toBe("old");
+    expect(leftovers(home)).toEqual([]);
+  });
+
+  it("does not retry other rename errors", () => {
+    const f = join(home, "a.md");
+    let calls = 0;
+    expect(() => writeFileAtomic(f, "new", { rename: () => { calls++; throw Object.assign(new Error("ENOENT"), { code: "ENOENT" }); } })).toThrow(/ENOENT/);
+    expect(calls).toBe(1);
   });
 });

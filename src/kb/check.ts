@@ -29,6 +29,7 @@ export interface KbCheckResult {
 const FALLBACK_COMMITS = 50;
 const SENSITIVE = /(^|\/)(CLAUDE(\.local)?\.md|AGENTS\.md|\.mcp\.json)$|(^|\/)\.(claude|github)\//;
 const SHA_RE = /^[0-9a-f]{7,40}$/;
+const FETCH_TIMEOUT_MS = 60_000;
 const UNCHECKED = "KONTROL YAPILAMADI";
 
 /** `--strict`: a foreign/suspicious commit or an unchecked run fails the command (default exit stays 0). */
@@ -58,7 +59,7 @@ export function checkKb(o: { ack?: boolean | string } = {}): KbCheckResult {
   const cwd = paths.kb;
   const warnings: string[] = [];
   try {
-    git(cwd, ["fetch", "-q"]);
+    git(cwd, ["fetch", "-q"], FETCH_TIMEOUT_MS);
   } catch (e) {
     return unchecked(`fetch başarısız, kontrol atlandı: ${(e as Error).message}`);
   }
