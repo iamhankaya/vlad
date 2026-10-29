@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
   appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, readDoc, serializeDoc,
@@ -300,6 +300,25 @@ export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
   return previous;
 }
 
+/**
+ * Parsed + validated task files by path, keyed by mtime/size: one `vlad status` lists the kb several times
+ * (markStale, markSilentWorkers, summary, pipeline worktrees) and each pass re-parsed every file (F-vlad-094).
+ * A write changes mtime/size, so a stale entry is never served; callers get clones because they mutate and save.
+ */
+const parsedTasks = new Map<string, { stamp: string; data: TaskData; body: string }>();
+function readTaskFile(file: string): { data: TaskData; body: string } {
+  const st = statSync(file, { bigint: true });
+  const stamp = `${st.mtimeNs}:${st.size}`;
+  let hit = parsedTasks.get(file);
+  if (hit?.stamp !== stamp) {
+    const { data, body } = readDoc<TaskData>(file);
+    validate("task", data);
+    hit = { stamp, data, body };
+    parsedTasks.set(file, hit);
+  }
+  return { data: structuredClone(hit.data), body: hit.body };
+}
+
 export function listTasksWithWarnings(
   f: { state?: TaskState[]; project?: string; parent?: string } = {},
 ): { tasks: Task[]; warnings: string[] } {
@@ -308,8 +327,7 @@ export function listTasksWithWarnings(
   for (const file of listMdFiles(kbPaths().tasks)) {
     const name = basename(file);
     try {
-      const { data, body } = readDoc<TaskData>(file);
-      validate("task", data);
+      const { data, body } = readTaskFile(file);
       if (f.state && !f.state.includes(data.state)) continue;
       if (f.project && data.project !== f.project) continue;
       if (f.parent && data.parent !== f.parent) continue;
