@@ -6,7 +6,7 @@ import { getSection, kbPaths, nowIso, readDoc, validate, writeDoc } from "../../
 import type { TaskData } from "../../src/kb/index.js";
 import {
   TransitionError, answerTask, askTask, createTask, getTask, listTasks, listTasksWithWarnings,
-  logTask, markDigested, markStale, nextTaskId, readyTasks, readyWithLimit, reportTask, setState, undigestedTasks,
+  logTask, markDigested, markStale, nextTaskId, readyTasks, readyWithLimit, reportTask, saveTask, setState, undigestedTasks,
 } from "../../src/tasks/index.js";
 
 const D = new Date(2026, 9, 15, 10, 0, 0);
@@ -337,5 +337,41 @@ describe("digested", () => {
     finish(a.data.id);
     expect(() => markDigested([a.data.id, b.data.id])).toThrow(/done değil/);
     expect(getTask(a.data.id).data.digested ?? null).toBeNull();
+  });
+});
+
+describe("listTasks ayrıştırma önbelleği (F-vlad-094)", () => {
+  it("döndürülen görevi değiştirmek sonraki okumayı etkilemez", () => {
+    const t = mk();
+    const body = listTasks()[0].body;
+    listTasks()[0].data.title = "bozuk";
+    listTasks()[0].body = "bozuk";
+    expect(listTasks()).toMatchObject([{ data: { id: t.data.id, title: "t" }, body }]);
+  });
+  it("dosya aynı boyutta yeniden yazılsa da yeni içerik görülür", () => {
+    const t = mk("aaa");
+    expect(listTasks()[0].data.title).toBe("aaa");
+    writeFileSync(t.file, readFileSync(t.file, "utf8").replace("title: aaa", "title: bbb"));
+    expect(listTasks()[0].data.title).toBe("bbb");
+  });
+  it("saveTask ardışık yazımları (okumalar arasında) hep son durumu gösterir", () => {
+    const t = mk();
+    for (const title of ["aaa", "bbb", "ccc", "ddd"]) {
+      const cur = listTasks()[0];
+      cur.data.title = title;
+      saveTask(cur);
+      expect(listTasks()[0].data.title).toBe(title);
+    }
+  });
+  it("silinen dosya listeden düşer, bozulan dosya uyarı verir", () => {
+    const a = mk("a");
+    const b = mk("b");
+    expect(listTasks()).toHaveLength(2);
+    rmSync(a.file);
+    expect(listTasks().map((x) => x.data.id)).toEqual([b.data.id]);
+    writeFileSync(b.file, "bozuk");
+    const r = listTasksWithWarnings();
+    expect(r.tasks).toEqual([]);
+    expect(r.warnings).toHaveLength(1);
   });
 });
