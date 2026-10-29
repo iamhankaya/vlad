@@ -8,6 +8,8 @@ export * from "./schema.js";
 export * from "./config.js";
 export * from "./types.js";
 export * from "./journal.js";
+export * from "./decisions.js";
+export * from "./search.js";
 export * from "./archive.js";
 export * from "./maintain.js";
 export * from "./get.js";
