@@ -71,6 +71,14 @@ describe("decisions split", () => {
     expect(t.indexOf("— Bir")).toBeLessThan(t.indexOf("— Yeni"));
     expect(t.match(/^# Karar Günlüğü/gm)).toHaveLength(1);
   });
+  it("a rerun after a crash (decisions.md left behind, files already written) does not duplicate blocks", () => {
+    writeLegacy();
+    maintainKb({ now: NOW });
+    const before = dec("vlad");
+    writeLegacy();
+    maintainKb({ now: NOW });
+    expect(dec("vlad")).toBe(before);
+  });
   it("addDecision writes to decisions/<project>.md, other project shapes to _genel", () => {
     addDecision({ project: "vlad", title: "T", body: "x" }, NOW);
     addDecision({ project: "../x", title: "G", body: "y" }, NOW);
@@ -95,6 +103,16 @@ describe("archive", () => {
     expect(existsSync(join(kbPaths().tasks, "archive", "2026-09", `${old.data.id}.md`))).toBe(true);
     expect(existsSync(join(kbPaths().tasks, `${old.data.id}.md`))).toBe(false);
     for (const t of [recent, oldRunning, oldFailed]) expect(existsSync(t.file)).toBe(true);
+  });
+  it("does not overwrite when the same id already sits in the archive", () => {
+    const t = mk(); ageTask(t.data.id, "done", daysAgo(40));
+    const dup = join(kbPaths().tasks, "archive", "2026-09");
+    mkdirSync(dup, { recursive: true });
+    writeFileSync(join(dup, `${t.data.id}.md`), "kopya");
+    const r = maintainKb({ now: NOW });
+    expect(r.tasks).toEqual([]);
+    expect(readFileSync(join(dup, `${t.data.id}.md`), "utf8")).toBe("kopya");
+    expect(existsSync(t.file)).toBe(true);
   });
   it("--days changes the threshold", () => {
     const t = mk(); ageTask(t.data.id, "done", daysAgo(10));

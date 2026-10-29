@@ -47,7 +47,8 @@ function splitDecisions(dry: boolean): MaintainResult["decisions"] {
   for (const slug of slugs.sort()) {
     const file = join(p.decisions, `${slug}.md`);
     const existing = existsSync(file) ? parseDecisions(readFileSync(file, "utf8")) : { preamble: "", blocks: [] };
-    const mine = legacy.blocks.filter((b) => b.slug === slug).map((b) => b.text);
+    const have = new Set(existing.blocks.map((b) => b.text)); // a rerun after a crash must not duplicate blocks already written
+    const mine = legacy.blocks.filter((b) => b.slug === slug && !have.has(b.text)).map((b) => b.text);
     const parts = [...(slug === "_genel" ? [legacy.preamble] : []), existing.preamble, ...mine, ...existing.blocks.map((b) => b.text)].filter(Boolean);
     writes.push([file, `${decisionTitle(slug)}\n\n${parts.join("\n\n")}\n`]);
     report.push({ file: slug, blocks: mine.length });
@@ -72,6 +73,7 @@ function archiveDir(dir: string, states: string[], cutoff: number, dry: boolean)
     const t = Date.parse(data.updated ?? "");
     if (!states.includes(data.state ?? "") || Number.isNaN(t) || t >= cutoff) continue;
     const to = join(dir, ARCHIVE, String(data.updated).slice(0, 7), name);
+    if (existsSync(to)) continue; // same id already archived (merge/copy): never overwrite
     moved.push({ id: name.slice(0, -3), from: relative(kb, from), to: relative(kb, to) });
     if (!dry) {
       mkdirSync(join(dir, ARCHIVE, String(data.updated).slice(0, 7)), { recursive: true });

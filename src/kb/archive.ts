@@ -18,7 +18,7 @@ export function listMdFiles(dir: string): string[] {
       for (const f of readdirSync(join(arch, m.name))) if (f.endsWith(".md")) files.push(join(arch, m.name, f));
     }
   }
-  return files.sort((a, b) => basename(a).localeCompare(basename(b)));
+  return files.sort((a, b) => (basename(a) < basename(b) ? -1 : basename(a) > basename(b) ? 1 : 0));
 }
 
 /** Path of `<id>.md` in `dir` or its archive, or null. */
