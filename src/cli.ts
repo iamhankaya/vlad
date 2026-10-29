@@ -406,7 +406,7 @@ def(mode, "night", "Gece (yetki) modunu açar: pencere boyunca faz ve son kapı 
   });
   out(o, { night }, modeText(new Date()));
 })
-  .requiredOption("--until <HH:MM|ISO>", "bitiş: sıradaki HH:MM ya da ISO tarih-saat")
+  .requiredOption("--until <HH:MM|ISO>", "bitiş: sıradaki HH:MM ya da ISO tarih-saat (en çok 24 saat)")
   .option("--projects <a,b>", "yetkinin geçtiği projeler (boş = hepsi)")
   .option("--note <metin>", "kullanıcının verdiği kapsam notu");
 def(mode, "watch <on|off>", "Bekçi modu: gece modundan bağımsız aç/kapat", (v: string, o: Opts) => {
