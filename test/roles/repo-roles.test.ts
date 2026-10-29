@@ -118,7 +118,7 @@ describe("work notes (## Çalışma notları) wiring", () => {
       expect(read(p), p).toContain("vlad finding");
       expect(read(p), p).toContain("Çalışma notları");
     }
-    expect(read("CLAUDE.md")).toContain("vlad project write|set|note|list");
+    expect(read("CLAUDE.md")).toContain("vlad project write|set|note|summary|status|list");
     expect(read("docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md")).toContain("## 15. Bulgu kaydı ve retro");
   });
 });

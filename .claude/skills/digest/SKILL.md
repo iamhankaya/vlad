@@ -114,7 +114,7 @@ Karar yazmadan önce projenin geçerli kararlarına bak (`vlad decision list --p
 - `add` yeni `D-<proje>-NNN` ID'sini döner; günlükte ve özette bu ID ile an.
 Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?" diye sor.
 
-## 5b. Proje durum özeti
+### 5b. Proje durum özeti
 
 Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
 ```
