@@ -29,6 +29,7 @@ describe("blocks/ standardBlocks matrix", () => {
       if (autonomy === "pr" && mode === "local") {
         expect(t).toContain(`git push -u origin vlad/${ID}`);
         expect(t).toContain("gh run watch");
+        expect(t).toContain("--interval 60"); // F-vlad-087: the 3 s default polling exhausts the GitHub API quota
         expect(t).toMatch(/aynı neden ikinci kez/);
         expect(t).toMatch(/entegrasyon dalından gelen/);
       }
@@ -73,7 +74,8 @@ describe("blocks/ project repo skills", () => {
   it("lists the card's skills by name for local non-plan workers, nothing without them", () => {
     const t = text({ autonomy: "commit", projectSkills: ["ab-test-ve-kapi", "godot-ui"] });
     expect(t).toContain("`ab-test-ve-kapi`, `godot-ui`");
-    expect(t).toMatch(/Skill aracıyla yükle/);
+    expect(t).toMatch(/İşe başlamadan .*Skill aracıyla yükle/); // F-vlad-093: mandatory, not "the ones that fit"
+    expect(t).not.toContain("Göreve uyanları");
     expect(text({ autonomy: "commit" })).not.toContain("Projenin repo skill");
     expect(text({ autonomy: "commit", projectSkills: [] })).not.toContain("Projenin repo skill");
     expect(text({ autonomy: "plan", projectSkills: ["x"] })).not.toContain("Projenin repo skill");
