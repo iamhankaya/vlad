@@ -14,7 +14,7 @@ export function readStdinSync(
     let n: number;
     try {
       const r = read(buf);
-      if (Buffer.isBuffer(r)) { if (!r.length) break; chunks.push(r); continue; }
+      if (Buffer.isBuffer(r)) { if (!r.length) break; chunks.push(r); waits = 0; continue; }
       n = r;
     } catch (e) {
       if ((e as { code?: string }).code !== "EAGAIN" || ++waits > MAX_EAGAIN) throw e;
@@ -23,6 +23,7 @@ export function readStdinSync(
     }
     if (n === 0) break;
     chunks.push(Buffer.from(buf.subarray(0, n)));
+    waits = 0;
   }
   return Buffer.concat(chunks).toString("utf8");
 }

@@ -17,4 +17,10 @@ describe("F-vlad-008/ readStdinSync", () => {
   it("gives up when EAGAIN never clears", () => {
     expect(() => readStdinSync(() => { throw eagain(); }, () => {})).toThrow(/EAGAIN/);
   });
+
+  it("EAGAIN budget counts consecutive waits, not total", () => {
+    let i = 0;
+    const read = () => { if (i++ >= 6000) return Buffer.alloc(0); if (i % 2) throw eagain(); return Buffer.from("x"); };
+    expect(readStdinSync(read, () => {})).toHaveLength(3000);
+  });
 });
