@@ -6,7 +6,7 @@ import { getSection, kbPaths, nowIso, readDoc, validate, writeDoc } from "../../
 import type { TaskData } from "../../src/kb/index.js";
 import {
   TransitionError, answerTask, askTask, createTask, getTask, listTasks, listTasksWithWarnings,
-  logTask, markDigested, markStale, nextTaskId, readyTasks, readyWithLimit, reportTask, setState, undigestedTasks,
+  logTask, markDigested, markStale, nextTaskId, readyTasks, readyWithLimit, reportTask, saveTask, setState, undigestedTasks,
 } from "../../src/tasks/index.js";
 
 const D = new Date(2026, 9, 15, 10, 0, 0);
@@ -353,6 +353,15 @@ describe("listTasks ayrıştırma önbelleği (F-vlad-094)", () => {
     expect(listTasks()[0].data.title).toBe("aaa");
     writeFileSync(t.file, readFileSync(t.file, "utf8").replace("title: aaa", "title: bbb"));
     expect(listTasks()[0].data.title).toBe("bbb");
+  });
+  it("saveTask ardışık yazımları (okumalar arasında) hep son durumu gösterir", () => {
+    const t = mk();
+    for (const title of ["aaa", "bbb", "ccc", "ddd"]) {
+      const cur = listTasks()[0];
+      cur.data.title = title;
+      saveTask(cur);
+      expect(listTasks()[0].data.title).toBe(title);
+    }
   });
   it("silinen dosya listeden düşer, bozulan dosya uyarı verir", () => {
     const a = mk("a");

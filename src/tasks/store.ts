@@ -283,6 +283,7 @@ export function saveTask(task: Task): void {
   task.data.updated = nowIso();
   validate("task", task.data);
   writeDoc(task.file, task.data, task.body);
+  parsedTasks.delete(task.file); // same-tick rewrite: the stamp alone could not tell
 }
 
 /**
@@ -308,7 +309,8 @@ export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
 const parsedTasks = new Map<string, { stamp: string; data: TaskData; body: string }>();
 function readTaskFile(file: string): { data: TaskData; body: string } {
   const st = statSync(file, { bigint: true });
-  const stamp = `${st.mtimeNs}:${st.size}`;
+  // ino: atomic writes rename a new file in, so a rewrite within one mtime tick still changes the key
+  const stamp = `${st.mtimeNs}:${st.size}:${st.ino}`;
   let hit = parsedTasks.get(file);
   if (hit?.stamp !== stamp) {
     const { data, body } = readDoc<TaskData>(file);
