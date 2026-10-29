@@ -124,10 +124,10 @@ def(project, "status <slug>", "Proje durum özeti: kayıtlardan üretilen sayıl
     `görevler: ${Object.entries(s.tasks.counts).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
     ...s.tasks.active.map((t) => `  ${t.id}  ${t.state}  ${t.title}`),
     ...(s.tasks.last_done ? [`son done: ${s.tasks.last_done.id}  ${s.tasks.last_done.title}`] : []),
-    `açık bulgu: ${s.findings.open.length}`,
+    `açık bulgu: ${Object.entries(s.findings.counts).map(([k, v]) => `${k}=${v}`).join(" ") || "yok"}`,
     ...s.findings.open.map((f) => `  ${f.id}  ${f.severity}  ${f.state}  ${f.title}`),
-    `geçerli karar: ${s.decisions.length}`,
-    ...s.decisions.map((d) => `  ${d.id}  ${d.date}  ${d.title}`),
+    `geçerli karar: ${s.decisions.total}${s.decisions.total > s.decisions.recent.length ? ` (son ${s.decisions.recent.length}; tümü: vlad decision list --project ${s.slug})` : ""}`,
+    ...s.decisions.recent.map((d) => `  ${d.id}  ${d.date}  ${d.title}`),
   ];
   out(o, s, lines.join("\n"));
 });
@@ -476,7 +476,7 @@ def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID's
   .option("--source <kaynak>", "session/görev kaynağı")
   .option("--supersedes <id>", "bu kararın yerine geçtiği karar (o yerine-geçti olur)");
 def(decision, "list", "Kararları kısa listeler (varsayılan yalnız geçerli)", (o: Opts) => {
-  const decisions = listDecisions({ project: o.project as string | undefined, all: !!o.all });
+  const decisions = listDecisions({ project: o.project as string | undefined, all: !!o.all }).map(({ path: _p, ...d }) => d); // paths are for `kb search`; they only bloat a list
   out(o, { decisions }, decisions.map((d) => `${d.id}  ${d.date}  ${d.status}  ${d.title}${d.superseded_by ? `  -> ${d.superseded_by}` : ""}`).join("\n"));
 })
   .option("--project <slug>", "yalnız bu proje (genel kararlar: genel)")

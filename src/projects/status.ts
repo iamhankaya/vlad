@@ -10,6 +10,9 @@ const AS_OF = /^_Güncel: (.+)_$/;
 /** ~1000 tokens of Turkish prose; longer summaries defeat the purpose of a short status. */
 const MAX_SUMMARY_CHARS = 6000;
 const CLOSED = ["done", "cancelled"];
+/** Keeps the status near the ~1000 token target on projects with hundreds of records. */
+const LIST_MAX = 15;
+const LISTED_SEVERITIES = ["kritik", "yüksek", "orta"];
 
 export interface ProjectStatus {
   slug: string;
@@ -29,8 +32,17 @@ export interface ProjectStatus {
     active: { id: string; state: string; kind: string; phase: string | null; title: string; updated: string }[];
     last_done: { id: string; title: string; updated: string } | null;
   };
-  findings: { open: { id: string; severity: string; state: string; title: string }[] };
-  decisions: Pick<DecisionRecord, "id" | "date" | "title" | "summary">[];
+  findings: {
+    /** open + deferred, per severity */
+    counts: Record<string, number>;
+    /** kritik/yüksek/orta only, at most LIST_MAX (the full list: `vlad finding list`) */
+    open: { id: string; severity: string; state: string; title: string }[];
+  };
+  decisions: {
+    total: number;
+    /** newest LIST_MAX valid decisions (the full list: `vlad decision list --project`) */
+    recent: Pick<DecisionRecord, "id" | "date" | "title">[];
+  };
 }
 
 function cardOf(slug: string): { file: string; data: ProjectCard; body: string } {
@@ -85,10 +97,16 @@ export function projectStatus(slug: string): ProjectStatus {
       last_done: done ? { id: done.data.id, title: done.data.title, updated: done.data.updated } : null,
     },
     findings: {
+      counts: Object.fromEntries(SEVERITIES.map((s) => [s, findings.filter((f) => f.data.severity === s).length]).filter(([, n]) => n)),
       open: findings
-        .sort((a, b) => SEVERITIES.indexOf(a.data.severity) - SEVERITIES.indexOf(b.data.severity) || a.data.id.localeCompare(b.data.id))
+        .filter((f) => LISTED_SEVERITIES.includes(f.data.severity))
+        .sort((a, b) => SEVERITIES.indexOf(a.data.severity) - SEVERITIES.indexOf(b.data.severity) || b.data.id.localeCompare(a.data.id))
+        .slice(0, LIST_MAX)
         .map((f) => ({ id: f.data.id, severity: f.data.severity, state: f.data.state, title: f.data.title })),
     },
-    decisions: decisions.map(({ id, date, title, summary }) => ({ id, date, title, summary })),
+    decisions: {
+      total: decisions.length,
+      recent: [...decisions].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, LIST_MAX).map(({ id, date, title }) => ({ id, date, title })),
+    },
   };
 }

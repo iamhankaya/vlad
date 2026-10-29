@@ -39,6 +39,11 @@ describe("searchKb", () => {
     expect(searchKb({ query: "donusturmeyi" }).map((h) => h.id)).toEqual(["D-watchparty-001"]);
     expect(searchKb({ query: "yokboyle" })).toEqual([]);
   });
+  it("ranks a geçerli decision above a task that merely mentions the words", () => {
+    createTask({ project: "vlad", title: "Ses dönüştürme işi", kind: "dev", body: "## Tanım\nses dönüştürme" });
+    addDecision({ project: "vlad", title: "Ses dönüştürme yerel", body: "- **Karar:** yerel" }, NOW);
+    expect(searchKb({ query: "ses dönüştürme" })[0].type).toBe("decision");
+  });
   it("requires every query word", () => {
     addDecision({ project: "vlad", title: "A", body: "- **Karar:** kedi köpek" }, NOW);
     addDecision({ project: "vlad", title: "B", body: "- **Karar:** kedi" }, NOW);

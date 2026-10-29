@@ -58,7 +58,7 @@ function scoreOf(unit: Unit, words: string[]): number {
     if (!inBody && !inTitle) return 0; // every query word must occur
     score += (inTitle ? 3 : 0) + (inBody ? 1 : 0);
   }
-  return score;
+  return score + (unit.type === "decision" && unit.status === "geçerli" ? 4 : 0); // "what did we decide" questions want the current decision first
 }
 
 /** `## ` sections of a markdown body (text before the first heading is the "" section). */

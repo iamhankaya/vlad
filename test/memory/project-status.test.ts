@@ -25,12 +25,13 @@ describe("projectStatus", () => {
     expect(s.tasks.counts.running).toBe(1);
     expect(s.tasks.active.map((x) => x.id)).toEqual([t.data.id]);
     expect(s.findings.open.map((f) => f.severity)).toEqual(["yüksek"]);
-    expect(s.decisions.map((d) => d.id)).toEqual(["D-vlad-001"]);
+    expect(s.findings.counts).toEqual({ yüksek: 1 });
+    expect(s.decisions).toMatchObject({ total: 1, recent: [{ id: "D-vlad-001" }] });
   });
   it("invalid decisions are not listed; unknown project fails", () => {
     addDecision({ project: "vlad", title: "A", body: "x" }, T0);
     addDecision({ project: "vlad", title: "B", body: "y", supersedes: "D-vlad-001" }, T0);
-    expect(projectStatus("vlad").decisions.map((d) => d.id)).toEqual(["D-vlad-002"]);
+    expect(projectStatus("vlad").decisions.recent.map((d) => d.id)).toEqual(["D-vlad-002"]);
     expect(() => projectStatus("yok")).toThrow(/bulunamadı/);
   });
   it("summary is güncel until a newer record exists, then bayat with the records named", () => {
