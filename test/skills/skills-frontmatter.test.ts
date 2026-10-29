@@ -95,6 +95,8 @@ describe("skills/ references and de-duplication", () => {
     const w = read("global/skills/vlad-worker/SKILL.md");
     for (const x of ["ci-triage", "Boşta bekleme", "visual-proof", "İzin kalıpları", "Ölçüm:"]) expect(w, x).toContain(x);
     const c = read("global/skills/ci-triage/SKILL.md");
+    expect(c).toContain("gh run watch <run-id> --exit-status --interval 60");
+    expect(w).toContain("--interval 60");
     for (const x of ["gh run watch", "--log-failed", "ikinci kez", "entegrasyon", "100755"]) expect(c, x).toContain(x);
   });
 });

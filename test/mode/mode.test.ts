@@ -23,6 +23,10 @@ describe("parseUntil", () => {
     expect(() => parseUntil("2026-10-28T20:00:00+03:00", now)).toThrow(/geçmiş/);
     expect(() => parseUntil("25:00", now)).toThrow(/geçersiz/);
   });
+  it("ISO beyond 24h is rejected (F-vlad-088: there was no upper bound)", () => {
+    expect(parseUntil("2026-10-29T23:00:00+03:00", now).getTime()).toBe(now.getTime() + 23.5 * H);
+    expect(() => parseUntil("2026-11-05T08:00:00+03:00", now)).toThrow(/24 saat/);
+  });
 });
 
 describe("mode state (kb/mode.json)", () => {

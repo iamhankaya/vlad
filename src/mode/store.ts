@@ -38,6 +38,7 @@ export function parseUntil(s: string, now: Date): Date {
   const d = new Date(s);
   if (Number.isNaN(d.getTime()) || !/^\d{4}-\d{2}-\d{2}/.test(s.trim())) throw new Error(`geçersiz bitiş: ${s} (HH:MM veya ISO tarih-saat)`);
   if (d <= now) throw new Error(`bitiş geçmişte: ${s}`);
+  if (d.getTime() - now.getTime() > 24 * 3_600_000) throw new Error(`bitiş 24 saatten uzak: ${s} (pencere en çok 24 saat)`);
   return d;
 }
 

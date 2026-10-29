@@ -21,14 +21,14 @@ const realSource = (mode: BlockCtx["mode"]): string =>
 
 const prLocal = (id: string): string =>
   `Yetki (autonomy pr): yalnız \`vlad/${id}\` dalını \`git push -u origin vlad/${id}\` ile push edebilir ve CI'ı ` +
-  `\`gh run list --branch vlad/${id}\` / \`gh run watch <run-id> --exit-status\` ile izleyebilirsin. Yasak: başka dala push, \`--force\`, ana veya entegrasyon dalına merge/PR, ` +
+  `\`gh run list --branch vlad/${id}\` / \`gh run watch <run-id> --exit-status --interval 60\` ile izleyebilirsin. Yasak: başka dala push, \`--force\`, ana veya entegrasyon dalına merge/PR, ` +
   "ana dala dokunma, kb dosyalarını doğrudan düzenleme (yerelde yalnız `vlad task log/ask/report` CLI'ı). " +
   `Merge'süz PR (kaynak dal vlad/${id}) yalnız pipeline dışı görevde \`gh pr create --head vlad/${id}\`; pipeline fazında PR açma. ` +
-  "CI: tek bir `gh run watch` kullan (yoklama döngüsü kurma); bellek/oturum uyarısı ya da 20 dk sessizlik olursa izlemeyi bırak, " +
+  "CI: tek bir `gh run watch --interval 60` kullan (yoklama döngüsü kurma; varsayılan 3 sn aralık GitHub API sınırını tüketir); bellek/oturum uyarısı ya da 20 dk sessizlik olursa izlemeyi bırak, " +
   `\`vlad task log ${id} "CI: <run-id> izleniyor/bekliyor"\` yaz ve raporla; boşta bekleyerek oturum tüketme. ` +
   "CI tur kuralı: kırmızıyı düzeltip yeniden push edersin, ama aynı neden ikinci kez kırmızı çıkarsa dur ve " +
   `\`vlad task ask ${id} "CI: <neden>, 2. tur"\` sor; entegrasyon dalından gelen (kendi değişikliğin olmayan) kırmızı tur sayılmaz: ` +
-  "düzeltmeye çalışma, raporun `### Açık noktalar`'ına yaz. Ayrıntı için `ci-triage` skill'ini yükle (yoksa bu kural yeterlidir).";
+  "düzeltmeye çalışma, raporun `### Açık noktalar`'ına yaz. Push sonrası `ci-triage` skill'ini Skill aracıyla yükle (zorunlu; yüklenemezse bu kural yeterlidir, raporda belirt).";
 
 const commitLocal = (id: string): string =>
   `Yetki (autonomy commit): yalnız \`vlad/${id}\` dalında commit'le; push etme, PR açma, ana veya entegrasyon dalına merge etme. CI yoksa kapı komutunu yerelde koş.`;
@@ -64,7 +64,7 @@ export function standardBlocks(ctx: BlockCtx): string[] {
   }
   const authority = mode === "cloud" ? cloudAuthority(id, autonomy) : autonomy === "pr" ? prLocal(id) : commitLocal(id);
   const repoSkills = mode === "local" && ctx.projectSkills?.length
-    ? [`Projenin repo skill'leri: ${ctx.projectSkills.map((s) => `\`${s}\``).join(", ")}. Göreve uyanları Skill aracıyla yükle; yüklemediysen nedenini kapanış raporuna yaz.`]
+    ? [`Projenin repo skill'leri: ${ctx.projectSkills.map((s) => `\`${s}\``).join(", ")}. İşe başlamadan hepsini Skill aracıyla yükle (zorunlu); yükleyemediysen nedenini kapanış raporuna yaz.`]
     : [];
   return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, realSource(mode)];
 }
