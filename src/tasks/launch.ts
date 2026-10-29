@@ -114,10 +114,12 @@ export function ensureIntegration(
  * pipeline's own). Derived, not recorded: the pipeline task's `worktree` only covers its own project.
  */
 export function integrationWorktrees(
-  parentId: string, cfg: VladConfig,
+  parentId: string, cfg: VladConfig, all?: Task[],
 ): { project: string; repo: string; branch: string; worktree: string }[] {
-  const projects = new Set([getTask(parentId).data.project]);
-  for (const c of listTasks({ parent: parentId })) projects.add(c.data.project);
+  // `all`: tasks the caller already loaded (task list), so N pipelines do not re-read the whole kb N times (F-vlad-094)
+  const parent = all?.find((t) => t.data.id === parentId) ?? getTask(parentId);
+  const projects = new Set([parent.data.project]);
+  for (const c of all ? all.filter((t) => t.data.parent === parentId) : listTasks({ parent: parentId })) projects.add(c.data.project);
   const branch = `vlad/${parentId}`;
   const out: { project: string; repo: string; branch: string; worktree: string }[] = [];
   for (const project of projects) {

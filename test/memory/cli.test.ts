@@ -18,6 +18,18 @@ const json = (args: string[], input?: string) => {
   return JSON.parse(r.out);
 };
 
+describe("task list --fields/--limit (F-vlad-094)", { timeout: 30_000 }, () => {
+  it("projects the json to the requested fields and keeps the newest N", () => {
+    for (const t of ["bir", "iki", "üç"]) json(["task", "new", "--project", "alpha", "--title", t, "--kind", "dev", "--body-file", "-"], "## Tanım\nx\n");
+    const all = json(["task", "list"]).tasks;
+    expect(all).toHaveLength(3);
+    const r = json(["task", "list", "--fields", "id,state,title", "--limit", "2"]).tasks;
+    expect(r).toEqual(all.slice(-2).map((t: { id: string; state: string; title: string }) => ({ id: t.id, state: t.state, title: t.title })));
+    expect(vlad(["task", "list", "--fields", "id,bozuk"]).code).toBe(1);
+    expect(vlad(["task", "list", "--limit", "0"]).code).toBe(1);
+  });
+});
+
 describe("memory CLI", { timeout: 30_000 }, () => {
   it("decision add/list/set/migrate, kb search and project status/summary work end to end", () => {
     const card = join(home, "card.md");
