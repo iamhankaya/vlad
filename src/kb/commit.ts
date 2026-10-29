@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { isSeparateKb, kbPaths } from "./home.js";
 
 /** Lines a kb repo's .gitignore must carry (local-only state). */
-export const KB_GITIGNORE = ["inbox/", "logs/", "vlad-session.txt", ".vlad.lock"];
+export const KB_GITIGNORE = ["inbox/", "logs/", "vlad-session.txt", ".vlad.lock", ".obsidian/"];
 
 function missingIgnores(kbDir: string): string[] {
   const file = join(kbDir, ".gitignore");

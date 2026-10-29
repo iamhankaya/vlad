@@ -22,7 +22,7 @@ vlad project list --json
 ```
 - Projeyi slug ile eşle; belirsizse kullanıcıya sor. Kart yoksa önce `/scan` öner.
 - `kb/projects/<slug>.md` kartını oku (özet, mimari notlar, açık konular).
-- `kb/decisions.md` içinde bu projeye ait ilgili kararları oku.
+- `kb/decisions/<slug>.md` (+ genel kararlar için `kb/decisions/_genel.md`) dosyasındaki ilgili kararları oku.
 - Aynı konuda açık görev var mı bak:
   ```
   vlad task list --project <slug> --json

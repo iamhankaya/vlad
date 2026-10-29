@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
-  appendToSection, autonomyFor, CLOUD_ID_FLOOR, getSection, isCloudEnv, kbPaths, loadConfig, nowIso, readDoc, serializeDoc,
+  appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, readDoc, serializeDoc,
   setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
 import type { TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
@@ -185,8 +185,9 @@ function dayPrefix(date: Date): string {
   return `T${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}-`;
 }
 
+/** Where the task lives: its archive file if archived, else the live path (which may not exist yet). */
 function taskFile(id: string): string {
-  return join(kbPaths().tasks, `${id}.md`);
+  return findMdFile(kbPaths().tasks, id) ?? join(kbPaths().tasks, `${id}.md`);
 }
 
 /** Task ids mentioned in `body` that have no task file (a typo or a made-up id; reported as a warning, not an error). */
@@ -199,11 +200,10 @@ export function unknownTaskRefs(body: string): string[] {
 export function nextTaskId(tasksDir: string, date: Date): string {
   const prefix = dayPrefix(date);
   let max = isCloudEnv() ? CLOUD_ID_FLOOR : 0;
-  if (existsSync(tasksDir)) {
-    for (const f of readdirSync(tasksDir)) {
-      const m = f.startsWith(prefix) ? /^-?(\d+)\.md$/.exec(f.slice(prefix.length)) : null;
-      if (m) max = Math.max(max, Number(m[1]));
-    }
+  for (const path of listMdFiles(tasksDir)) {
+    const f = basename(path);
+    const m = f.startsWith(prefix) ? /^-?(\d+)\.md$/.exec(f.slice(prefix.length)) : null;
+    if (m) max = Math.max(max, Number(m[1]));
   }
   return `${prefix}${pad2(max + 1)}`;
 }
@@ -254,6 +254,10 @@ export function createTask(
       ...(o.model ? { model: o.model as TaskModel, ...(o.modelReason?.trim() ? { model_reason: o.modelReason.trim() } : {}) } : {}),
     };
     validate("task", data);
+    if (findMdFile(paths.tasks, id)) { // taken by an archived task: the exclusive write below only sees the live dir
+      n++;
+      continue;
+    }
     const file = taskFile(id);
     try {
       writeFileAtomic(file, serializeDoc(data, body), { exclusive: true });
@@ -299,12 +303,10 @@ export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
 export function listTasksWithWarnings(
   f: { state?: TaskState[]; project?: string; parent?: string } = {},
 ): { tasks: Task[]; warnings: string[] } {
-  const dir = kbPaths().tasks;
   const tasks: Task[] = [];
   const warnings: string[] = [];
-  if (!existsSync(dir)) return { tasks, warnings };
-  for (const name of readdirSync(dir).filter((x) => x.endsWith(".md")).sort()) {
-    const file = join(dir, name);
+  for (const file of listMdFiles(kbPaths().tasks)) {
+    const name = basename(file);
     try {
       const { data, body } = readDoc<TaskData>(file);
       validate("task", data);

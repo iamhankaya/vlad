@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
-import { join } from "node:path";
-import { kbPaths, nowIso, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
+import { existsSync, mkdirSync } from "node:fs";
+import { basename, join } from "node:path";
+import { findMdFile, kbPaths, listMdFiles, nowIso, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
 import type { FindingData, FindingSeverity, FindingState } from "../kb/index.js";
 
 export type Finding = { data: FindingData; body: string; file: string };
@@ -12,19 +12,19 @@ export const UNRESOLVED: readonly FindingState[] = ["open", "deferred"];
 
 const DETAIL = "## Ayrıntı";
 
+/** Where the finding lives: its archive file if archived, else the live path (which may not exist yet). */
 function findingFile(id: string): string {
-  return join(kbPaths().findings, `${id}.md`);
+  return findMdFile(kbPaths().findings, id) ?? join(kbPaths().findings, `${id}.md`);
 }
 
 /** Next free `F-<project>-NNN` for the project (numbering is per project). */
 export function nextFindingId(dir: string, project: string): string {
   const prefix = `F-${project}-`;
   let max = 0;
-  if (existsSync(dir)) {
-    for (const f of readdirSync(dir)) {
-      const m = f.startsWith(prefix) ? /^(\d+)\.md$/.exec(f.slice(prefix.length)) : null;
-      if (m) max = Math.max(max, Number(m[1]));
-    }
+  for (const path of listMdFiles(dir)) {
+    const f = basename(path);
+    const m = f.startsWith(prefix) ? /^(\d+)\.md$/.exec(f.slice(prefix.length)) : null;
+    if (m) max = Math.max(max, Number(m[1]));
   }
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
@@ -54,6 +54,10 @@ export function addFinding(
       title: o.title.trim(), created: ts, updated: ts,
     };
     validate("finding", data);
+    if (findMdFile(dir, id)) { // taken by an archived finding: the exclusive write below only sees the live dir
+      n++;
+      continue;
+    }
     const file = findingFile(id);
     try {
       writeFileAtomic(file, serializeDoc(data, body), { exclusive: true });
@@ -79,12 +83,10 @@ export function getFinding(id: string): Finding {
 export function listFindingsWithWarnings(
   f: { project?: string; state?: FindingState[]; severity?: FindingSeverity[] } = {},
 ): { findings: Finding[]; warnings: string[] } {
-  const dir = kbPaths().findings;
   const findings: Finding[] = [];
   const warnings: string[] = [];
-  if (!existsSync(dir)) return { findings, warnings };
-  for (const name of readdirSync(dir).filter((x) => x.endsWith(".md")).sort()) {
-    const file = join(dir, name);
+  for (const file of listMdFiles(kbPaths().findings)) {
+    const name = basename(file);
     try {
       const { data, body } = readDoc<FindingData>(file);
       validate("finding", data);

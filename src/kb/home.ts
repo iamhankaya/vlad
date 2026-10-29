@@ -46,7 +46,10 @@ export interface KbPaths {
   processed: string;
   logs: string;
   journal: string;
+  /** Per-project decision files: decisions/<slug>.md (general ones in _genel.md). */
   decisions: string;
+  /** The old single-file log; `vlad kb maintain` splits it into `decisions`. */
+  legacyDecisions: string;
   schemas: string;
   roles: string;
 }
@@ -67,7 +70,8 @@ export function kbPaths(home: string = getVladHome()): KbPaths {
     processed: join(inbox, "processed"),
     logs: join(kb, "logs"),
     journal: join(kb, "journal"),
-    decisions: join(kb, "decisions.md"),
+    decisions: join(kb, "decisions"),
+    legacyDecisions: join(kb, "decisions.md"),
     schemas: join(home, "schemas"),
     roles: join(home, "roles"),
   };

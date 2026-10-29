@@ -372,7 +372,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
   });
   it("decision add and journal append", () => {
     expect(vlad(["decision", "add", "--project", "p", "--title", "t", "--body-file", "-", "--json"], "- **Karar:** x").code).toBe(0);
-    expect(readFileSync(join(home, "kb", "decisions.md"), "utf8")).toContain(" — p — t");
+    expect(readFileSync(join(home, "kb", "decisions", "p.md"), "utf8")).toContain(" — p — t");
     expect(vlad(["journal", "append", "2026-10-15", "--file", "-", "--json"], "- a").code).toBe(0);
     expect(existsSync(join(home, "kb", "journal", "2026-10-15.md"))).toBe(true);
   });
@@ -380,6 +380,22 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     const r = vlad(["task", "launch", "T20260101-01", "--dry-run", "--json"]);
     expect(r.code).toBe(1);
     expect(JSON.parse(r.err).error).toMatch(/bulunamadı/);
+  });
+  it("kb maintain: dry-run changes nothing; archived done task still shows in task list/set and counts toward undigested", () => {
+    const id = mkTask();
+    const file = join(home, "kb", "tasks", `${id}.md`);
+    writeFileSync(file, readFileSync(file, "utf8").replace(/^state: .*$/m, "state: done").replace(/^updated: .*$/m, "updated: 2026-01-05T10:00:00+03:00"));
+    const dry = JSON.parse(vlad(["kb", "maintain", "--dry-run", "--json"]).out);
+    expect(dry.dry_run).toBe(true);
+    expect(dry.tasks.map((t: { id: string }) => t.id)).toEqual([id]);
+    expect(existsSync(file)).toBe(true);
+    expect(JSON.parse(vlad(["kb", "maintain", "--json"]).out).tasks).toHaveLength(1);
+    expect(existsSync(file)).toBe(false);
+    expect(JSON.parse(vlad(["task", "list", "--json"]).out).tasks.map((t: { id: string }) => t.id)).toEqual([id]);
+    expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 1 rapor");
+    expect(vlad(["task", "digested", id, "--json"]).code).toBe(0);
+    expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 0 rapor");
+    expect(JSON.parse(vlad(["kb", "maintain", "--json"]).out).tasks).toEqual([]);
   });
 });
 

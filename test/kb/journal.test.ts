@@ -12,7 +12,7 @@ describe("addDecision", () => {
     const now = new Date(2026, 9, 15, 12, 0, 0);
     addDecision({ project: "watchparty", title: "Bir", body: "- **Karar:** x\n- **Gerekçe:** y", source: "görev T1" }, now);
     addDecision({ project: "watchparty", title: "İki", body: "- **Karar:** z" }, now);
-    const text = readFileSync(join(home, "kb", "decisions.md"), "utf8");
+    const text = readFileSync(join(home, "kb", "decisions", "watchparty.md"), "utf8");
     const heads = text.split("\n").filter((l) => l.startsWith("### "));
     expect(heads).toEqual(["### 2026-10-15 — watchparty — Bir", "### 2026-10-15 — watchparty — İki"]);
     expect(text).toContain("- **Kaynak:** görev T1");

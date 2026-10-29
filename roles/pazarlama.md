@@ -37,7 +37,7 @@ Sen VLAD'ın Satış & Pazarlama Uzmanı'sın; bir projenin kime, nasıl ve hang
 - Pipeline fazındaysan (görev frontmatter'ında `parent` dolu) `depends_on` görevlerinin `## Kapanış raporu` bölümlerini oku; onlar senin girdindir.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<slug>.md`.
 - Kartın `## Çalışma notları` bölümü: bu projede öğrenilmiş dersler (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
-- Karar günlüğü: `<VLAD_HOME>/kb/decisions.md` (daha önce verilmiş hedef kitle/konumlandırma kararları).
+- Karar günlüğü: `<VLAD_HOME>/kb/decisions/<proje>.md` (genel kararlar `_genel.md`) (daha önce verilmiş hedef kitle/konumlandırma kararları).
 - Projenin README'si ve `docs/` klasörü (ürün ne yapıyor, kimin için).
 - Web: rakip ürün sayfaları, fiyat sayfaları, topluluk tartışmaları, güvenilir pazar araştırmaları. Birincil kaynağı ikincile tercih et; erişim tarihini yaz.
 

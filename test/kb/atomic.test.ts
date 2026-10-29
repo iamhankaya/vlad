@@ -46,6 +46,6 @@ describe("F-vlad-084/ atomic kb writes", () => {
 
   it("addDecision still appends through the atomic path", () => {
     addDecision({ project: "p", title: "t", body: "b" });
-    expect(existsSync(join(home, "kb", "decisions.md"))).toBe(true);
+    expect(existsSync(join(home, "kb", "decisions", "p.md"))).toBe(true);
   });
 });
