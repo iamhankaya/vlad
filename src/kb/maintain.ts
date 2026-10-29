@@ -68,10 +68,11 @@ function archiveDir(dir: string, states: string[], cutoff: number, dry: boolean)
   const moved: { id: string; from: string; to: string }[] = [];
   for (const name of readdirSync(dir).filter((n) => n.endsWith(".md")).sort()) {
     const from = join(dir, name);
-    let data: { state?: string; updated?: string };
-    try { data = readDoc<{ state?: string; updated?: string }>(from).data; } catch { continue; } // unreadable files are listed as warnings by the stores
+    let data: { state?: string; updated?: string; digested?: string | null };
+    try { data = readDoc<typeof data>(from).data; } catch { continue; } // unreadable files are listed as warnings by the stores
     const t = Date.parse(data.updated ?? "");
     if (!states.includes(data.state ?? "") || Number.isNaN(t) || t >= cutoff) continue;
+    if (data.state === "done" && !data.digested) continue; // closing report not processed by /digest yet
     const to = join(dir, ARCHIVE, String(data.updated).slice(0, 7), name);
     if (existsSync(to)) continue; // same id already archived (merge/copy): never overwrite
     moved.push({ id: name.slice(0, -3), from: relative(kb, from), to: relative(kb, to) });

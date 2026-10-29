@@ -3,9 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig } from "../../src/kb/index.js";
+import { loadConfig, maintainKb } from "../../src/kb/index.js";
 import { writeProject } from "../../src/projects/store.js";
-import { createTask, getTask, prepareCloudLaunch, reportTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, markDigested, prepareCloudLaunch, reportTask, setState } from "../../src/tasks/index.js";
 import { pinVladFiles } from "../../src/tasks/cloud.js";
 import { makeHome } from "../helpers.js";
 
@@ -173,6 +173,20 @@ describe("readonly details", () => {
     expect(p).toContain("kb klonundan (`<kb>/…`, salt okuma) okursun");
     expect(p).not.toContain("görev dosyası ve worktree adımlarını geçersiz kılar");
     expect(p).toContain(`tasks/${t.data.id}.md\` klonda yoksa`);
+  });
+
+  it("an archived dependency is opened from its real archive path", () => {
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "" });
+    const dep = createTask({ project: "alpha", title: "d", kind: "research", body: "", parent: pipe.data.id });
+    setState(dep.data.id, "running"); setState(dep.data.id, "awaiting_approval"); setState(dep.data.id, "done");
+    markDigested([dep.data.id]);
+    const t = mk({ parent: pipe.data.id, dependsOn: [dep.data.id] });
+    const raw = readFileSync(dep.file, "utf8").replace(/^updated: .*$/m, "updated: 2026-01-05T10:00:00+03:00").replace(/^digested: .*$/m, "digested: 2026-01-05T10:00:00+03:00");
+    writeFileSync(dep.file, raw);
+    maintainKb({ now: new Date(2026, 9, 29) });
+    const { prompt: p } = prepareCloudLaunch(t.data.id, { cloudKb: "readonly", remoteBranch: () => "exists" });
+    expect(p).toContain(`<kb>/tasks/archive/2026-01/${dep.data.id}.md`);
+    expect(p).not.toContain(`<kb>/tasks/${dep.data.id}.md`);
   });
 
   it("an invalid cloudKb leaves the task queued with error set", () => {

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
 import { addDecision } from "../../src/kb/journal.js";
+import { getKbRecord } from "../../src/kb/get.js";
 import { maintainKb } from "../../src/kb/maintain.js";
 import { addFinding, getFinding, listFindingsWithWarnings, nextFindingId, setFindingState } from "../../src/findings/store.js";
 import { createTask, getTask, listTasks, nextTaskId, logTask, setState, unknownTaskRefs } from "../../src/tasks/store.js";
@@ -35,11 +36,13 @@ const writeLegacy = (text = LEGACY) => writeFileSync(join(home, "kb", "decisions
 const dec = (slug: string) => readFileSync(join(home, "kb", "decisions", `${slug}.md`), "utf8");
 
 /** Sets a task's state and `updated` directly (the store stamps `updated` itself on save). */
-function ageTask(id: string, state: string, updated: Date) {
+function ageTask(id: string, state: string, updated: Date, digested = true) {
   const t = getTask(id);
-  const raw = readFileSync(t.file, "utf8")
+  let raw = readFileSync(t.file, "utf8")
     .replace(/^state: .*$/m, `state: ${state}`)
     .replace(/^updated: .*$/m, `updated: ${updated.toISOString()}`);
+  if (state === "done" && digested) raw = raw.replace(/^updated: .*$/m, (m) => `${m}
+digested: ${updated.toISOString()}`);
   writeFileSync(t.file, raw);
 }
 
@@ -113,6 +116,28 @@ describe("archive", () => {
     expect(r.tasks).toEqual([]);
     expect(readFileSync(join(dup, `${t.data.id}.md`), "utf8")).toBe("kopya");
     expect(existsSync(t.file)).toBe(true);
+  });
+  it("keeps done tasks whose closing report /digest has not processed yet", () => {
+    const undigested = mk(); const digested = mk(); const cancelled = mk();
+    ageTask(undigested.data.id, "done", daysAgo(90), false);
+    ageTask(digested.data.id, "done", daysAgo(90));
+    ageTask(cancelled.data.id, "cancelled", daysAgo(90));
+    const r = maintainKb({ now: NOW });
+    expect(r.tasks.map((t) => t.id).sort()).toEqual([digested.data.id, cancelled.data.id].sort());
+    expect(existsSync(undigested.file)).toBe(true);
+  });
+  it("getKbRecord finds archived tasks and findings, returns the real path and one section", () => {
+    const t = mk(); ageTask(t.data.id, "done", daysAgo(40));
+    const live = getKbRecord(mk().data.id);
+    expect(live).toMatchObject({ kind: "task", archived: false });
+    maintainKb({ now: NOW });
+    const r = getKbRecord(t.data.id, "## Tanım");
+    expect(r).toMatchObject({ id: t.data.id, kind: "task", archived: true, relative: `tasks/archive/2026-09/${t.data.id}.md` });
+    expect(r.file).toBe(join(kbPaths().tasks, "archive", "2026-09", `${t.data.id}.md`));
+    expect(r.content).not.toContain("## Kapanış raporu");
+    expect(() => getKbRecord(t.data.id, "## Yok")).toThrow(/bölüm/);
+    expect(() => getKbRecord("T20200101-99")).toThrow(/bulunamadı/);
+    expect(() => getKbRecord("../x")).toThrow(/geçersiz/);
   });
   it("--days changes the threshold", () => {
     const t = mk(); ageTask(t.data.id, "done", daysAgo(10));

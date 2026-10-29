@@ -23,7 +23,7 @@ git -C <kbDir> pull --ff-only
 vlad inbox list --json
 vlad task list --undigested --json
 ```
-İlki: `{"items":[{ "file": "...", "record": {...} }, ...]}`. İkincisi: `{"tasks":[{ "id", "project", "title", "updated", ... }]}`; her görev için `kb/tasks/<id>.md`'yi oku: `## Tanım`, `## İlerleme`, `## Sorular` (cevaplar dahil) ve `## Kapanış raporu`. Pipeline fazında çatının (`parent`) `## İlerleme` bölümünü de oku. Kullanıcı onay/karar/teyitleri çoğunlukla İlerleme ("Kullanıcı teyidi", "[KARAR]") ve Sorular'dadır. İkisi de boşsa "işlenecek rapor yok" de ve bitir.
+İlki: `{"items":[{ "file": "...", "record": {...} }, ...]}`. İkincisi: `{"tasks":[{ "id", "project", "title", "updated", ... }]}`; her görev için `vlad kb get <id> --json` ile (içerik `content` alanında) oku: `## Tanım`, `## İlerleme`, `## Sorular` (cevaplar dahil) ve `## Kapanış raporu`. Pipeline fazında çatının (`parent`) `## İlerleme` bölümünü de oku. Kullanıcı onay/karar/teyitleri çoğunlukla İlerleme ("Kullanıcı teyidi", "[KARAR]") ve Sorular'dadır. İkisi de boşsa "işlenecek rapor yok" de ve bitir.
 
 Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an). Aynı görevin hem inbox raporu (`task_id` eşleşir) hem kapanış raporu varsa bunları **tek** günlük maddesinde birleştir.
 

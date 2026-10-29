@@ -16,3 +16,16 @@ describe("docs follow the per-project decisions layout", () => {
     expect(stale).toEqual([]);
   });
 });
+
+describe("skills read tasks by id through `vlad kb get`", () => {
+  it.each(["digest", "status", "delegate"])("%s skill does not hard-code kb/tasks/<id>.md for reading", (s) => {
+    const t = readFileSync(join(root, `.claude/skills/${s}/SKILL.md`), "utf8");
+    expect(t).toContain("vlad kb get");
+    expect(t).not.toMatch(/kb\/tasks\/<id>\.md/);
+  });
+  it("the worker skill reads dependency reports through it", () => {
+    const t = readFileSync(join(root, "global/skills/vlad-worker/SKILL.md"), "utf8");
+    expect(t).toContain("vlad kb get <dep-id>");
+    expect(t).not.toMatch(/kb\/tasks\/<dep-id>\.md`\s+dosyasındaki/);
+  });
+});

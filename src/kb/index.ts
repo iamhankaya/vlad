@@ -10,3 +10,4 @@ export * from "./types.js";
 export * from "./journal.js";
 export * from "./archive.js";
 export * from "./maintain.js";
+export * from "./get.js";

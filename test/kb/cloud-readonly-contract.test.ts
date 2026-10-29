@@ -50,7 +50,7 @@ describe("kb salt okuma: metin sözleşmesi (T20261026-20)", () => {
   it("CLAUDE.md: salt okuma + vlad kb check cümlesi ve komut listesi", () => {
     const c = read("CLAUDE.md");
     expect(c).toMatch(/`cloudKb: "readonly"` yalnız açıkça seçilirse kb salt okuma eklenir; yazma yalnız VLAD'dır ve yabancı commit `vlad kb check` ile izlenir/);
-    expect(c).toMatch(/`vlad kb commit\|check\|maintain`/);
+    expect(c).toMatch(/`vlad kb commit\|check\|maintain\|get`/);
   });
 
   it(".claude/settings.json: geçerli JSON, izin listesi yalnız add_repo (register_repo_root yok), hook korunur", () => {

@@ -61,7 +61,7 @@ Kapı yordamı (gate koşusu, ön kontrol, ingest-preview, kayıt dosyası yenid
 
 ## 2. `awaiting_approval` görevler
 
-`kind: pipeline` (çatı) ise adım 3'teki **son kapıya** git. Diğerleri için `kb/tasks/<id>.md`'yi oku ve göster:
+`kind: pipeline` (çatı) ise adım 3'teki **son kapıya** git. Diğerleri için görevi `vlad kb get <id> --json` ile oku (arşivdekini de bulur; dosya yolunu varsayma) ve göster:
 - `## Kapanış raporu` (ne yapıldı, testler, açık noktalar) — özetle.
 - Commit'ler ve diff özeti (worktree frontmatter'daki `worktree`; ana branch `main` değilse repo'nun ana branch'ini kullan; pipeline fazında `main` yerine entegrasyon branch'i `vlad/<çatı-id>`):
   ```
