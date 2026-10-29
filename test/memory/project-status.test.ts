@@ -5,7 +5,7 @@ import { addFinding } from "../../src/findings/store.js";
 import { addDecision } from "../../src/kb/decisions.js";
 import { projectStatus, setProjectSummary } from "../../src/projects/status.js";
 import { writeProject } from "../../src/projects/store.js";
-import { createTask, setState } from "../../src/tasks/store.js";
+import { createTask, markDigested, setState } from "../../src/tasks/store.js";
 import { makeHome } from "../helpers.js";
 
 const card = (slug: string) => `---\nslug: ${slug}\nname: ${slug}\npath: C:\\dev\\${slug}\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n`;
@@ -42,6 +42,13 @@ describe("projectStatus", () => {
     expect(s.state).toBe("bayat");
     expect(s.newer).toContain(t.data.id);
     expect(s.text).toContain("Sıradaki: y");
+  });
+  it("digesting a task after the summary does not make the summary bayat", () => {
+    const t = createTask({ project: "vlad", title: "İş", kind: "dev", body: "" }, T0);
+    setState(t.data.id, "running"); setState(t.data.id, "awaiting_approval"); setState(t.data.id, "done");
+    setProjectSummary("vlad", "x", new Date());
+    markDigested([t.data.id]);
+    expect(projectStatus("vlad").summary.state).toBe("güncel");
   });
   it("setProjectSummary keeps frontmatter and other sections, replaces on rerun, rejects headings and oversize", () => {
     setProjectSummary("vlad", "bir", T0);

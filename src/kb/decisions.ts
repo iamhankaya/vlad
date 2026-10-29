@@ -99,6 +99,7 @@ export function addDecision(
   const file = decisionFileFor(o.project);
   const path = decisionPath(file);
   if (o.supersedes) locate(o.supersedes); // fail before writing anything
+  if (existsSync(path) && blocks(readLines(path)).some((b) => !b.meta.id)) migrateDecisions({ only: file }); // new ids must come after the old blocks
   const cur = existsSync(path) ? readLines(path) : [];
   const id = newId(file, maxNumber(blocks(cur)) + 1);
   const head = `### ${nowIso(now).slice(0, 10)} — ${o.project} — ${o.title}`;
@@ -150,10 +151,18 @@ export function setDecisionStatus(id: string, status: string, supersededBy?: str
   if (status !== "yerine-geçti" && supersededBy) throw new Error("--superseded-by yalnız yerine-geçti ile kullanılır");
   if (supersededBy === id) throw new Error("karar kendisinin yerine geçemez");
   const target = locate(id);
+  const prior = target.block.meta.superseded_by;
   const by = supersededBy ? locate(supersededBy) : null;
   setMeta(target.lines, target.block, "status", status);
   setMeta(target.lines, target.block, "superseded_by", supersededBy);
   writeFileAtomic(target.path, target.lines.join("\n"));
+  if (prior && prior !== supersededBy) { // no longer replaced by `prior`: drop its back-link
+    const old = locate(prior);
+    if (old.block.meta.supersedes === id) {
+      setMeta(old.lines, old.block, "supersedes", undefined);
+      writeFileAtomic(old.path, old.lines.join("\n"));
+    }
+  }
   if (by && !by.block.meta.supersedes) {
     const fresh = locate(supersededBy!); // re-read: it may be the file just written
     setMeta(fresh.lines, fresh.block, "supersedes", id);
@@ -162,9 +171,9 @@ export function setDecisionStatus(id: string, status: string, supersededBy?: str
 }
 
 /** Gives every decision block without an ID the next `D-<proje>-NNN` and status geçerli; nothing else changes. Idempotent. */
-export function migrateDecisions(o: { dryRun?: boolean } = {}): { file: string; assigned: number }[] {
+export function migrateDecisions(o: { dryRun?: boolean; only?: string } = {}): { file: string; assigned: number }[] {
   const report: { file: string; assigned: number }[] = [];
-  for (const file of decisionFiles()) {
+  for (const file of o.only ? [o.only] : decisionFiles()) {
     const path = decisionPath(file);
     const lines = readLines(path);
     const bs = blocks(lines);

@@ -79,8 +79,10 @@ export function projectStatus(slug: string): ProjectStatus {
   const cutoff = asOf ? Date.parse(asOf) : NaN;
   const newer: string[] = [];
   if (Number.isFinite(cutoff)) {
-    for (const t of tasks) if (Date.parse(t.data.updated) > cutoff) newer.push(t.data.id);
+    // `task digested` re-stamps `updated` with the same instant as `digested`: that is /digest finishing, not new work
+    for (const t of tasks) if (Date.parse(t.data.updated) > cutoff && t.data.digested !== t.data.updated) newer.push(t.data.id);
     for (const f of listFindingsWithWarnings({ project: slug }).findings) if (Date.parse(f.data.updated) > cutoff) newer.push(f.data.id);
+    // shortcut: decisions carry a date only, so one added later the same day as the summary is not seen; /digest writes the summary after the decisions
     for (const d of listDecisions({ project: slug, all: true })) if (d.date > asOf!.slice(0, 10)) newer.push(d.id);
   }
   const state = !raw ? "yok" : Number.isFinite(cutoff) && !newer.length ? "güncel" : "bayat"; // no timestamp: cannot vouch for it

@@ -65,6 +65,20 @@ describe("decision list / set", () => {
   });
 });
 
+describe("review fixes", () => {
+  it("addDecision on a file with unnumbered blocks numbers them first, so the new one is last", () => {
+    legacy();
+    expect(addDecision({ project: "watchparty", title: "Yeni", body: "x" }, NOW)).toBe("D-watchparty-003");
+    expect(listDecisions({ project: "watchparty" }).map((d) => d.id)).toEqual(["D-watchparty-001", "D-watchparty-002", "D-watchparty-003"]);
+  });
+  it("set geçerli also drops the replacing decision's back-link", () => {
+    const a = addDecision({ project: "vlad", title: "A", body: "x" }, NOW);
+    const b = addDecision({ project: "vlad", title: "B", body: "y", supersedes: a }, NOW);
+    setDecisionStatus(a, "geçerli");
+    expect(listDecisions({ project: "vlad", all: true }).find((d) => d.id === b)!.supersedes).toBeUndefined();
+  });
+});
+
 describe("migrate", () => {
   it("gives legacy blocks ids in order, status geçerli, loses no text, is idempotent", () => {
     legacy();
@@ -78,13 +92,12 @@ describe("migrate", () => {
     expect(migrateDecisions()).toEqual([]);
     expect(readFileSync(file("watchparty"), "utf8")).toBe(text);
   });
-  it("continues numbering after existing ids and dry-run writes nothing", () => {
+  it("continues numbering after existing ids; dry-run writes nothing", () => {
     legacy("vlad", "# Karar Günlüğü — vlad\n\n### 2026-10-01 — vlad — Eski\n- **Karar:** a\n");
-    addDecision({ project: "vlad", title: "Yeni", body: "b" }, NOW);
     expect(migrateDecisions({ dryRun: true })).toEqual([{ file: "vlad", assigned: 1 }]);
-    expect(readFileSync(file("vlad"), "utf8")).not.toContain("D-vlad-002");
-    migrateDecisions();
-    const ids = listDecisions({ project: "vlad", all: true }).map((d) => d.id).sort();
-    expect(ids).toEqual(["D-vlad-001", "D-vlad-002"]);
+    expect(readFileSync(file("vlad"), "utf8")).not.toContain("D-vlad-001");
+    addDecision({ project: "vlad", title: "Yeni", body: "b" }, NOW); // numbers the old block first
+    expect(listDecisions({ project: "vlad", all: true }).map((d) => d.id)).toEqual(["D-vlad-001", "D-vlad-002"]);
+    expect(migrateDecisions()).toEqual([]);
   });
 });

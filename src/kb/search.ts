@@ -92,8 +92,9 @@ function* findingUnits(): Generator<Unit> {
 }
 
 function* decisionUnits(project?: string): Generator<Unit> {
+  let n = 0; // unmigrated blocks have no id: file#date#index keeps same-day ones apart
   for (const { rec, text } of scanDecisions(project)) {
-    yield { id: rec.id || `${rec.file}#${rec.date}`, type: "decision", project: rec.file === "_genel" ? null : rec.file, status: rec.id ? rec.status : null, date: rec.date, title: rec.title, text, path: rec.path };
+    yield { id: rec.id || `${rec.file}#${rec.date}#${n++}`, type: "decision", project: rec.file === "_genel" ? "genel" : rec.file, status: rec.id ? rec.status : null, date: rec.date, title: rec.title, text, path: rec.path };
   }
 }
 

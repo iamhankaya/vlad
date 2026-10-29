@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addFinding } from "../../src/findings/store.js";
 import { addDecision } from "../../src/kb/decisions.js";
@@ -43,6 +44,13 @@ describe("searchKb", () => {
     createTask({ project: "vlad", title: "Ses dönüştürme işi", kind: "dev", body: "## Tanım\nses dönüştürme" });
     addDecision({ project: "vlad", title: "Ses dönüştürme yerel", body: "- **Karar:** yerel" }, NOW);
     expect(searchKb({ query: "ses dönüştürme" })[0].type).toBe("decision");
+  });
+  it("finds general decisions with --project genel and keeps same-day unmigrated blocks apart", () => {
+    addDecision({ project: "Genel Kural", title: "Genel karar", body: "- **Karar:** kural" }, NOW);
+    expect(searchKb({ query: "kural", project: "genel" }).map((h) => h.id)).toEqual(["D-genel-001"]);
+    mkdirSync(join(process.env.VLAD_HOME!, "kb", "decisions"), { recursive: true });
+    writeFileSync(join(process.env.VLAD_HOME!, "kb", "decisions", "vlad.md"), "# K\n\n### 2026-10-01 — vlad — Bir\n- **Karar:** zebra\n\n### 2026-10-01 — vlad — İki\n- **Karar:** zebra\n");
+    expect(searchKb({ query: "zebra" })).toHaveLength(2);
   });
   it("requires every query word", () => {
     addDecision({ project: "vlad", title: "A", body: "- **Karar:** kedi köpek" }, NOW);
