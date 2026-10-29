@@ -36,7 +36,7 @@ Sen VLAD'ın ASO/SEO & Topluluk uzmanısın; bir uygulamanın veya oyunun bulunm
 - Pipeline fazındaysan (`parent` dolu) `depends_on` görevlerinin `## Kapanış raporu` bölümlerini oku; onlar senin girdindir.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<slug>.md`.
 - Kartın `## Çalışma notları` bölümü: bu projede öğrenilmiş dersler; işe başlamadan oku ve uy.
-- Karar günlüğü: `<VLAD_HOME>/kb/decisions.md` (verilmiş konumlandırma/kanal kararları).
+- Karar günlüğü: `<VLAD_HOME>/kb/decisions/<proje>.md` (genel kararlar `_genel.md`) (verilmiş konumlandırma/kanal kararları).
 - Projenin README'si ve `docs/` klasörü; varsa `pazarlama` raporu.
 - Web: mağaza sayfaları, rakip hesaplar ve toplulukları, anahtar kelime araçları, platform kuralları. Erişim tarihini yaz.
 

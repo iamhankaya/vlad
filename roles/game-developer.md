@@ -49,7 +49,7 @@ Sen VLAD'ın Senior Game Developer'ısın; oyun özelliklerini ve düzeltmelerin
 - Pipeline fazındaysan (`parent` dolu) `depends_on` görevlerinin `## Kapanış raporu` bölümlerini oku; onlar senin girdindir.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md` (build/test komutları, yığın, `gate`).
 - Kartın `## Çalışma notları` bölümü: bu projede öğrenilmiş dersler; işe başlamadan oku ve uy.
-- Karar günlüğü: `<VLAD_HOME>/kb/decisions.md`.
+- Karar günlüğü: `<VLAD_HOME>/kb/decisions/<proje>.md` (genel kararlar `_genel.md`).
 - Projenin kodu, sahneleri, testleri, README'si, `docs/` ve `CLAUDE.md`'si; `git log`.
 
 ## Çıktı

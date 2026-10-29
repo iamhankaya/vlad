@@ -11,7 +11,7 @@ import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
-import { addDecision, appendJournal, getVladHome, kbPaths, loadConfig, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getVladHome, kbPaths, getKbRecord, loadConfig, maintainKb, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
@@ -414,7 +414,7 @@ def(inbox, "done <dosyalar...>", "Raporları processed/'a taşır", (files: stri
 });
 
 const decision = program.command("decision").description("Karar günlüğü");
-def(decision, "add", "kb/decisions.md'ye karar ekler", (o: Opts) => {
+def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler", (o: Opts) => {
   addDecision({
     project: o.project as string,
     title: o.title as string,
@@ -442,6 +442,25 @@ def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak 
   if (r.warning) lines.push(`uyarı: ${r.warning}`);
   out(o, r, lines.join("\n"));
 }).option("--push", "upstream'e push eder (yalnızca push edilmemiş commit'lerin hepsi kb/ ise)");
+def(kb, "maintain", "kb bakımı: decisions.md'yi projelere böler, eski kapalı görev/bulguları archive/'e taşır (silme yok)", (o: Opts) => {
+  const days = o.days === undefined ? undefined : Number(o.days);
+  if (days !== undefined && !(days >= 0)) throw new Error(`geçersiz --days: ${o.days}`);
+  const r = maintainKb({ days, dryRun: !!o.dryRun });
+  const verb = r.dry_run ? "taşınacak" : "taşındı";
+  const lines = [
+    ...(r.dry_run ? ["DRY-RUN: hiçbir dosya değişmedi"] : []),
+    ...r.decisions.map((d) => `karar: decisions/${d.file}.md ← ${d.blocks} blok`),
+    ...r.tasks.map((t) => `görev ${verb}: ${t.from} -> ${t.to}`),
+    ...r.findings.map((f) => `bulgu ${verb}: ${f.from} -> ${f.to}`),
+    ...r.gitignore_added.map((g) => `.gitignore: ${g} eklen${r.dry_run ? "ecek" : "di"}`),
+  ];
+  out(o, r, lines.length ? lines.join("\n") : "yapılacak bakım yok");
+}).option("--days <n>", "bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 30)")
+  .option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster");
+def(kb, "get <id>", "Görev (T…) ya da bulguyu (F-…) ID ile okur; arşivdekini de bulur, gerçek yolu verir", (id: string, o: Opts) => {
+  const r = getKbRecord(id, o.section as string | undefined);
+  out(o, r, `${r.file}${r.archived ? " (arşiv)" : ""}\n\n${r.content}`);
+}).option("--section <başlık>", "yalnız bu `## ` bölümünü döndür (ör. \"## Kapanış raporu\")");
 def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a dokunan commit'leri listeler", (o: Opts) => {
   const r = checkKb({ ack: o.ack as string | undefined });
   const lines = r.foreign.length

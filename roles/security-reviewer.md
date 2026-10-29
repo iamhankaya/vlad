@@ -30,7 +30,7 @@ Sen VLAD'ın Security Reviewer'ısın; bir fazın diff'ini güvenlik gözüyle o
 - Faz görev dosyası ve `## Kapanış raporu` (`<VLAD_HOME>/kb/tasks/<id>.md`); diff: `git -C <worktree> diff <taban>...HEAD`.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md` (`exposure`, `gate`).
 - Kartın `## Çalışma notları` bölümü: bu projede öğrenilmiş dersler; işe başlamadan oku ve uy.
-- Karar günlüğü: `<VLAD_HOME>/kb/decisions.md`.
+- Karar günlüğü: `<VLAD_HOME>/kb/decisions/<proje>.md` (genel kararlar `_genel.md`).
 
 ## Çıktı
 

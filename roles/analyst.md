@@ -37,7 +37,7 @@ Sen VLAD'ın Senior Analyst'isin; gereksinimleri netleştirir, kodu ve doküman�
 - Pipeline fazındaysan (görev frontmatter'ında `parent` dolu) `depends_on` görevlerinin `## Kapanış raporu` bölümlerini oku; onlar senin girdindir.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<slug>.md` (proje yolu, yığın, `exposure`, açık konular).
 - Kartın `## Çalışma notları` bölümü: bu projede öğrenilmiş dersler (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
-- Karar günlüğü: `<VLAD_HOME>/kb/decisions.md` (önceki kararlar ve gerekçeleri).
+- Karar günlüğü: `<VLAD_HOME>/kb/decisions/<proje>.md` (genel kararlar `_genel.md`) (önceki kararlar ve gerekçeleri).
 - Projenin kodu, testleri, README'si ve `docs/` klasörü; `git log` / `git blame` (yalnızca okuma).
 - Web: resmi dokümanlar ve sürüm notları.
 

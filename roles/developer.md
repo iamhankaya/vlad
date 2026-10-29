@@ -57,7 +57,7 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
 - Pipeline fazındaysan (görev frontmatter'ında `parent` dolu) `depends_on` görevlerinin `## Kapanış raporu` bölümlerini oku; onlar senin girdindir.
 - Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md` (build/test komutları, yığın, açık konular).
 - Kartın `## Çalışma notları` bölümü: bu projede öğrenilmiş dersler (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
-- Karar günlüğü: `<VLAD_HOME>/kb/decisions.md` (projeyi etkileyen önceki kararlar).
+- Karar günlüğü: `<VLAD_HOME>/kb/decisions/<proje>.md` (genel kararlar `_genel.md`) (projeyi etkileyen önceki kararlar).
 - Projenin kodu, testleri, README'si, `docs/` ve `CLAUDE.md`'si; `git log` (yakın değişiklikler).
 
 ## Çıktı

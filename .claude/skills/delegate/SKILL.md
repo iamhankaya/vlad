@@ -22,7 +22,7 @@ vlad project list --json
 ```
 - Projeyi slug ile eşle; belirsizse kullanıcıya sor. Kart yoksa önce `/scan` öner.
 - `kb/projects/<slug>.md` kartını oku (özet, mimari notlar, açık konular).
-- `kb/decisions.md` içinde bu projeye ait ilgili kararları oku.
+- `kb/decisions/<slug>.md` (+ genel kararlar için `kb/decisions/_genel.md`) dosyasındaki ilgili kararları oku.
 - Aynı konuda açık görev var mı bak:
   ```
   vlad task list --project <slug> --json
@@ -202,7 +202,7 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 ## 5b. research → arka plan agent'ı
 
 1. `vlad task set <id> running --json`
-2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`kb/tasks/<id>.md`) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Rolün `skills` listesi doluysa ardından: "İşe başlamadan şu skill'leri yükle: `<a>`, `<b>`. Yüklenemeyen olursa raporda belirt." Pipeline fazıysa ekle: "Önce bağımlı olduğun görevlerin `## Kapanış raporu` bölümünü oku: `kb/tasks/<dep-id>.md` …" (görevin `depends_on`'u). Agent sonucu Markdown olarak döndürür; dosya yazmaz. Arka plan agent'ını görevin modeliyle, yoksa rolün `model`'iyle başlat (Agent aracının `model` parametresi; değer `vlad task list --project <slug> --json` çıktısında görevin `effective_model` alanıdır, yoksa `vlad role list --json`); ikisi de boşsa varsayılan.
+2. İşi bir arka plan agent'ına ver: görev dosyası yolunu (`vlad kb get <id> --json` çıktısındaki `file`; arşivde olabilir) ve kabul kriterlerini ilet. Görevin rolü varsa prompt şu cümleyle başlar: "Rolün: <title>. Önce `<rol file>` dosyasını oku ve oradaki sorumluluk, yetki ve çıktı kurallarına uy." (`file`, `vlad role list --json` çıktısından). Rolün `skills` listesi doluysa ardından: "İşe başlamadan şu skill'leri yükle: `<a>`, `<b>`. Yüklenemeyen olursa raporda belirt." Pipeline fazıysa ekle: "Önce bağımlı olduğun görevlerin `## Kapanış raporu` bölümünü oku: `kb/tasks/<dep-id>.md` …" (görevin `depends_on`'u). Agent sonucu Markdown olarak döndürür; dosya yazmaz. Arka plan agent'ını görevin modeliyle, yoksa rolün `model`'iyle başlat (Agent aracının `model` parametresi; değer `vlad task list --project <slug> --json` çıktısında görevin `effective_model` alanıdır, yoksa `vlad role list --json`); ikisi de boşsa varsayılan.
 3. Önemli ara adımlarda: `vlad task log <id> "<adım>"`
 4. Sonucu Markdown olarak geçici dosyaya yaz ve:
    ```

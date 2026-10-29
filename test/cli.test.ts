@@ -372,7 +372,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
   });
   it("decision add and journal append", () => {
     expect(vlad(["decision", "add", "--project", "p", "--title", "t", "--body-file", "-", "--json"], "- **Karar:** x").code).toBe(0);
-    expect(readFileSync(join(home, "kb", "decisions.md"), "utf8")).toContain(" — p — t");
+    expect(readFileSync(join(home, "kb", "decisions", "p.md"), "utf8")).toContain(" — p — t");
     expect(vlad(["journal", "append", "2026-10-15", "--file", "-", "--json"], "- a").code).toBe(0);
     expect(existsSync(join(home, "kb", "journal", "2026-10-15.md"))).toBe(true);
   });
@@ -380,6 +380,30 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     const r = vlad(["task", "launch", "T20260101-01", "--dry-run", "--json"]);
     expect(r.code).toBe(1);
     expect(JSON.parse(r.err).error).toMatch(/bulunamadı/);
+  });
+  it("kb maintain: dry-run changes nothing; archived digested task stays in list/get; undigested one is kept", () => {
+    const id = mkTask();
+    const keep = mkTask();
+    const age = (f: string, extra: string) => writeFileSync(f, readFileSync(f, "utf8").replace(/^state: .*$/m, "state: done").replace(/^updated: .*$/m, `updated: 2026-01-05T10:00:00+03:00${extra}`));
+    const file = join(home, "kb", "tasks", `${id}.md`);
+    const keepFile = join(home, "kb", "tasks", `${keep}.md`);
+    age(file, "\ndigested: 2026-01-06T10:00:00+03:00");
+    age(keepFile, "");
+    const dry = JSON.parse(vlad(["kb", "maintain", "--dry-run", "--json"]).out);
+    expect(dry.dry_run).toBe(true);
+    expect(dry.tasks.map((t: { id: string }) => t.id)).toEqual([id]);
+    expect(existsSync(file)).toBe(true);
+    expect(JSON.parse(vlad(["kb", "maintain", "--json"]).out).tasks).toHaveLength(1);
+    expect(existsSync(file)).toBe(false);
+    expect(existsSync(keepFile)).toBe(true);
+    const ids = JSON.parse(vlad(["task", "list", "--json"]).out).tasks.map((t: { id: string }) => t.id);
+    expect(ids).toEqual([id, keep].sort());
+    expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 1 rapor");
+    const got = JSON.parse(vlad(["kb", "get", id, "--section", "## Tanım", "--json"]).out);
+    expect(got).toMatchObject({ id, archived: true, relative: `tasks/archive/2026-01/${id}.md` });
+    expect(got.content).toContain("x");
+    expect(vlad(["kb", "get", "T20200101-99", "--json"]).code).toBe(1);
+    expect(JSON.parse(vlad(["kb", "maintain", "--json"]).out).tasks).toEqual([]);
   });
 });
 
