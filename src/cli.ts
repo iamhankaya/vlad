@@ -11,10 +11,11 @@ import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
-import { addDecision, appendJournal, getVladHome, kbPaths, getKbRecord, loadConfig, maintainKb, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
+import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
@@ -52,12 +53,15 @@ function out(o: Opts, data: unknown, text: string): void {
 
 const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}`;
 /** Pipeline tasks carry their per-project integration worktrees (F-vlad-063); a missing project card must not break listing. */
-const integrationInfo = (t: Task) => {
+const integrationInfo = (t: Task, all?: Task[]) => {
   if (t.data.kind !== "pipeline") return {};
-  try { return { integration_worktrees: integrationWorktrees(t.data.id, loadConfig()) }; } catch { return {}; }
+  try { return { integration_worktrees: integrationWorktrees(t.data.id, loadConfig(), all) }; } catch { return {}; }
 };
 /** Task data plus the model it runs on (task `model` ?? role `model`), for --json consumers. */
-const withModel = (t: Task) => ({ ...t.data, ...modelInfo(t.data), ...integrationInfo(t) });
+const withModel = (t: Task, all?: Task[]) => ({ ...t.data, ...modelInfo(t.data), ...integrationInfo(t, all) });
+/** Fields `task list --fields` can pick: the task frontmatter plus derived ones (computed only when asked for). */
+const TASK_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "created", "updated", "error", "digested", "role", "parent", "depends_on", "phase", "report_file", "model", "model_reason"];
+const DERIVED_FIELDS = ["role_model", "effective_model", "integration_worktrees"];
 /** Detailed status line: shows the model only when the task's own model deviates from its role's. */
 const statusLine = (t: Task) => {
   const m = t.data.model && t.data.model !== modelInfo(t.data).role_model ? `  [model: ${t.data.model}]` : "";
@@ -110,6 +114,27 @@ def(project, "note <slug> [not]", "Karta `## Çalışma notları` altına tarihl
   const line = addProjectNote(slug, text);
   out(o, { slug, note: line }, `not eklendi: ${slug}`);
 }).option("--file <md>", "not dosyası (- = stdin)");
+def(project, "status <slug>", "Proje durum özeti: kayıtlardan üretilen sayılar/listeler + kartın `## Durum özeti` anlatısı (güncel/bayat/yok)", (slug: string, o: Opts) => {
+  const s = projectStatus(slug);
+  const lines = [
+    `${s.slug}  ${s.status}${s.gate ? `  gate: ${s.gate}` : ""}`,
+    `özet: ${s.summary.state}${s.summary.as_of ? ` (${s.summary.as_of} tarihine kadar)` : ""}${s.summary.newer.length ? `  yeni kayıt: ${s.summary.newer.join(", ")}` : ""}`,
+    ...(s.summary.text ? ["", s.summary.text] : []),
+    "",
+    `görevler: ${Object.entries(s.tasks.counts).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
+    ...s.tasks.active.map((t) => `  ${t.id}  ${t.state}  ${t.title}`),
+    ...(s.tasks.last_done ? [`son done: ${s.tasks.last_done.id}  ${s.tasks.last_done.title}`] : []),
+    `açık bulgu: ${Object.entries(s.findings.counts).map(([k, v]) => `${k}=${v}`).join(" ") || "yok"}`,
+    ...s.findings.open.map((f) => `  ${f.id}  ${f.severity}  ${f.state}  ${f.title}`),
+    `geçerli karar: ${s.decisions.total}${s.decisions.total > s.decisions.recent.length ? ` (son ${s.decisions.recent.length}; tümü: vlad decision list --project ${s.slug})` : ""}`,
+    ...s.decisions.recent.map((d) => `  ${d.id}  ${d.date}  ${d.title}`),
+  ];
+  out(o, s, lines.join("\n"));
+});
+def(project, "summary <slug>", "Kartın `## Durum özeti` bölümünü yazar (/digest); ilk satıra 'Güncel' damgası eklenir", (slug: string, o: Opts) => {
+  const stamp = setProjectSummary(slug, readInput(o.file as string));
+  out(o, { slug, as_of: stamp }, `özet yazıldı: ${slug} (${stamp})`);
+}).requiredOption("--file <md>", "özet metni (- = stdin); en çok ~1000 token");
 def(project, "list", "Kartları listeler", (o: Opts) => {
   const { projects, warnings } = listProjectsWithWarnings();
   out(
@@ -294,16 +319,37 @@ def(task, "list", "Görevleri listeler", (o: Opts) => {
   const listed = listTasksWithWarnings({ state: states, project: o.project as string | undefined, parent: o.parent as string | undefined });
   const tasks = o.undigested ? listed.tasks.filter((t) => !t.data.digested) : listed.tasks;
   const { warnings } = listed;
+  const limit = o.limit === undefined ? undefined : Number(o.limit);
+  if (limit !== undefined && !(limit >= 1)) throw new Error(`geçersiz --limit: ${o.limit}`);
+  const shown = limit === undefined ? tasks : tasks.slice(-limit); // ids are date-ordered: the newest N
+  const fields = o.fields ? String(o.fields).split(",").map((f) => f.trim()).filter(Boolean) : undefined;
+  let rows: unknown[];
+  if (fields) {
+    const bad = fields.filter((f) => !DERIVED_FIELDS.includes(f) && !TASK_FIELDS.includes(f));
+    if (bad.length) throw new Error(`bilinmeyen alan: ${bad.join(", ")}`);
+    const all = fields.includes("integration_worktrees") ? listTasksWithWarnings().tasks : undefined;
+    rows = shown.map((t) => {
+      const full: Record<string, unknown> = { ...t.data };
+      if (fields.includes("role_model") || fields.includes("effective_model")) Object.assign(full, modelInfo(t.data));
+      if (fields.includes("integration_worktrees")) Object.assign(full, integrationInfo(t, all));
+      return Object.fromEntries(fields.filter((f) => f in full).map((f) => [f, full[f]]));
+    });
+  } else {
+    const all = shown.some((t) => t.data.kind === "pipeline") ? listTasksWithWarnings().tasks : undefined;
+    rows = shown.map((t) => withModel(t, all));
+  }
   out(
     o,
-    { tasks: tasks.map(withModel), warnings },
-    [...tasks.map(taskLine), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
+    { tasks: rows, warnings },
+    [...shown.map(taskLine), ...warnings.map((w) => `uyarı: ${w}`)].join("\n"),
   );
 })
   .option("--state <states>", "virgülle ayrılmış durumlar")
   .option("--project <slug>", "proje slug'ı")
   .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
-  .option("--parent <id>", "yalnızca bu pipeline'ın fazları");
+  .option("--parent <id>", "yalnızca bu pipeline'ın fazları")
+  .option("--fields <alanlar>", "--json çıktısını bu alanlarla sınırla (virgülle; role_model, effective_model, integration_worktrees yalnız istenirse hesaplanır)")
+  .option("--limit <n>", "en yeni n görev");
 def(task, "idle", "Uzun süredir güncellenmeyen running/blocked görevler (bekçi modu dürtmesi için)", (o: Opts) => {
   const minutes = Number(o.minutes);
   if (!(minutes >= 0)) throw new Error(`geçersiz --minutes: ${o.minutes}`);
@@ -347,7 +393,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
   if (s.mode) lines.push(`mod: ${s.mode}`);
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
-  out(o, { ...s, active: s.active.map(withModel), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
+  out(o, { ...s, active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
 }).option("--summary", "tek satır özet")
   .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");
 
@@ -414,19 +460,36 @@ def(inbox, "done <dosyalar...>", "Raporları processed/'a taşır", (files: stri
 });
 
 const decision = program.command("decision").description("Karar günlüğü");
-def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler", (o: Opts) => {
-  addDecision({
+def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID'si döner", (o: Opts) => {
+  const id = addDecision({
     project: o.project as string,
     title: o.title as string,
     body: readInput(o.bodyFile as string),
     source: o.source as string | undefined,
+    supersedes: o.supersedes as string | undefined,
   });
-  out(o, { ok: true }, "karar eklendi");
+  out(o, { ok: true, id }, `karar eklendi: ${id}`);
 })
   .requiredOption("--project <slug>", "proje")
   .requiredOption("--title <başlık>", "başlık")
   .requiredOption("--body-file <md>", "gövde (- = stdin)")
-  .option("--source <kaynak>", "session/görev kaynağı");
+  .option("--source <kaynak>", "session/görev kaynağı")
+  .option("--supersedes <id>", "bu kararın yerine geçtiği karar (o yerine-geçti olur)");
+def(decision, "list", "Kararları kısa listeler (varsayılan yalnız geçerli)", (o: Opts) => {
+  const decisions = listDecisions({ project: o.project as string | undefined, all: !!o.all }).map(({ path: _p, ...d }) => d); // paths are for `kb search`; they only bloat a list
+  out(o, { decisions }, decisions.map((d) => `${d.id}  ${d.date}  ${d.status}  ${d.title}${d.superseded_by ? `  -> ${d.superseded_by}` : ""}`).join("\n"));
+})
+  .option("--project <slug>", "yalnız bu proje (genel kararlar: genel)")
+  .option("--all", "geçersiz ve yerine geçilmiş kararlar da");
+def(decision, "set <id> <durum>", `Kararın durumunu değiştirir (${DECISION_STATUSES.join(" | ")})`, (id: string, status: string, o: Opts) => {
+  setDecisionStatus(id, status, o.supersededBy as string | undefined);
+  out(o, { id, status, superseded_by: (o.supersededBy as string | undefined) ?? null }, `${id} -> ${status}`);
+}).option("--superseded-by <id>", "yerine geçen karar (yerine-geçti için zorunlu)");
+def(decision, "migrate", "ID'siz eski karar bloklarına D-<proje>-NNN ve durum 'geçerli' ekler (metin silinmez, idempotent)", (o: Opts) => {
+  const r = migrateDecisions({ dryRun: !!o.dryRun });
+  const verb = o.dryRun ? "verilecek" : "verildi";
+  out(o, { dry_run: !!o.dryRun, files: r }, r.length ? [...(o.dryRun ? ["DRY-RUN: hiçbir dosya değişmedi"] : []), ...r.map((f) => `decisions/${f.file}.md: ${f.assigned} ID ${verb}`)].join("\n") : "geçiş gerekmiyor");
+}).option("--dry-run", "hiçbir şeye dokunmadan göster");
 
 const journal = program.command("journal").description("Günlük");
 def(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, o: Opts) => {
@@ -461,6 +524,13 @@ def(kb, "get <id>", "Görev (T…) ya da bulguyu (F-…) ID ile okur; arşivdeki
   const r = getKbRecord(id, o.section as string | undefined);
   out(o, r, `${r.file}${r.archived ? " (arşiv)" : ""}\n\n${r.content}`);
 }).option("--section <başlık>", "yalnız bu `## ` bölümünü döndür (ör. \"## Kapanış raporu\")");
+def(kb, "search <sorgu>", "Sınırlı kb araması (görev bölümü, bulgu, karar bloğu, günlük bölümü; arşiv dahil); tüm kelimeler geçmeli", (query: string, o: Opts) => {
+  const hits = searchKb({ query, project: o.project as string | undefined, type: o.type as string | undefined, limit: o.limit === undefined ? undefined : Number(o.limit) });
+  out(o, { hits }, hits.map((h) => `${h.id}  ${h.type}  ${h.status ?? "-"}  ${h.date ?? "-"}${h.section ? `  ${h.section}` : ""}\n  ${h.snippet}\n  ${h.path}`).join("\n") || "eşleşme yok");
+})
+  .option("--project <slug>", "yalnız bu proje")
+  .option("--type <tür>", "task | finding | decision | journal")
+  .option("--limit <n>", "en çok bu kadar sonuç", "8");
 def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a dokunan commit'leri listeler", (o: Opts) => {
   const r = checkKb({ ack: o.ack as string | undefined });
   const lines = r.foreign.length

@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
-import { addDecision } from "../../src/kb/journal.js";
+import { addDecision } from "../../src/kb/decisions.js";
 import { getKbRecord } from "../../src/kb/get.js";
 import { maintainKb } from "../../src/kb/maintain.js";
 import { addFinding, getFinding, listFindingsWithWarnings, nextFindingId, setFindingState } from "../../src/findings/store.js";

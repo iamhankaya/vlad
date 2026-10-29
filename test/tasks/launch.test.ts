@@ -8,7 +8,7 @@ import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
 import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
-import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, listTasks, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { trustKey } from "../../src/tasks/trust.js";
 import { assertInside, makeHome, makeJunction, rmTemp } from "../helpers.js";
@@ -449,6 +449,14 @@ x
       repo: beta, branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, beta, p.data.id),
     });
     expect(w.find((x) => x.project === "alpha")!.worktree).toBe(worktreePath(cfg, repo, p.data.id));
+  });
+
+  it("F-vlad-094: integrationWorktrees gives the same answer from an already loaded task list (no per-pipeline re-read)", async () => {
+    cfg.worktreeDir = "{repo}-wt";
+    const p = pipe();
+    await launchTask(betaPhase(p.data.id).data.id, { launcher: fakeLauncher(), cfg });
+    const all = listTasks();
+    expect(integrationWorktrees(p.data.id, cfg, all)).toEqual(integrationWorktrees(p.data.id, cfg));
   });
 
   it("F-vlad-063: a phase project whose card is gone is skipped; cleanup still removes the pipeline's own worktree", async () => {

@@ -65,7 +65,7 @@ vlad journal append <YYYY-MM-DD> --file <geçici.md> --json
 Bir açık noktayı **bulgu** (4b) ya da kartta **"kullanıcı kararı bekliyor"** türü açık konu (4) olarak yazmadan önce onay/karar/teyit/düzeltme şu kaynaklarda aranır:
 - görevin ve çatının `## İlerleme` / `## Sorular` bölümleri;
 - projenin kullanıcı listesi görevi (başlığında "Kullanıcıdan beklenenler" geçen açık görev; ör. Ashen için T20261023-96);
-- `kb/decisions/<proje>.md` (ilgili tarih; `vlad kb maintain` çalışmamış kb'de eski tek dosya `decisions.md`);
+- kararlar: `vlad decision list --project <proje> --all --json` ve konuya göre `vlad kb search "<sorgu>" --project <proje> --type decision --json` (eski tek dosya `decisions.md` yalnız `vlad kb maintain` çalışmamış kb'de);
 - sonraki fazların kapanış raporları.
 
 Bulunursa madde açılmaz (bulgu varsa doğrudan `fixed`/`wontfix`: `vlad finding set <id> <durum> --by <görev-id>`) ve günlükte kaynağıyla belirtilir ("kullanıcı teyit etti, kaynak: T…/İlerleme"). Gerekçe: 2026-10-25 digest'inde teyitli Zyfen SFX lisansı (F-ashen-bastion-051) bulgu olarak açıldı ve kartlara bayat "kullanıcı kararı bekliyor" maddeleri yazıldı. Kartın `## Çalışma notları`'ndaki 2026-10-22 digest dersiyle (kapanmış maddeyi açık yazma) aynı çizgidedir; o dersi tekrar yazma, ona atıf yap.
@@ -76,6 +76,7 @@ Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamam�
 - `## Son aktivite`: en yeni olaylar üstte, tarih + kısa özet + kaynak ID; en fazla ~10 madde tut.
 - `## Açık konular`: yeni açılanları ekle, kapananları çıkar. Açık bulguların özetini de yansıt (`vlad finding list --project <slug> --state open,deferred --json`): önem sırasıyla kısa liste, `F-…` ID'leriyle; kritik/yüksek olanlar üstte. Düzelen/wontfix olanları çıkar.
 - `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` ve retro yazar). Kartı yeniden yazarken bölümü aynen koru.
+- `## Durum özeti`'ne **dokunma** (yalnızca `vlad project summary` yazar, adım 5b). Kartı yeniden yazarken bölümü aynen koru.
 - `last_activity`: en yeni `ended` (mevcuttan yeniyse).
 - Diğer bölümleri ve alanları koru.
 - Yeniden yazmadan önce adım 3b'yi uygula: onaylanmış bir konuyu "kullanıcı kararı bekliyor" diye yazma.
@@ -107,7 +108,19 @@ Raporlarda açık bir teknik/ürün kararı varsa (ör. "WebSocket kullanacağı
 ```
 vlad decision add --project <slug> --title "<kısa başlık>" --body-file <geçici.md> --json
 ```
+Karar yazmadan önce projenin geçerli kararlarına bak (`vlad decision list --project <slug> --json`):
+- Yeni karar eskisinin yerine geçiyorsa `--supersedes <eski-id>` ekle (eski otomatik `yerine-geçti` olur, iki yönlü bağlanır).
+- Eski karar yerine bir şey gelmeden geçersiz kaldıysa: `vlad decision set <id> geçersiz --json`; yanlışlıkla işaretlenmişse `vlad decision set <id> geçerli`.
+- `add` yeni `D-<proje>-NNN` ID'sini döner; günlükte ve özette bu ID ile an.
 Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?" diye sor.
+
+### 5b. Proje durum özeti
+
+Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
+```
+vlad project summary <slug> --file <geçici.md> --json
+```
+Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Bu adımı işlemediğin projede özeti güncelleme (bayat kalması doğrudur). Eski kayıtlar için gerekirse önce `vlad kb search`.
 
 ## 6. Raporları kapat
 

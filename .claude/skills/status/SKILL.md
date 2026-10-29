@@ -134,6 +134,8 @@ Başta `vlad mode status` bak (özet satırında da görünür). **Gece modu etk
 
 ### Retro (son kapıdan sonra)
 
+Retro ve "nerede kalmıştık" soruları için kart/günlük dosyalarını baştan okuma: önce `vlad project status <slug> --json`, gerekirse `vlad kb search "<sorgu>" --project <slug> --json`.
+
 Çatı `done` olunca kısa bir retro yap (2–5 dakikalık özet; uzun rapor yazma). Kaynak: çatı ve faz görev dosyaları (`## İlerleme`, `## Sorular`, `## Kapanış raporu`), `failed`/`cancelled` fazlar, geri alınan merge'ler, kırmızı gate koşuları.
 1. Kullanıcıya üç başlıkta göster: **Ne iyi gitti**, **Ne sürtündü** (tekrar eden hata, ortam sorunu, çakışma, limit kesintisi, geç yakalanan bulgu), **Ders** (somut, bir cümle, eyleme dönük).
 2. Proje düzeyindeki dersleri kullanıcı onayıyla karta yaz (her ders ayrı komut; kart gövdesi elle düzenlenmez):

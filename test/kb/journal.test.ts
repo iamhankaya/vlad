@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { addDecision, appendJournal } from "../../src/kb/journal.js";
+import { appendJournal } from "../../src/kb/journal.js";
+import { addDecision } from "../../src/kb/decisions.js";
 import { makeHome } from "../helpers.js";
 
 let home: string;
