@@ -14,9 +14,10 @@ function missingIgnores(kbDir: string): string[] {
   return KB_GITIGNORE.filter((l) => !have.has(l));
 }
 
-export function git(cwd: string, args: string[]): string {
+/** `GIT_TERMINAL_PROMPT=0`: a credential prompt fails instead of hanging; `timeoutMs` bounds network calls (F-vlad-073). */
+export function git(cwd: string, args: string[], timeoutMs?: number): string {
   try {
-    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", windowsHide: true });
+    return execFileSync("git", args, { cwd, encoding: "utf8", stdio: "pipe", windowsHide: true, timeout: timeoutMs, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
   } catch (e) {
     const err = e as { stderr?: string; message: string };
     throw new Error(`git ${args[0]} başarısız: ${(err.stderr || err.message).trim()}`);

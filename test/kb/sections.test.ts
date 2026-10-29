@@ -23,4 +23,10 @@ describe("sections", () => {
     expect(getSection(out, "## A")).toBe("new");
     expect(getSection(out, "## B")).toBe("b1");
   });
+  it("a '## ' line inside a code fence does not end the section (F-vlad-075)", () => {
+    const fenced = "## A\na1\n```md\n## not a heading\n```\na2\n\n## B\nb1\n";
+    expect(getSection(fenced, "## A")).toBe("a1\n```md\n## not a heading\n```\na2");
+    expect(getSection(fenced, "## B")).toBe("b1");
+    expect(getSection(fenced, "## not a heading")).toBeNull();
+  });
 });

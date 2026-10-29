@@ -11,6 +11,7 @@ import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
+import { readInput } from "./kb/input.js";
 import { addDecision, appendJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
@@ -40,11 +41,6 @@ function fail(e: unknown): never {
     process.stderr.write([error, ...details.map((d) => `  ${d}`)].join("\n") + "\n");
   }
   process.exit(1);
-}
-
-/** Reads a file; "-" means stdin. */
-function readInput(p: string): string {
-  return readFileSync(p === "-" ? 0 : p, "utf8");
 }
 
 function out(o: Opts, data: unknown, text: string): void {

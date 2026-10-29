@@ -1,11 +1,15 @@
 /** Markdown section helpers. `heading` is the full heading line, e.g. "## Tanım". */
 
 function range(lines: string[], heading: string): { start: number; end: number } | null {
-  const start = lines.findIndex((l) => l.trimEnd() === heading);
+  let fenced = false; // a '## ' line inside a code fence is content, not a heading (F-vlad-075)
+  const isFence = (l: string) => /^\s*(```|~~~)/.test(l);
+  const start = lines.findIndex((l) => (isFence(l) ? ((fenced = !fenced), false) : !fenced && l.trimEnd() === heading));
   if (start < 0) return null;
   let end = lines.length;
+  fenced = false;
   for (let i = start + 1; i < lines.length; i++) {
-    if (/^## /.test(lines[i])) {
+    if (isFence(lines[i])) fenced = !fenced;
+    else if (!fenced && /^## /.test(lines[i])) {
       end = i;
       break;
     }
