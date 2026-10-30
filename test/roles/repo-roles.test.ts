@@ -229,6 +229,14 @@ describe("game/mobile roles and short-writing rule", () => {
     for (const w of ["ASO", "SEO", "Discord", "TikTok", "haftalık", "hesap açmaz", "paylaşım yapmaz", "iletişime geçmez"]) expect(body, w).toContain(w);
   });
 
+  it("designer carries the visual quality bar and status has the visual approval gate", () => {
+    const d = read("roles/designer.md");
+    expect(d).toMatch(/^  - frontend-design:frontend-design$/m);
+    for (const w of ["yüksek sadakatli mockup", "açık + koyu", "2–3 ayrı görsel yön", "3–5 referans", "seçim gelmeden", "en az 2 tur", "impeccable critique", "new-work", "craft-floor", "frontend-design", "büyük harf etiket", "dekoratif gradyan", "karışık ikon", "Fluent 2", "### Görsel yönler", "### Görsel turlar"]) expect(d, w).toContain(w);
+    const status = read(".claude/skills/status/SKILL.md");
+    for (const w of ["Görsel onay kapısı", "ekran görüntülerini (`### Görsel yönler`", "gece modunda da bu kapı", "`tasarım` kapısı (görsel onay"]) expect(status, w).toContain(w);
+  });
+
   it("designer keeps the web rules and gains a mobile section; pazarlama gains a game section split with growth", () => {
     const d = read("roles/designer.md");
     for (const w of ["docs/design/", "`tasarım`", "`denetim`", "Jetpack Compose", "Material 3", "48dp", "edge-to-edge", "TalkBack", "Roborazzi", "Paparazzi", ".claude/skills"]) expect(d, w).toContain(w);
