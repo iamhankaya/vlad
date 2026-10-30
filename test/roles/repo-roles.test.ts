@@ -234,7 +234,7 @@ describe("game/mobile roles and short-writing rule", () => {
     expect(d).toMatch(/^  - frontend-design:frontend-design$/m);
     for (const w of ["yüksek sadakatli mockup", "açık + koyu", "2–3 ayrı görsel yön", "3–5 referans", "seçim gelmeden", "en az 2 tur", "impeccable critique", "new-work", "craft-floor", "frontend-design", "büyük harf etiket", "dekoratif gradyan", "karışık ikon", "Fluent 2", "### Görsel yönler", "### Görsel turlar"]) expect(d, w).toContain(w);
     const status = read(".claude/skills/status/SKILL.md");
-    for (const w of ["görsel onay", "ekran görüntülerini", "gece modunda"]) expect(status, w).toContain(w);
+    for (const w of ["Görsel onay kapısı", "ekran görüntülerini (`### Görsel yönler`", "gece modunda da bu kapı", "`tasarım` kapısı (görsel onay"]) expect(status, w).toContain(w);
   });
 
   it("designer keeps the web rules and gains a mobile section; pazarlama gains a game section split with growth", () => {
