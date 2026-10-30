@@ -88,6 +88,17 @@ describe("TerminalLauncher", () => {
   });
 });
 
+describe("buildScript resume", () => {
+  it("continues the recorded session, keeping --model", () => {
+    expect(buildScript(req({ resume: { sessionId: "abc-123" } }))).toMatch(/\nclaude --resume 'abc-123' \$p\n$/);
+    expect(buildScript(req({ model: "sonnet", resume: { sessionId: "it's" } }))).toMatch(/\nclaude --model 'sonnet' --resume 'it''s' \$p\n$/);
+  });
+  it("falls back to --continue without a session id", () => {
+    expect(buildScript(req({ resume: {} }))).toMatch(/\nclaude --continue \$p\n$/);
+    expect(buildScript(req({ model: "opus", resume: {} }))).toMatch(/\nclaude --model 'opus' --continue \$p\n$/);
+  });
+});
+
 describe("TerminalLauncher external", () => {
   it("writes the script but opens no terminal, and returns script/command/cwd", async () => {
     const dir = sd();

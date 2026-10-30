@@ -23,9 +23,12 @@ export function buildScript(req: LaunchRequest): string {
     .map((l) => (/^['‘’‚‛]@/.test(l) ? " " + l : l))
     .join("\n");
   lines.push("$p = @'", prompt, "'@");
-  if (req.model === undefined) lines.push("claude $p");
-  else if (MODEL.test(req.model)) lines.push(`claude --model ${q(req.model)} $p`);
-  else throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
+  if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
+  const flags = [
+    ...(req.model === undefined ? [] : ["--model", q(req.model)]),
+    ...(req.resume ? (req.resume.sessionId ? ["--resume", q(req.resume.sessionId)] : ["--continue"]) : []),
+  ];
+  lines.push(["claude", ...flags, "$p"].join(" "));
   return lines.join("\n") + "\n";
 }
 

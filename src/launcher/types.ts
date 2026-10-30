@@ -5,6 +5,7 @@ export interface LaunchRequest {
   env: Record<string, string>; // VLAD_TASK_ID vb.
   title: string; // pencere/sekme başlığı
   model?: string; // claude --model; yoksa varsayılan model
+  resume?: { sessionId?: string }; // önceki oturumu sürdür: claude --resume <id>, id yoksa --continue
 }
 export interface LaunchResult {
   ok: boolean;

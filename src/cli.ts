@@ -308,6 +308,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     const ext = externalLaunch({
       taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
+      resume: { sessionId: t.data.session_id?.trim() || undefined }, // keep the worker's context: a fresh `claude $p` would lose it
     });
     if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);
     out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);

@@ -360,6 +360,14 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(j.command).toContain(`${id}.ps1`);
       expect(j.cwd).toBe(j.worktree);
     });
+    it("task resume --external continues the recorded session, or the last one without a session_id", () => {
+      vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+      const without = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
+      expect(readFileSync(without.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--continue \$p\n$/);
+      expect(vlad(["task", "session", id, "sess-42", "--json"]).code).toBe(0);
+      const withSid = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
+      expect(readFileSync(withSid.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--resume 'sess-42' \$p\n$/);
+    });
     it("--external is refused together with --dry-run and in cloud mode", () => {
       const both = vlad(["task", "launch", id, "--external", "--dry-run", "--json"], undefined, env());
       expect(both.code).toBe(1);
