@@ -277,7 +277,7 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
   it("CLAUDE.md komut listesi, `vlad --help` komutlarıyla birebir örtüşür", () => {
     const line = read("CLAUDE.md").split("\n").find((l) => l.startsWith("Kullanılabilir komutlar:"))!;
     const documented = new Set<string>();
-    for (const m of line.matchAll(/`vlad ([a-z]+)(?: ((?:[a-z]+\|?)+))?/g)) {
+    for (const m of line.matchAll(/`vlad ([a-z]+)(?: ((?:[a-z-]+\|?)+))?/g)) {
       const subs = (m[2] ?? "").split("|").filter(Boolean);
       if (!subs.length) documented.add(m[1]);
       for (const s of subs) documented.add(`${m[1]} ${s}`);
