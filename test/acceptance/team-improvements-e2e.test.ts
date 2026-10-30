@@ -277,7 +277,7 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
   it("CLAUDE.md komut listesi, `vlad --help` komutlarıyla birebir örtüşür", () => {
     const line = read("CLAUDE.md").split("\n").find((l) => l.startsWith("Kullanılabilir komutlar:"))!;
     const documented = new Set<string>();
-    for (const m of line.matchAll(/`vlad ([a-z]+)(?: ((?:[a-z]+\|?)+))?/g)) {
+    for (const m of line.matchAll(/`vlad ([a-z]+)(?: ((?:[a-z-]+\|?)+))?/g)) {
       const subs = (m[2] ?? "").split("|").filter(Boolean);
       if (!subs.length) documented.add(m[1]);
       for (const s of subs) documented.add(`${m[1]} ${s}`);
@@ -285,7 +285,7 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
     const actual = new Set<string>();
     const top = [...help([]).matchAll(/^  ([a-z]+)\b/gm)].map((m) => m[1]).filter((c) => c !== "help");
     for (const c of top) {
-      const sub = [...help([c]).split("Commands:")[1]?.matchAll(/^  ([a-z]+)\b/gm) ?? []].map((m) => m[1]).filter((s) => s !== "help");
+      const sub = [...help([c]).split("Commands:")[1]?.matchAll(/^  ([a-z-]+)\b/gm) ?? []].map((m) => m[1]).filter((s) => s !== "help");
       if (!sub.length) actual.add(c); else for (const s of sub) actual.add(`${c} ${s}`);
     }
     expect([...actual].filter((c) => !documented.has(c)), "CLI'da olup CLAUDE.md'de olmayan").toEqual([]);

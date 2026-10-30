@@ -181,6 +181,7 @@ vlad task launch <id> --json
 - Başarılı: görev `running`; yeni terminal sekmesi/penceresinde çalışan açılır. Kullanıcıya branch (`vlad/<id>`) ve worktree yolunu göster.
 - Pipeline fazı (`parent` dolu): ilk fazda entegrasyon branch'i `vlad/<çatı-id>` ve worktree'si (`<worktreeDir>/<çatı-id>`) açılır, çatı `running` olur; fazın branch'i entegrasyon branch'inden açılır. Kullanıcıya ikisini de göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.
+- `--external` (vlad-desktop gibi gömülü istemciler): worktree + branch + güven kaydı + `running` aynen yapılır, terminal AÇILMAZ; JSON'da `script` (`%TEMP%\vlad\<id>.ps1`), `command` ve `cwd` döner, pencereyi istemci açar. Bulut modunda reddedilir.
 - `--dry-run` önizleme değildir: worktree + branch oluşturur ve görevi terminal açmadan `running` yapar (yalnızca test içindir). Bu yüzden "önce dry-run ile göster" diye kullanma.
 
 **İzin kalıpları:** çalışanın push ve `gh run`/`gh workflow run` komutları tek başına koşar ve `settings.json` kalıplarıyla eşleşir (kalıp listesi `vlad-worker` skill'inde tek kaynaktır). Reddedilirse çalışan `ask` ile sorar; kullanıcı onayıyla push/dispatch'i `git -C <worktree> …` / `gh` ile sen yaparsın. Kalıbı sen yazmazsın, çalışan da kendi izin ayarını değiştirmez.

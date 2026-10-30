@@ -224,6 +224,15 @@ export async function launchTask(
   }
 }
 
+/** Closes the task's worker window/process tree; the state and the worktree stay as they are. */
+export function closeTaskWindow(
+  id: string,
+  o: { closeWorker?: (taskId: string) => number[] | void } = {},
+): { id: string; killed: number[] } {
+  getTask(id); // unknown ids fail here
+  return { id, killed: (o.closeWorker ?? closeWorkerWindow)(id) ?? [] };
+}
+
 /**
  * Closes the worker's window, then removes the worktree of a done/cancelled task.
  * The branch is left alone.
@@ -296,16 +305,19 @@ export function statusSummary(
   now: Date,
   probe?: LivenessProbe,
   platform?: NodeJS.Platform,
+  /** `mark: false` (status --no-mark) is a pure read: nothing is marked stalled and an elapsed mode window is not cleared. */
+  opts: { mark?: boolean } = {},
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
   undigested: number; openSevereFindings: number; mode: string | null;
 } {
-  const newlyStalled = [
+  const mark = opts.mark !== false;
+  const newlyStalled = mark ? [
     ...markStale(now, cfg.staleAfterHours),
     ...markSilentWorkers(now, cfg, probe, platform),
-  ].map((t) => t.data.id);
+  ].map((t) => t.data.id) : [];
   const mode = modeLine(now);
-  try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared
+  if (mark) try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
   for (const t of tasks) counts[t.data.state]++;

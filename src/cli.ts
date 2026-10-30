@@ -12,16 +12,17 @@ import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
-import { addDecision, appendJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
-import { NoopLauncher, TerminalLauncher, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
+import { swallowEpipe } from "./stdout.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -29,6 +30,9 @@ import type { Task } from "./tasks/index.js";
 interface Opts { json?: boolean; [k: string]: unknown }
 
 const wantsJson = () => process.argv.includes("--json");
+
+swallowEpipe(process.stdout);
+swallowEpipe(process.stderr);
 
 function fail(e: unknown): never {
   let error = e instanceof Error ? e.message : String(e);
@@ -211,15 +215,17 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
 
 def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {
   const cfg = loadConfig();
+  if (o.external && o.dryRun) throw new Error("--external ve --dry-run birlikte kullanılamaz");
   let mode: LaunchMode;
   try {
     // a dry run only prints the terminal command, so the test guard does not apply
     mode = resolveLaunchMode(cfg.launcher, process.platform, o.dryRun ? { ...process.env, VLAD_LAUNCHER: "" } : process.env);
   } catch (e) {
-    if (!o.dryRun) throw e; // a dry run only prints the terminal command, so it works anywhere
+    if (!o.dryRun && !(o.external && cfg.launcher !== "cloud")) throw e; // --external opens nothing, so a platform without a terminal is fine; a dry run only prints the terminal command, so it works anywhere
     mode = "auto-terminal";
   }
   if (mode === "cloud") {
+    if (o.external) throw new Error("--external yerel çalışan içindir; bulut modunda kullanılamaz");
     const r = prepareCloudLaunch(id);
     out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
       `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}` +
@@ -227,17 +233,21 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
     return;
   }
   let last: LaunchResult | undefined;
-  const real = mode === "noop"
-    ? new NoopLauncher()
-    : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+  // --external (vlad-desktop): only writes the script; the caller opens it, so no terminal and no noop guard
+  const real = o.external
+    ? new TerminalLauncher({ mode: "auto", external: true })
+    : mode === "noop"
+      ? new NoopLauncher()
+      : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   const t = await launchTask(id, { launcher, cfg });
   out(
     o,
-    { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail },
-    `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}`,
+    { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}) },
+    `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}`,
   );
-}).option("--dry-run", "terminal açmadan komutu göster");
+}).option("--dry-run", "terminal açmadan komutu göster")
+  .option("--external", "terminal açma; betiği yaz, script/command/cwd döndür (gömülü kullanım)");
 
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
   const parsed = parseEvents(readInput(((o.eventsFile ?? o.file) as string | undefined) ?? "-"));
@@ -291,9 +301,26 @@ def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiş
   .option("--clear", "tüm bağımlılıkları kaldır");
 def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", (id: string, o: Opts) => {
   const r = resumeInfo(id);
+  if (o.external) {
+    if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
+    const t = getTask(id);
+    const model = modelInfo(t.data).effective_model;
+    const ext = externalLaunch({
+      taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
+      title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
+      resume: { sessionId: t.data.session_id?.trim() || undefined }, // keep the worker's context: a fresh `claude $p` would lose it
+    });
+    if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);
+    out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);
+    return;
+  }
   out(o, r, r.mode === "local"
     ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
     : `send_message session_id=${r.session_id}\n${r.message}`);
+}).option("--external", "yerel çalışan için betik yaz (terminal açma); script/command/cwd döner");
+def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", (id: string, o: Opts) => {
+  const r = closeTaskWindow(id);
+  out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
 });
 def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
   cleanupTask(id, { cfg: loadConfig() });
@@ -366,7 +393,7 @@ def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları
 }).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
-  const s = statusSummary(loadConfig(), new Date());
+  const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false });
   if (o.summary) {
     // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
     const line =
@@ -391,6 +418,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
   out(o, { ...s, active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
 }).option("--summary", "tek satır özet")
+  .option("--no-mark", "yan etkisiz okuma: stalled işaretleme ve mod penceresi temizliği yapılmaz (aynı JSON şekli)")
   .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");
 
 const mode = program.command("mode").description("Gece / bekçi modu (yetki penceresi kb/mode.json)");
@@ -492,6 +520,11 @@ def(journal, "append <tarih>", "kb/journal/<tarih>.md'ye ekler", (date: string, 
   appendJournal(date, readInput(o.file as string));
   out(o, { date }, `günlüğe eklendi: ${date}`);
 }).requiredOption("--file <md>", "içerik (- = stdin)");
+
+def(journal, "get <tarih>", "kb/journal/<tarih>.md içeriğini proje bölümleriyle döner (salt okuma)", (date: string, o: Opts) => {
+  const j = getJournal(date);
+  out(o, j, j.content);
+});
 
 const kb = program.command("kb").description("Hafıza deposu");
 def(kb, "commit <mesaj>", "kb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)", (msg: string, o: Opts) => {
