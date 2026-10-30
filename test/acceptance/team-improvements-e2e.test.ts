@@ -285,7 +285,7 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
     const actual = new Set<string>();
     const top = [...help([]).matchAll(/^  ([a-z]+)\b/gm)].map((m) => m[1]).filter((c) => c !== "help");
     for (const c of top) {
-      const sub = [...help([c]).split("Commands:")[1]?.matchAll(/^  ([a-z]+)\b/gm) ?? []].map((m) => m[1]).filter((s) => s !== "help");
+      const sub = [...help([c]).split("Commands:")[1]?.matchAll(/^  ([a-z-]+)\b/gm) ?? []].map((m) => m[1]).filter((s) => s !== "help");
       if (!sub.length) actual.add(c); else for (const s of sub) actual.add(`${c} ${s}`);
     }
     expect([...actual].filter((c) => !documented.has(c)), "CLI'da olup CLAUDE.md'de olmayan").toEqual([]);

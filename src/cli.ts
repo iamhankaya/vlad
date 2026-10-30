@@ -215,12 +215,13 @@ def(task, "new", "queued görev oluşturur", (o: Opts) => {
 
 def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {
   const cfg = loadConfig();
+  if (o.external && o.dryRun) throw new Error("--external ve --dry-run birlikte kullanılamaz");
   let mode: LaunchMode;
   try {
     // a dry run only prints the terminal command, so the test guard does not apply
     mode = resolveLaunchMode(cfg.launcher, process.platform, o.dryRun ? { ...process.env, VLAD_LAUNCHER: "" } : process.env);
   } catch (e) {
-    if (!o.dryRun) throw e; // a dry run only prints the terminal command, so it works anywhere
+    if (!o.dryRun && !(o.external && cfg.launcher !== "cloud")) throw e; // --external opens nothing, so a platform without a terminal is fine; a dry run only prints the terminal command, so it works anywhere
     mode = "auto-terminal";
   }
   if (mode === "cloud") {

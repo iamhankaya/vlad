@@ -360,6 +360,16 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(j.command).toContain(`${id}.ps1`);
       expect(j.cwd).toBe(j.worktree);
     });
+    it("--external is refused together with --dry-run and in cloud mode", () => {
+      const both = vlad(["task", "launch", id, "--external", "--dry-run", "--json"], undefined, env());
+      expect(both.code).toBe(1);
+      expect(JSON.parse(both.err).error).toContain("--dry-run");
+      writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt"), launcher: "cloud" }));
+      const cloud = vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+      expect(cloud.code).toBe(1);
+      expect(JSON.parse(cloud.err).error).toContain("--external");
+      expect(JSON.parse(vlad(["task", "list", "--json"]).out).tasks[0].state).toBe("queued");
+    });
     it("task close-window is refused under the noop launcher guard and changes nothing", () => {
       vlad(["task", "launch", id, "--external", "--json"], undefined, env());
       const r = vlad(["task", "close-window", id, "--json"]);
