@@ -7,7 +7,7 @@ import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
-import { buildPrompt, cleanupTask, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
+import { buildPrompt, cleanupTask, closeTaskWindow, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, listTasks, saveTask, setState } from "../../src/tasks/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { trustKey } from "../../src/tasks/trust.js";
@@ -606,7 +606,35 @@ describe("cleanupTask", () => {
   );
 });
 
+describe("closeTaskWindow", () => {
+  it("closes the window through the injected closer and leaves state and worktree alone", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(t.data.id).data.worktree!;
+    const closed: string[] = [];
+    const r = closeTaskWindow(t.data.id, { closeWorker: (id) => { closed.push(id); return [42]; } });
+    expect(closed).toEqual([t.data.id]);
+    expect(r).toEqual({ id: t.data.id, killed: [42] });
+    expect(getTask(t.data.id).data.state).toBe("running");
+    expect(existsSync(wt)).toBe(true);
+  });
+  it("rejects an unknown task", () => {
+    expect(() => closeTaskWindow("T20260101-99", { closeWorker: () => [] })).toThrow();
+  });
+});
+
 describe("statusSummary", () => {
+  it("mark:false reads without side effects: no stalled marking", async () => {
+    const a = mk();
+    await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
+    const future = new Date(Date.now() + 7 * 3600_000);
+    const s = statusSummary(cfg, future, undefined, undefined, { mark: false });
+    expect(s.newlyStalled).toEqual([]);
+    expect(s.counts.running).toBe(1);
+    expect(s.counts.stalled).toBe(0);
+    expect(getTask(a.data.id).data.state).toBe("running");
+    expect(Object.keys(s).sort()).toEqual(Object.keys(statusSummary(cfg, new Date())).sort());
+  });
   it("counts states, lists active, marks stale and counts inbox", async () => {
     const a = mk();
     const b = mk();

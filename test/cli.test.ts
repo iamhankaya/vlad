@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -315,6 +315,84 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     expect(JSON.parse(vlad(["task", "set", id, "done", "--json"]).out).state).toBe("done");
     expect(vlad(["task", "cleanup", id, "--json"]).code).toBe(0);
     expect(existsSync(j.worktree)).toBe(false);
+  });
+  describe("vlad-desktop support", () => {
+    let base: string;
+    let tmp: string;
+    let id: string;
+    const env = () => ({ TEMP: tmp, TMP: tmp, TMPDIR: tmp });
+    beforeEach(() => {
+      base = mkdtempSync(join(tmpdir(), "vlad-cli-repo-"));
+      tmp = mkdtempSync(join(tmpdir(), "vlad-cli-tmp-"));
+      const repo = join(base, "alpha");
+      mkdirSync(repo);
+      const g = (...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd: repo, stdio: "pipe" });
+      g("init", "-b", "main");
+      writeFileSync(join(repo, "a.txt"), "1");
+      g("add", ".");
+      g("commit", "-m", "first");
+      writeCard(repo);
+      writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt") }));
+      id = mkTask();
+    });
+    it("task launch --external writes the script, opens no terminal, and returns script/command/cwd", () => {
+      const r = vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+      expect(r.code, r.err).toBe(0);
+      const j = JSON.parse(r.out);
+      expect(j.state).toBe("running");
+      expect(j.branch).toBe(`vlad/${id}`);
+      expect(j.method).toBe("external");
+      expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
+      expect(existsSync(j.script)).toBe(true);
+      expect(readFileSync(j.script, "utf8")).toContain(`$env:VLAD_TASK_ID = '${id}'`);
+      expect(j.cwd).toBe(j.worktree);
+      expect(j.command).toContain("powershell -NoExit -ExecutionPolicy Bypass -File ");
+      expect(j.command).toContain(`${id}.ps1`);
+    });
+    it("task resume --external writes a resume script for a running task", () => {
+      vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+      rmSync(join(tmp, "vlad", `${id}.ps1`));
+      const r = vlad(["task", "resume", id, "--external", "--json"], undefined, env());
+      expect(r.code, r.err).toBe(0);
+      const j = JSON.parse(r.out);
+      expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
+      expect(readFileSync(j.script, "utf8")).toContain("kaldığı yerden sürdürülüyor");
+      expect(j.command).toContain(`${id}.ps1`);
+      expect(j.cwd).toBe(j.worktree);
+    });
+    it("task close-window is refused under the noop launcher guard and changes nothing", () => {
+      vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+      const r = vlad(["task", "close-window", id, "--json"]);
+      expect(r.code).toBe(1);
+      expect(JSON.parse(r.err).error).toContain("VLAD_LAUNCHER=noop");
+      expect(JSON.parse(vlad(["task", "list", "--json"]).out).tasks[0].state).toBe("running");
+    });
+    it("status --no-mark keeps the JSON shape and does not stall a silent running task", () => {
+      vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+      const f = join(home, "kb", "tasks", `${id}.md`);
+      writeFileSync(f, readFileSync(f, "utf8").replace(/^updated: .*$/m, "updated: 2020-01-01T00:00:00+03:00"));
+      const plain = JSON.parse(vlad(["status", "--json", "--no-mark"]).out);
+      expect(plain.newlyStalled).toEqual([]);
+      expect(plain.counts.running).toBe(1);
+      const marked = JSON.parse(vlad(["status", "--json"]).out);
+      expect(Object.keys(plain).sort()).toEqual(Object.keys(marked).sort());
+      expect(marked.counts.stalled).toBe(1);
+    });
+    it("journal get returns the day's content split into project sections", () => {
+      vlad(["journal", "append", "2026-10-15", "--file", "-", "--json"], "## watchparty\n- a\n\n## vlad\n- b\n");
+      const r = vlad(["journal", "get", "2026-10-15", "--json"]);
+      expect(r.code, r.err).toBe(0);
+      const j = JSON.parse(r.out);
+      expect(j.date).toBe("2026-10-15");
+      expect(j.content).toContain("- a");
+      expect(j.sections.map((s: { project: string }) => s.project)).toEqual(["watchparty", "vlad"]);
+      expect(j.sections[0].content).toContain("- a");
+      expect(j.sections[0].content).not.toContain("- b");
+    });
+    it("journal get fails on a missing day and on a bad date", () => {
+      expect(vlad(["journal", "get", "2026-10-16", "--json"]).code).toBe(1);
+      expect(vlad(["journal", "get", "../x", "--json"]).code).toBe(1);
+    });
   });
   it("bare `vlad` and a group without subcommand print help", () => {
     for (const args of [[], ["task"]]) {

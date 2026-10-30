@@ -116,16 +116,35 @@ export class NoopLauncher implements Launcher {
   }
 }
 
+/**
+ * Embedded mode (vlad-desktop): writes `<tmp>/vlad/<id>.ps1` and returns how to run it; opens nothing, so the
+ * noop guard does not apply. The file name stays `\vlad\<id>.ps1` (closeWorkerWindow and liveness match on it).
+ */
+export function externalLaunch(req: LaunchRequest, scriptDir?: string): LaunchResult {
+  const dir = scriptDir ?? join(tmpdir(), "vlad");
+  const script = join(dir, `${req.taskId}.ps1`);
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(script, "﻿" + buildScript(req), "utf8");
+  } catch (e) {
+    return { ok: false, method: "external", detail: (e as Error).message };
+  }
+  const command = toCommandLine("powershell", ["-NoExit", "-ExecutionPolicy", "Bypass", "-File", script]);
+  return { ok: true, method: "external", script, command, cwd: req.cwd, detail: command };
+}
+
 export class TerminalLauncher implements Launcher {
   constructor(private o: {
     mode: "auto" | "wt" | "powershell";
     dryRun?: boolean;
+    external?: boolean;
     hasWt?: () => boolean;
     exec?: (file: string, args: string[], cwd?: string) => void | Promise<void>;
     scriptDir?: string;
   }) {}
 
   async launch(req: LaunchRequest): Promise<LaunchResult> {
+    if (this.o.external) return externalLaunch(req, this.o.scriptDir);
     const method: "wt" | "powershell" =
       this.o.mode === "auto" ? ((this.o.hasWt ?? defaultHasWt)() ? "wt" : "powershell") : this.o.mode;
     const dir = this.o.scriptDir ?? join(tmpdir(), "vlad");

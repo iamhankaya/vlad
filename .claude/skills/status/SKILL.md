@@ -169,6 +169,7 @@ vlad task answer <id> "<cevap>" --json
 Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
 - **Devam:** önce `vlad task resume <id> --json` (yalnızca `running`/`stalled`). Hata verirse (worktree yok, yanlış branch, session yok) mesajı göster; **yanlış worktree'de devam ettirme**. Başarılıysa (sürdürme ve her `SendMessage` uyandırmasından sonra çalışan için `notify_when_idle: true` aboneliğini yeniden kur, `/delegate` 5a; idle bildirimi gelince görev dosyasını oku, durum değişmemişse çalışanı dürt):
   - `mode: "local"`: `dirty` doluysa kullanıcıya söyle; `stalled` ise `vlad task set <id> running --json`; kullanıcıya `worktree` yolunda devam etmesini ve `prompt`'u çalışana vermesini öner (`claude --resume <session_id>` / `claude --continue` ile birlikte).
+  - Gömülü istemci (vlad-desktop) için `vlad task resume <id> --external --json` devam prompt'lu betik yazar ve `script`/`command`/`cwd` döner (terminal açmaz). Çalışan penceresini kapatmak için `vlad task close-window <id>` (durum ve worktree değişmez). Yan etkisiz durum okuması: `vlad status --json --no-mark`.
   - `mode: "cloud"`: `stalled` ise `vlad task set <id> running --json`; `args` ile `send_message` çağır (`session_id`, `message`). Bu bir dış eylem değil, mevcut çalışana devam mesajıdır.
   Kesilen çalışanları (oturum limiti, çökme) bu yolla sürdür; yeni görev açma.
 - **İptal:** `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`.
