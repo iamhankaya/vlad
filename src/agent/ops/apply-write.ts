@@ -58,10 +58,14 @@ export function reconcileApplyWrite(rec: JournalRecord): Verdict {
   try { t = getTask(w.id); } catch { return "unknown"; }
   switch (w.cmd) {
     case "task.session": return t.data.session_id === w.sessionId!.trim() ? "applied" : "not-applied";
-    case "task.log": return t.body.split("\n").some((l) => { // `- <iso> <metin>`; başlangıçtan sonra yazılmış satır
-      const m = /^- (\S+) (.*)$/.exec(l);
-      return !!m && m[2] === escHeads(w.text!) && Date.parse(m[1]!) >= rec.ts - 2000;
-    }) ? "applied" : "not-applied";
+    case "task.log": { // `- <iso> <ilk satır>` + devam satırları aynen; tüm girdi eşleşmeli (çok satırlı log tek kayıttır)
+      const want = escHeads(w.text!.replace(/\r\n/g, "\n").trimEnd()).split("\n"); // kayıtlı gövde LF'e normalize ve bölüm sonu kırpılmıştır
+      const lines = t.body.split("\n");
+      return lines.some((l, i) => {
+        const m = /^- (\S+) (.*)$/.exec(l);
+        return !!m && m[2] === want[0] && Date.parse(m[1]!) >= rec.ts - 2000 && want.slice(1).every((x, j) => lines[i + 1 + j] === x);
+      }) ? "applied" : "not-applied";
+    }
     case "task.ask": return t.data.state === "blocked" && t.body.includes(escHeads(w.text!)) ? "applied" : "not-applied";
     case "task.report": return t.data.state === "awaiting_approval" && t.body.includes(w.text!.trim()) ? "applied" : "not-applied";
   }

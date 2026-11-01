@@ -16,10 +16,10 @@ describe("machines:B agent install (print-only)", () => {
     expect(launchdPlist({ node: "/n", cli: "/a&b/<c>.js", home: "/h", path: "/p" })).toContain("/a&amp;b/&lt;c&gt;.js");
   });
   it("Windows task runs at logon in the interactive session (/it) with limited rights", () => {
-    const a = schtasksArgs({ node: "C:\\Program Files\\nodejs\\node.exe", cli: "C:\\dev\\vlad\\dist\\cli.js" });
+    const a = schtasksArgs({ node: "C:\\Program Files\\nodejs\\node.exe", cli: "C:\\dev\\vlad\\dist\\cli.js", home: "C:\\dev\\vlad" });
     expect(a.slice(0, 2)).toEqual(["/create", "/tn"]);
     expect(a).toEqual(expect.arrayContaining(["VladAgent", "/sc", "onlogon", "/it", "/rl", "limited", "/f"]));
-    expect(a[a.indexOf("/tr") + 1]).toBe('"C:\\Program Files\\nodejs\\node.exe" "C:\\dev\\vlad\\dist\\cli.js" agent start');
+    expect(a[a.indexOf("/tr") + 1]).toBe('"C:\\dev\\vlad\\.vlad-agent\\agent-start.cmd"'); // VLAD_HOME'u betik sabitler (e3-codex3)
   });
   it("installPlan prints by the machine's os and never applies by itself", () => {
     const w = installPlan("win32", { node: "n.exe", cli: "c.js", home: "h", path: "p" });

@@ -37,11 +37,27 @@ export async function callLocal<T>(cfg: VladConfig, self: string, op: AgentOp, a
 }
 
 /**
- * def() kancası: beyin olmayan makinede `task log|ask|report|session` yerel Agent'a iletilir; diğer kb yazmaları reddedilir.
+ * İşçide yerelde çalışabilen komutlar (açık izin listesi): kb klonunu okur ya da kb'ye hiç dokunmaz.
+ * Liste dışı her komut ya iletilir (FORWARD) ya reddedilir; yeni komut varsayılan olarak reddedilir (fail-closed).
+ * `task launch`/`kb commit` gibi iç kilitli yazıcılar KB_WRITES'ta olmadığı için burada olmamaları gerekir.
+ */
+const WORKER_LOCAL = new Set([
+  "vlad scan", "vlad status", "vlad install", "role list",
+  "project status", "project list", "finding list",
+  "task list", "task idle", "task ready", "task close-window",
+  "inbox list", "inbox count", "decision list", "journal get", "audit skills",
+  "kb get", "kb search", "kb check", "session name",
+  "agent start", "agent status", "agent keygen", "agent setkey", "agent install",
+  "queue list", "queue flush", "queue drop", "machine list", "machine ping", "machine probe-window",
+]);
+
+/**
+ * def() kancası: beyin olmayan makinede `task log|ask|report|session` yerel Agent'a iletilir; WORKER_LOCAL dışındaki
+ * her komut reddedilir (kb klonu yalnız kb-sync ile değişir).
  * true → komut iletildi (çıktı yazıldı), yerel handler çalışmaz.
  */
-export async function forwardIfWorker(key: string, args: any[], kbWrites: ReadonlySet<string>): Promise<boolean> {
-  if (!kbWrites.has(key)) return false;
+export async function forwardIfWorker(key: string, args: any[]): Promise<boolean> {
+  if (WORKER_LOCAL.has(key)) return false;
   const ctx = workerContext();
   if (!ctx) return false;
   const cmd = FORWARD[key];
