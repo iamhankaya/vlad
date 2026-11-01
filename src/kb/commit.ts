@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isSeparateKb, kbPaths } from "./home.js";
 
 /** Lines a kb repo's .gitignore must carry (local-only state). */
-export const KB_GITIGNORE = ["inbox/", "logs/", "vlad-session.txt", ".vlad.lock", ".obsidian/"];
+export const KB_GITIGNORE = ["inbox/", "logs/", "vlad-session.txt", ".vlad.lock*", ".obsidian/"];
 
 function missingIgnores(kbDir: string): string[] {
   const file = join(kbDir, ".gitignore");
@@ -50,10 +50,16 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
   const spec = separate ? "." : "kb";
   const r: KbCommitResult = { committed: false };
   if (separate) {
+    // existing kb repos get new local-only entries (e.g. lock temp files) before `git add`
     const miss = missingIgnores(paths.kb);
-    if (miss.length) r.warning = `kb .gitignore eksik: ${miss.join(", ")} ekle (yerel durum commit'lenmesin)`;
+    if (miss.length) {
+      const file = join(paths.kb, ".gitignore");
+      const cur = existsSync(file) ? readFileSync(file, "utf8") : "";
+      appendFileSync(file, (cur && !cur.endsWith("\n") ? "\n" : "") + miss.join("\n") + "\n");
+    }
   }
-  git(cwd, ["add", "--", spec]);
+  // lock files are excluded explicitly too: they appear/vanish mid-`git add` (unable to index) and legacy kb/ has no kb .gitignore
+  git(cwd, ["add", "--", spec, ":(exclude,glob)**/.vlad.lock*"]);
   if (git(cwd, ["diff", "--cached", "--name-only", "--", spec]).trim()) {
     git(cwd, ["commit", "-q", "-m", `kb: ${message.trim()}`, "--", spec]);
     r.committed = true;
