@@ -318,7 +318,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     }, o.launcher);
   } catch (e) {
     const msg = (e as Error).message;
-    await unclaim();
+    try { await unclaim(); } catch { /* best effort: asıl hata kaybolmasın */ }
     await recordError(id, msg);
     throw new Error(msg);
   }
