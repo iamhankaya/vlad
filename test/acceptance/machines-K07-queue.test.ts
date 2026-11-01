@@ -20,6 +20,8 @@ async function setup(test?: Record<string, string>) {
   return { w, px };
 }
 const mkTask = async (world: World, machine = "windows") => { const id = await world.newTask(); world.setFront(id, { state: "running", machine }); return id; };
+/** flush, hâlihazırda çalışan arka plan boşaltmasına denk gelirse hemen döner (queue.ts `flushing`); koşul gerçekleşene kadar bekler. Bkz. kapanış raporu bulgusu. */
+const until = async (cond: () => boolean, ms = 20_000) => { const t0 = Date.now(); while (!cond() && Date.now() - t0 < ms) await new Promise((r) => setTimeout(r, 200)); };
 const count = (txt: string, needle: string) => txt.split(needle).length - 1;
 const logs = (world: World, id: string) => { const t = world.readTask(world.brain, id); return [...t.matchAll(/^- \S+ (L\d)$/gm)].map((m) => m[1]); };
 const queueList = async (world: World) => {
@@ -65,6 +67,7 @@ describe("machines:K — K7 kuyruk", () => {
     const r = await runVlad(w.worker, ["task", "log", id, "L2", "--json"]);
     expect(r.code, r.err).toBe(0);
     await runVlad(w.worker, ["queue", "flush"]);
+    await until(() => logs(w, id).length >= 2);
     expect(logs(w, id)).toEqual(["L1", "L2"]);
   }, 90_000);
 
@@ -135,6 +138,7 @@ describe("machines:K — K7 kuyruk", () => {
     await w.startAgents(["worker"]);
     expect((await queueList(w)).length).toBe(2);
     await runVlad(w.worker, ["queue", "flush"]);
+    await until(() => logs(w, id).length >= 2);
     expect(logs(w, id)).toEqual(["L1", "L2"]);
   }, 90_000);
 

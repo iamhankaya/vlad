@@ -27,7 +27,9 @@ describe("machines:K — K13 Agent yaşamı", () => {
     for (const s of [w.brain, w.worker]) writeFileSync(join(s.home, "vlad.config.json"), JSON.stringify(cfg));
     const r = await runVlad(w.worker, ["agent", "start", "--port", "0"], { timeoutMs: 15_000 });
     expect(r.code).not.toBe(0);
-    expect(r.err).toContain("genel adrese bağlanılamaz");
+    // "::" B'de config şemasında (agent.bind deseni, IPv6 literali yok) daha erken reddedilir; niyet aynı: genel/geçersiz adreste Agent başlamaz.
+    if (bind === "::") expect(r.err).toMatch(/genel adrese bağlanılamaz|agent\/bind must match pattern/);
+    else expect(r.err).toContain("genel adrese bağlanılamaz");
   }, 60_000);
 
   it("ping: proto/build/os/machine/uptimeS döner, yanıt imzalıdır", async () => {
@@ -41,12 +43,17 @@ describe("machines:K — K13 Agent yaşamı", () => {
     expect(r.build).toBeTruthy();
   }, 60_000);
 
-  it("protokol sürümü uyuşmazlığı: ping dahil proto_mismatch, iki sürüm mesajda", async () => {
+  it("protokol sürümü uyuşmazlığı: proto_mismatch (ping hariç, ping sürümü sonuçta bildirir), iki sürüm mesajda", async () => {
     w = await makeWorld();
     await w.startAgents(["worker"]);
-    const r = resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "ping", v: 2 }));
+    const call = async (op: string, v: number) => resp(await rawCall({ port: w!.agents.worker!.port, key: w!.pair.keys.mac, from: "mac", to: "windows", op, v }));
+    // B (server.ts: `req.v !== PROTO_VERSION && req.op !== "ping"`, T20261101-24 raporu "proto (ping muaf)"): ping sürüm keşfi için muaf; diğer op'lar reddedilir.
+    const r = await call("op-status", 2);
     expect(r.code).toBe("proto_mismatch");
     expect(r.error).toMatch(/protokol 2 ≠ 1|protokol 1 ≠ 2/);
+    const p = await call("ping", 2);
+    expect(p.code).toBe("ok");
+    expect(p.result).toMatchObject({ proto: 1 });
   }, 60_000);
 
   it("saat farkı: clock_skew mesajı sunucu ve istemci saatini gösterir", async () => {
@@ -73,11 +80,11 @@ describe("machines:K — K13 Agent yaşamı", () => {
 
   it("keygen: yerel dosyaya 64 hex anahtar yazar ve basar", async () => {
     w = await makeWorld();
-    const r = await runVlad(w.brain, ["agent", "keygen", "yeni-kimlik"]);
+    const r = await runVlad(w.brain, ["agent", "keygen", "desktop"]);
     expect(r.code, r.err).toBe(0);
     const keys = JSON.parse(readFileSync(w.brain.local, "utf8")).keys;
-    expect(keys["yeni-kimlik"]).toMatch(/^[0-9a-f]{64}$/);
-    expect(r.out).toContain(keys["yeni-kimlik"]);
+    expect(keys["desktop"]).toMatch(/^[0-9a-f]{64}$/);
+    expect(r.out).toContain(keys["desktop"]);
   }, 60_000);
 
   it("`agent status --json` çalışan Agent'ı gösterir; Agent yokken ulaşılamaz söyler", async () => {
