@@ -290,7 +290,7 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
     }
     expect([...actual].filter((c) => !documented.has(c)), "CLI'da olup CLAUDE.md'de olmayan").toEqual([]);
     expect([...documented].filter((c) => !actual.has(c)), "CLAUDE.md'de olup CLI'da olmayan").toEqual([]);
-  });
+  }, 120_000); // her komut grubu için ayrı süreç açılır; çok makineli komutlarla 30 sn yetmiyor
   it("CLAUDE.md `project set` alan listesi, CLI'ın kabul ettiği alanlarla aynı", () => {
     const m = /`set` alanları: ([^—)]*)/.exec(read("CLAUDE.md"))![1];
     const doc = m.split(",").map((x) => x.replace(/[`\s]/g, ""));
