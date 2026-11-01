@@ -6,7 +6,8 @@ import { Command, CommanderError } from "commander";
 import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
-import { idleTasks } from "./tasks/liveness.js";
+import { idleTasks, probeRemoteWorkers } from "./tasks/liveness.js";
+import type { RemoteStallPlan } from "./tasks/liveness.js";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
@@ -21,7 +22,8 @@ import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
 import { agentKeygen, agentStart, agentStatus } from "./agent/start.js";
 import { installPlan } from "./agent/install.js";
-import { selfName } from "./agent/state.js";
+import { readLocal, selfName } from "./agent/state.js";
+import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -114,6 +116,15 @@ const before = (key: string, args: any[]): Promise<boolean> => forwardIfWorker(k
 /** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
 const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyOf(key, KB_WRITES, INNER_LOCK.has(key) ? loadConfig() : {}); // C1: resume/cleanup lock in phases once `machines` is set
 // --- /machines:S ---
+// --- machines:C3 --- uzak stalled: ağ çağrıları kilit DIŞINDA (status'un kilitli gövdesi yalnız sonucu uygular); --no-mark ve --hook yolunda hiç bağlantı yok
+async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
+  try {
+    const cfg = loadConfig();
+    if (!cfg.machines || !cfg.brain || selfName() !== cfg.brain) return [];
+    return await probeRemoteWorkers(cfg, new AgentClient({ self: cfg.brain, keys: readLocal().keys, config: () => cfg }), new Date());
+  } catch { return []; } // a broken probe must never take status down
+}
+// --- /machines:C3 ---
 
 /** Registers a command with --json and a uniform error path. */
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
@@ -123,6 +134,7 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
     try {
       const opts = args[args.length - 2] as Opts;
       if (key === "vlad status" && opts.mark !== false) {
+        if (!opts.hook) opts.remotePlans = await remoteStallPlans(); // C3
         // SessionStart hook runs this: never block it behind a long writer; fall back to the side-effect-free read
         try { await withKbLock(() => fn(...args), { timeoutMs: 2000 }); } catch (e) {
           if (!(e instanceof KbLockTimeout)) throw e;
@@ -470,7 +482,7 @@ def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları
 // --- /machines:A ---
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
-  const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false });
+  const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false, remotePlans: o.remotePlans as RemoteStallPlan[] | undefined });
   if (o.summary) {
     // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
     const line =
