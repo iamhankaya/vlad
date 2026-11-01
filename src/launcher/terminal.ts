@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertRealLauncherAllowed } from "./mode.js";
+import { closePosixWorker, externalPosixLaunch } from "./posix.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
 // PowerShell treats typographic single quotes as quote characters too; double each one.
@@ -104,9 +105,10 @@ const KILL_WORKER =
   "Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($pat) } | " +
   "ForEach-Object { taskkill.exe /PID $_.ProcessId /T /F | Out-Null; $_.ProcessId }";
 
-/** Closes the terminal of a task's worker (Windows only). Returns the killed process IDs. */
-export function closeWorkerWindow(taskId: string): number[] {
-  if (process.platform !== "win32") return [];
+/** Closes the terminal of a task's worker (Windows: process tree; macOS/Linux: tmux session + script processes). Returns the killed process IDs. */
+export function closeWorkerWindow(taskId: string, platform: NodeJS.Platform = process.platform): number[] {
+  if (platform === "darwin" || platform === "linux") return closePosixWorker(taskId);
+  if (platform !== "win32") return [];
   assertRealLauncherAllowed();
   const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", KILL_WORKER], {
     encoding: "utf8", windowsHide: true, timeout: 20000, stdio: ["ignore", "pipe", "pipe"],
@@ -129,7 +131,8 @@ export class NoopLauncher implements Launcher {
  * Embedded mode (vlad-desktop): writes `<tmp>/vlad/<id>.ps1` and returns how to run it; opens nothing, so the
  * noop guard does not apply. The file name stays `\vlad\<id>.ps1` (closeWorkerWindow and liveness match on it).
  */
-export function externalLaunch(req: LaunchRequest, scriptDir?: string): LaunchResult {
+export function externalLaunch(req: LaunchRequest, scriptDir?: string, platform: NodeJS.Platform = process.platform): LaunchResult {
+  if (platform === "darwin" || platform === "linux") return externalPosixLaunch(req, scriptDir);
   const dir = scriptDir ?? join(tmpdir(), "vlad");
   const script = join(dir, `${req.taskId}.ps1`);
   try {

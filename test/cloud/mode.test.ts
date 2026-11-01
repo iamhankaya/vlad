@@ -36,7 +36,7 @@ describe("schemas", () => {
   it("config accepts launcher: cloud, still rejects unknown values", () => {
     const home = makeHome();
     validate("config", { ...defaultConfig(), launcher: "cloud" }, home);
-    expect(() => validate("config", { ...defaultConfig(), launcher: "tmux" }, home)).toThrow();
+    expect(() => validate("config", { ...defaultConfig(), launcher: "bogus" }, home)).toThrow();
   });
   it("project card: exposure is optional, accepts local|network|internet, rejects other values", () => {
     makeHome();

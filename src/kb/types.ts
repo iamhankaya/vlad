@@ -14,7 +14,7 @@ export type ProjectStatus = "active" | "paused" | "archived";
 export type Exposure = "local" | "network" | "internet";
 /** How a cloud worker gets its task text: clones vlad-kb read-only, or receives it inline in the prompt. */
 export type CloudKb = "readonly" | "inline";
-export type Launcher = "auto" | "wt" | "powershell" | "cloud";
+export type Launcher = "auto" | "wt" | "powershell" | "cloud" | "tmux" | "terminal";
 
 /** kb/projects/<slug>.md frontmatter (spec 5.1) */
 export interface ProjectCard {

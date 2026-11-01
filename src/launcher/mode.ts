@@ -1,7 +1,7 @@
 import { isCloudEnv } from "../kb/env.js";
 import type { Launcher } from "../kb/types.js";
 
-export type LaunchMode = "cloud" | "wt" | "powershell" | "auto-terminal" | "noop";
+export type LaunchMode = "cloud" | "wt" | "powershell" | "auto-terminal" | "tmux" | "terminal" | "noop";
 
 /** F-vlad-064: VLAD_LAUNCHER=noop (set by vitest) forbids real terminals/processes unless VLAD_ALLOW_REAL_LAUNCHER=1. */
 export const realLauncherBlocked = (env: NodeJS.ProcessEnv = process.env): boolean =>
@@ -15,7 +15,7 @@ export function assertRealLauncherAllowed(env: NodeJS.ProcessEnv = process.env):
 
 /**
  * Picks how `vlad task launch` starts a worker (`noop` under the test guard, except for cloud). `auto` keeps the Windows terminal behavior on
- * Windows; elsewhere it selects the cloud launcher when a cloud session is detected and fails otherwise.
+ * Windows, uses tmux on macOS; elsewhere it selects the cloud launcher when a cloud session is detected and fails otherwise.
  */
 export function resolveLaunchMode(
   launcher: Launcher, platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env,
@@ -25,8 +25,9 @@ export function resolveLaunchMode(
   if (launcher !== "auto") return noop ? "noop" : launcher;
   if (platform === "win32") return noop ? "noop" : "auto-terminal";
   if (isCloudEnv(env)) return "cloud";
+  if (platform === "darwin") return noop ? "noop" : "tmux";
   throw new Error(
-    "launcher=auto: Windows dışında yalnızca bulut ortamı desteklenir ve bulut algılanmadı " +
+    "launcher=auto: Windows/macOS dışında yalnızca bulut ortamı desteklenir ve bulut algılanmadı " +
       "(CLAUDE_CODE_REMOTE=true yok); vlad.config.json'da launcher'ı açıkça ayarla",
   );
 }
