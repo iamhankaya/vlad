@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertRealLauncherAllowed } from "./mode.js";
@@ -119,7 +119,10 @@ export function closeWorkerWindow(taskId: string, platform: NodeJS.Platform = pr
 
 /** Starts nothing; used while VLAD_LAUNCHER=noop so tests can drive the launch flow without a terminal. */
 export class NoopLauncher implements Launcher {
-  async launch(): Promise<LaunchResult> {
+  async launch(req?: LaunchRequest): Promise<LaunchResult> {
+    // test seam (T20261101-19): VLAD_NOOP_LOG gets one JSONL line per launch so tests can see what a remote worker would have started
+    const log = process.env.VLAD_NOOP_LOG;
+    if (log && req) appendFileSync(log, JSON.stringify({ taskId: req.taskId, cwd: req.cwd, title: req.title }) + String.fromCharCode(10));
     // test seam (F-vlad-102): simulates a slow terminal so tests can check what the launch holds meanwhile
     const delay = Number(process.env.VLAD_NOOP_LAUNCH_DELAY_MS);
     if (delay > 0) await new Promise((r) => setTimeout(r, delay));

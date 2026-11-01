@@ -39,7 +39,30 @@ export function loadConfig(home: string = getVladHome()): VladConfig {
     const n = autoCompactTokens(cfg.workerAutoCompact);
     if (!(n >= 100000 && n <= 1000000)) throw new Error(`config: workerAutoCompact 100000–1000000 aralığında olmalı: ${cfg.workerAutoCompact}`);
   }
+  checkMachines(cfg);
   return cfg;
+}
+
+/** machines çapraz doğrulaması (şemanın ifade edemediği kurallar); `machines` yoksa hiçbir şey denetlenmez. */
+function checkMachines(cfg: VladConfig): void {
+  const { machines, brain, consoles } = cfg;
+  if (!machines) {
+    if (brain || consoles?.length) throw new Error("config: brain/consoles yalnız machines tanımlıyken kullanılır");
+    return;
+  }
+  const names = machines.map((m) => m.name);
+  if ([...names, ...(consoles ?? []).map((c) => c.name)].includes("self")) throw new Error("config: 'self' ayrılmış bir ad (makine/konsol adı olamaz)");
+  const dup = names.find((n, i) => names.indexOf(n) !== i);
+  if (dup) throw new Error(`config: makine adı birden fazla tanımlı: ${dup}`);
+  if (!brain) throw new Error("config: machines varsa brain zorunlu");
+  if (!names.includes(brain)) throw new Error(`config: brain machines içinde değil: ${brain}`);
+  const clash = consoles?.find((c) => names.includes(c.name));
+  if (clash) throw new Error(`config: konsol adı makine adıyla çakışıyor: ${clash.name}`);
+  const cn = (consoles ?? []).map((c) => c.name);
+  const cdup = cn.find((n, i) => cn.indexOf(n) !== i);
+  if (cdup) throw new Error(`config: konsol adı birden fazla tanımlı: ${cdup}`);
+  const noHost = machines.find((m) => m.name !== brain && !m.agent.host);
+  if (noHost) throw new Error(`config: ${noHost.name}: brain dışındaki makinede agent.host zorunlu`);
 }
 
 export function autonomyFor(cfg: VladConfig, slug: string): Autonomy {

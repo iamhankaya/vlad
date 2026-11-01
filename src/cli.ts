@@ -16,6 +16,7 @@ import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbReco
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
+import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -39,12 +40,13 @@ function fail(e: unknown): never {
   let details: string[] = [];
   if (e instanceof ValidationError) details = e.details;
   else if (e instanceof TransitionError) details = [`izin verilenler: ${TRANSITIONS[e.from].join(", ") || "(yok)"}`];
+  else details = remoteErrorDetails(e);
   if (wantsJson()) process.stderr.write(JSON.stringify({ error, details }) + "\n");
   else {
     error = `hata: ${error}`;
     process.stderr.write([error, ...details.map((d) => `  ${d}`)].join("\n") + "\n");
   }
-  process.exit(1);
+  process.exit(exitCodeFor(e));
 }
 
 function out(o: Opts, data: unknown, text: string): void {
@@ -60,7 +62,7 @@ const integrationInfo = (t: Task, all?: Task[]) => {
 /** Task data plus the model it runs on (task `model` ?? role `model`), for --json consumers. */
 const withModel = (t: Task, all?: Task[]) => ({ ...t.data, ...modelInfo(t.data), ...integrationInfo(t, all) });
 /** Fields `task list --fields` can pick: the task frontmatter plus derived ones (computed only when asked for). */
-const TASK_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "created", "updated", "error", "digested", "role", "parent", "depends_on", "phase", "report_file", "model", "model_reason"];
+const TASK_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "created", "updated", "error", "digested", "role", "parent", "depends_on", "phase", "report_file", "model", "model_reason", "machine", "machine_reserved", "launch_op"];
 const DERIVED_FIELDS = ["role_model", "effective_model", "integration_worktrees"];
 /** Detailed status line: shows the model only when the task's own model deviates from its role's. */
 const statusLine = (t: Task) => {
@@ -93,6 +95,14 @@ const KB_WRITES = new Set([
   "inbox done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
 ]);
 
+// --- machines:S --- kancalar; varsayılan = mevcut davranış. B `before`'ı (iletim), C `lockPolicy`'yi (resume/cleanup iç kilit) doldurur.
+/** true → komut başka makineye iletildi (çıktı yazıldı), yerel handler çalışmaz. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const before = async (_key: string, _args: any[]): Promise<boolean> => false;
+/** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
+const lockPolicy = (key: string): "outer" | "inner" | "none" => (KB_WRITES.has(key) ? "outer" : "none");
+// --- /machines:S ---
+
 /** Registers a command with --json and a uniform error path. */
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
   const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
@@ -107,7 +117,8 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
           opts.mark = false;
           await fn(...args);
         }
-      } else await (KB_WRITES.has(key) ? withKbLock(() => fn(...args)) : fn(...args));
+      } else if (await before(key, args)) return;
+      else await (lockPolicy(key) === "outer" ? withKbLock(() => fn(...args)) : fn(...args));
     } catch (e) {
       fail(e);
     }
@@ -615,6 +626,18 @@ def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {
   const name = readFileSync(file, "utf8").trim();
   out(o, { name }, name);
 });
+
+// --- machines:B --- agent, queue, remote
+const agent = program.command("agent").description("VLAD Agent (çoklu makine; T20261101-19)");
+const queue = program.command("queue").description("İşçi tarafı beyin-yazma kuyruğu");
+void agent; void queue;
+// --- /machines:B ---
+// --- machines:C2 --- machine
+const machine = program.command("machine").description("Makine kaydı ve uzak denetim");
+void machine;
+// --- /machines:C2 ---
+// remote: B bölgesinde `program.command("remote")` olarak kaydedilir; S yalnız grubu açar
+program.command("remote").description("Konsol istemcisi: komutu beyin Agent'ında çalıştırır");
 
 def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", (o: Opts) => {
   const claudeDir = process.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");

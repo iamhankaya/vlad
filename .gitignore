@@ -4,3 +4,5 @@ dist/
 .remember/
 .claude/worktrees/
 /kb/
+/vlad.local.json
+/.vlad-agent/

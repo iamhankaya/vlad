@@ -1,3 +1,4 @@
+import type { ConsoleDef, MachineDef } from "../machines/types.js";
 export type Autonomy = "plan" | "commit" | "pr";
 export type TaskKind = "dev" | "research" | "pipeline";
 export type TaskState =
@@ -37,6 +38,8 @@ export interface ProjectCard {
   gate?: string;
   /** Repo skills (`.claude/skills`) workers of this project should load when they fit the task; named in the launch prompt, checked by `vlad audit skills`. */
   skills?: string[];
+  /** Çalışanın koşabileceği makineler, sıra = tercih; yok → [brain]. */
+  machines?: string[];
   last_activity: string | null;
   last_scanned: string | null;
 }
@@ -73,6 +76,10 @@ export interface TaskData {
   model?: TaskModel | null;
   /** Why this task needs `model`; required for `opus`. */
   model_reason?: string | null;
+  /** Yalnız `machines` tanımlıyken: görevin koştuğu makine, rezervasyon zamanı ve uzak launch opId'si (plan: belirsiz sonuç protokolü). */
+  machine?: string | null;
+  machine_reserved?: string | null;
+  launch_op?: string | null;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
@@ -146,4 +153,8 @@ export interface VladConfig {
   /** `claude --autocompact` for workers (e.g. "300k"); absent or "" → no flag. Range 100000–1000000 tokens. */
   workerAutoCompact?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
+  /** Çoklu makine (T20261101-19); hepsi isteğe bağlı: yoksa bugünkü davranış. `brain` machines içinde olmalı. */
+  machines?: MachineDef[];
+  brain?: string;
+  consoles?: ConsoleDef[];
 }

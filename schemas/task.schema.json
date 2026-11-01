@@ -23,6 +23,9 @@
     "phase": { "type": ["string", "null"] },
     "report_file": { "type": ["string", "null"] },
     "model": { "enum": ["haiku", "sonnet", "opus", null] },
-    "model_reason": { "type": ["string", "null"] }
+    "model_reason": { "type": ["string", "null"] },
+    "machine": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9-]*$" },
+    "machine_reserved": { "type": ["string", "null"], "format": "date-time" },
+    "launch_op": { "type": ["string", "null"], "minLength": 1 }
   }
 }
