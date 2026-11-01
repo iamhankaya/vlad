@@ -19,6 +19,8 @@ import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
 import { agentKeygen, agentStart, agentStatus } from "./agent/start.js";
+import { installPlan } from "./agent/install.js";
+import { selfName } from "./agent/state.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -642,6 +644,17 @@ def(agent, "keygen <kimlik>", "Kimlik için yeni anahtar üretir, vlad.local.jso
   const r = agentKeygen(identity);
   out(o, r, `${r.identity}: ${r.key}\n(${r.file}'a yazıldı; anahtarı diğer uca güvenli kanaldan elle kopyala, Agent'ı yeniden başlat)`);
 });
+
+def(agent, "install", "Agent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows: görev zamanlayıcı); --apply ile kurar", (o: Opts) => {
+  const cfg = loadConfig();
+  const self = selfName();
+  const m = cfg.machines?.find((x) => x.name === self);
+  if (!m) throw new Error(`agent install: ${self} config machines içinde değil`);
+  const plan = installPlan(m.os, { node: process.execPath, cli: process.argv[1]!, home: getVladHome(), path: process.env.PATH ?? "" });
+  if (o.apply) plan.apply?.();
+  const text = [plan.description, ...(plan.file ? [`dosya: ${plan.file}`] : []), ...(plan.content ? ["", plan.content] : []), `komut: ${plan.command}`, ...(o.apply ? ["uygulandı"] : ["(uygulamak için --apply)"])].join("\n");
+  out(o, { description: plan.description, file: plan.file, content: plan.content, command: plan.command, applied: !!o.apply }, text);
+}).option("--apply", "kaydı gerçekten kur (yoksa yalnız basar)");
 
 const queue = program.command("queue").description("İşçi tarafı beyin-yazma kuyruğu (yerel Agent'a sorar)");
 const queueCall = async <T>(op: "queue-list" | "queue-flush" | "queue-drop", args: unknown): Promise<T> => {
