@@ -329,9 +329,11 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
     const model = modelInfo(t.data).effective_model;
+    const autoCompact = loadConfig().workerAutoCompact;
     const ext = externalLaunch({
       taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
+      ...(autoCompact ? { autoCompact } : {}),
       resume: { sessionId: t.data.session_id?.trim() || undefined }, // keep the worker's context: a fresh `claude $p` would lose it
     });
     if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);

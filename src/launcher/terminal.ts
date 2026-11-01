@@ -9,6 +9,7 @@ import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 const SQ = /['‘’‚‛]/g;
 const q = (s: string) => `'${s.replace(SQ, (m) => m + m)}'`;
 // Same as the role schema's `model` pattern; checked again here because the value lands in a script.
+const AUTOCOMPACT = /^\d+(\.\d+)?[kKmM]?$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
 export function buildScript(req: LaunchRequest): string {
@@ -24,8 +25,10 @@ export function buildScript(req: LaunchRequest): string {
     .join("\n");
   lines.push("$p = @'", prompt, "'@");
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
+  if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);
   const flags = [
     ...(req.model === undefined ? [] : ["--model", q(req.model)]),
+    ...(req.autoCompact === undefined ? [] : ["--autocompact", q(req.autoCompact)]),
     ...(req.resume ? (req.resume.sessionId ? ["--resume", q(req.resume.sessionId)] : ["--continue"]) : []),
   ];
   lines.push(["claude", ...flags, "$p"].join(" "));

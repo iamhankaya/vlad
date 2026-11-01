@@ -195,6 +195,7 @@ export async function launchTask(
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
 
   const model = effectiveModel(task.data, role);
+  const autoCompact = o.cfg.workerAutoCompact;
   let failure: string | null = null;
   try {
     const res = await o.launcher.launch({
@@ -204,6 +205,7 @@ export async function launchTask(
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
+      ...(autoCompact ? { autoCompact } : {}),
     });
     if (!res.ok) failure = `launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`;
   } catch (e) {

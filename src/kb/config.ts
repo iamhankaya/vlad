@@ -16,6 +16,12 @@ export function defaultConfig(): VladConfig {
   };
 }
 
+/** Claude Code accepts 100000–1000000 tokens; `k`/`M` suffix allowed. */
+export function autoCompactTokens(v: string): number {
+  const m = /^(\d+(?:\.\d+)?)([kKmM]?)$/.exec(v);
+  return m ? Number(m[1]) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : NaN;
+}
+
 /** Defaults overlaid with <home>/vlad.config.json (shallow), then validated. */
 export function loadConfig(home: string = getVladHome()): VladConfig {
   const file = join(home, "vlad.config.json");
@@ -29,6 +35,10 @@ export function loadConfig(home: string = getVladHome()): VladConfig {
   }
   const cfg = { ...defaultConfig(), ...user } as VladConfig;
   validate("config", cfg, home);
+  if (cfg.workerAutoCompact) {
+    const n = autoCompactTokens(cfg.workerAutoCompact);
+    if (!(n >= 100000 && n <= 1000000)) throw new Error(`config: workerAutoCompact 100000–1000000 aralığında olmalı: ${cfg.workerAutoCompact}`);
+  }
   return cfg;
 }
 
