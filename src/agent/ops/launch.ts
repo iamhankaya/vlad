@@ -1,0 +1,164 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { currentBranch } from "../../git/git.js";
+import { getVladHome } from "../../kb/home.js";
+import { writeFileAtomic } from "../../kb/atomic.js";
+import { closeWorkerWindow } from "../../launcher/index.js";
+import type { Launcher } from "../../launcher/index.js";
+import { RemoteError } from "../../machines/types.js";
+import { ensureIntegrationGit, launchCore } from "../../tasks/launch-core.js";
+import { removeTaskWorktree } from "../../tasks/launch.js";
+import { dirtyLine, dirtyPaths } from "../../tasks/resume.js";
+import { untrustWorktree } from "../../tasks/trust.js";
+import type { Reconciler } from "../reconcile.js";
+import { agentDir } from "../state.js";
+import { argObject, bad, isInside, projectArg, repoNameArg, resolveRepo, taskFileOf, taskIdArg, workerCtx, workerLauncher, workerWorktree } from "./worker.js";
+import type { WorkerCtx } from "./worker.js";
+
+export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string } }
+interface LaunchRecord { taskId: string; repo: string; worktree: string; branch: string; opId: string | null; result?: LaunchResultW }
+type CloseFn = (id: string) => number[] | void;
+
+const MAX_TEXT = 256 * 1024;
+const REF = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
+const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
+const COMPACT = /^\d+(\.\d+)?[kKmM]?$/;
+const failed = (m: string) => new RemoteError("failed", `failed: ${m}`);
+const forbidden = (m: string) => new RemoteError("forbidden", `forbidden: ${m}`);
+
+const launchesDir = () => join(agentDir(), "launches");
+const recordFile = (id: string) => join(launchesDir(), `${id}.json`);
+function readRecord(id: string): LaunchRecord | null {
+  try { return JSON.parse(readFileSync(recordFile(id), "utf8")) as LaunchRecord; } catch { return null; }
+}
+function writeRecord(r: LaunchRecord): void {
+  mkdirSync(launchesDir(), { recursive: true });
+  writeFileAtomic(recordFile(r.taskId), JSON.stringify(r, null, 2) + "\n");
+}
+
+function text(o: Record<string, unknown>, k: string, max: number): string {
+  const v = o[k];
+  if (typeof v !== "string" || !v || v.includes("\0") || Buffer.byteLength(v) > max) throw bad(`${k} geçersiz`);
+  return v;
+}
+function optStr(o: Record<string, unknown>, k: string, re: RegExp): string | undefined {
+  if (o[k] === undefined) return undefined;
+  if (typeof o[k] !== "string" || !re.test(o[k] as string)) throw bad(`${k} geçersiz`);
+  return o[k] as string;
+}
+
+/** Kayıt, işçinin kendi hesapladığı yolla birebir eşit olmalı; aksi forbidden (istekten yol alınmaz). */
+function verifiedRecord(ctx: WorkerCtx, id: string, repoName: string): { repo: string; wt: string } {
+  const rec = readRecord(id);
+  if (!rec) throw forbidden(`başlatma kaydı yok: ${id}`);
+  const repo = resolveRepo(ctx.def, repoName);
+  const wt = workerWorktree(ctx, repo, id);
+  if (rec.taskId !== id || rec.worktree !== wt || rec.repo !== repo) throw forbidden("başlatma kaydı hesaplanan yolla uyuşmuyor");
+  return { repo, wt };
+}
+
+const fill = (s: string, ctx: WorkerCtx, id: string): string => s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id));
+const envOf = (id: string) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome() });
+
+export async function launchOp(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher } = {}): Promise<LaunchResultW> {
+  const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact"]);
+  const id = taskIdArg(a);
+  projectArg(a);
+  const repoName = repoNameArg(a);
+  if (a.branch !== `vlad/${id}`) throw bad("branch vlad/<taskId> olmalı");
+  const b = a.base as Record<string, unknown> | undefined;
+  if (!b || typeof b !== "object" || (b.kind !== "default" && b.kind !== "integration")) throw bad("base geçersiz");
+  const defaultBranch = optStr(b, "defaultBranch", REF);
+  const parent = b.kind === "integration" ? taskIdArg({ taskId: b.parent }) : undefined;
+  const template = text(a, "promptTemplate", MAX_TEXT);
+  const title = text(a, "title", 300);
+  const model = optStr(a, "model", MODEL);
+  const autoCompact = optStr(a, "autoCompact", COMPACT);
+
+  const ctx = workerCtx();
+  const existing = readRecord(id);
+  if (existing && existing.opId !== c.opId) throw new RemoteError("conflict", `conflict: görev bu makinede zaten başlatılmış (op ${existing.opId ?? "?"})`);
+  const repo = resolveRepo(ctx.def, repoName);
+  const worktree = workerWorktree(ctx, repo, id);
+  const launcher = o.launcher ?? workerLauncher(ctx.cfg);
+  const wcfg = { ...ctx.cfg, worktreeDir: ctx.def.worktreeDir ?? ctx.cfg.worktreeDir };
+  let integration: { branch: string; worktree: string } | undefined;
+  let res;
+  try {
+    if (parent) integration = ensureIntegrationGit(repo, parent, wcfg, defaultBranch);
+    res = await launchCore({
+      taskId: id, repo, worktree, branch: `vlad/${id}`, ...(integration ? { base: integration.branch } : {}),
+      prompt: fill(template, ctx, id), env: envOf(id), title,
+      ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),
+    }, launcher);
+  } catch (e) {
+    throw failed((e as Error).message);
+  }
+  const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}) };
+  writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, result });
+  if (parent && integration && !readRecord(parent)) writeRecord({ taskId: parent, repo, worktree: integration.worktree, branch: integration.branch, opId: null });
+  return result;
+}
+
+/** Açılış uzlaştırması: bu opId'ye ait kayıt varsa launch uygulanmıştır (sonucuyla); yoksa güvenle yeniden denenebilir. */
+export const reconcileLaunch: Reconciler = (rec) => {
+  const dir = launchesDir();
+  if (!existsSync(dir)) return "not-applied";
+  for (const f of readdirSync(dir)) {
+    try {
+      const r = JSON.parse(readFileSync(join(dir, f), "utf8")) as LaunchRecord;
+      if (r.opId === rec.opId && r.result) return { verdict: "applied", result: r.result };
+    } catch { /* bozuk kayıt: atla */ }
+  }
+  return "not-applied";
+};
+
+export async function closeOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ killed: number[] }> {
+  const id = taskIdArg(argObject(args, ["taskId"]));
+  try { return { killed: (o.close ?? closeWorkerWindow)(id) ?? [] }; } catch (e) { throw failed((e as Error).message); }
+}
+
+export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ removed: boolean }> {
+  const a = argObject(args, ["taskId", "project", "repoName", "terminal"]);
+  const id = taskIdArg(a);
+  projectArg(a);
+  const repoName = repoNameArg(a);
+  if (a.terminal !== true) throw forbidden("cleanup yalnız done/cancelled görev için (terminal:true)");
+  const ctx = workerCtx();
+  const { repo, wt } = verifiedRecord(ctx, id, repoName);
+  if (!existsSync(wt)) { rmSync(recordFile(id), { force: true }); return { removed: false }; }
+  if (!isInside(dirname(wt), wt) || dirname(wt) !== dirname(workerWorktree(ctx, repo, "T00000000-00"))) throw forbidden(`worktree kök dışında: ${wt}`);
+  try { (o.close ?? closeWorkerWindow)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
+  let warn: string | null = null;
+  try { warn = untrustWorktree(wt); } catch (e) { warn = (e as Error).message; }
+  if (warn) throw failed(`güven kaydı kaldırılamadı, worktree silinmedi: ${warn}`); // fail-closed
+  try { removeTaskWorktree(repo, wt, id); } catch (e) { throw failed((e as Error).message); }
+  rmSync(recordFile(id), { force: true });
+  return { removed: true };
+}
+
+export async function resumeOp(args: unknown, o: { launcher?: Launcher } = {}): Promise<{ worktree: string; method: string; dirty: string[] }> {
+  const a = argObject(args, ["taskId", "project", "repoName", "promptTemplate", "title", "model", "autoCompact", "sessionId"]);
+  const id = taskIdArg(a);
+  projectArg(a);
+  const repoName = repoNameArg(a);
+  const template = text(a, "promptTemplate", MAX_TEXT);
+  const title = text(a, "title", 300);
+  const model = optStr(a, "model", MODEL);
+  const autoCompact = optStr(a, "autoCompact", COMPACT);
+  const sessionId = optStr(a, "sessionId", /^[A-Za-z0-9._:-]{1,128}$/);
+  const ctx = workerCtx();
+  const { wt } = verifiedRecord(ctx, id, repoName);
+  if (!existsSync(wt)) throw new RemoteError("not_found", `not_found: worktree yok: ${wt}; görev ${id} bu makinede sürdürülemez`);
+  const cur = currentBranch(wt);
+  if (cur !== `vlad/${id}`) throw failed(`worktree yanlış branch'te (${cur ?? "bilinmiyor"}, beklenen vlad/${id}): ${wt}`);
+  const dirty = dirtyPaths(wt);
+  const prompt = fill(template, ctx, id).split("{{WORKTREE}}").join(wt).split("{{DIRTY_LINE}}").join(dirtyLine(dirty));
+  const launcher = o.launcher ?? workerLauncher(ctx.cfg);
+  let r;
+  try {
+    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), resume: { sessionId } });
+  } catch (e) { throw failed(`launcher başarısız: ${(e as Error).message}`); }
+  if (!r.ok) throw failed(`launcher başarısız (${r.method}): ${r.detail ?? "bilinmeyen hata"}`);
+  return { worktree: wt, method: r.method, dirty };
+}

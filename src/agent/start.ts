@@ -11,6 +11,7 @@ import { reconcileApplyWrite } from "./ops/apply-write.js";
 import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
 import { OP_TABLE } from "./ops/index.js";
+import { reconcileLaunch } from "./ops/launch.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
@@ -47,7 +48,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const dir = agentDir();
   mkdirSync(dir, { recursive: true });
   const journal = new Journal(join(dir, "journal.jsonl"), nowMs);
-  reconcile(journal, { "apply-write": reconcileApplyWrite });
+  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch });
   const queue = kind === "worker-agent" ? new AgentQueue(join(dir, "queue"), nowMs) : undefined;
   const build = buildId();
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });

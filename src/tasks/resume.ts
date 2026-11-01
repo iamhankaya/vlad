@@ -32,7 +32,12 @@ function logTail(body: string): string[] {
   return lines.slice(-TAIL);
 }
 
-function dirtyPaths(cwd: string): string[] {
+/** The "uncommitted changes" sentence of a resume prompt; a worker Agent fills it for its own worktree. */
+export const dirtyLine = (dirty: string[]): string => dirty.length
+  ? `Kaydedilmemiş değişiklikler var (${dirty.join(", ")}): incele, anlamlıysa WIP commit'le.`
+  : "Kaydedilmemiş değişiklik yok.";
+
+export function dirtyPaths(cwd: string): string[] {
   const status = runGitRaw(cwd, ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"]) ?? "";
   return status.split("\n").filter((l) => l.length >= 4).map((l) => l.slice(3));
 }
@@ -79,9 +84,7 @@ export function localResumePrompt(plan: ResumePlan, wt: string, dirty: string[])
     authority,
     `Çalışma dizinin: ${wt} (branch ${branch}). Ana dizinde veya başka bir worktree'de ÇALIŞMA; önce bu dizine geç.`,
     "Önce `git status` ve `git branch --show-current` ile branch'i ve kaydedilmemiş değişiklikleri doğrula.",
-    dirty.length
-      ? `Kaydedilmemiş değişiklikler var (${dirty.join(", ")}): incele, anlamlıysa WIP commit'le.`
-      : "Kaydedilmemiş değişiklik yok.",
+    dirtyLine(dirty),
     `Son ilerleme kayıtları:\n${tailTextOf(plan)}`,
     "Kaldığın yerden devam et; her anlamlı adımda WIP commit + `vlad task log` \"kaldığım yer\" satırı yaz.",
   ].join("\n");
