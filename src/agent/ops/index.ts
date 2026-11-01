@@ -8,12 +8,13 @@ import { ping } from "./ping.js";
 import { kbSync } from "./kb-sync.js";
 import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
 import { probeWindow } from "./probe-window.js";
+import { gateRun, mergeOp, mergePreview } from "./gate.js";
 import { liveness } from "./liveness.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
 
 // Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
 // `notImplemented` yerine kendi modülüne bağlar (B: ping, op-status, apply-write, exec, kb-head, forward-write, queue-*;
-// C2: kb-sync, launch, resume, close, cleanup, probe-window; C3: liveness).
+// C2: kb-sync, launch, resume, close, cleanup, probe-window; C3: liveness; C4: gate-run, merge-preview, merge).
 
 export type AgentKind = "worker-agent" | "brain-agent";
 /** İsteği imzalayan kimliğin rolü; `self` = worker Agent'ına aynı makineden gelen yerel istemci (from==to). */
@@ -68,3 +69,8 @@ OP_TABLE.cleanup = (a) => cleanupOp(a);
 // --- machines:C3 ---
 OP_TABLE.liveness = (a) => liveness(a);
 // --- /machines:C3 ---
+// --- machines:C4 ---
+OP_TABLE["gate-run"] = (a) => gateRun(a);
+OP_TABLE["merge-preview"] = (a) => mergePreview(a);
+OP_TABLE.merge = (a) => mergeOp(a);
+// --- /machines:C4 ---

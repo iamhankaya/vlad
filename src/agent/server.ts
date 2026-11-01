@@ -29,7 +29,7 @@ export interface ServerOpts {
   crashAt?: string;
 }
 
-const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "probe-window", "merge-preview", "gate-run", "forward-write", "queue-drop"]);
+const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "probe-window", "merge-preview", "forward-write", "queue-drop"]);
 const defaultJournaled = (op: AgentOp): boolean => !READ_ONLY.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */

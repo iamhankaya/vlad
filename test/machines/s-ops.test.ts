@@ -36,11 +36,11 @@ describe("machines:S ops table (role -> allowed ops)", () => {
       expect(isAllowed("brain-agent", "self", op), op).toBe(false);
     }
   });
-  it("every op has a body and each unbound op is notImplemented in the contract phase", async () => {
+  it("every op has a body and none is notImplemented any more", async () => {
     const all = new Set(Object.keys(OP_TABLE));
     for (const op of ["gate-run", "merge-preview", "merge"]) {
       expect(all.has(op), op).toBe(true);
-      await expect(OP_TABLE[op as AgentOp]({}, { from: "x", opId: "o" })).rejects.toThrow(NotImplementedOp);
+      await expect(OP_TABLE[op as AgentOp]({}, { from: "x", opId: "o" })).rejects.not.toThrow(NotImplementedOp);
     }
     for (const op of ["ping", "op-status", "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop", "liveness"]) expect(all.has(op), op).toBe(true);
   });
