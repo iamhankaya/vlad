@@ -143,6 +143,7 @@ export interface RemoteDeps {
 }
 
 /** A remote launch whose outcome is unknown keeps its reservation; anything else is a definite failure. */
+const RETRY_STATES: ReadonlySet<string> = new Set(["unknown", "aborted", "cancelled", "aborted-cancelled", "failed", "not_found"]);
 const UNCERTAIN: ReadonlySet<AgentCode> = new Set<AgentCode>(["unreachable", "timeout", "uncertain"]);
 
 export interface LaunchOpts {
@@ -168,7 +169,10 @@ export async function launchTask(id: string, o: LaunchOpts): Promise<Task> {
   const stale = await withKbLock(() => syncAutonomy(task, o.cfg));
   if (stale) console.error(`uyarı: ${id} yetkisi config'ten güncellendi (${stale} → ${task.data.autonomy})`);
 
-  if (!o.cfg.machines) return launchLocal(task, o, {});
+  if (!o.cfg.machines) {
+    if (o.machine) throw new Error("--machine yalnız config'te machines tanımlıyken kullanılır");
+    return launchLocal(task, o, {});
+  }
   const machine = await placeTask(task, o);
   if (machine === o.cfg.brain) return launchLocal(task, o, { machine });
   if (!o.remote) throw new Error(`uzak taşıma bağlı değil (VLAD Agent istemcisi yok): ${machine}`);
@@ -202,9 +206,9 @@ async function placeTask(task: Task, o: LaunchOpts): Promise<string> {
 /** Records the error and, when the reservation is still ours (`launch_op`), releases it. */
 const failReservation = (id: string, opId: string, msg: string): Promise<void> => withKbLock(() => {
   const t = getTask(id);
-  if (t.data.state === "running") return;
+  if (t.data.state === "running" || t.data.launch_op !== opId) return; // a newer attempt owns the task: a late reply writes nothing
   t.data.error = msg;
-  if (t.data.launch_op === opId) Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
+  Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
   saveTask(t);
 });
 
@@ -265,6 +269,8 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
 }
 
+class LostRace extends Error {}
+
 interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
 interface OpStatus { state: string; result?: RemoteLaunched }
 
@@ -280,8 +286,10 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const reserve = (old: string | null): Promise<string> => withKbLock(() => {
     const t = getTask(id);
     if (t.data.state !== "queued" || (t.data.launch_op ?? null) !== old) {
-      throw new Error(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); başlatılmadı`);
+      throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); başlatılmadı`);
     }
+    const pin = parent ? getTask(parent).data.machine : null;
+    if (pin && pin !== machine) throw new Error(`pipeline ${pin} makinesine sabit; ${machine} olamaz`);
     const { load } = machineLoad(listTasks().filter((x) => x.data.id !== id), cfg.brain!, nowMs());
     const cap = capsOf(cfg)[machine];
     if (cap !== undefined && (load[machine] ?? 0) >= cap) throw new Error(`bekliyor — ${id} için makine yok (${machine}: dolu)`);
@@ -295,7 +303,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const commit = (opId: string, r: RemoteLaunched): Promise<Task> => withKbLock(() => {
     const t = getTask(id);
     if (t.data.launch_op !== opId || t.data.state !== "queued") {
-      throw new Error(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); yazılmadı`);
+      throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); yazılmadı`);
     }
     const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null });
     if (r.integration && parent) recordIntegration(parent, task.data.project, r.integration.branch, r.integration.worktree);
@@ -308,33 +316,40 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     // an earlier attempt's outcome is unknown: ask the worker before launching again
     let st = (await transport.call<OpStatus>(machine, "op-status", { target: old })).result;
     if (st.state === "unknown") st = (await transport.call<OpStatus>(machine, "op-status", { target: old, cancel: true })).result; // tombstone: it can no longer start
-    if (st.state === "done" && st.result) return commit(old, st.result);
+    if (st.state === "done") {
+      if (!st.result) throw new Error(`önceki launch tamamlanmış ama sonuç yok (${machine}, op ${old}); elle incele`);
+      return commit(old, st.result);
+    }
     if (st.state === "started") throw busy(old);
+    if (!RETRY_STATES.has(st.state)) throw new Error(`beklenmeyen op-status durumu: ${st.state} (${machine}, op ${old})`);
   }
   if (parent && CLOSED.includes(getTask(parent).data.state)) throw new Error(`çatı görev ${parent} ${getTask(parent).data.state}; fazı başlatılamaz`);
-  const op = await reserve(old);
-
+  // built before the reservation: a missing role file must not leave a reservation behind
   const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
   const model = effectiveModel(task.data, role);
   const def = card.default_branch ?? undefined;
+  const args = {
+    taskId: id, project: task.data.project, repoName: repoNameOf(card.path), branch: `vlad/${id}`,
+    base: parent ? { kind: "integration", parent, ...(def ? { defaultBranch: def } : {}) } : { kind: "default", ...(def ? { defaultBranch: def } : {}) },
+    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills }),
+    title: `VLAD ${id} — ${task.data.title}`,
+    ...(model ? { model } : {}),
+    ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
+  };
+  const op = await reserve(old);
+
+  let res: { result: RemoteLaunched };
   try {
     await remote.syncKb?.(machine);
-    const res = await transport.call<RemoteLaunched>(machine, "launch", {
-      taskId: id, project: task.data.project, repoName: repoNameOf(card.path), branch: `vlad/${id}`,
-      base: parent ? { kind: "integration", parent, ...(def ? { defaultBranch: def } : {}) } : { kind: "default", ...(def ? { defaultBranch: def } : {}) },
-      promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills }),
-      title: `VLAD ${id} — ${task.data.title}`,
-      ...(model ? { model } : {}),
-      ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
-    }, { opId: op });
-    return await commit(op, res.result);
+    res = await transport.call<RemoteLaunched>(machine, "launch", args, { opId: op });
   } catch (e) {
     // no answer: the worker may have launched anyway -> keep the reservation, the next `task launch` asks op-status
     if (e instanceof RemoteError && UNCERTAIN.has(e.code)) throw e;
-    if ((e as Error).message.startsWith("başka deneme kazandı")) throw e;
     await failReservation(id, op, (e as Error).message);
     throw e;
   }
+  // the worker did launch: a failure while recording it keeps the reservation (the next launch adopts via op-status)
+  return commit(op, res.result);
 }
 
 /**

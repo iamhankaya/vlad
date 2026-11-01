@@ -275,4 +275,58 @@ describe("machines:C1 launchTask — yerleştirme + uzak yol", () => {
     await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/uzak taşıma/);
     expect(getTask(task.data.id).data.launch_op ?? null).toBeNull();
   });
+
+  it("geç yanıt eski denemenin hatasıyla yeni denemenin görevine hata yazmaz", async () => {
+    const task = mk();
+    const f = fakeTransport({
+      ...ok,
+      launch: () => {
+        const x = getTask(task.data.id);
+        x.data.launch_op = "op-yeni";
+        saveTask(x);
+        throw new RemoteError("failed", "eski hata", "windows");
+      },
+    });
+    await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow("eski hata");
+    const d = getTask(task.data.id).data;
+    expect(d.launch_op).toBe("op-yeni");
+    expect(d.error ?? null).toBeNull();
+  });
+
+  it("uzak launch başarılı ama kayıt yazılamazsa rezervasyon KALIR (sonraki launch op-status ile sahiplenir)", async () => {
+    const task = mk();
+    const f = fakeTransport({ ...ok, launch: () => ({ branch: "vlad/X", worktree: 5 }) }); // worktree string değil: şema yazmayı reddeder
+    await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow();
+    const d = getTask(task.data.id).data;
+    expect(d).toMatchObject({ state: "queued", machine: "windows" });
+    expect(d.launch_op).toBeTruthy();
+  });
+
+  it("rol dosyası yoksa rezervasyon yazılmaz", async () => {
+    const task = mk();
+    const rt = getTask(task.data.id);
+    rt.data.role = "yok-boyle-rol";
+    saveTask(rt);
+    const f = fakeTransport(ok);
+    await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow();
+    expect(getTask(task.data.id).data.launch_op ?? null).toBeNull();
+  });
+
+  it("op-status 'done' ama sonuç yok: hata, yeniden launch yok", async () => {
+    const task = mk();
+    const t = getTask(task.data.id);
+    Object.assign(t.data, { machine: "windows", launch_op: "op-eski", machine_reserved: new Date().toISOString() });
+    saveTask(t);
+    const f = fakeTransport({ ...ok, "op-status": () => ({ state: "done" }), launch: () => launched });
+    await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow(/sonuç yok/);
+    expect(f.ops("launch")).toHaveLength(0);
+  });
+
+  it("machines yokken --machine açık hata verir", async () => {
+    const c2 = defaultConfig();
+    c2.worktreeDir = cfg.worktreeDir;
+    card(undefined);
+    const task = mk();
+    await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg: c2, machine: "windows" })).rejects.toThrow(/yalnız config'te machines/);
+  });
 });
