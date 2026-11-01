@@ -1,4 +1,5 @@
 import { execFile, spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readDoc } from "../../kb/doc.js";
@@ -41,7 +42,8 @@ function taskFront(ctx: WorkerCtx, id: string, project: string): TaskFront {
   if (!existsSync(f)) throw new RemoteError("not_found", `not_found: görev dosyası işçi kb'sinde yok: ${id}`);
   const t = readDoc<TaskFront>(f).data;
   if (t.project !== project) throw bad("project görevin projesiyle uyuşmuyor");
-  if (t.machine && t.machine !== ctx.self) throw forbidden(`görev başka makinede: ${t.machine}`);
+  // çatının machine alanı boş olabilir (kaydı işçide); faz/tek görevde makine eşleşmesi zorunlu
+  if (t.kind === "pipeline" ? t.machine && t.machine !== ctx.self : t.machine !== ctx.self) throw forbidden(`görev bu makinede değil: ${t.machine ?? "machine yok"}`);
   return t;
 }
 function defaultBranchOf(ctx: WorkerCtx, project: string): string | undefined {
@@ -88,22 +90,42 @@ export async function gateRun(args: unknown): Promise<GateRunResult> {
   let gate: string | undefined;
   try { gate = readDoc<{ gate?: string }>(join(workerKbDir(ctx.def), "projects", `${project}.md`)).data.gate; } catch { /* kart yok → aşağıda */ }
   if (!gate?.trim()) throw failed(`projede gate tanımlı değil: ${project}`);
-  return runGate(gate, cwd);
+  return serialized(cwd, () => runGate(gate, cwd));
+}
+
+/** cwd başına sıra: aynı worktree'de gate ve merge birbirinin altında dosya değiştirmesin. */
+const chains = new Map<string, Promise<unknown>>();
+function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const run = (chains.get(key) ?? Promise.resolve()).then(fn);
+  const tail = run.catch(() => undefined);
+  chains.set(key, tail);
+  void tail.then(() => { if (chains.get(key) === tail) chains.delete(key); });
+  return run;
+}
+
+function killTree(p: ReturnType<typeof spawn>): void {
+  // Windows'ta p.kill() yalnız cmd.exe'yi öldürür; torunlar (npm test…) boruları tutar
+  if (process.platform === "win32" && p.pid) spawn("taskkill", ["/PID", String(p.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => p.kill());
+  else p.kill();
 }
 
 function runGate(cmd: string, cwd: string): Promise<GateRunResult> {
   return new Promise((resolve) => {
     const p = spawn(cmd, { cwd, shell: true, windowsHide: true });
     let stdout = "", stderr = "";
-    const keep = (s: string, d: Buffer) => (s + d.toString("utf8")).slice(-2 * OUT_CAP); // bellek sınırı
-    p.stdout.on("data", (d: Buffer) => { stdout = keep(stdout, d); });
-    p.stderr.on("data", (d: Buffer) => { stderr = keep(stderr, d); });
-    let timedOut = false;
-    // shortcut: yalnız kabuk süreci öldürülür, torunlar kalabilir; gerçek süreç ağacı temizliği gerekirse taskkill /T ekle
-    const timer = setTimeout(() => { timedOut = true; p.kill(); }, GATE_TIMEOUT_MS);
-    const done = (exit: number, extra = "") => { clearTimeout(timer); resolve({ exit, stdout: capText(stdout, OUT_CAP), stderr: capText(stderr + extra, OUT_CAP) }); };
+    const dec = [new StringDecoder("utf8"), new StringDecoder("utf8")];
+    p.stdout.on("data", (d: Buffer) => { stdout = (stdout + dec[0]!.write(d)).slice(-2 * OUT_CAP); }); // bellek sınırı
+    p.stderr.on("data", (d: Buffer) => { stderr = (stderr + dec[1]!.write(d)).slice(-2 * OUT_CAP); });
+    let finished = false;
+    const done = (exit: number, extra = "") => {
+      if (finished) return;
+      finished = true; clearTimeout(timer);
+      resolve({ exit, stdout: capText(stdout, OUT_CAP), stderr: capText(stderr + extra, OUT_CAP) });
+    };
+    // sonucu 'close'u beklemeden ver: torun borulara tutunsa da op asılı kalmaz
+    const timer = setTimeout(() => { killTree(p); done(124, "\ngate zaman aşımına uğradı"); }, GATE_TIMEOUT_MS);
     p.on("error", (e) => done(127, `\ngate başlatılamadı: ${e.message}`));
-    p.on("close", (code) => done(timedOut ? 124 : (code ?? 1), timedOut ? "\ngate zaman aşımına uğradı" : ""));
+    p.on("close", (code) => done(code ?? 1));
   });
 }
 
@@ -133,16 +155,13 @@ export async function mergePreview(args: unknown): Promise<MergePreviewResult> {
   return { log: capText(log, OUT_CAP), diffStat: capText(diffStat, OUT_CAP), conflicts: mt.code === 1 ? conflictsOf(mt.stdout) : [] };
 }
 
-let mergeChain: Promise<unknown> = Promise.resolve();
-/** Aynı işçide merge'ler sırayla (aynı worktree'de iki merge çakışır). */
-export function mergeOp(args: unknown): Promise<MergeResult> {
-  const run = mergeChain.then(() => mergeOne(args));
-  mergeChain = run.catch(() => undefined);
-  return run;
+/** Aynı worktree'de merge ve gate sırayla çalışır. */
+export async function mergeOp(args: unknown): Promise<MergeResult> {
+  const mc = mergeCtx(args, ["message"]);
+  return serialized(mc.cwd, () => mergeOne(mc));
 }
 
-async function mergeOne(args: unknown): Promise<MergeResult> {
-  const { cwd, into, from, a } = mergeCtx(args, ["message"]);
+async function mergeOne({ cwd, into, from, a }: ReturnType<typeof mergeCtx>): Promise<MergeResult> {
   const message = a.message === undefined ? `Merge ${from}` : a.message;
   if (typeof message !== "string" || !message.trim() || message.includes("\0") || Buffer.byteLength(message) > MAX_MESSAGE) throw bad("message geçersiz");
   if (!existsSync(cwd)) throw new RemoteError("not_found", `not_found: worktree yok: ${cwd}`);
@@ -152,6 +171,11 @@ async function mergeOne(args: unknown): Promise<MergeResult> {
   if ((await runGit(cwd, ["merge-base", "--is-ancestor", `refs/heads/${from}`, "HEAD"])).code === 0) {
     return { head: (await mustGit(cwd, ["rev-parse", "HEAD"])).trim(), merged: false }; // zaten içeride
   }
+  // önceden yarım merge ya da kirli izlenen dosya varsa dokunma: abort başkasının işini silmesin
+  if ((await runGit(cwd, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])).stdout.trim()) throw failed(`${cwd} içinde yarım kalmış bir merge var; elle çöz`);
+  const dirty = (await runGit(cwd, ["status", "--porcelain", "-uno"])).stdout.trim();
+  if (dirty) throw failed(`${cwd} kirli (izlenen dosyalarda değişiklik); merge yapılmadı:
+${dirty.slice(0, 500)}`);
   const m = await runGit(cwd, ["merge", "--no-ff", "-m", message, `refs/heads/${from}`], 300_000);
   if (m.code !== 0) {
     await runGit(cwd, ["merge", "--abort"]);
