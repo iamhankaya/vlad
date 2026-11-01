@@ -7,7 +7,7 @@ const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 const frontmatter = (md: string) => /^---\r?\n([\s\S]*?)\r?\n---/.exec(md)?.[1] ?? "";
 const field = (md: string, key: string) => new RegExp(`^${key}:\s*(.+)$`, "m").exec(frontmatter(md))?.[1].trim() ?? "";
 
-const NEW_VLAD_SKILLS = ["second-opinion", "integrate", "art-prompt"];
+const NEW_VLAD_SKILLS = ["second-opinion", "integrate", "art-prompt", "setup-audit"];
 const WORKER_SKILLS = ["vlad-worker", "ci-triage"];
 
 describe("skills/ frontmatter", () => {

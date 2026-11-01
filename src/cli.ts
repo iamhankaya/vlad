@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
+import { auditSetup } from "./audit/setup.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
 import { idleTasks } from "./tasks/liveness.js";
@@ -492,6 +493,20 @@ def(audit, "skills", "Görev oturum kayıtlarından beklenen/yüklenen/eksik ski
 })
   .option("--since <tarih>", "bu tarihten sonra oluşturulan görevler")
   .option("--project <slug>", "yalnızca bu proje");
+
+def(audit, "setup", "Kurulum denetimi verisi (salt okuma): biten görevler, ölçümler, sürtünme işaretleri, skill envanteri, yaşlı bulgular", (o: Opts) => {
+  const r = auditSetup({ since: o.since as string | undefined });
+  const sev = Object.entries(r.open_points.by_severity).map(([k, v]) => `${k}:${v}`).join(" ") || "-";
+  const sg = r.signals;
+  out(o, r, [
+    `aralık: ${r.since} →  ${r.tasks.total} biten görev`,
+    `ölçüm: ${r.measures.tasks_with_measure} görevde; ${Object.entries(r.measures.sums).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
+    `açık nokta: ${r.open_points.total} (${sev})`,
+    `işaretler: test itirazı ${sg.test_itirazi.count}, değişiklik turu ${sg.degisiklik_istegi.count}, [KARAR] ${sg.karar.count}, izin reddi ${sg.izin_reddi.count}`,
+    `skill: ${r.skills.inventory.length} envanterde, ${r.skills.unused.length} hiç yüklenmemiş (${r.skills.transcripts} oturum kaydı)`,
+    `bulgu: ${r.findings.unresolved.length} açık/ertelenmiş, ${r.findings.stale} tanesi 30 günden eski`,
+  ].join("\n"));
+}).option("--since <tarih>", "bu tarihten sonra biten görevler (YYYY-MM-DD; varsayılan: 14 gün önce)");
 
 const inbox = program.command("inbox").description("Oturum raporları");
 def(inbox, "list", "İşlenmemiş raporlar", (o: Opts) => {
