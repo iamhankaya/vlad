@@ -12,7 +12,7 @@ import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
-import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
@@ -78,12 +78,36 @@ program
   .exitOverride()
   .configureOutput({ writeErr: (str) => { pendingHelp += str; } });
 
+/**
+ * Commands that write the kb run under the cross-process kb lock (F-vlad-096): ID generation and the write
+ * share one lock region. Read-only commands, `kb commit` (files are written atomically) and
+ * `task close-window` (no kb write) stay lock-free. `task launch` locks only its kb write regions inside
+ * `launchTask` (F-vlad-102), never the worktree/terminal wait. `status`/`mode status` write only as a side effect
+ * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
+ */
+const KB_WRITES = new Set([
+  "project write", "project set", "project note", "project summary",
+  "finding add", "finding set",
+  "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
+  "mode night", "mode watch", "mode off", "mode status",
+  "inbox done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
+]);
+
 /** Registers a command with --json and a uniform error path. */
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
   const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
+  const key = `${parent.name()} ${spec.split(" ")[0]}`;
   c.action(async (...args: any[]) => {
     try {
-      await fn(...args);
+      const opts = args[args.length - 2] as Opts;
+      if (key === "vlad status" && opts.mark !== false) {
+        // SessionStart hook runs this: never block it behind a long writer; fall back to the side-effect-free read
+        try { await withKbLock(() => fn(...args), { timeoutMs: 2000 }); } catch (e) {
+          if (!(e instanceof KbLockTimeout)) throw e;
+          opts.mark = false;
+          await fn(...args);
+        }
+      } else await (KB_WRITES.has(key) ? withKbLock(() => fn(...args)) : fn(...args));
     } catch (e) {
       fail(e);
     }
@@ -226,7 +250,7 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   }
   if (mode === "cloud") {
     if (o.external) throw new Error("--external yerel çalışan içindir; bulut modunda kullanılamaz");
-    const r = prepareCloudLaunch(id);
+    const r = await withKbLock(() => prepareCloudLaunch(id));
     out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
       `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}` +
       r.warnings.map((w) => `\nuyarı: ${w}`).join(""));

@@ -1,7 +1,7 @@
 import { linkSync, renameSync, rmSync, writeFileSync } from "node:fs";
 
 const RENAME_RETRIES = 5;
-const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+export const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /** Windows refuses to replace a file another process has open (EPERM/EBUSY/EACCES) until it is closed; wait briefly and retry (F-vlad-091). */
 function renameRetry(rename: (a: string, b: string) => void, from: string, to: string): void {

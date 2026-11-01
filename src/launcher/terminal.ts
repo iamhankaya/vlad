@@ -115,6 +115,9 @@ export function closeWorkerWindow(taskId: string): number[] {
 /** Starts nothing; used while VLAD_LAUNCHER=noop so tests can drive the launch flow without a terminal. */
 export class NoopLauncher implements Launcher {
   async launch(): Promise<LaunchResult> {
+    // test seam (F-vlad-102): simulates a slow terminal so tests can check what the launch holds meanwhile
+    const delay = Number(process.env.VLAD_NOOP_LAUNCH_DELAY_MS);
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
     return { ok: true, method: "noop", detail: "VLAD_LAUNCHER=noop" };
   }
 }

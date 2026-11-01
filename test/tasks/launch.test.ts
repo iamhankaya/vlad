@@ -55,6 +55,15 @@ function fakeLauncher(ok = true): Launcher & { reqs: LaunchRequest[] } {
 }
 const mk = (kind: "dev" | "research" = "dev") => createTask({ project: "alpha", title: "İlk görev", kind, body: "## Tanım\nx\n" });
 
+describe("launchTask: eşzamanlı başka başlatma (F-vlad-102)", () => {
+  it("launcher beklerken görev başka yerde running olduysa hata geri yazımı çalışan göreve error yazmaz", async () => {
+    const t = mk();
+    const racing: Launcher = { async launch() { setState(t.data.id, "running"); return { ok: false, method: "fake", detail: "boom" }; } };
+    await expect(launchTask(t.data.id, { launcher: racing, cfg })).rejects.toThrow(/boom/);
+    expect(getTask(t.data.id).data.error).toBeNull();
+  });
+});
+
 describe("launchTask", () => {
   it("reads autonomy from config at launch: stale frontmatter is refreshed and the prompt block follows config", async () => {
     const t = mk();
