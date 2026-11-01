@@ -230,3 +230,21 @@ describe("machines:C2 resume op (işçi)", () => {
     expect(reqs).toHaveLength(0);
   });
 });
+
+describe("machines:C2 review düzeltmeleri", () => {
+  it("resume: ilk kirli dosyanın yolu kesilmez (' M a.txt' → a.txt)", async () => {
+    await launchOp(L(), ctx("op-d"), { launcher });
+    writeFileSync(join(`${repo}-wt`, ID, "f.txt"), "degisti"); // izlenen dosya, ilk satır ' M f.txt'
+    reqs = [];
+    const r = await resumeOp({ taskId: ID, project: "alpha", repoName: "alpha", promptTemplate: "{{DIRTY_LINE}}", title: "T" }, { launcher, close: () => [] });
+    expect(r.dirty).toEqual(["f.txt"]);
+  });
+  it("aynı işçide eşzamanlı iki launch sıraya girer (ikisi de tamamlanır, çift hata yok)", async () => {
+    const ID2 = "T20261101-62";
+    const [a, b] = await Promise.all([
+      launchOp(L({ base: { kind: "integration", parent: PARENT } }), ctx("op-p1"), { launcher }),
+      launchOp(L({ taskId: ID2, branch: `vlad/${ID2}`, base: { kind: "integration", parent: PARENT } }), ctx("op-p2"), { launcher }),
+    ]);
+    expect(a.integration).toEqual(b.integration);
+  });
+});

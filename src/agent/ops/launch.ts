@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { branchExistsAsync, runGitAsync } from "../../git/git-async.js";
+import { branchExistsAsync, runGitAsync, runGitRawAsync } from "../../git/git-async.js";
 import { getVladHome } from "../../kb/home.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
@@ -74,7 +74,15 @@ function dropEntry(id: string, repo: string, wt: string): void {
 const fill = (s: string, ctx: WorkerCtx, id: string): string => s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id));
 const envOf = (id: string) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome() });
 
-export async function launchOp(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher } = {}): Promise<LaunchResultW> {
+let launchChain: Promise<unknown> = Promise.resolve();
+/** Async git removed the accidental serialisation sync calls gave: launches on one worker run one at a time again (worktree/branch/lock races). */
+export function launchOp(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher } = {}): Promise<LaunchResultW> {
+  const run = launchChain.then(() => launchOne(args, c, o));
+  launchChain = run.catch(() => undefined);
+  return run;
+}
+
+async function launchOne(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher }): Promise<LaunchResultW> {
   const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact"]);
   const id = taskIdArg(a);
   projectArg(a);
@@ -178,7 +186,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: 
   if (!existsSync(wt)) throw new RemoteError("not_found", `not_found: worktree yok: ${wt}; görev ${id} bu makinede sürdürülemez`);
   const cur = (await runGitAsync(wt, ["branch", "--show-current"])) || null;
   if (cur !== `vlad/${id}`) throw failed(`worktree yanlış branch'te (${cur ?? "bilinmiyor"}, beklenen vlad/${id}): ${wt}`);
-  const dirty = ((await runGitAsync(wt, ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"], 30_000)) ?? "")
+  const dirty = ((await runGitRawAsync(wt, ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"], 30_000)) ?? "")
     .split("\n").filter((l) => l.length >= 4).map((l) => l.slice(3));
   const prompt = fill(template, ctx, id).split("{{WORKTREE}}").join(wt).split("{{DIRTY_LINE}}").join(dirtyLine(dirty));
   const launcher = o.launcher ?? workerLauncher(ctx.cfg);

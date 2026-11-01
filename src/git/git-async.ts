@@ -15,7 +15,7 @@ export function runGitRawAsync(cwd: string, args: string[], timeoutMs = 3000): P
 }
 export const runGitAsync = async (cwd: string, args: string[], timeoutMs = 3000): Promise<string | null> => (await runGitRawAsync(cwd, args, timeoutMs))?.trim() ?? null;
 
-export function mustGitAsync(cwd: string, args: string[], timeoutMs = 60_000): Promise<string> {
+export function mustGitAsync(cwd: string, args: string[], timeoutMs = 600_000): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile("git", args, { cwd, timeout: timeoutMs, encoding: "utf8", windowsHide: true, env: ENV, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) reject(new Error(`git ${args[0]} başarısız: ${(stderr || err.message).trim()}`));

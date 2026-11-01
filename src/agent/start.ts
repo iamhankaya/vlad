@@ -114,6 +114,7 @@ export function agentKeygen(identity: string): KeygenResult {
 export function agentSetKey(peer: string, key: string): { peer: string; file: string } {
   const cfg = loadConfig();
   if (cfg.machines && !roleOf(cfg, peer)) throw new Error(`agent setkey: kimlik config'te tanımlı değil: ${peer}`);
+  if (peer === selfName()) throw new Error("agent setkey: kendi adın için çift anahtar olmaz (keygen <kendi-adın>)");
   if (!/^[0-9a-f]{64}$/.test(key)) throw new Error("agent setkey: anahtar 64 hex olmalı");
   const local = readLocal();
   writeLocal({ ...local, keys: { ...local.keys, [peer]: key } });
