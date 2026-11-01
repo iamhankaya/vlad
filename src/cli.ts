@@ -14,7 +14,7 @@ import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
-import { NoopLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
@@ -262,7 +262,9 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
     ? new TerminalLauncher({ mode: "auto", external: true })
     : mode === "noop"
       ? new NoopLauncher()
-      : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+      : mode === "tmux" || mode === "terminal"
+        ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
+        : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   const t = await launchTask(id, { launcher, cfg });
   out(

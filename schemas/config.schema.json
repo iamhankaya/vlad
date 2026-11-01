@@ -10,7 +10,7 @@
     "staleAfterHours": { "type": "number", "exclusiveMinimum": 0 },
     "workerSilentMinutes": { "type": "number", "exclusiveMinimum": 0 },
     "maxParallel": { "type": "integer", "minimum": 1 },
-    "launcher": { "enum": ["auto", "wt", "powershell", "cloud"] },
+    "launcher": { "enum": ["auto", "wt", "powershell", "cloud", "tmux", "terminal"] },
     "worktreeDir": { "type": "string" },
     "cloudKb": { "enum": ["readonly", "inline"] },
     "workerAutoCompact": { "type": "string", "pattern": "^([0-9]+(\\.[0-9]+)?[kKmM]?)?$" },

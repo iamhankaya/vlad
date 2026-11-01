@@ -27,11 +27,11 @@ describe("senaryo 1: config launcher=cloud", { timeout: 30_000 }, () => {
     expect(loadConfig(home).launcher).toBe("cloud");
   });
   it("bilinmeyen launcher değeri hâlâ reddedilir", () => {
-    setLauncher("tmux");
+    setLauncher("bogus");
     expect(() => loadConfig(home)).toThrow();
   });
-  it("mevcut değerler (auto|wt|powershell) geçerli kalır", () => {
-    for (const l of ["auto", "wt", "powershell"]) {
+  it("mevcut değerler (auto|wt|powershell|tmux|terminal) geçerli kalır", () => {
+    for (const l of ["auto", "wt", "powershell", "tmux", "terminal"]) {
       setLauncher(l);
       expect(loadConfig(home).launcher).toBe(l);
     }
