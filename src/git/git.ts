@@ -63,9 +63,10 @@ export function changedFiles(cwd: string): string[] {
   return [...set];
 }
 
-export function worktreePath(cfg: VladConfig, repoPath: string, taskId: string): string {
+/** `os`: hedef makinenin işletim sistemi (ayırıcıyı belirler); verilmezse bugünkü win32 biçimi. */
+export function worktreePath(cfg: VladConfig, repoPath: string, taskId: string, os: "win32" | "darwin" | "linux" = "win32"): string {
   const base = cfg.worktreeDir.split("{repo}").join(repoPath);
-  return `${base.replace(/[\\/]+$/, "")}\\${taskId}`;
+  return `${base.replace(/[\\/]+$/, "")}${os === "win32" ? "\\" : "/"}${taskId}`;
 }
 
 function mustGit(cwd: string, args: string[]): void {
