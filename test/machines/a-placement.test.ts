@@ -37,6 +37,13 @@ describe("machines:A machineLoad", () => {
     expect(r.load).toEqual({ windows: 2 });
     expect(r.expired).toEqual([staleLocal.data.id, staleRemote.data.id]);
   });
+  it("terminal-state leftovers and an unparsable timestamp do not hold a remote slot forever", () => {
+    const done = task({ state: "done", machine: "windows", machine_reserved: iso(NOW), launch_op: "d" });
+    const bad = task({ machine: "mac", machine_reserved: "not-a-date", launch_op: "e" });
+    const r = machineLoad([done, bad], "mac", NOW);
+    expect(r.load).toEqual({});
+    expect(r.expired).toEqual([bad.data.id]);
+  });
   it("a running task with a leftover reservation is counted once", () => {
     const t = task({ state: "running", machine: "windows", machine_reserved: iso(NOW), launch_op: "x" });
     expect(machineLoad([t], "mac", NOW).load).toEqual({ windows: 1 });

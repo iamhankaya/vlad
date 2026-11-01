@@ -54,9 +54,11 @@ function out(o: Opts, data: unknown, text: string): void {
 }
 
 // --- machines:A --- `@<makine>` eki: yalnız görevde machine varsa ve brain değilse
+let brainName: string | null | undefined; // config bir kez okunur (liste satırı başına değil)
 const machineTag = (t: Task): string => {
   if (!t.data.machine) return "";
-  try { const c = loadConfig(); return c.machines && t.data.machine !== c.brain ? ` @${t.data.machine}` : ""; } catch { return ""; }
+  if (brainName === undefined) { try { brainName = loadConfig().brain ?? null; } catch { brainName = null; } }
+  return brainName && t.data.machine !== brainName ? ` @${t.data.machine}` : "";
 };
 // --- /machines:A ---
 const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}${machineTag(t)}`;
@@ -438,7 +440,7 @@ def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları
     o,
     {
       tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel,
-      ...(r.placements ? { placements: r.placements, held_reasons: r.held_reasons } : {}),
+      ...(r.placements ? { placements: r.placements, held_reasons: r.held_reasons, warnings: r.warnings } : {}),
     },
     lines.join("\n"),
   );

@@ -18,8 +18,9 @@ export function machineLoad(tasks: Task[], brain: string, now: number): Load {
     if (d.kind !== "dev") continue;
     const m = d.machine ?? brain;
     let counts = d.state === "running";
-    if (!counts && d.machine && d.machine_reserved) {
-      const stale = now - Date.parse(d.machine_reserved) > RESERVATION_TTL_MS;
+    // yalnız bekleyen (queued) görevin rezervasyonu sayılır; running zaten sayıldı, terminal durumlardaki artık yok sayılır
+    if (d.state === "queued" && d.machine && d.machine_reserved) {
+      const stale = !(now - Date.parse(d.machine_reserved) <= RESERVATION_TTL_MS); // geçersiz tarih = süresi dolmuş
       if (stale) expired.push(d.id);
       counts = !stale || m !== brain;
     }
