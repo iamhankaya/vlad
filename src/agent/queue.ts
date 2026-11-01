@@ -24,7 +24,7 @@ const name = (seq: number, opId: string) => `${String(seq).padStart(8, "0")}-${o
  * Her girdi atomik yazılan (tmp + rename) tek dosyadır: `<dir>/NNNNNNNN-<opId>.json`; kalıcı hatalılar `<dir>/failed/`.
  */
 export class AgentQueue {
-  private flushing = false;
+  private flushing: Promise<unknown> | null = null;
   private count = 0;
   private bytes = 0;
   private seqNo = 0;
@@ -99,17 +99,21 @@ export class AgentQueue {
 
   /**
    * Sıradan gönderir. `send` başarıyla döner → silinir; RemoteError: kalıcı → failed/ (+ aynı görevin kalanı), diğer → durur.
-   * Devam eden (inflight) bir doğrudan gönderim varsa sıra bozulmasın diye hiçbir şey yapmaz.
+   * Süren bir boşaltma varsa bitmesini bekler, kalanı kendisi boşaltır; inflight (doğrudan gönderim) girdide durur.
    */
   async flush(send: (it: QueueItem) => Promise<unknown>): Promise<{ sent: number; failed: number; remaining: number }> {
+    while (this.flushing) await this.flushing.catch(() => undefined); // süren boşaltma bitsin; kalanı bu çağrı boşaltır
+    const run = this.drain(send);
+    this.flushing = run;
+    try { return await run; } finally { this.flushing = null; }
+  }
+  private async drain(send: (it: QueueItem) => Promise<unknown>): Promise<{ sent: number; failed: number; remaining: number }> {
     const r = { sent: 0, failed: 0, remaining: 0 };
-    if (this.flushing) return { ...r, remaining: this.count };
-    this.flushing = true;
-    try {
+    {
       const poisoned = new Map<string, number>(); // görev id → başarısız ilk seq
       for (const f of this.files()) {
         const it = this.read(join(this.dir, f));
-        if (!it) continue;
+        if (!it) { renameSync(join(this.dir, f), join(this.dir, "failed", f)); continue; } // çalışırken yazılmış bozuk girdi (sayaçta yok)
         if (it.state === "inflight") break;
         const prev = poisoned.get(it.id);
         if (prev !== undefined) { this.fail(f, it, `önceki başarısız: ${prev}`); r.failed++; continue; }
@@ -120,7 +124,7 @@ export class AgentQueue {
           break;
         }
       }
-    } finally { this.flushing = false; }
+    }
     r.remaining = this.count;
     return r;
   }
