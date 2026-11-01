@@ -4,7 +4,10 @@ import {
   appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, readDoc, serializeDoc,
   setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
-import type { TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
+import type { ProjectCard, TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
+import { simulateReady } from "../machines/placement.js";
+import { nowMs } from "../machines/clock.js";
+import type { HeldByLimit, Placement } from "../machines/types.js";
 import { getRole, type Role } from "../roles/store.js";
 import { assertTransition } from "./state.js";
 
@@ -360,13 +363,31 @@ export function readyTasks(f: { parent?: string } = {}): Task[] {
  * use up slots; the ready tasks beyond the free slots are held. No limit → everything starts.
  */
 export function readyWithLimit(
-  f: { parent?: string } = {}, maxParallel?: number,
-): { tasks: Task[]; held_by_limit: Task[]; running: number; maxParallel: number | null } {
+  f: { parent?: string } = {}, maxParallel?: number, cfg?: VladConfig,
+): {
+  tasks: Task[]; held_by_limit: Task[]; running: number; maxParallel: number | null;
+  /** Only with `machines` in config: where each ready task goes and why the held ones wait. */
+  placements?: Placement[]; held_reasons?: HeldByLimit[]; warnings?: string[];
+} {
   const ready = readyTasks(f);
   const running = listTasks({ state: ["running"] }).filter((t) => t.data.kind === "dev").length;
+  if (cfg?.machines) {
+    const sim = simulateReady(ready, listTasks(), cfg, cardMachines, nowMs());
+    const placed = new Set(sim.placements.map((p) => p.id));
+    return {
+      tasks: ready.filter((t) => placed.has(t.data.id)), held_by_limit: ready.filter((t) => !placed.has(t.data.id)),
+      running, maxParallel: maxParallel ?? null, placements: sim.placements, held_reasons: sim.held, warnings: sim.warnings,
+    };
+  }
   if (maxParallel === undefined) return { tasks: ready, held_by_limit: [], running, maxParallel: null };
   const free = Math.max(0, maxParallel - running);
   return { tasks: ready.slice(0, free), held_by_limit: ready.slice(free), running, maxParallel };
+}
+
+/** Project card's `machines` (absent card or field -> placement falls back to the brain). */
+function cardMachines(project: string): { machines?: string[] } {
+  const file = join(kbPaths().projects, `${project}.md`);
+  try { return { machines: readDoc<ProjectCard>(file).data.machines }; } catch { return {}; }
 }
 
 export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {}): Task {

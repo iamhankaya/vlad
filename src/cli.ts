@@ -57,7 +57,15 @@ function out(o: Opts, data: unknown, text: string): void {
   process.stdout.write((o.json ? JSON.stringify(data) : text) + "\n");
 }
 
-const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}`;
+// --- machines:A --- `@<makine>` eki: yalnız görevde machine varsa ve brain değilse
+let brainName: string | null | undefined; // config bir kez okunur (liste satırı başına değil)
+const machineTag = (t: Task): string => {
+  if (!t.data.machine) return "";
+  if (brainName === undefined) { try { brainName = loadConfig().brain ?? null; } catch { brainName = null; } }
+  return brainName && t.data.machine !== brainName ? ` @${t.data.machine}` : "";
+};
+// --- /machines:A ---
+const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}${machineTag(t)}`;
 /** Pipeline tasks carry their per-project integration worktrees (F-vlad-063); a missing project card must not break listing. */
 const integrationInfo = (t: Task, all?: Task[]) => {
   if (t.data.kind !== "pipeline") return {};
@@ -143,7 +151,7 @@ def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts
   const card = writeProject(slug, readInput(o.file as string));
   out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
 }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
-def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
+def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate|machines); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
   setProjectField(slug, field, value);
   out(o, { slug, field, value: value === "" ? null : value }, value === "" ? `silindi: ${slug}.${field}` : `yazıldı: ${slug}.${field}=${value}`);
 });
@@ -421,18 +429,26 @@ def(task, "idle", "Uzun süredir güncellenmeyen running/blocked görevler (bek�
   const tasks = idleTasks(new Date(), minutes);
   out(o, { minutes, tasks }, tasks.map((t) => `${t.id}  ${t.state.padEnd(8)} ${t.idle_minutes} dk  ${t.branch ?? "-"}  ${t.last_log ?? ""}`).join("\n"));
 }).option("--minutes <n>", "en az bu kadar dakikadır sessiz", "30");
+// --- machines:A ---
 def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
-  const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel);
+  const cfg = loadConfig();
+  const r = readyWithLimit({ parent: o.parent as string | undefined }, cfg.maxParallel, cfg);
+  for (const w of r.warnings ?? []) process.stderr.write(`uyarı: ${w}\n`);
+  const why = (id: string) => (r.held_reasons?.find((h) => h.id === id)?.reasons ?? []).map((x) => `${x.machine} ${x.reason}`).join(", ");
   const lines = [
-    ...r.tasks.map(taskLine),
-    ...r.held_by_limit.map((t) => `${taskLine(t)}  (maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor)`),
+    ...r.tasks.map((t) => taskLine(t) + (r.placements ? `  -> ${r.placements.find((p) => p.id === t.data.id)?.machine}` : "")),
+    ...r.held_by_limit.map((t) => `${taskLine(t)}  (${r.held_reasons ? `bekliyor: ${why(t.data.id)}` : `maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor`})`),
   ];
   out(
     o,
-    { tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel },
+    {
+      tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel,
+      ...(r.placements ? { placements: r.placements, held_reasons: r.held_reasons, warnings: r.warnings } : {}),
+    },
     lines.join("\n"),
   );
 }).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
+// --- /machines:A ---
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
   const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false });
