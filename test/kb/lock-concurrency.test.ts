@@ -76,7 +76,7 @@ describe("kb yazma kilidi: eşzamanlı süreçler (F-vlad-096)", { timeout: 120_
     const env = { VLAD_LOCK_TIMEOUT_MS: "300" };
 
     const w = await vlad(["task", "log", id, "x", "--json"], "", env);
-    expect(w.code).toBe(1);
+    expect(w.code).toBe(75);
     expect(JSON.parse(w.err).error).toMatch(/^kb kilidi alınamadı/);
     expect((await vlad(["task", "list", "--json"], "", env)).code).toBe(0);
     expect((await vlad(["status", "--no-mark", "--json"], "", env)).code).toBe(0);

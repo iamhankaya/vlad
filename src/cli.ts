@@ -18,6 +18,10 @@ import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveL
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
+import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
+import { agentKeygen, agentStart, agentStatus } from "./agent/start.js";
+import { installPlan } from "./agent/install.js";
+import { selfName } from "./agent/state.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -106,8 +110,7 @@ const KB_WRITES = new Set([
 
 // --- machines:S --- kancalar; varsayılan = mevcut davranış. B `before`'ı (iletim), C `lockPolicy`'yi (resume/cleanup iç kilit) doldurur.
 /** true → komut başka makineye iletildi (çıktı yazıldı), yerel handler çalışmaz. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const before = async (_key: string, _args: any[]): Promise<boolean> => false;
+const before = (key: string, args: any[]): Promise<boolean> => forwardIfWorker(key, args, KB_WRITES);
 /** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
 const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyOf(key, KB_WRITES, INNER_LOCK.has(key) ? loadConfig() : {}); // C1: resume/cleanup lock in phases once `machines` is set
 // --- /machines:S ---
@@ -664,15 +667,61 @@ def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {
 
 // --- machines:B --- agent, queue, remote
 const agent = program.command("agent").description("VLAD Agent (çoklu makine; T20261101-19)");
-const queue = program.command("queue").description("İşçi tarafı beyin-yazma kuyruğu");
-void agent; void queue;
+def(agent, "start", "Agent'ı başlatır (tek örnek; kimlik VLAD_MACHINE/vlad.local.json)", async (o: Opts) => {
+  await agentStart({ port: o.port === undefined ? undefined : Number(o.port), printPort: !!o.printPort });
+}).option("--port <n>", "config portunu geçersiz kıl (0 = rastgele)").option("--print-port", "ilk stdout satırı {\"listening\":{host,port}}");
+def(agent, "status", "Yerel Agent çalışıyor mu", async (o: Opts) => {
+  const s = await agentStatus();
+  out(o, s, s.running ? `çalışıyor: ${s.host}:${s.port}${s.pid ? ` (pid ${s.pid})` : ""}` : `çalışmıyor (${s.host}:${s.port})`);
+  process.exitCode = s.running ? 0 : 1;
+});
+def(agent, "keygen <kimlik>", "Kimlik için yeni anahtar üretir, vlad.local.json'a yazar (varsa değiştirir)", (identity: string, o: Opts) => {
+  const r = agentKeygen(identity);
+  out(o, r, `${r.identity}: ${r.key}\n(${r.file}'a yazıldı; anahtarı diğer uca güvenli kanaldan elle kopyala, Agent'ı yeniden başlat)`);
+});
+
+def(agent, "install", "Agent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows: görev zamanlayıcı); --apply ile kurar", (o: Opts) => {
+  const cfg = loadConfig();
+  const self = selfName();
+  const m = cfg.machines?.find((x) => x.name === self);
+  if (!m) throw new Error(`agent install: ${self} config machines içinde değil`);
+  const plan = installPlan(m.os, { node: process.execPath, cli: process.argv[1]!, home: getVladHome(), path: process.env.PATH ?? "" });
+  if (o.apply) plan.apply?.();
+  const text = [plan.description, ...(plan.file ? [`dosya: ${plan.file}`] : []), ...(plan.content ? ["", plan.content] : []), `komut: ${plan.command}`, ...(o.apply ? ["uygulandı"] : ["(uygulamak için --apply)"])].join("\n");
+  out(o, { description: plan.description, file: plan.file, content: plan.content, command: plan.command, applied: !!o.apply }, text);
+}).option("--apply", "kaydı gerçekten kur (yoksa yalnız basar)");
+
+const queue = program.command("queue").description("İşçi tarafı beyin-yazma kuyruğu (yerel Agent'a sorar)");
+const queueCall = async <T>(op: "queue-list" | "queue-flush" | "queue-drop", args: unknown): Promise<T> => {
+  const w = workerContext();
+  if (!w) throw new Error("queue: yalnız beyin olmayan işçi makinede kullanılır");
+  return callLocal<T>(w.cfg, w.self, op, args);
+};
+def(queue, "list", "Bekleyen ve başarısız yazmalar", async (o: Opts) => {
+  const r = await queueCall<{ entries: { seq: number; opId: string; cmd: string; id: string; state: string }[] }>("queue-list", {});
+  out(o, r, r.entries.length ? r.entries.map((e) => `${e.seq}  ${e.state.padEnd(8)} ${e.cmd} ${e.id}  ${e.opId}`).join("\n") : "kuyruk boş");
+});
+def(queue, "flush", "Kuyruğu şimdi boşaltmayı dener", async (o: Opts) => {
+  const r = await queueCall<{ sent: number; failed: number; remaining: number }>("queue-flush", {});
+  out(o, r, `gönderilen ${r.sent}, başarısız ${r.failed}, kalan ${r.remaining}`);
+});
+def(queue, "drop <seq>", "Kuyruktaki (ya da başarısız) girdiyi siler", async (seq: string, o: Opts) => {
+  const n = Number(seq);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`seq geçersiz: ${seq}`);
+  const r = await queueCall<{ dropped: true }>("queue-drop", { seq: n });
+  out(o, r, `silindi: ${n}`);
+});
+
+program.command("remote").description("Konsol istemcisi: komutu beyin Agent'ında çalıştırır (vlad remote [--op-id id] [--stdin] -- <vlad argv…>)")
+  .option("--op-id <uuid>", "yazma tekrarında ilk sonucu döndürmek için sabit opId").option("--stdin", "stdin'i komuta ilet (--file - için)")
+  .argument("[argv...]").action(async (argv: string[], o: Opts) => {
+    try { await runRemote(argv, { opId: o.opId as string | undefined, stdin: !!o.stdin }); } catch (e) { fail(e); }
+  });
 // --- /machines:B ---
 // --- machines:C2 --- machine
 const machine = program.command("machine").description("Makine kaydı ve uzak denetim");
 void machine;
 // --- /machines:C2 ---
-// remote: B bölgesinde `program.command("remote")` olarak kaydedilir; S yalnız grubu açar
-program.command("remote").description("Konsol istemcisi: komutu beyin Agent'ında çalıştırır");
 
 def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", (o: Opts) => {
   const claudeDir = process.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");
