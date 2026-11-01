@@ -30,5 +30,6 @@ export function readStdinSync(
 
 /** Reads a file; "-" means stdin. */
 export function readInput(p: string): string {
+  if (p !== "-" && (process.env.VLAD_FORWARDED ?? "").startsWith("console:")) throw new Error("konsoldan dosya yolu okunamaz; içerik stdin (-) ile verilmeli");
   return p === "-" ? readStdinSync() : readFileSync(p, "utf8");
 }
