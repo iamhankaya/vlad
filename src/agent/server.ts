@@ -24,7 +24,7 @@ export interface ServerOpts {
   readTimeoutMs?: number;
   maxConnections?: number;
   /** Yan etkili (günlüğe girer) işlem mi? Varsayılan: salt okunurlar hariç hepsi. */
-  journaled?: (op: AgentOp, args: unknown) => boolean;
+  journaled?: (op: AgentOp, args: unknown) => boolean | undefined;
   /** Yalnız VLAD_AGENT_TEST=1: after-started | after-apply | before-done → process.exit(137). */
   crashAt?: string;
 }
@@ -32,6 +32,8 @@ export interface ServerOpts {
 const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "probe-window", "merge-preview", "gate-run", "forward-write", "queue-drop"]);
 const defaultJournaled = (op: AgentOp): boolean => !READ_ONLY.has(op);
 
+/** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
+const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -69,7 +71,7 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
     const handler = o.ops[req.op];
     if (!handler) throw new Fail("bad_request", `bad_request: bilinmeyen işlem: ${req.op}`);
     const ctx = { from: req.from, opId: req.opId };
-    if (!(o.journaled ?? defaultJournaled)(req.op, req.args)) return sign("ok", { result: await handler(req.args, ctx) });
+    if (!(o.journaled?.(req.op, req.args) ?? defaultJournaled(req.op))) return sign("ok", { result: await handler(req.args, ctx) });
     return await runJournaled(o, req, handler, sign);
   } catch (e) {
     const f = toFail(e);
@@ -101,7 +103,7 @@ async function runJournaled(o: ServerOpts, req: AgentRequest, handler: OpHandler
     if (done.state === "done") return sign("ok", { ...(done.result !== undefined ? { result: done.result } : {}), meta: { ...done.meta, replayed: true } });
     // bekleyen işlem hata ile bitti (aborted): yeniden denenebilir
   }
-  j.start(req.opId, req.from, req.op, hash);
+  j.start(req.opId, req.from, req.op, hash, KEEP_ARGS.has(req.op) ? req.args : undefined);
   running.add(req.opId);
   crash("after-started");
   try {

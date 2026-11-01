@@ -1,6 +1,11 @@
 import type { AgentOp } from "../../machines/types.js";
+import { applyWrite } from "./apply-write.js";
+import { exec } from "./exec.js";
+import { forwardWrite } from "./forward-write.js";
+import { kbHead } from "./kb-head.js";
 import { opStatus } from "./op-status.js";
 import { ping } from "./ping.js";
+import { queueDrop, queueFlush, queueList } from "./queue.js";
 
 // Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
 // `notImplemented` yerine kendi modülüne bağlar (B: ping, op-status, apply-write, exec, kb-head, forward-write, queue-*;
@@ -40,4 +45,11 @@ export const OP_TABLE = Object.fromEntries(OPS.map((op) => [op, notImplemented(o
 // --- machines:B --- B'nin op satırları
 OP_TABLE.ping = () => ping();
 OP_TABLE["op-status"] = (a, c) => opStatus(a, c);
+OP_TABLE["apply-write"] = (a, c) => applyWrite(a, c);
+OP_TABLE.exec = (a, c) => exec(a, c);
+OP_TABLE["kb-head"] = () => kbHead();
+OP_TABLE["forward-write"] = (a) => forwardWrite(a);
+OP_TABLE["queue-list"] = () => queueList();
+OP_TABLE["queue-flush"] = () => queueFlush();
+OP_TABLE["queue-drop"] = (a) => queueDrop(a);
 // --- /machines:B ---

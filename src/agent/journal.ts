@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { JOURNAL_RETENTION_DAYS, type AgentOp, type OpMeta, type OpRecord } from "../machines/types.js";
 
 /** Günlük kaydı; `meta` yalnız uzlaştırmanın bıraktığı notlar (recovered/uncertain). */
-export interface JournalRecord extends OpRecord { meta?: OpMeta }
+export interface JournalRecord extends OpRecord { meta?: OpMeta; /** yalnız uzlaştırması argüman isteyen işlemlerde, `started` süresince */ args?: unknown }
 
 /** opId günlüğü: tek satır JSON ekleme + fsync; bellekte opId → son durum. Tek süreç (Agent) sahibidir. */
 export class Journal {
@@ -27,13 +27,14 @@ export class Journal {
   get(opId: string): JournalRecord | undefined { return this.recs.get(opId); }
   startedList(): JournalRecord[] { return [...this.recs.values()].filter((r) => r.state === "started"); }
 
-  start(opId: string, from: string, op: AgentOp, argsHash: string): void {
-    this.put({ opId, from, op, state: "started", ts: this.now(), argsHash });
+  start(opId: string, from: string, op: AgentOp, argsHash: string, args?: unknown): void {
+    this.put({ opId, from, op, state: "started", ts: this.now(), argsHash, ...(args !== undefined ? { args } : {}) });
   }
   finish(opId: string, state: "done" | "aborted", result?: unknown, meta?: OpMeta): void {
     const prev = this.recs.get(opId);
     if (!prev) throw new Error(`günlükte yok: ${opId}`);
-    const rec: JournalRecord = { ...prev, state, ts: this.now(), ...(result !== undefined ? { result } : {}), ...(meta ? { meta } : {}) };
+    const { args: _args, ...rest } = prev; // sonuçlanınca argüman günlükte tutulmaz
+    const rec: JournalRecord = { ...rest, state, ts: this.now(), ...(result !== undefined ? { result } : {}), ...(meta ? { meta } : {}) };
     this.put(rec);
     for (const w of this.waiters.get(opId)?.splice(0) ?? []) w(rec);
   }
