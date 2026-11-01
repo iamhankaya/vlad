@@ -214,14 +214,14 @@ async function placeTask(task: Task, o: LaunchOpts): Promise<string> {
 }
 
 /** Records the error and, when the reservation is still ours (`launch_op`), releases it. */
-const failReservation = (id: string, opId: string, msg: string): Promise<void> => withKbLock(() => {
+const failReservation = (id: string, opId: string, msg: string, releaseMachinePin = false): Promise<void> => withKbLock(() => {
   const t = getTask(id);
   if (t.data.state === "running" || t.data.launch_op !== opId) return; // a newer attempt owns the task: a late reply writes nothing
   t.data.error = msg;
   const was = t.data.machine;
   Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
   saveTask(t);
-  if (was) releasePin(t.data.parent, was, id);
+  if (was && releaseMachinePin) releasePin(t.data.parent, was, id); // yalnız bu deneme koyduysa: önceki fazların pin'i kalır
 });
 
 /**
@@ -331,6 +331,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const busy = (op: string) => new Error(`önceki launch sürüyor (${machine}, op ${op}); sonra tekrar dene`);
 
   /** Reserves capacity on `machine` under a fresh `launch_op`, replacing `old` (kb lock, no network). */
+  let claimedPin = false;
   const reserve = (old: string | null): Promise<string> => withKbLock(() => {
     const t = getTask(id);
     if (t.data.state !== "queued" || (t.data.launch_op ?? null) !== old) {
@@ -344,7 +345,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     const opId = randomUUID();
     Object.assign(t.data, { machine, machine_reserved: new Date(nowMs()).toISOString(), launch_op: opId });
     saveTask(t);
-    claimPin(parent, machine); // aynı kilit bölgesinde: eşzamanlı kardeş faz pin'i görür
+    claimedPin = claimPin(parent, machine); // aynı kilit bölgesinde: eşzamanlı kardeş faz pin'i görür
     return opId;
   });
 
@@ -394,7 +395,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   } catch (e) {
     // no answer: the worker may have launched anyway -> keep the reservation, the next `task launch` asks op-status
     if (e instanceof RemoteError && UNCERTAIN.has(e.code)) throw e;
-    await failReservation(id, op, (e as Error).message);
+    await failReservation(id, op, (e as Error).message, claimedPin);
     throw e;
   }
   // the worker did launch: a failure while recording it keeps the reservation (the next launch adopts via op-status)
