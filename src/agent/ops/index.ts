@@ -5,6 +5,7 @@ import { forwardWrite } from "./forward-write.js";
 import { kbHead } from "./kb-head.js";
 import { opStatus } from "./op-status.js";
 import { ping } from "./ping.js";
+import { liveness } from "./liveness.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
 
 // Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
@@ -53,3 +54,6 @@ OP_TABLE["queue-list"] = () => queueList();
 OP_TABLE["queue-flush"] = () => queueFlush();
 OP_TABLE["queue-drop"] = (a) => queueDrop(a);
 // --- /machines:B ---
+// --- machines:C3 ---
+OP_TABLE.liveness = (a) => liveness(a);
+// --- /machines:C3 ---
