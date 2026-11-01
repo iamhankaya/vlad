@@ -40,6 +40,7 @@ const projectDefaultBranch = (slug: string): string | undefined => projectCard(s
 /** Persists the last error on a task without touching its state. */
 const recordError = (id: string, msg: string): Promise<void> => withKbLock(() => {
   const t = getTask(id);
+  if (t.data.state === "running") return; // started elsewhere while the launcher ran: the error field is not ours to set (F-vlad-102)
   t.data.error = msg;
   saveTask(t);
 });
