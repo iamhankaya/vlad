@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { currentBranch } from "../../git/git.js";
 import { getVladHome } from "../../kb/home.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
-import { closeWorkerWindow } from "../../launcher/index.js";
+import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
 import { RemoteError } from "../../machines/types.js";
 import { ensureIntegrationGit, launchCore } from "../../tasks/launch-core.js";
@@ -25,6 +25,9 @@ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 const COMPACT = /^\d+(\.\d+)?[kKmM]?$/;
 const failed = (m: string) => new RemoteError("failed", `failed: ${m}`);
 const forbidden = (m: string) => new RemoteError("forbidden", `forbidden: ${m}`);
+
+/** İşçinin pencere kapatıcısı: noop korumasında hiç pencere açılmadığından kapatılacak da yoktur (gerçek süreç öldürülmez). */
+const defaultClose: CloseFn = (id) => (resolveLaunchMode(workerCtx().cfg.launcher) === "noop" ? [] : closeWorkerWindow(id));
 
 const launchesDir = () => join(agentDir(), "launches");
 const recordFile = (id: string) => join(launchesDir(), `${id}.json`);
@@ -115,7 +118,7 @@ export const reconcileLaunch: Reconciler = (rec) => {
 
 export async function closeOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ killed: number[] }> {
   const id = taskIdArg(argObject(args, ["taskId"]));
-  try { return { killed: (o.close ?? closeWorkerWindow)(id) ?? [] }; } catch (e) { throw failed((e as Error).message); }
+  try { return { killed: (o.close ?? defaultClose)(id) ?? [] }; } catch (e) { throw failed((e as Error).message); }
 }
 
 export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ removed: boolean }> {
@@ -128,7 +131,7 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) { rmSync(recordFile(id), { force: true }); return { removed: false }; }
   if (!isInside(dirname(wt), wt) || dirname(wt) !== dirname(workerWorktree(ctx, repo, "T00000000-00"))) throw forbidden(`worktree kök dışında: ${wt}`);
-  try { (o.close ?? closeWorkerWindow)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
+  try { (o.close ?? defaultClose)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
   let warn: string | null = null;
   try { warn = untrustWorktree(wt); } catch (e) { warn = (e as Error).message; }
   if (warn) throw failed(`güven kaydı kaldırılamadı, worktree silinmedi: ${warn}`); // fail-closed

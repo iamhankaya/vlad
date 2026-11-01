@@ -53,7 +53,7 @@ export const taskFileOf = (def: MachineDef, id: string): string => join(workerKb
 
 /** `<root>/<repoName>` ve `.git` taşıyan tek dizin; 0 → not_found "repo yok", >1 → conflict "belirsiz repo adı". */
 export function resolveRepo(def: MachineDef, repoName: string): string {
-  const found = (def.roots ?? []).map((r) => join(r, repoName)).filter((d) => existsSync(join(d, ".git"))).map((d) => realpathSync(d));
+  const found = (def.roots ?? []).map((r) => join(r, repoName)).filter((d) => existsSync(join(d, ".git"))).map((d) => realpathSync.native(d));
   const pick = pickRepoDir(found);
   if (pick.ok) return pick.dir;
   if (pick.code === "not_found") throw new RemoteError("not_found", `not_found: repo yok: ${repoName}`);

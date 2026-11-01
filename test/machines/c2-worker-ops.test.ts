@@ -20,7 +20,7 @@ const ctx = (opId = "op-1") => ({ from: "mac", opId });
 
 beforeEach(() => {
   saved = Object.fromEntries(["VLAD_HOME", "VLAD_KB_DIR", "VLAD_MACHINE", "VLAD_CLAUDE_JSON"].map((k) => [k, process.env[k]]));
-  base = realpathSync(mkdtempSync(join(tmpdir(), "vlad-c2w-")));
+  base = realpathSync.native(mkdtempSync(join(tmpdir(), "vlad-c2w-")));
   roots = join(base, "roots"); repo = join(roots, "alpha");
   mkdirSync(repo, { recursive: true });
   git(repo, "init", "-q", "-b", "main"); writeFileSync(join(repo, "f.txt"), "1"); git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "i");
@@ -105,6 +105,7 @@ describe("machines:C2 close op", () => {
     const asked: string[] = [];
     expect(await closeOp({ taskId: ID }, { close: (id) => { asked.push(id); return [11, 12]; } })).toEqual({ killed: [11, 12] });
     expect(asked).toEqual([ID]);
+    expect(await closeOp({ taskId: ID })).toEqual({ killed: [] }); // noop koruması: gerçek süreç öldürülmez
     await expect(closeOp({ taskId: "../x" }, { close: () => [] })).rejects.toMatchObject({ code: "bad_request" });
     await expect(closeOp({ taskId: ID, extra: 1 }, { close: () => [] })).rejects.toMatchObject({ code: "bad_request" });
   });
