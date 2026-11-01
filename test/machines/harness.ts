@@ -135,3 +135,19 @@ export async function startProxy(target: { host?: string; port: number }): Promi
   p.port = (server.address() as net.AddressInfo).port;
   return p;
 }
+
+// ---- FakeTransport: RemoteTransport'un bellek-içi test gerçeklemesi (C1/C2/C3 ve kabul testleri kullanır) ----
+import { randomUUID } from "node:crypto";
+import type { AgentOp, OpMeta, RemoteTransport } from "../../src/machines/types.js";
+
+export interface FakeCall { to: string; op: AgentOp; args: unknown; opId: string; as?: string }
+/** `handler` sonucu döner ya da RemoteError fırlatır; her çağrı `calls`'a yazılır. */
+export class FakeTransport implements RemoteTransport {
+  calls: FakeCall[] = [];
+  constructor(private handler: (c: FakeCall) => unknown | Promise<unknown> = () => ({})) {}
+  async call<T = unknown>(to: string, op: AgentOp, args: unknown, o: { opId?: string; timeoutMs?: number; as?: string } = {}): Promise<{ opId: string; result: T; meta?: OpMeta }> {
+    const c: FakeCall = { to, op, args, opId: o.opId ?? randomUUID(), as: o.as };
+    this.calls.push(c);
+    return { opId: c.opId, result: (await this.handler(c)) as T };
+  }
+}
