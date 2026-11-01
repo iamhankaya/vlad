@@ -40,6 +40,9 @@ export const CONSOLE_CATALOG: readonly CatalogEntry[] = [
   { path: ["task", "list"], kind: "read" },
   { path: ["task", "idle"], kind: "read" },
   { path: ["task", "ready"], kind: "read" },
+  { path: ["task", "gate"], kind: "write" },
+  { path: ["task", "merge-preview"], kind: "read" },
+  { path: ["task", "merge"], kind: "write" },
   { path: ["status"], kind: "read" },
   { path: ["mode", "night"], kind: "write" },
   { path: ["mode", "watch"], kind: "write" },
@@ -100,4 +103,11 @@ export function validateConsoleArgv(argv: string[], stdin?: string): { entry: Ca
     } else if (/^--[a-z-]*file$/.test(name)) throw new RemoteError("forbidden", `forbidden: ${name} bu komutta kullanılamaz`);
   }
   return { entry };
+}
+
+/** Konsol exec alt süreç sınırı: kapı komutları uzak çağrılarını (gate 30 dk, merge 330 sn) kapsar; diğerleri 110 sn. */
+export function consoleExecTimeoutMs(argv: string[]): number {
+  if (argv[0] === "task" && argv[1] === "gate") return 31 * 60_000;
+  if (argv[0] === "task" && argv[1] === "merge") return 6 * 60_000;
+  return 110_000;
 }
