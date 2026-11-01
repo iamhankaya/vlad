@@ -17,7 +17,7 @@ describe("machines:S exit codes", () => {
   it.each([...TRANSIENT_CODES])("transient RemoteError %s -> 75", (code) => {
     expect(exitCodeFor(new RemoteError(code, "x", "windows"))).toBe(75);
   });
-  it.each(["forbidden", "failed", "bad_request", "not_found", "conflict", "uncertain", "too_large"] as AgentCode[])("permanent RemoteError %s -> 1", (code) => {
+  it.each(["auth", "proto_mismatch", "forbidden", "failed", "bad_request", "not_found", "conflict", "uncertain", "too_large"] as AgentCode[])("permanent RemoteError %s -> 1", (code) => {
     expect(exitCodeFor(new RemoteError(code, "x"))).toBe(1);
   });
   it("other errors stay 1 (kb lock timeout stays 1: existing tests assert it)", () => {

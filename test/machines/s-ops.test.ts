@@ -9,7 +9,7 @@ import type { AgentOp } from "../../src/machines/index.js";
 describe("machines:S ops table (role -> allowed ops)", () => {
   const WORKER_ON_BRAIN: AgentOp[] = ["ping", "apply-write"];
   it("brain may call these on a worker agent", () => {
-    expect([...allowedOps("worker-agent", "brain")].sort()).toEqual(["cleanup", "close", "kb-sync", "launch", "liveness", "op-status", "ping", "probe-window", "resume"]);
+    expect([...allowedOps("worker-agent", "brain")].sort()).toEqual(["cleanup", "close", "gate-run", "kb-sync", "launch", "liveness", "merge", "merge-preview", "op-status", "ping", "probe-window", "resume"]);
   });
   it("worker may call only ping/apply-write on the brain agent", () => {
     expect([...allowedOps("brain-agent", "worker")].sort()).toEqual(WORKER_ON_BRAIN.slice().sort());
@@ -20,6 +20,11 @@ describe("machines:S ops table (role -> allowed ops)", () => {
   it("worker cannot launch/cleanup; console cannot apply-write; brain cannot exec", () => {
     expect(isAllowed("worker-agent", "worker", "launch")).toBe(false);
     expect(isAllowed("worker-agent", "worker", "cleanup")).toBe(false);
+    for (const op of ["gate-run", "merge-preview", "merge"] as AgentOp[]) {
+      expect(isAllowed("worker-agent", "brain", op), op).toBe(true);
+      for (const c of ["worker", "console", "self"] as const) expect(isAllowed("worker-agent", c, op), `${c} ${op}`).toBe(false);
+      expect(isAllowed("brain-agent", "worker", op), op).toBe(false);
+    }
     expect(isAllowed("brain-agent", "console", "apply-write")).toBe(false);
     expect(isAllowed("brain-agent", "brain", "exec")).toBe(false);
     expect(isAllowed("worker-agent", "console", "ping")).toBe(false);
@@ -33,7 +38,7 @@ describe("machines:S ops table (role -> allowed ops)", () => {
   });
   it("every op has a body and each is notImplemented in the contract phase", async () => {
     const all = new Set(Object.keys(OP_TABLE));
-    for (const op of ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop"]) {
+    for (const op of ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop"]) {
       expect(all.has(op), op).toBe(true);
       await expect(OP_TABLE[op as AgentOp]({}, { from: "x", opId: "o" })).rejects.toThrow(NotImplementedOp);
     }

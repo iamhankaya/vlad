@@ -18,7 +18,7 @@ const notImplemented = (op: AgentOp): OpHandler => async () => { throw new NotIm
 
 const ALLOWED: Record<AgentKind, Partial<Record<CallerRole, readonly AgentOp[]>>> = {
   "worker-agent": {
-    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window"],
+    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge"],
     self: ["forward-write", "queue-list", "queue-flush", "queue-drop"],
   },
   "brain-agent": {
@@ -31,7 +31,7 @@ export const allowedOps = (agent: AgentKind, caller: CallerRole): readonly Agent
 export const isAllowed = (agent: AgentKind, caller: CallerRole, op: AgentOp): boolean => allowedOps(agent, caller).includes(op);
 
 const OPS: AgentOp[] = [
-  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window",
+  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge",
   "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop",
 ];
 export const OP_TABLE = Object.fromEntries(OPS.map((op) => [op, notImplemented(op)])) as Record<AgentOp, OpHandler>;

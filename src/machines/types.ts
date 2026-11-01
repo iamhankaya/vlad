@@ -41,6 +41,7 @@ export type IdentityRole = "brain" | "worker" | "console";
 
 export type AgentOp =
   | "ping" | "op-status" | "kb-sync" | "launch" | "resume" | "close" | "cleanup" | "liveness" | "probe-window"
+  | "gate-run" | "merge-preview" | "merge"
   | "apply-write" | "exec" | "kb-head"
   | "forward-write" | "queue-list" | "queue-flush" | "queue-drop";
 
@@ -117,8 +118,19 @@ export class RemoteError extends Error {
     return TRANSIENT_CODES.has(this.code);
   }
 }
-export const TRANSIENT_CODES: ReadonlySet<AgentCode> = new Set<AgentCode>(["unreachable", "timeout", "busy", "clock_skew", "proto_mismatch", "auth"]);
+export const TRANSIENT_CODES: ReadonlySet<AgentCode> = new Set<AgentCode>(["unreachable", "timeout", "busy", "clock_skew"]);
 
 export interface Placement { id: string; machine: string }
 export type HoldReason = "dolu" | "erişilemez" | "tanımsız";
 export interface HeldByLimit { id: string; reasons: { machine: string; reason: HoldReason }[] }
+
+// Kapı işlemleri (brain → worker Agent; push YOK). Gövdeleri sonraki fazlar bağlar; şekil sözleşmedir.
+/** `gate-run`: kartın gate komutunu entegrasyon worktree'sinde koşar (yolu işçi kendi hesaplar). */
+export interface GateRunArgs { taskId: string; project: string; repoName: string; target: "integration" | "task" }
+export interface GateRunResult { exit: number; stdout: string; stderr: string }
+/** `merge-preview`: log + diff --stat + merge-tree; yazmaz. */
+export interface MergePreviewArgs { taskId: string; project: string; repoName: string; from: string; into: string }
+export interface MergePreviewResult { log: string; diffStat: string; conflicts: string[] }
+/** `merge`: faz → vlad/<çatı> ya da son kapıda ana dal; yalnız brain'den, görev/makine eşleşmeli. */
+export interface MergeArgs { taskId: string; project: string; repoName: string; from: string; into: string; message?: string }
+export interface MergeResult { head: string; merged: boolean }

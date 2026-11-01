@@ -14,7 +14,7 @@ describe("machines:S contract constants", () => {
       .toEqual({ PROTO_VERSION: 1, DEFAULT_AGENT_PORT: 7437, CLOCK_SKEW_MS: 120_000, JOURNAL_RETENTION_DAYS: 14, MAX_CONNECTIONS: 16, MAX_FRAME_BYTES: 8 * 1024 * 1024 });
   });
   it("transient codes are exactly the retryable ones", () => {
-    expect([...TRANSIENT_CODES].sort()).toEqual(["auth", "busy", "clock_skew", "proto_mismatch", "timeout", "unreachable"]);
+    expect([...TRANSIENT_CODES].sort()).toEqual(["busy", "clock_skew", "timeout", "unreachable"]);
   });
 });
 
