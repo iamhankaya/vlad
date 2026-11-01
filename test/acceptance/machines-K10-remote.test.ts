@@ -278,6 +278,10 @@ describe("machines:K — K19 kapı işlemleri (uzak makinede gate-run / merge-pr
     const o1 = resp(await op(w, "gate-run", { ...base, taskId: "T20990101-77", target: "task" }));
     expect(["forbidden", "not_found"]).toContain(o1.code);
     w.setFront(phase, { machine: "mac" });
+    // işçi görev dosyasını kendi kb klonundan okur: değişiklik commit+push+kb-sync ile işçiye ulaşmalı
+    expect((await runVlad(w.brain, ["kb", "commit", "baska-makine", "--push"])).code).toBe(0);
+    const sync2 = resp(await op(w, "kb-sync", { expectSha: git(w.brain.kb, "rev-parse", "HEAD").trim() }));
+    expect(sync2.code, JSON.stringify(sync2)).toBe("ok");
     const o2 = resp(await op(w, "merge", { ...base, taskId: phase, from: `vlad/${phase}`, into: `vlad/${pid}` }));
     expect(["forbidden", "not_found"]).toContain(o2.code);
     for (const [k, name] of [["windows", "gate-run"], ["desktop", "merge"], ["desktop", "merge-preview"]] as const) {

@@ -32,7 +32,7 @@ const defaultClose: CloseFn = (id) => (resolveLaunchMode(workerCtx().cfg.launche
 
 const launchesDir = () => join(agentDir(), "launches");
 const recordFile = (id: string) => join(launchesDir(), `${id}.json`);
-function readRecord(id: string): LaunchRecord | null {
+export function readRecord(id: string): LaunchRecord | null {
   try { return JSON.parse(readFileSync(recordFile(id), "utf8")) as LaunchRecord; } catch { return null; }
 }
 function writeRecord(r: LaunchRecord): void {
@@ -52,7 +52,7 @@ function optStr(o: Record<string, unknown>, k: string, re: RegExp): string | und
 }
 
 /** Kayıt, işçinin kendi hesapladığı yolla birebir eşit olmalı; aksi forbidden (istekten yol alınmaz). */
-function verifiedRecord(ctx: WorkerCtx, id: string, repoName: string): { repo: string; wt: string } {
+export function verifiedRecord(ctx: WorkerCtx, id: string, repoName: string): { repo: string; wt: string } {
   const rec = readRecord(id);
   if (!rec) throw forbidden(`başlatma kaydı yok: ${id}`);
   const repo = resolveRepo(ctx.def, repoName);
@@ -60,7 +60,7 @@ function verifiedRecord(ctx: WorkerCtx, id: string, repoName: string): { repo: s
   if (rec.taskId !== id || !entriesOf(rec).some((e) => e.worktree === wt && e.repo === repo)) throw forbidden("başlatma kaydı hesaplanan yolla uyuşmuyor");
   return { repo, wt };
 }
-const entriesOf = (r: LaunchRecord): RecEntry[] => [{ repo: r.repo, worktree: r.worktree, branch: r.branch }, ...(r.extra ?? [])];
+export const entriesOf = (r: LaunchRecord): RecEntry[] => [{ repo: r.repo, worktree: r.worktree, branch: r.branch }, ...(r.extra ?? [])];
 /** Removes the entry of a cleaned worktree; the record file goes when nothing is left. */
 function dropEntry(id: string, repo: string, wt: string): void {
   const rec = readRecord(id);

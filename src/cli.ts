@@ -18,7 +18,7 @@ import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
-import { brainTransport, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, remoteResume } from "./machines/remote.js";
+import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
 import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
 import { agentKeygen, agentSetKey, agentStart, agentStatus } from "./agent/start.js";
@@ -426,6 +426,36 @@ def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapat�
   // --- /machines:C1 ---
   out(o, { id }, `${id} worktree kaldırıldı`);
 });
+// --- machines:C4 --- uzak makinedeki görev/çatı için kapı işlemleri (push yok); yerel görevde /integrate akışı geçerli
+async function gateRoute(id: string): Promise<{ machine: string; transport: ReturnType<typeof brainTransport> }> {
+  const cfg0 = loadConfig();
+  const machine = gateMachineOf(getTask(id), cfg0);
+  if (!machine) throw new Error(`${id} uzak makinede değil; kapı işlemleri yerelde /integrate akışıyla yapılır`);
+  const transport = brainTransport(cfg0, selfName());
+  await syncKb(transport, machine); // işçi kartın gate'ini ve görev dosyasını kendi kb klonundan okur
+  return { machine, transport };
+}
+def(task, "gate <id>", "Uzak makinede kartın gate komutunu koşar (--target integration: çatı worktree'si, task: görevin kendisi); gate kırmızıysa çıkış 1", async (id: string, o: Opts) => {
+  const target = (o.target ?? "integration") as string;
+  if (target !== "integration" && target !== "task") throw new Error("--target integration | task olmalı");
+  const { machine, transport } = await gateRoute(id);
+  const r = await remoteGateRun(transport, machine, getTask(id), target);
+  out(o, { id, machine, target, ...r }, `${r.stdout}${r.stderr ? `
+${r.stderr}` : ""}
+[gate çıkış kodu ${r.exit}]`);
+  if (r.exit !== 0) process.exitCode = 1;
+}).option("--target <hedef>", "integration (varsayılan) | task");
+def(task, "merge-preview <id>", "Uzak makinede merge önizlemesi: log, diff --stat, çakışmalar (yazmaz)", async (id: string, o: Opts) => {
+  const { machine, transport } = await gateRoute(id);
+  const r = await remoteMergePreview(transport, machine, getTask(id), { ...(o.into ? { into: o.into as string } : {}) });
+  out(o, { id, machine, ...r }, `${r.log}${r.diffStat}${r.conflicts.length ? `çakışma: ${r.conflicts.join(", ")}` : "çakışma yok"}`);
+}).option("--into <dal>", "hedef dal (varsayılan: vlad/<çatı> ya da kartın default_branch'i)");
+def(task, "merge <id>", "Uzak makinede görev dalını hedefe --no-ff merge eder (push yok; çakışmada geri alınır)", async (id: string, o: Opts) => {
+  const { machine, transport } = await gateRoute(id);
+  const r = await remoteMerge(transport, machine, getTask(id), { ...(o.into ? { into: o.into as string } : {}), ...(o.message ? { message: o.message as string } : {}) });
+  out(o, { id, machine, ...r }, r.merged ? `${id} merge edildi -> ${r.head}` : `${id} zaten içeride (${r.head})`);
+}).option("--into <dal>", "hedef dal (varsayılan: vlad/<çatı> ya da kartın default_branch'i)").option("--message <metin>", "merge commit mesajı");
+// --- /machines:C4 ---
 def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {
   markDigested(ids);
   out(o, { ids }, `${ids.length} görev işlendi olarak işaretlendi`);
