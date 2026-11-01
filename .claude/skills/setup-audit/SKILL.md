@@ -10,7 +10,7 @@ Kullanıcı `/setup-audit` dediğinde **onay sormadan** yürür (skill çağrıs
 ## 1. Aralık
 
 - `--since YYYY-MM-DD` verildiyse onu kullan.
-- Yoksa son denetimin tarihi: `vlad task list --json --fields id,title,created --limit 200` çıktısında başlığı `Kurulum denetimi` ile başlayan en yeni görevin `created` günü. Hiç yoksa bugünden 14 gün öncesi.
+- Yoksa son denetimin tarihi: `vlad task list --json --fields id,title,state,created --limit 200` çıktısında başlığı `Kurulum denetimi` ile başlayan ve `state` değeri `done` ya da `awaiting_approval` olan (iptal/yarım kalmış sayılmaz) en yeni görevin `created` günü. Hiç yoksa bugünden 14 gün öncesi. Aynı gün biten görevler iki denetimde de görünebilir; çift saydığın kanıtı öneride belirt.
 - Aralığı kullanıcıya tek satırda söyle.
 
 ## 2. Görev
@@ -33,6 +33,8 @@ Ana bağlamı şişirme; ham veriyi okuyup yorumlamayı arka plan agent'larına 
 - **sonnet:** sınıflandırma ve örüntü arama (aşağıdaki kategoriler). Örnek ID'lerin kapanış raporlarını `vlad kb get <id> --section "## Kapanış raporu" --json` ile okutur.
 
 Agent'lar kb'ye yazmaz; sonuç taslaktır, kanıt ID'lerini VLAD örnekleyerek doğrular.
+
+`skills.unused` yalnız oturum kaydı bulunan görevlerden (`skills.transcripts`) ve VLAD oturumundan çıkar; kayıt sayısı azsa ya da görevlerin çoğunda kayıt yoksa "Fazla" önerisi yazma, bunu `### Açık noktalar`a veri sınırı olarak yaz.
 
 Sinyal okuma: `ci_tur` ve `review_bulgusu` yüksekse tekrarlı bir kalıp var mı bak; `test_itirazi`/`degisiklik_istegi` yüksekse kabul/sözleşme fazı ya da rol talimatı zayıf olabilir; `izin_reddi` tekrarı izin kuralı ya da mod penceresi adayıdır.
 

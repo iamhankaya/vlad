@@ -499,7 +499,7 @@ def(audit, "setup", "Kurulum denetimi verisi (salt okuma): biten görevler, öl�
   const sev = Object.entries(r.open_points.by_severity).map(([k, v]) => `${k}:${v}`).join(" ") || "-";
   const sg = r.signals;
   out(o, r, [
-    `aralık: ${r.since} →  ${r.tasks.total} biten görev`,
+    `aralık: ${r.since} → ${r.tasks.total} biten görev`,
     `ölçüm: ${r.measures.tasks_with_measure} görevde; ${Object.entries(r.measures.sums).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
     `açık nokta: ${r.open_points.total} (${sev})`,
     `işaretler: test itirazı ${sg.test_itirazi.count}, değişiklik turu ${sg.degisiklik_istegi.count}, [KARAR] ${sg.karar.count}, izin reddi ${sg.izin_reddi.count}`,

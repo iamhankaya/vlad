@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { auditSetup } from "../../src/audit/setup.js";
 import { kbPaths, writeDoc } from "../../src/kb/index.js";
 import { addFinding } from "../../src/findings/store.js";
+import { defaultConfig } from "../../src/kb/index.js";
+import { worktreePath } from "../../src/git/git.js";
+import { claudeProjectDir } from "../../src/tasks/liveness.js";
 import { createTask } from "../../src/tasks/index.js";
 import { makeHome } from "../helpers.js";
 
@@ -20,11 +23,11 @@ const report = (measure: string, points: string[] = []) =>
   `### Yapılanlar\n- x\n${measure}\n\n### Test sonuçları\n- ok\n\n### Açık noktalar\n${points.join("\n")}\n`;
 
 /** Writes a finished task whose `updated` is `at` (ISO date); body gets the given sections. */
-function task(o: { at: string; role?: string; phase?: string; state?: string; progress?: string[]; questions?: string[]; closing?: string; prior?: boolean; model?: string }) {
+function task(o: { at: string; role?: string; phase?: string; state?: string; progress?: string[]; questions?: string[]; closing?: string; prior?: number; model?: string }) {
   const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "", role: o.role, phase: o.phase, model: o.model, modelReason: o.model === "opus" ? "r" : undefined }, new Date(`${o.at}T10:00:00+03:00`));
   t.data.state = (o.state ?? "done") as never;
   t.data.updated = `${o.at}T12:00:00+03:00`;
-  const body = `## Tanım\nd\n\n## Kabul kriterleri\n\n## Bağlam\n\n## İlerleme\n${(o.progress ?? []).join("\n")}\n\n## Sorular\n${(o.questions ?? []).join("\n")}\n\n## Kapanış raporu\n${o.closing ?? ""}\n${o.prior ? "\n## Önceki raporlar\n### eski\n" : ""}`;
+  const body = `## Tanım\nd\n\n## Kabul kriterleri\n\n## Bağlam\n\n## İlerleme\n${(o.progress ?? []).join("\n")}\n\n## Sorular\n${(o.questions ?? []).join("\n")}\n\n## Kapanış raporu\n${o.closing ?? ""}\n${o.prior ? `\n## Önceki raporlar\n${Array.from({ length: o.prior }, (_, i) => `### Önceki rapor #${i + 1}\nTest itirazı: eski metin\n`).join("")}` : ""}`;
   writeDoc(t.file, t.data, body);
   return t.data.id;
 }
@@ -67,17 +70,24 @@ describe("auditSetup", () => {
     task({ at: "2026-10-29", closing: report("(ölçüm yok)") });
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
     expect(r.measures.tasks_with_measure).toBe(2);
-    expect(r.measures.sums).toMatchObject({ yeni_test: 6, ci_tur: 1, review_bulgusu: 7 });
+    expect(r.measures.sums).toMatchObject({ yeni_test: 6, ci_tur: 1, review_bulgusu: 7, satir_eklenen: 11, satir_silinen: 2 });
     expect(r.open_points.total).toBe(4);
     expect(r.open_points.by_severity).toEqual({ yüksek: 1, düşük: 2, orta: 1 });
   });
 
   it("counts test objections, change rounds, [KARAR] and permission denials with example ids", () => {
-    const a = task({ at: "2026-10-28", questions: ["- 2026-10-28T10:00:00+03:00 **Soru:** Test itirazı: x.test.ts:3 — yanlış"], progress: ["- 2026-10-28T11:00:00+03:00 [KARAR] kabul", "- 2026-10-28T11:05:00+03:00 [KARAR] ikinci"], prior: true });
+    // only the **Soru:** line counts: the answer, the report text and earlier reports quote the phrase too
+    const a = task({
+      at: "2026-10-28",
+      questions: ["- 2026-10-28T10:00:00+03:00 **Soru:** Test itirazı: x.test.ts:3 — yanlış", "- 2026-10-28T10:30:00+03:00 **Cevap:** Test itirazı kabul"],
+      closing: "### Yapılanlar\nTest itirazı: anlatım\n",
+      progress: ["- 2026-10-28T11:00:00+03:00 [KARAR] kabul", "- 2026-10-28T11:05:00+03:00 [KARAR] ikinci"],
+      prior: 3,
+    });
     const b = task({ at: "2026-10-29", progress: ["- 2026-10-29T11:00:00+03:00 push izin reddi: gh pr create"] });
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
     expect(r.signals.test_itirazi).toEqual({ tasks: 1, count: 1, examples: [a] });
-    expect(r.signals.degisiklik_istegi).toEqual({ tasks: 1, count: 1, examples: [a] });
+    expect(r.signals.degisiklik_istegi).toEqual({ tasks: 1, count: 3, examples: [a] });
     expect(r.signals.karar).toEqual({ tasks: 1, count: 2, examples: [a] });
     expect(r.signals.izin_reddi).toEqual({ tasks: 1, count: 1, examples: [b] });
   });
@@ -95,6 +105,21 @@ describe("auditSetup", () => {
     expect(byName.ponytail.source).toBe("vendor");
     expect(byName["test-driven-development"].roles).toEqual(["developer"]);
     expect(r.skills.unused).toEqual(expect.arrayContaining(["digest", "ponytail"]));
+  });
+
+  it("counts a skill as loaded even when the worker was not expected to load it", () => {
+    const repo = join(tmpdir(), "vlad-setup-repo");
+    skillDir(".claude/skills", "digest");
+    role("developer");
+    const id = task({ at: "2026-10-28", role: "developer" });
+    const dir = join(cfgDir, "projects", claudeProjectDir(worktreePath(defaultConfig(), repo, id)));
+    mkdirSync(dir, { recursive: true });
+    const use = (skill: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] } });
+    writeFileSync(join(dir, "s.jsonl"), [use("vlad-worker"), use("digest")].join("\n") + "\n");
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.skills.transcripts).toBe(1);
+    expect(r.skills.inventory.find((s) => s.name === "digest")?.loaded).toBe(1);
+    expect(r.skills.unused).not.toContain("digest");
   });
 
   it("lists unresolved findings oldest first with age in days", () => {

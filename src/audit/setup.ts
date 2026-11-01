@@ -5,6 +5,7 @@ import { getSection } from "../kb/sections.js";
 import { listFindingsWithWarnings, UNRESOLVED } from "../findings/store.js";
 import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
+import { effectiveModel } from "../tasks/store.js";
 import { auditSkills } from "./skills.js";
 
 const DAY = 86_400_000;
@@ -70,13 +71,16 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     const { id } = t.data;
     bump(out.tasks.by_role, t.data.role);
     bump(out.tasks.by_phase, t.data.phase);
-    bump(out.tasks.by_model, t.data.model ?? roles.find((r) => r.slug === t.data.role)?.model);
+    bump(out.tasks.by_model, effectiveModel(t.data, roles.find((r) => r.slug === t.data.role)));
 
     const closing = getSection(t.body, "## Kapanış raporu") ?? "";
     const m = [...closing.matchAll(/Ölçüm:(.*)/g)].pop();
     if (m) {
       out.measures.tasks_with_measure++;
-      for (const [, k, v] of m[1].matchAll(/([a-zçğıöşü_]+)=(\d+)/gi)) out.measures.sums[k] = (out.measures.sums[k] ?? 0) + Number(v);
+      const add = (k: string, v: string) => { out.measures.sums[k] = (out.measures.sums[k] ?? 0) + Number(v); };
+      for (const [, k, v] of m[1].matchAll(/([a-zçğıöşü_]+)=(\d+)/gi)) add(k, v);
+      const lines = /satır=\+(\d+)\/-(\d+)/i.exec(m[1]); // worker format: satır=+<eklenen>/-<silinen>
+      if (lines) { add("satir_eklenen", lines[1]); add("satir_silinen", lines[2]); }
     }
     const points = /^### Açık noktalar\s*$([\s\S]*?)(?=^### |(?![\s\S]))/m.exec(closing)?.[1] ?? "";
     for (const [, sev] of points.matchAll(/^- \[(kritik|yüksek|orta|düşük|bilgi)\]/gim)) {
@@ -85,8 +89,9 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     }
 
     const progress = getSection(t.body, "## İlerleme") ?? "";
-    signal(out.signals.test_itirazi, id, matches(t.body, /Test itirazı:/g));
-    signal(out.signals.degisiklik_istegi, id, matches(t.body, /^## Önceki raporlar\s*$/gm));
+    signal(out.signals.test_itirazi, id, matches(getSection(t.body, "## Sorular") ?? "", /\*\*Soru:\*\*\s*Test itirazı:/g));
+    // one per change round: reportTask appends "### Önceki rapor #N" each time
+    signal(out.signals.degisiklik_istegi, id, matches(getSection(t.body, "## Önceki raporlar") ?? "", /^### Önceki rapor #\d+/gm));
     signal(out.signals.karar, id, matches(progress, /\[KARAR\]/g));
     signal(out.signals.izin_reddi, id, matches(progress, /izin reddi|permission denied/gi));
   }
@@ -106,7 +111,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   }
   const usage = auditSkills({ since, configDir: o.configDir });
   const loaded: Record<string, number> = { ...usage.vlad.loaded };
-  for (const t of usage.tasks) for (const s of t.loaded) loaded[s] = (loaded[s] ?? 0) + 1;
+  for (const t of usage.tasks) for (const s of t.scanned) loaded[s] = (loaded[s] ?? 0) + 1;
   out.skills.transcripts = usage.summary.audited;
   out.skills.inventory = [...found].map(([name, v]) => ({ name, source: v.source, roles: [...v.roles].sort(), loaded: loaded[name] ?? 0 })).sort((a, b) => (a.name < b.name ? -1 : 1));
   out.skills.unused = out.skills.inventory.filter((s) => !s.loaded).map((s) => s.name);

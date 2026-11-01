@@ -74,6 +74,8 @@ function derivedWorktree(project: string, id: string): string | null {
 export interface TaskAudit {
   id: string; project: string; role: string | null; transcript: boolean;
   expected: string[]; loaded: string[]; missing: string[];
+  /** every skill the transcripts show loaded, expected or not (usage statistics) */
+  scanned: string[];
 }
 export interface SkillAudit {
   tasks: TaskAudit[];
@@ -100,12 +102,12 @@ export function auditSkills(o: { configDir?: string; since?: string; project?: s
     if (t.data.kind === "pipeline" || !wt) continue;
     const scan = scanDir(dirOf(wt));
     const base = { id: t.data.id, project: t.data.project, role: t.data.role ?? null };
-    if (!scan) { tasks.push({ ...base, transcript: false, expected: [], loaded: [], missing: [] }); continue; }
+    if (!scan) { tasks.push({ ...base, transcript: false, expected: [], loaded: [], missing: [], scanned: [] }); continue; }
     let roleSkills: string[] = [];
     try { roleSkills = t.data.role ? getRole(t.data.role).skills : []; } catch { /* role file gone: only the base protocol is checked */ }
     const expected = [...new Set(["vlad-worker", ...roleSkills.map(bare), ...cardSkills(t.data.project), ...(t.data.autonomy === "pr" && scan.pushed ? ["ci-triage"] : [])])];
     const loaded = expected.filter((s) => scan.loaded[s]);
-    tasks.push({ ...base, transcript: true, expected, loaded, missing: expected.filter((s) => !scan.loaded[s]) });
+    tasks.push({ ...base, transcript: true, expected, loaded, missing: expected.filter((s) => !scan.loaded[s]), scanned: Object.keys(scan.loaded) });
   }
 
   const vladScan = scanDir(dirOf(getVladHome()), sinceMs);
