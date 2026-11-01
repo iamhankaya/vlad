@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -37,7 +38,7 @@ describe("buildPosixScript", () => {
     expect(s.startsWith("#!/usr/bin/env bash\n")).toBe(true);
     expect(s).toContain(String.raw`export K='it'\''s'`);
     expect(s).toContain("cd '/Users/me/vlad wt/T20261101-18'");
-    expect(s).toContain("<<'VLAD_PROMPT_EOF'\nmerhaba\nVLAD_PROMPT_EOF\n");
+    expect(s).toContain("read -r -d '' p <<'VLAD_PROMPT_EOF'\nmerhaba\nVLAD_PROMPT_EOF\n");
     expect(s).toMatch(/\nclaude "\$p"\n$/);
   });
   it("keeps model, autocompact and resume flags in the Windows order", () => {
@@ -52,7 +53,27 @@ describe("buildPosixScript", () => {
   });
   it("picks a heredoc delimiter the prompt does not contain", () => {
     const s = buildPosixScript(req({ prompt: "a\nVLAD_PROMPT_EOF\nb\n$(evil) `x`" }));
-    expect(s).toContain("<<'VLAD_PROMPT_EOF_'\na\nVLAD_PROMPT_EOF\nb\n$(evil) `x`\nVLAD_PROMPT_EOF_\n");
+    expect(s).toContain("read -r -d '' p <<'VLAD_PROMPT_EOF_'\na\nVLAD_PROMPT_EOF\nb\n$(evil) `x`\nVLAD_PROMPT_EOF_\n");
+  });
+});
+
+describe("buildPosixScript run by a real bash", () => {
+  // bash 3.2 (macOS) choked on quotes/parens in a heredoc inside $( ); the script must pass any prompt through intact
+  it.runIf(process.platform !== "win32")("hands a prompt with quotes, parens and $() to claude unchanged", () => {
+    const dir = sd();
+    const fake = join(dir, "claude");
+    writeFileSync(fake, '#!/bin/sh\nprintf "%s" "$1" > "$OUT"\n');
+    chmodSync(fake, 0o755);
+    const prompt = "Merhaba 'dünya' (kapanmayan\n- `x` $(evil) \"q\"\nson satır";
+    const script = join(dir, "w.sh");
+    writeFileSync(script, buildPosixScript(req({ cwd: dir, prompt })));
+    const out = join(dir, "out.txt");
+    const res = spawnSync("bash", [script], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
+    expect(res.status).toBe(0);
+    expect(readFileSync(out, "utf8")).toBe(prompt);
+  });
+  it("title control characters never reach the script", () => {
+    expect(buildPosixScript(req({ title: "a\u0007b\u001b[0m" }))).not.toMatch(/[\x07\x1b]/);
   });
 });
 
@@ -102,6 +123,7 @@ describe("PosixLauncher", () => {
     const r = await new PosixLauncher({ mode: "tmux", scriptDir: sd(), hasTmux: () => true, run: () => { throw new Error("duplicate session"); } }).launch(req());
     expect(r).toMatchObject({ ok: false });
     expect(r.detail).toContain("duplicate session");
+    expect(r.detail).toContain("close-window T20261101-18");
   });
 });
 
@@ -138,7 +160,7 @@ describe("closePosixWorker", () => {
       selfPid: 222,
     });
     expect(calls[0]).toBe("tmux kill-session -t vlad-T20261101-18");
-    expect(calls).toContain("pgrep -f -- /vlad/T20261101-18.sh");
+    expect(calls).toContain(String.raw`pgrep -f -- bash .*/vlad/T20261101-18\.sh$`);
     expect(calls).toContain("pkill -TERM -P 111");
     expect(killed).toEqual([111]);
     expect(out).toEqual([111]);

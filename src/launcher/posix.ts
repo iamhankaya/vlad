@@ -21,11 +21,12 @@ export function buildPosixScript(req: LaunchRequest): string {
     if (!ENV_NAME.test(k)) throw new Error(`geçersiz env adı: ${JSON.stringify(k)}`);
     lines.push(`export ${k}=${q(v)}`);
   }
-  lines.push(`cd ${q(req.cwd)} || exit 1`, `printf '\\033]0;%s\\007' ${q(req.title)}`);
+  lines.push(`cd ${q(req.cwd)} || exit 1`, `printf '\\033]0;%s\\007' ${q(req.title.replace(/[\x00-\x1f\x7f]/g, " "))}`);
   const prompt = req.prompt.replace(/\r\n?/g, "\n");
   let eof = "VLAD_PROMPT_EOF";
   while (prompt.split("\n").includes(eof)) eof += "_";
-  lines.push(`p=$(cat <<'${eof}'`, prompt, eof, ")");
+  // read, not $(cat <<EOF): bash 3.2 (macOS /bin/bash) parses a heredoc body inside $( ) and chokes on quotes/parens
+  lines.push(`IFS= read -r -d '' p <<'${eof}'`, prompt, eof, "p=${p%$'\\n'}");
   const flags = [
     ...(req.model === undefined ? [] : ["--model", q(req.model)]),
     ...(req.autoCompact === undefined ? [] : ["--autocompact", q(req.autoCompact)]),
@@ -99,7 +100,8 @@ export class PosixLauncher implements Launcher {
       await (this.o.run ?? defaultRun)(cmd.file, cmd.args);
       return { ok: true, method, detail: JSON.stringify(cmd) };
     } catch (e) {
-      return { ok: false, method, detail: (e as Error).message };
+      const m = (e as Error).message;
+      return { ok: false, method, detail: /duplicate session/.test(m) ? `${m} (önce: vlad task close-window ${req.taskId})` : m };
     }
   }
 }
@@ -124,9 +126,9 @@ export function closePosixWorker(
   const self = o.selfPid ?? process.pid;
   try { run("tmux", ["kill-session", "-t", tmuxSession(taskId)]); } catch { /* no session or no tmux */ }
   let found = "";
-  try { found = String(run("pgrep", ["-f", "--", `/vlad/${taskId}.sh`]) ?? ""); } catch { /* pgrep exits 1 on no match */ }
+  try { found = String(run("pgrep", ["-f", "--", `bash .*/vlad/${taskId.replace(/[^\w-]/g, "\\$&")}\\.sh$`]) ?? ""); } catch { /* pgrep exits 1 on no match */ }
   const killed: number[] = [];
-  for (const pid of found.split(/\r?\n/).map((l) => Number(l.trim())).filter((n) => n > 0 && n !== self)) {
+  for (const pid of found.split(/\r?\n/).map((l) => Number(l.trim())).filter((n) => n > 0 && n !== self && n !== process.ppid)) {
     try { run("pkill", ["-TERM", "-P", String(pid)]); } catch { /* no children */ }
     try { kill(pid); killed.push(pid); } catch { /* already gone */ }
   }
