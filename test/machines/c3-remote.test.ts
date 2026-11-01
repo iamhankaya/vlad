@@ -113,4 +113,14 @@ describe("machines:C3 uzak liveness (beyin)", () => {
     expect(statusSummary(cfg, NOW, undefined, "linux", { mark: true, remotePlans: plan }).newlyStalled).toContain(a);
     expect(getTask(a).data.state).toBe("stalled");
   });
+
+  it("bozuk bir proje kartı diğer görevlerin probunu kapatmaz", async () => {
+    const good = mkRunning("windows", 120);
+    const badId = createTask({ project: "bozuk", title: "t", kind: "dev", body: "## Tanım\nx\n" }).data.id;
+    setState(badId, "running", { machine: "windows", worktree: "W:/wt/x" });
+    writeFileSync(join(kbPaths().projects, "bozuk.md"), "---\n: : [bozuk\n---\n");
+    const tr = new FakeTransport(() => ({ results: { [good]: { ageMs: null, hasProcess: false } } }));
+    const plans = await probeRemoteWorkers(cfg, tr, NOW);
+    expect(plans.map((x) => x.id)).toEqual([good]);
+  });
 });

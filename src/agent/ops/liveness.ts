@@ -2,7 +2,7 @@ import { scanRoots } from "../../scan/scan.js";
 import { worktreePath } from "../../git/git.js";
 import { machineDef } from "../../machines/registry.js";
 import { pickRepoDir, repoNameOf } from "../../machines/paths.js";
-import { defaultProbe, type LivenessProbe } from "../../tasks/liveness.js";
+import { commandLinesAsync, transcriptMtime, type LivenessProbe } from "../../tasks/liveness.js";
 import { agentEnv } from "./env.js";
 
 export interface LivenessTask { id: string; project: string; repoName: string }
@@ -29,7 +29,7 @@ export function livenessResults(tasks: LivenessTask[], d: Deps): Record<string, 
   return out;
 }
 
-const ID = /^[A-Za-z0-9._-]{1,64}$/;
+const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 function parse(args: unknown): LivenessTask[] {
   const a = (args as { tasks?: unknown } | null)?.tasks;
   if (!Array.isArray(a) || a.length > 500) throw new Error("bad_request: tasks dizisi bekleniyor");
@@ -51,5 +51,8 @@ export async function liveness(args: unknown): Promise<{ results: Record<string,
     const pick = pickRepoDir(repos.map((r) => r.path).filter((p) => repoNameOf(p) === t.repoName));
     return pick.ok ? worktreePath(cfg, pick.dir, t.id, def?.os ?? "win32") : null;
   };
-  return { results: livenessResults(tasks, { now: e.now(), probe: defaultProbe(), worktreeOf }) };
+  // one async process listing, well inside the brain's 4 s budget: a slow listing fails the op (no verdict) instead of reading as "unreachable"
+  const lines = await commandLinesAsync(3000);
+  const probe: LivenessProbe = { alive: (id) => (lines ? lines.some((l) => l.includes(id.toLowerCase())) : null), transcriptMtime };
+  return { results: livenessResults(tasks, { now: e.now(), probe, worktreeOf }) };
 }

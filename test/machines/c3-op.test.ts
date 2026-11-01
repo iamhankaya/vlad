@@ -40,4 +40,10 @@ describe("machines:C3 liveness op (işçi)", () => {
   it("op tablosunda liveness artık notImplemented değil; bozuk argüman bad_request benzeri hata", async () => {
     await expect(OP_TABLE.liveness({ tasks: "bozuk" }, { from: "mac", opId: "x" })).rejects.not.toMatchObject({ name: "NotImplementedOp" });
   });
+
+  it("görev kimliği yol parçası olamaz (.. ve . reddedilir)", async () => {
+    for (const id of ["..", ".", "a/b"]) {
+      await expect(OP_TABLE.liveness({ tasks: [{ id, project: "p", repoName: "r" }] }, { from: "mac", opId: "x" })).rejects.toThrow(/bad_request/);
+    }
+  });
 });

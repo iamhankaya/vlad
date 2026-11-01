@@ -122,7 +122,7 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
     const cfg = loadConfig();
     if (!cfg.machines || !cfg.brain || selfName() !== cfg.brain) return [];
     return await probeRemoteWorkers(cfg, new AgentClient({ self: cfg.brain, keys: readLocal().keys, config: () => cfg }), new Date());
-  } catch { return []; } // a broken probe must never take status down
+  } catch (e) { process.stderr.write(`uyarı: uzak stalled denetimi atlandı: ${(e as Error).message}\n`); return []; } // a broken probe must never take status down
 }
 // --- /machines:C3 ---
 

@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -48,6 +48,16 @@ function commandLines(): string[] | null {
   } catch {
     return null;
   }
+}
+
+/** Async process listing for the Agent (never blocks its event loop); null on failure or timeout. */
+export function commandLinesAsync(timeoutMs: number): Promise<string[] | null> {
+  return new Promise((resolve) => {
+    execFile("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine } | Where-Object { $_ }",
+    ], { encoding: "utf8", windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (err, out) => resolve(err ? null : out.split(/\r?\n/).map((l) => l.toLowerCase())));
+  });
 }
 
 export function defaultProbe(): LivenessProbe {
@@ -141,7 +151,9 @@ export async function probeRemoteWorkers(
   }
   const deadline = Date.now() + budget;
   const one = async ([machine, tasks]: [string, Task[]]): Promise<RemoteStallPlan[]> => {
-    const asks = tasks.flatMap((t) => { const repoName = repoNameOfProject(t.data.project); return repoName ? [{ t, ask: { id: t.data.id, project: t.data.project, repoName } }] : []; });
+    const asks = tasks.flatMap((t) => {
+      try { const repoName = repoNameOfProject(t.data.project); return repoName ? [{ t, ask: { id: t.data.id, project: t.data.project, repoName } }] : []; } catch { return []; } // one broken card must not hide the others
+    });
     if (!asks.length) return [];
     const idleOf = (t: Task) => now.getTime() - Date.parse(t.data.updated);
     const plan = (t: Task, reason: RemoteStallPlan["reason"]): RemoteStallPlan => ({ id: t.data.id, updated: t.data.updated, machine, reason });
