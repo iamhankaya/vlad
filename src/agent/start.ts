@@ -40,7 +40,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   if (!keys[self]) throw new Error(`agent: ${self} için anahtar yok (vlad agent keygen ${self})`);
   const kind = self === cfg.brain ? "brain-agent" : "worker-agent";
   const bind = def.agent.bind ?? def.agent.host ?? "127.0.0.1";
-  await assertPrivateBind(bind);
+  const bindIp = await assertPrivateBind(bind); // doğrulanan IP ile dinle (yeniden çözümleme yok)
   const port = o.port ?? def.agent.port;
 
   const test = process.env.VLAD_AGENT_TEST === "1";
@@ -55,7 +55,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   let srv;
   try {
     srv = await startServer({
-      self, kind, cfg: () => loadConfig(), keys, ops: OP_TABLE, journal, build, bind, port,
+      self, kind, cfg: () => loadConfig(), keys, ops: OP_TABLE, journal, build, bind: bindIp, port,
       journaled: (op, args) => (op === "exec" ? execIsWrite(args) : undefined),
       ...(test ? { crashAt: process.env.VLAD_TEST_CRASH_AT, readTimeoutMs: Number(process.env.VLAD_AGENT_READ_TIMEOUT_MS) || undefined } : {}),
     });

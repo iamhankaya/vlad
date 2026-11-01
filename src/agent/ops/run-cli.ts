@@ -18,8 +18,8 @@ export function runCli(argv: string[], o: { stdin?: string; forwarded: string; o
     const out: Buffer[] = [], err: Buffer[] = [];
     child.stdout.on("data", (d: Buffer) => out.push(d));
     child.stderr.on("data", (d: Buffer) => err.push(d));
-    const timer = setTimeout(() => { child.kill(); reject(new RemoteError("failed", `failed: komut ${Math.round(o.timeoutMs / 1000)} sn içinde bitmedi`)); }, o.timeoutMs);
-    child.on("error", (e) => { clearTimeout(timer); reject(new RemoteError("failed", `failed: alt süreç başlamadı: ${e.message}`)); });
+    const timer = setTimeout(() => { child.kill(); reject(new RemoteError("busy", `busy: komut ${Math.round(o.timeoutMs / 1000)} sn içinde bitmedi`)); }, o.timeoutMs);
+    child.on("error", (e) => { clearTimeout(timer); reject(new RemoteError("busy", `busy: alt süreç başlamadı: ${e.message}`)); });
     child.on("close", (code) => {
       clearTimeout(timer);
       resolve({ stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8"), exit: code ?? 1 });

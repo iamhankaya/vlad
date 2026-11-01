@@ -18,7 +18,8 @@ export function workerContext(): { cfg: VladConfig; self: string } | null {
   let cfg: VladConfig;
   try { cfg = loadConfig(); } catch { return null; } // config hatasını komutun kendisi raporlar
   if (!cfg.machines) return null;
-  const self = selfName();
+  let self: string;
+  try { self = selfName(); } catch { return null; } // kimlik belirsiz: bugünkü (tek makine) davranış
   return self === cfg.brain ? null : { cfg, self };
 }
 

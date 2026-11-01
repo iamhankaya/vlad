@@ -60,7 +60,7 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
     return reply(typeof r?.opId === "string" ? r.opId : "", "bad_request", { error: "bad_request: istek biçimi geçersiz" });
   }
   const req = r as AgentRequest;
-  const key = o.keys[req.from];
+  const key = Object.hasOwn(o.keys, req.from) ? o.keys[req.from] : undefined;
   if (!key || req.to !== o.self || !verifyRequest(key, req)) return reply(req.opId, "auth", { error: "auth: imza geçersiz" });
   const sign = (code: WireCode, x: { result?: unknown; error?: string; meta?: OpMeta } = {}) => reply(req.opId, code, { ...x, key });
   try {
@@ -96,7 +96,7 @@ async function runJournaled(o: ServerOpts, req: AgentRequest, handler: OpHandler
   for (;;) {
     const rec = j.get(req.opId);
     if (!rec || rec.state === "aborted") break;
-    if (rec.from !== req.from || (rec.argsHash && rec.argsHash !== hash)) throw new Fail("conflict", "conflict: opId başka bir istekle kullanılmış");
+    if (rec.from !== req.from || rec.op !== req.op || (rec.argsHash && rec.argsHash !== hash)) throw new Fail("conflict", "conflict: opId başka bir istekle kullanılmış");
     if (rec.state === "aborted-cancelled") throw new Fail("conflict", "conflict: işlem iptal edilmiş");
     if (rec.state === "started" && !running.has(req.opId)) throw new Fail("conflict", "conflict: önceki deneme belirsiz kaldı; op-status ile sorgula");
     const done = rec.state === "started" ? await j.waitFor(req.opId) : rec;
@@ -143,6 +143,7 @@ export function startServer(o: ServerOpts): Promise<RunningServer> {
       }
       if (!frames.length) return;
       handled = true;
+      clearTimeout(timer); // okuma zaman aşımı yalnız çerçeve gelene kadar; uzun işlem soketi koparmaz
       handleRequest(o, frames[0]).then(respond, () => sock.destroy());
     });
   });

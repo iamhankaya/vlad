@@ -32,6 +32,7 @@ export class AgentQueue {
     mkdirSync(join(dir, "failed"), { recursive: true });
     for (const d of [dir, join(dir, "failed")]) for (const f of readdirSync(d)) if (f.endsWith(".tmp")) rmSync(join(d, f), { force: true });
     for (const f of readdirSync(dir)) if (f.endsWith(".json") && !this.read(join(dir, f))) renameSync(join(dir, f), join(dir, "failed", f)); // bozuk JSON → failed
+    for (const f of this.files()) { const p = this.read(join(dir, f)); if (p?.state === "inflight") this.write(join(dir, f), { ...p, state: "pending" }); } // çökme kalıntısı: aynı opId beyinde idempotent
     for (const f of this.files()) { this.count++; this.bytes += statSync(join(dir, f)).size; }
     const seqFile = join(dir, ".seq");
     const saved = existsSync(seqFile) ? parseInt(readFileSync(seqFile, "utf8"), 10) || 0 : 0;

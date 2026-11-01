@@ -40,5 +40,8 @@ export async function forwardWrite(args: unknown): Promise<ForwardResult> {
 /** Kuyruğu sırayla beyne boşaltır (aynı opId → beyin günlüğü tekrarı çiftlemez). */
 export function flushQueue(): Promise<{ sent: number; failed: number; remaining: number }> {
   const e = agentEnv();
-  return e.queue!.flush((it) => e.transport.call(brainOf(), "apply-write", wire(it), { opId: it.opId }));
+  return e.queue!.flush(async (it) => {
+    const r = await e.transport.call<ExecResult>(brainOf(), "apply-write", wire(it), { opId: it.opId });
+    if (r.result && r.result.exit !== 0) throw new RemoteError("failed", `failed: komut çıkış ${r.result.exit}: ${(r.result.stderr ?? "").trim()}`); // sessiz kayıp yok: failed/'a gider
+  });
 }

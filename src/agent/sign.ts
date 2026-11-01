@@ -11,7 +11,10 @@ export function canonicalJson(v: unknown): string {
   return JSON.stringify(v);
 }
 const sha = (s: string) => createHash("sha256").update(s, "utf8").digest("hex");
-const mac = (key: string, s: string) => createHmac("sha256", Buffer.from(key, "hex")).update(s, "utf8").digest("hex");
+const mac = (key: string, s: string) => {
+  if (!/^[0-9a-f]{64}$/i.test(key)) throw new Error("anahtar biçimi geçersiz (64 hex bekleniyor)");
+  return createHmac("sha256", Buffer.from(key, "hex")).update(s, "utf8").digest("hex");
+};
 const same = (a: unknown, b: string) => {
   if (typeof a !== "string") return false;
   const x = Buffer.from(a), y = Buffer.from(b);
@@ -20,8 +23,8 @@ const same = (a: unknown, b: string) => {
 
 const reqMsg = (r: Omit<AgentRequest, "sig">) => `VLAD1\n${r.from}\n${r.to}\n${r.opId}\n${r.ts}\n${r.op}\n${sha(canonicalJson(r.args))}`;
 export const signRequest = (key: string, r: Omit<AgentRequest, "sig">): AgentRequest => ({ ...r, sig: mac(key, reqMsg(r)) });
-export const verifyRequest = (key: string, r: AgentRequest): boolean => same(r.sig, mac(key, reqMsg(r)));
+export const verifyRequest = (key: string, r: AgentRequest): boolean => { try { return same(r.sig, mac(key, reqMsg(r))); } catch { return false; } };
 
 const resMsg = (r: Pick<AgentResponse, "opId" | "code" | "result">) => `VLAD1R\n${r.opId}\n${r.code}\n${sha(canonicalJson(r.result ?? null))}`;
 export const signResponse = (key: string, r: Omit<AgentResponse, "sig">): AgentResponse => ({ ...r, sig: mac(key, resMsg(r)) });
-export const verifyResponse = (key: string, r: AgentResponse): boolean => same(r.sig, mac(key, resMsg(r)));
+export const verifyResponse = (key: string, r: AgentResponse): boolean => { try { return same(r.sig, mac(key, resMsg(r))); } catch { return false; } };
