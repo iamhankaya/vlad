@@ -134,6 +134,7 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
   c.action(async (...args: any[]) => {
     try {
       const opts = args[args.length - 2] as Opts;
+      if (key === "vlad status" && workerContext()) opts.mark = false; // işçinin kb klonu salt okunur: işaretleme/mod temizliği yazmaz (kb-sync kirli ağaçta reddeder)
       if (key === "vlad status" && opts.mark !== false) {
         if (!opts.hook) opts.remotePlans = await remoteStallPlans(); // C3
         // SessionStart hook runs this: never block it behind a long writer; fall back to the side-effect-free read
