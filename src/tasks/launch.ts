@@ -13,8 +13,8 @@ import { closeWorkerWindow } from "../launcher/index.js";
 import type { Launcher } from "../launcher/index.js";
 import { splitSkills } from "../roles/store.js";
 import type { Role } from "../roles/store.js";
-import { markSilentWorkers } from "./liveness.js";
-import type { LivenessProbe } from "./liveness.js";
+import { applyRemoteStalls, markSilentWorkers } from "./liveness.js";
+import type { LivenessProbe, RemoteStallPlan } from "./liveness.js";
 import {
   effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState, syncAutonomy, unmetDependencies,
 } from "./store.js";
@@ -442,7 +442,7 @@ export function statusSummary(
   probe?: LivenessProbe,
   platform?: NodeJS.Platform,
   /** `mark: false` (status --no-mark) is a pure read: nothing is marked stalled and an elapsed mode window is not cleared. */
-  opts: { mark?: boolean } = {},
+  opts: { mark?: boolean; /** machines C3: remote probe results, applied here under the kb lock */ remotePlans?: RemoteStallPlan[] } = {},
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
   undigested: number; openSevereFindings: number; mode: string | null;
@@ -451,6 +451,7 @@ export function statusSummary(
   const newlyStalled = mark ? [
     ...markStale(now, cfg.staleAfterHours),
     ...markSilentWorkers(now, cfg, probe, platform),
+    ...applyRemoteStalls(opts.remotePlans ?? []),
   ].map((t) => t.data.id) : [];
   const mode = modeLine(now);
   if (mark) try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared

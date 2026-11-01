@@ -8,6 +8,7 @@ import { ping } from "./ping.js";
 import { kbSync } from "./kb-sync.js";
 import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
 import { probeWindow } from "./probe-window.js";
+import { liveness } from "./liveness.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
 
 // Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
@@ -64,3 +65,6 @@ OP_TABLE.resume = (a) => resumeOp(a);
 OP_TABLE.close = (a) => closeOp(a);
 OP_TABLE.cleanup = (a) => cleanupOp(a);
 // --- /machines:C2 ---
+// --- machines:C3 ---
+OP_TABLE.liveness = (a) => liveness(a);
+// --- /machines:C3 ---
