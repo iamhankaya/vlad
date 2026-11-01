@@ -82,7 +82,8 @@ export interface RunningAgent { port: number; host: string; proc: ChildProcess; 
 export async function startAgent(side: Side, o: { nowFile?: string; test?: Record<string, string>; timeoutMs?: number } = {}): Promise<RunningAgent> {
   const env = { ...process.env, ...side.env, ...(o.nowFile ? { VLAD_NOW_FILE: o.nowFile } : {}), ...(o.test ? { VLAD_AGENT_TEST: "1", ...o.test } : {}) };
   const proc = spawn(process.execPath, [CLI, "agent", "start", "--port", "0", "--print-port"], { env, stdio: ["ignore", "pipe", "pipe"] });
-  proc.stderr!.resume(); // dolu boru Agent'ı asmasın
+  let errBuf = "";
+  proc.stderr!.on("data", (d: Buffer) => { if (errBuf.length < 4000) errBuf += d; }); // dolu boru Agent'ı asmasın; hata mesajı için ilk 4 KB tutulur
   const first = await new Promise<{ host: string; port: number }>((res, rej) => {
     let buf = "";
     const t = setTimeout(() => rej(new Error("agent başlamadı: ilk satır gelmedi")), o.timeoutMs ?? 10_000);
@@ -93,7 +94,7 @@ export async function startAgent(side: Side, o: { nowFile?: string; test?: Recor
       clearTimeout(t);
       try { res(JSON.parse(buf.slice(0, nl)).listening); } catch (e) { rej(e as Error); }
     });
-    proc.on("exit", (c) => { clearTimeout(t); rej(new Error(`agent çıktı (${c}) başlamadan`)); });
+    proc.on("exit", (c) => { clearTimeout(t); rej(new Error(`agent çıktı (${c}) başlamadan: ${errBuf}`)); });
   });
   return {
     ...first, proc,
