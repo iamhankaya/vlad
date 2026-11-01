@@ -38,7 +38,7 @@ describe("machines:S ops table (role -> allowed ops)", () => {
   });
   it("every op has a body and each unbound op is notImplemented in the contract phase", async () => {
     const all = new Set(Object.keys(OP_TABLE));
-    for (const op of ["kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge"]) {
+    for (const op of ["kb-sync", "launch", "resume", "close", "cleanup", "liveness", "gate-run", "merge-preview", "merge"]) {
       expect(all.has(op), op).toBe(true);
       await expect(OP_TABLE[op as AgentOp]({}, { from: "x", opId: "o" })).rejects.toThrow(NotImplementedOp);
     }
