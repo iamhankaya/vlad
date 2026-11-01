@@ -368,6 +368,17 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       const withSid = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
       expect(readFileSync(withSid.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--resume 'sess-42' \$p\n$/);
     });
+    it("workerAutoCompact puts --autocompact on launch --external and resume --external scripts; absent → no flag", () => {
+      const plain = JSON.parse(vlad(["task", "launch", id, "--external", "--json"], undefined, env()).out);
+      expect(readFileSync(plain.script, "utf8")).not.toContain("--autocompact");
+      writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt"), workerAutoCompact: "300k" }));
+      const res = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
+      expect(readFileSync(res.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--autocompact '300k' --continue \$p\n$/);
+      // fresh launch path: new task so launch itself writes the script
+      const id2 = mkTask();
+      const l = JSON.parse(vlad(["task", "launch", id2, "--external", "--json"], undefined, env()).out);
+      expect(readFileSync(l.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--autocompact '300k' \$p\n$/);
+    });
     it("--external is refused together with --dry-run and in cloud mode", () => {
       const both = vlad(["task", "launch", id, "--external", "--dry-run", "--json"], undefined, env());
       expect(both.code).toBe(1);

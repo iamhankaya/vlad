@@ -3,6 +3,7 @@
   "ignore": ["*-wt", "node_modules", "vlad"],
   "defaultAutonomy": "commit",
   "staleAfterHours": 6,
+  "workerAutoCompact": "300k",
   "launcher": "auto",
   "kbDir": "../vlad-kb",
   "worktreeDir": "{repo}-wt",

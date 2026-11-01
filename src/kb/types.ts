@@ -143,5 +143,7 @@ export interface VladConfig {
   kbDir?: string;
   /** Cloud worker kb access; absent → `inline`. */
   cloudKb?: CloudKb;
+  /** `claude --autocompact` for workers (e.g. "300k"); absent or "" → no flag. Range 100000–1000000 tokens. */
+  workerAutoCompact?: string;
   projects: Record<string, { autonomy?: Autonomy }>;
 }

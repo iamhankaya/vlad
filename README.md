@@ -25,7 +25,7 @@ vlad install
 - `global/skills/vlad-worker/` klasörünü `~/.claude/skills/vlad-worker/`'a kopyalar (çalışan protokolü her repoda kullanılabilir olur). Her çalıştırmada hedefteki `vlad-worker` klasörünün üzerine yazılır; orada yaptığınız elle değişiklikler kaybolur.
 - `VLAD_CLAUDE_DIR` ortam değişkeni `~/.claude` yerine başka bir klasörü hedefler (test ve deneme için).
 
-Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterHours`, launcher, opsiyonel `maxParallel` — aynı anda en fazla bu kadar `running` dev çalışanı; yoksa sınırsız).
+Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterHours`, launcher, opsiyonel `maxParallel` — aynı anda en fazla bu kadar `running` dev çalışanı; yoksa sınırsız; opsiyonel `workerAutoCompact` — çalışanların `claude --autocompact` eşiği, ör. `"300k"`, aralık 100000–1000000, `k`/`M` eki; yerel launch, `task launch --external` ve `task resume --external` betiklerine girer, bulutta karşılığı yok).
 
 `vlad task ready --parent <id>` sınıra uyan fazları `tasks`, sınır yüzünden bekleyenleri `held_by_limit` olarak verir. `vlad task resume <id>` kesilmiş (`running`/`stalled`) bir çalışan için devam bilgisi üretir: yerelde worktree/branch/kirli ağaç kontrolü ve devam prompt'u, bulutta `send_message` argümanları.
 

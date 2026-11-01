@@ -4,7 +4,7 @@ import {
   addWorktree, attachWorktree, branchExists, isWorktree, ReparseCleanupError, remoteBranchExists, removeWorktree, runGit,
   unlinkReparsePoints, worktreeBranch, worktreePath,
 } from "../git/git.js";
-import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
+import { readDoc, kbPaths, loadConfig, withKbLock } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
@@ -195,6 +195,7 @@ export async function launchTask(
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
 
   const model = effectiveModel(task.data, role);
+  const autoCompact = loadConfig().workerAutoCompact;
   let failure: string | null = null;
   try {
     const res = await o.launcher.launch({
@@ -204,6 +205,7 @@ export async function launchTask(
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
+      ...(autoCompact ? { autoCompact } : {}),
     });
     if (!res.ok) failure = `launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`;
   } catch (e) {

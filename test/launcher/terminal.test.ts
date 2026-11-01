@@ -34,6 +34,17 @@ describe("buildScript", () => {
       expect(() => buildScript(req({ model })), JSON.stringify(model)).toThrow(/geçersiz model/);
     }
   });
+  it("adds --autocompact after --model when given, and not otherwise", () => {
+    expect(buildScript(req({ autoCompact: "300k" }))).toMatch(/\nclaude --autocompact '300k' \$p\n$/);
+    expect(buildScript(req({ model: "sonnet", autoCompact: "300000", resume: { sessionId: "s1" } })))
+      .toMatch(/\nclaude --model 'sonnet' --autocompact '300000' --resume 's1' \$p\n$/);
+    expect(buildScript(req())).not.toContain("--autocompact");
+  });
+  it("rejects an unsafe autoCompact value instead of writing it into the script", () => {
+    for (const v of ["", "300k'; rm x", "$(x)", "abc", "--help"]) {
+      expect(() => buildScript(req({ autoCompact: v })), JSON.stringify(v)).toThrow(/geçersiz autoCompact/);
+    }
+  });
   it("protects lines starting with '@", () => {
     const s = buildScript(req({ prompt: "a\n'@ evil\nb" }));
     const lines = s.split("\n");

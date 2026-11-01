@@ -54,6 +54,23 @@ describe("config", () => {
       expect(() => loadConfig(home)).toThrow();
     }
   });
+  it("workerAutoCompact is optional; accepts k/M suffix within 100000–1000000, else a schema error", () => {
+    expect(loadConfig(home).workerAutoCompact).toBeUndefined();
+    for (const ok of ["300k", "300000", "100k", "1M", "1000k", "1000000", "0.5M"]) {
+      writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ workerAutoCompact: ok }));
+      expect(loadConfig(home).workerAutoCompact, ok).toBe(ok);
+    }
+    for (const bad of ["99k", "99999", "1001k", "2M", "abc", "300 k", "-300k", "300kb", "$(x)"]) {
+      writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ workerAutoCompact: bad }));
+      expect(() => loadConfig(home), bad).toThrow();
+    }
+    writeFileSync(join(home, "vlad.config.json"), '{"workerAutoCompact": 300000}');
+    expect(() => loadConfig(home)).toThrow();
+  });
+  it("empty workerAutoCompact means no flag and is accepted", () => {
+    writeFileSync(join(home, "vlad.config.json"), '{"workerAutoCompact": ""}');
+    expect(loadConfig(home).workerAutoCompact).toBe("");
+  });
   it("rejects invalid launcher", () => {
     writeFileSync(join(home, "vlad.config.json"), '{"launcher":"x"}');
     expect(() => loadConfig(home)).toThrow(ValidationError);
