@@ -1,5 +1,7 @@
 // Kabul fazı: Agent protokolünü SÖZLEŞMEDEN (plan "Çerçeveleme ve zarf" + "Kimlik doğrulama") bağımsız konuşan ham istemci.
-// Uygulamanın client.ts/sign.ts'ine bakılmaz; imza biçimi plan metninden: hex(HMAC-SHA256(key, "VLAD1\n"+from+"\n"+to+"\n"+opId+"\n"+ts+"\n"+op+"\n"+sha256hex(canonicalJson(args)))).
+// İmza biçimi (B güvenlik turu sonrası; docs/machines-agent-security.md + T20261101-24 raporu, kapsam sign.ts:24,28-29):
+//   istek: HMAC-SHA256(Buffer.from(key,"hex"), ["VLAD1", v, from, to, opId, ts, op, sha(canonicalJson(args))].join(LF))
+//   yanıt: HMAC-SHA256(Buffer.from(key,"hex"), ["VLAD1R", v, opId, ok, code, sha(result), sha(error), sha(meta)].join(LF))  (boş alan = null)
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import net from "node:net";
 
@@ -12,10 +14,11 @@ export const canonicalJson = (v: unknown): string => {
   return JSON.stringify(v ?? null);
 };
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
-export const signReq = (key: string, r: { from: string; to: string; opId: string; ts: number; op: string; args: unknown }) =>
-  createHmac("sha256", key).update(`VLAD1\n${r.from}\n${r.to}\n${r.opId}\n${r.ts}\n${r.op}\n${sha(canonicalJson(r.args))}`).digest("hex");
-export const signResp = (key: string, r: { opId: string; code: string; result?: unknown }) =>
-  createHmac("sha256", key).update(`VLAD1R\n${r.opId}\n${r.code}\n${sha(canonicalJson(r.result ?? null))}`).digest("hex");
+const hmacKey = (key: string) => Buffer.from(key, "hex");
+export const signReq = (key: string, r: { v: number; from: string; to: string; opId: string; ts: number; op: string; args: unknown }) =>
+  createHmac("sha256", hmacKey(key)).update(`VLAD1\n${r.v}\n${r.from}\n${r.to}\n${r.opId}\n${r.ts}\n${r.op}\n${sha(canonicalJson(r.args))}`).digest("hex");
+export const signResp = (key: string, r: { v?: number; opId: string; ok?: boolean; code: string; result?: unknown; error?: unknown; meta?: unknown }) =>
+  createHmac("sha256", hmacKey(key)).update(`VLAD1R\n${r.v ?? 1}\n${r.opId}\n${r.ok ?? r.code === "ok"}\n${r.code}\n${sha(canonicalJson(r.result ?? null))}\n${sha(canonicalJson(r.error ?? null))}\n${sha(canonicalJson(r.meta ?? null))}`).digest("hex");
 
 export const frame = (json: string): Buffer => {
   const body = Buffer.from(json, "utf8");
@@ -24,7 +27,7 @@ export const frame = (json: string): Buffer => {
   return Buffer.concat([h, body]);
 };
 
-export interface RawResp { v: number; opId: string; ok: boolean; code: string; result?: any; error?: string; serverTs: number; build: string; sig: string }
+export interface RawResp { v: number; opId: string; ok: boolean; code: string; result?: any; error?: string; meta?: any; serverTs: number; build: string; sig: string }
 export type RawOutcome = { kind: "response"; resp: RawResp } | { kind: "closed" } | { kind: "timeout" };
 
 /** Ham baytları gönderir, ilk yanıt çerçevesini (varsa) okur. */
@@ -58,7 +61,8 @@ export async function rawCall(c: RawCall): Promise<RawOutcome & { req: Record<st
   const opId = c.opId ?? randomUUID();
   const ts = c.ts ?? Date.now();
   const args = c.args ?? {};
-  const req: Record<string, unknown> = { v: c.v ?? 1, from: c.from, to: c.to, opId, ts, op: c.op, args, sig: signReq(c.key, { from: c.from, to: c.to, opId, ts, op: c.op, args }) };
+  const v = c.v ?? 1;
+  const req: Record<string, unknown> = { v, from: c.from, to: c.to, opId, ts, op: c.op, args, sig: signReq(c.key, { v, from: c.from, to: c.to, opId, ts, op: c.op, args }) };
   c.mutate?.(req);
   const out = await sendRaw(c.port, frame(JSON.stringify(req)), { timeoutMs: c.timeoutMs });
   return { ...out, req };

@@ -14,7 +14,8 @@ async function twins(world: World) {
   for (const id of [viaWorker, direct]) world.setFront(id, { state: "running", machine: "windows" });
   return { viaWorker, direct };
 }
-const norm = (s: string, ids: string[]) => ids.reduce((a, id, i) => a.split(id).join(`<ID${i}>`), s).replace(/\d{4}-\d{2}-\d{2}T[\d:.+Z-]+/g, "<ISO>");
+// Her taraf kendi görev kimliğini "<ID>" yapar (iki ikiz farklı ID taşır; konumsal numaralama iki tarafı hiç eşitleyemezdi). Diğer ikizin ID'si ayrı etiketlenir.
+const norm = (s: string, own: string, other: string) => s.split(own).join("<ID>").split(other).join("<OTHER>").replace(/\d{4}-\d{2}-\d{2}T[\d:.+Z-]+/g, "<ISO>");
 const section = (txt: string, name: string) => { const m = txt.replace(/\r\n/g, "\n").split(`\n## ${name}\n`)[1]; return (m ?? "").split("\n## ")[0]; };
 
 describe("machines:K — K5 işçi yazmaları beyne iletilir", () => {
@@ -30,11 +31,11 @@ describe("machines:K — K5 işçi yazmaları beyne iletilir", () => {
     const a = await runVlad(w.worker, argv(viaWorker), { stdin });
     const b = await runVlad(w.brain, argv(direct), { stdin });
     expect(b.code, b.err).toBe(0);
-    expect({ code: a.code, out: norm(a.out, [viaWorker, direct]), err: norm(a.err, [viaWorker, direct]) })
-      .toEqual({ code: b.code, out: norm(b.out, [viaWorker, direct]), err: norm(b.err, [viaWorker, direct]) });
+    expect({ code: a.code, out: norm(a.out, viaWorker, direct), err: norm(a.err, viaWorker, direct) })
+      .toEqual({ code: b.code, out: norm(b.out, direct, viaWorker), err: norm(b.err, direct, viaWorker) });
     // iki taraftaki görev dosyası aynı (zaman damgası/ID hariç) değişti; işçi home'unda görev yok
-    expect(norm(w.readTask(w.brain, viaWorker), [viaWorker, direct]).replace(/updated: .*/, ""))
-      .toBe(norm(w.readTask(w.brain, direct), [viaWorker, direct]).replace(/updated: .*/, ""));
+    expect(norm(w.readTask(w.brain, viaWorker), viaWorker, direct).replace(/updated: .*/, ""))
+      .toBe(norm(w.readTask(w.brain, direct), direct, viaWorker).replace(/updated: .*/, ""));
     expect(() => w!.taskFile(w!.worker, viaWorker)).toThrow();
   }, 60_000);
 
@@ -92,7 +93,8 @@ describe("machines:K — K5 işçi yazmaları beyne iletilir", () => {
 
 describe("machines:K — K6 büyük ve özel karakterli rapor", () => {
   const tricky = "Türkçe: çğıöşü İĞÜŞÖÇ — “tırnak” \"çift\" 'tek' $HOME $(id) `bt` \\n \\\\ %PATH% 😀\r\n";
-  const body = (n: number) => "### Yapılanlar\r\n" + tricky.repeat(Math.ceil(n / tricky.length));
+  // n = UTF-8 BAYT hedefi: B apply-write metin sınırı 1 MiB bayt (ops/apply-write.ts MAX_TEXT); karakter sayısıyla "1 MB" çok baytlı karakterler yüzünden sınırı aşıyordu.
+  const body = (n: number) => "### Yapılanlar\r\n" + tricky.repeat(Math.floor(n / Buffer.byteLength(tricky)));
 
   it("1 MB rapor işçiden iletilir; kapanış raporu bölümü doğrudan CLI ile birebir (sha256)", async () => {
     w = await makeWorld();
@@ -105,6 +107,6 @@ describe("machines:K — K6 büyük ve özel karakterli rapor", () => {
     expect(a.code, a.err).toBe(0);
     const sha = (id: string) => createHash("sha256").update(section(w!.readTask(w!.brain, id), "Kapanış raporu")).digest("hex");
     expect(sha(viaWorker)).toBe(sha(direct));
-    expect(section(w.readTask(w.brain, viaWorker), "Kapanış raporu").length).toBeGreaterThan(900_000);
+    expect(Buffer.byteLength(section(w.readTask(w.brain, viaWorker), "Kapanış raporu"))).toBeGreaterThan(900_000);
   }, 90_000);
 });

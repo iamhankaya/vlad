@@ -25,7 +25,7 @@ describe("machines:K — K8 kimlik ve yetki", () => {
     const { w, id, port, k } = await setup();
     const r = resp(await rawCall({ port, key: k.windows, from: "windows", to: "mac", op: "apply-write", args: write(id) }));
     expect(r.code).toBe("ok");
-    expect(r.sig).toBe(signResp(k.windows, { opId: r.opId, code: r.code, result: r.result }));
+    expect(r.sig).toBe(signResp(k.windows, r));
     expect(w.readTask(w.brain, id)).toContain("ZZ-yazma");
   }, 60_000);
 
@@ -158,7 +158,8 @@ describe("machines:K — K9 enjeksiyon (argv birebir veri; kabuk yok)", () => {
     "--json --file=/etc/passwd",
     "satır\nsonu\r\nvar",
     "‐‐file=ünicode benzeri ＂ ；",
-    "a".repeat(70 * 1024),
+    // Windows CreateProcess komut satırı sınırı (~32 K karakter): 70 KiB argv orada ENAMETOOLONG verir (B raporu açık noktası: uzun metin argv ile taşınamaz). Niyet (büyük tek argüman aynen geçer) 24 KiB ile korunur.
+    "a".repeat(process.platform === "win32" ? 24 * 1024 : 70 * 1024),
     "|| calc.exe & whoami",
   ];
   it("apply-write: düşmanca metinler tek argüman olarak aynen geçer, ek argüman/enjeksiyon yok", async () => {
@@ -170,9 +171,13 @@ describe("machines:K — K9 enjeksiyon (argv birebir veri; kabuk yok)", () => {
     const got = lines();
     expect(got).toHaveLength(hostile.length);
     got.forEach((rec: any, i) => {
-      expect(rec.argv.slice(0, 3)).toEqual(["task", "log", id]);
-      expect(rec.argv[3]).toBe(hostile[i]); // tek öğe, birebir
-      expect(rec.argv.filter((a: string) => a === hostile[i])).toHaveLength(1);
+      // B güvenlik turu (src/agent/ops/apply-write.ts writeArgv): `-` ile başlayan metinde seçenek sonu `--` id'den ÖNCE gelir: task log [--json] [--] <id> <metin>.
+      let k = 2;
+      if (rec.argv[k] === "--json") k++;
+      if (hostile[i].startsWith("-")) { expect(rec.argv[k]).toBe("--"); k++; }
+      expect(rec.argv.slice(0, 2)).toEqual(["task", "log"]);
+      expect(rec.argv.slice(k)).toEqual([id, hostile[i]]); // tek öğe, birebir, ek argüman yok
+      expect(rec.argv.slice(k).filter((a: string) => a === hostile[i])).toHaveLength(1); // `--` seçenek sonu ayracı metin "--" ise ayrı sayılır
       expect(rec.env.VLAD_FORWARDED).toBe("windows");
       expect(rec.env.VLAD_OP_ID).toBeTruthy();
     });
