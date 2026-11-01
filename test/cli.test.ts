@@ -514,3 +514,13 @@ describe("vlad cli", { timeout: 30_000 }, () => {
   });
 });
 
+
+describe("vlad audit setup", () => {
+  it("prints the JSON shape over an empty kb and rejects a bad --since", () => {
+    const cfg = mkdtempSync(join(tmpdir(), "vlad-setup-cli-")); // keeps the real ~/.claude out of the scan
+    const env = { CLAUDE_CONFIG_DIR: cfg };
+    const r = JSON.parse(vlad(["audit", "setup", "--since", "2026-10-01", "--json"], undefined, env).out);
+    expect(r).toMatchObject({ since: "2026-10-01", tasks: { total: 0 }, open_points: { total: 0 }, findings: { stale: 0 } });
+    expect(vlad(["audit", "setup", "--since", "dün"], undefined, env).code).toBe(1);
+  });
+});

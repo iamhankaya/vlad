@@ -7,7 +7,7 @@ const read = (p: string) => readFileSync(resolve(root, p), "utf8");
 const frontmatter = (md: string) => /^---\r?\n([\s\S]*?)\r?\n---/.exec(md)?.[1] ?? "";
 const field = (md: string, key: string) => new RegExp(`^${key}:\s*(.+)$`, "m").exec(frontmatter(md))?.[1].trim() ?? "";
 
-const NEW_VLAD_SKILLS = ["second-opinion", "integrate", "art-prompt"];
+const NEW_VLAD_SKILLS = ["second-opinion", "integrate", "art-prompt", "setup-audit"];
 const WORKER_SKILLS = ["vlad-worker", "ci-triage"];
 
 describe("skills/ frontmatter", () => {
@@ -42,6 +42,12 @@ describe("skills/ references and de-duplication", () => {
     for (const n of [...NEW_VLAD_SKILLS, "ci-triage"]) expect(c, n).toContain(n);
     expect(c).toContain("security-reviewer");
     expect(c).toMatch(/task new\|launch[^\n]*deps/);
+  });
+
+  it("setup-audit keeps its verification contract: optional items, mandatory check against later fixes, time coherence, doğrulandı column", () => {
+    const t = read(".claude/skills/setup-audit/SKILL.md");
+    for (const w of ["Madde zorunlu değil", "## 5. Doğrulama (zorunlu)", "decision list --project <slug> --all", "Zaman uyumu", "| doğrulandı", "plugin:skill", "vlad audit setup"]) expect(t, w).toContain(w);
+    expect(t).not.toMatch(/en az \d+ öneri yaz/i);
   });
 
   it("second-opinion owns the Codex commands; delegate and status only point to it", () => {
