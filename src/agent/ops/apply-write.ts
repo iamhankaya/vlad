@@ -42,7 +42,7 @@ export function writeArgv(w: WriteArgs): { argv: string[]; stdin?: string } {
 export async function applyWrite(args: unknown, ctx: { from: string; opId: string }): Promise<ExecResult> {
   const w = parseWriteArgs(args);
   let owner: string | null | undefined;
-  try { owner = getTask(w.id).data.machine; } catch { owner = ctx.from; } // olmayan görev: yerel CLI'ın kendi hata metni dönsün (stderr/çıkış kodu birebir, F-vlad-129)
+  try { owner = getTask(w.id).data.machine; } catch (e) { if (!/^görev bulunamadı/.test((e as Error).message)) throw new RemoteError("failed", `failed: görev okunamadı: ${w.id}`); owner = ctx.from; } // olmayan görev: yerel CLI'ın kendi hata metni dönsün (stderr/çıkış kodu birebir, F-vlad-129)
   if (owner !== ctx.from) throw new RemoteError("forbidden", "forbidden: görev başka makineye ait");
   const { argv, stdin } = writeArgv(w);
   const r = await runCli(argv, { stdin, forwarded: ctx.from, opId: ctx.opId, timeoutMs: 60_000 });

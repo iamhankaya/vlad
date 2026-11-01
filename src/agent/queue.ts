@@ -113,7 +113,7 @@ export class AgentQueue {
       const poisoned = new Map<string, number>(); // görev id → başarısız ilk seq
       for (const f of this.files()) {
         const it = this.read(join(this.dir, f));
-        if (!it) { renameSync(join(this.dir, f), join(this.dir, "failed", f)); continue; } // çalışırken yazılmış bozuk girdi (sayaçta yok)
+        if (!it) { if (existsSync(join(this.dir, f))) renameSync(join(this.dir, f), join(this.dir, "failed", f)); continue; } // çalışırken yazılmış bozuk girdi (sayaçta yok)
         if (it.state === "inflight") break;
         const prev = poisoned.get(it.id);
         if (prev !== undefined) { this.fail(f, it, `önceki başarısız: ${prev}`); r.failed++; continue; }
