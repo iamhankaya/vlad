@@ -77,14 +77,19 @@ export function resumePrepare(id: string): ResumePlan {
 const tailTextOf = (plan: ResumePlan): string => (plan.tail.length ? plan.tail.join("\n") : "(ilerleme kaydı yok)");
 
 /** The local resume prompt for a checked worktree; shared with a worker Agent that checks its own worktree. */
-export function localResumePrompt(plan: ResumePlan, wt: string, dirty: string[]): string {
+export const localResumePrompt = (plan: ResumePlan, wt: string, dirty: string[]): string => resumePromptText(plan, wt, dirtyLine(dirty));
+
+/** Resume prompt with `{{WORKTREE}}`/`{{DIRTY_LINE}}` left for the worker Agent to fill (it alone sees its worktree). */
+export const remoteResumeTemplate = (plan: ResumePlan): string => resumePromptText(plan, "{{WORKTREE}}", "{{DIRTY_LINE}}");
+
+function resumePromptText(plan: ResumePlan, wt: string, dirtyText: string): string {
   const { id, branch, authority } = plan;
   return [
     `VLAD görev ${id} kaldığı yerden sürdürülüyor.`,
     authority,
     `Çalışma dizinin: ${wt} (branch ${branch}). Ana dizinde veya başka bir worktree'de ÇALIŞMA; önce bu dizine geç.`,
     "Önce `git status` ve `git branch --show-current` ile branch'i ve kaydedilmemiş değişiklikleri doğrula.",
-    dirtyLine(dirty),
+    dirtyText,
     `Son ilerleme kayıtları:\n${tailTextOf(plan)}`,
     "Kaldığın yerden devam et; her anlamlı adımda WIP commit + `vlad task log` \"kaldığım yer\" satırı yaz.",
   ].join("\n");
