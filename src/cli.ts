@@ -7,24 +7,33 @@ import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEV
 import { auditSetup } from "./audit/setup.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
-import { idleTasks } from "./tasks/liveness.js";
+import { idleTasks, probeRemoteWorkers } from "./tasks/liveness.js";
+import type { RemoteStallPlan } from "./tasks/liveness.js";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
-import type { TaskKind, TaskState } from "./kb/index.js";
+import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
+import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
+import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
+import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
+import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
+import { agentKeygen, agentSetKey, agentStart, agentStatus } from "./agent/start.js";
+import { installPlan } from "./agent/install.js";
+import { readLocal, selfName } from "./agent/state.js";
+import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, remoteMachineOf, listTasksWithWarnings, modelInfo,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -40,19 +49,28 @@ function fail(e: unknown): never {
   let details: string[] = [];
   if (e instanceof ValidationError) details = e.details;
   else if (e instanceof TransitionError) details = [`izin verilenler: ${TRANSITIONS[e.from].join(", ") || "(yok)"}`];
+  else details = remoteErrorDetails(e);
   if (wantsJson()) process.stderr.write(JSON.stringify({ error, details }) + "\n");
   else {
     error = `hata: ${error}`;
     process.stderr.write([error, ...details.map((d) => `  ${d}`)].join("\n") + "\n");
   }
-  process.exit(1);
+  process.exit(exitCodeFor(e));
 }
 
 function out(o: Opts, data: unknown, text: string): void {
   process.stdout.write((o.json ? JSON.stringify(data) : text) + "\n");
 }
 
-const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}`;
+// --- machines:A --- `@<makine>` eki: yalnız görevde machine varsa ve brain değilse
+let brainName: string | null | undefined; // config bir kez okunur (liste satırı başına değil)
+const machineTag = (t: Task): string => {
+  if (!t.data.machine) return "";
+  if (brainName === undefined) { try { brainName = loadConfig().brain ?? null; } catch { brainName = null; } }
+  return brainName && t.data.machine !== brainName ? ` @${t.data.machine}` : "";
+};
+// --- /machines:A ---
+const taskLine = (t: Task) => `${t.data.id}  ${t.data.state.padEnd(17)} ${t.data.project}  ${t.data.title}${machineTag(t)}`;
 /** Pipeline tasks carry their per-project integration worktrees (F-vlad-063); a missing project card must not break listing. */
 const integrationInfo = (t: Task, all?: Task[]) => {
   if (t.data.kind !== "pipeline") return {};
@@ -61,7 +79,7 @@ const integrationInfo = (t: Task, all?: Task[]) => {
 /** Task data plus the model it runs on (task `model` ?? role `model`), for --json consumers. */
 const withModel = (t: Task, all?: Task[]) => ({ ...t.data, ...modelInfo(t.data), ...integrationInfo(t, all) });
 /** Fields `task list --fields` can pick: the task frontmatter plus derived ones (computed only when asked for). */
-const TASK_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "created", "updated", "error", "digested", "role", "parent", "depends_on", "phase", "report_file", "model", "model_reason"];
+const TASK_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "created", "updated", "error", "digested", "role", "parent", "depends_on", "phase", "report_file", "model", "model_reason", "machine", "machine_reserved", "launch_op"];
 const DERIVED_FIELDS = ["role_model", "effective_model", "integration_worktrees"];
 /** Detailed status line: shows the model only when the task's own model deviates from its role's. */
 const statusLine = (t: Task) => {
@@ -94,6 +112,22 @@ const KB_WRITES = new Set([
   "inbox done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
 ]);
 
+// --- machines:S --- kancalar; varsayılan = mevcut davranış. B `before`'ı (iletim), C `lockPolicy`'yi (resume/cleanup iç kilit) doldurur.
+/** true → komut başka makineye iletildi (çıktı yazıldı), yerel handler çalışmaz. */
+const before = (key: string, args: any[]): Promise<boolean> => forwardIfWorker(key, args);
+/** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
+const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyOf(key, KB_WRITES, INNER_LOCK.has(key) ? loadConfig() : {}); // C1: resume/cleanup lock in phases once `machines` is set
+// --- /machines:S ---
+// --- machines:C3 --- uzak stalled: ağ çağrıları kilit DIŞINDA (status'un kilitli gövdesi yalnız sonucu uygular); --no-mark ve --hook yolunda hiç bağlantı yok
+async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
+  try {
+    const cfg = loadConfig();
+    if (!cfg.machines || !cfg.brain || selfName() !== cfg.brain) return [];
+    return await probeRemoteWorkers(cfg, new AgentClient({ self: cfg.brain, keys: readLocal().keys, config: () => cfg }), new Date());
+  } catch (e) { process.stderr.write(`uyarı: uzak stalled denetimi atlandı: ${(e as Error).message}\n`); return []; } // a broken probe must never take status down
+}
+// --- /machines:C3 ---
+
 /** Registers a command with --json and a uniform error path. */
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
   const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
@@ -101,14 +135,17 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
   c.action(async (...args: any[]) => {
     try {
       const opts = args[args.length - 2] as Opts;
+      if (key === "vlad status" && workerContext()) opts.mark = false; // işçinin kb klonu salt okunur: işaretleme/mod temizliği yazmaz (kb-sync kirli ağaçta reddeder)
       if (key === "vlad status" && opts.mark !== false) {
+        if (!opts.hook) opts.remotePlans = await remoteStallPlans(); // C3
         // SessionStart hook runs this: never block it behind a long writer; fall back to the side-effect-free read
         try { await withKbLock(() => fn(...args), { timeoutMs: 2000 }); } catch (e) {
           if (!(e instanceof KbLockTimeout)) throw e;
           opts.mark = false;
           await fn(...args);
         }
-      } else await (KB_WRITES.has(key) ? withKbLock(() => fn(...args)) : fn(...args));
+      } else if (await before(key, args)) return;
+      else await (lockPolicy(key) === "outer" ? withKbLock(() => fn(...args)) : fn(...args));
     } catch (e) {
       fail(e);
     }
@@ -130,7 +167,7 @@ def(project, "write <slug>", "Kartı doğrulayıp yazar", (slug: string, o: Opts
   const card = writeProject(slug, readInput(o.file as string));
   out(o, { slug: card.slug }, `yazıldı: ${card.slug}`);
 }).requiredOption("--file <md>", "kart dosyası (- = stdin)");
-def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
+def(project, "set <slug> <field> <value>", "Tek kart alanını yazar (exposure|repo|default_branch|local_only|local_only_reason|gate|machines); boş değer alanı siler", (slug: string, field: string, value: string, o: Opts) => {
   setProjectField(slug, field, value);
   out(o, { slug, field, value: value === "" ? null : value }, value === "" ? `silindi: ${slug}.${field}` : `yazıldı: ${slug}.${field}=${value}`);
 });
@@ -267,13 +304,17 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
         ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
         : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
-  const t = await launchTask(id, { launcher, cfg });
+  // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
+  if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
+  const t = await launchTask(id, { launcher, cfg, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
+  // --- /machines:C1 ---
   out(
     o,
     { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}) },
     `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}`,
   );
 }).option("--dry-run", "terminal açmadan komutu göster")
+  .option("--machine <ad>", "görevi kartın makinelerinden birine sabitle (yalnız config'te machines varken)")
   .option("--external", "terminal açma; betiği yaz, script/command/cwd döndür (gömülü kullanım)");
 
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
@@ -326,8 +367,21 @@ def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiş
   .option("--add <ids>", "listeye ekle")
   .option("--remove <ids>", "listeden çıkar")
   .option("--clear", "tüm bağımlılıkları kaldır");
-def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", (id: string, o: Opts) => {
-  const r = resumeInfo(id);
+def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", async (id: string, o: Opts) => {
+  // --- machines:C1 --- hazırlık kilitli (kb yazar), worktree denetimi kilitsiz; uzak makinedeki görev C2'de
+  const cfg0 = loadConfig();
+  const { plan, remote } = await withKbLock(() => ({ remote: remoteMachineOf(getTask(id), cfg0), plan: resumePrepare(id) }));
+  if (remote) {
+    // uzak görev: worktree denetimi ve yeniden başlatma işçide (Agent), kb kilidi dışında
+    if (o.external) throw new Error("--external uzak makinede desteklenmez");
+    const transport = brainTransport(cfg0, selfName());
+    await syncKb(transport, remote); // the worker reads the task file from its kb clone
+    const rr = await remoteResume(transport, remote, getTask(id), plan, cfg0);
+    out(o, { id, mode: "remote", machine: remote, ...rr }, `${id} ${remote} makinesinde sürdürüldü (${rr.method}) -> ${rr.worktree}${rr.dirty.length ? `\nkaydedilmemiş: ${rr.dirty.join(", ")}` : ""}`);
+    return;
+  }
+  const r = resumeLocalCheck(plan);
+  // --- /machines:C1 ---
   if (o.external) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
@@ -347,14 +401,63 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
     : `send_message session_id=${r.session_id}\n${r.message}`);
 }).option("--external", "yerel çalışan için betik yaz (terminal açma); script/command/cwd döner");
-def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", (id: string, o: Opts) => {
-  const r = closeTaskWindow(id);
+def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", async (id: string, o: Opts) => {
+  const cfg0 = loadConfig();
+  const remote = remoteMachineOf(getTask(id), cfg0);
+  const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id);
   out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
 });
-def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
-  cleanupTask(id, { cfg: loadConfig() });
+def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", async (id: string, o: Opts) => {
+  // --- machines:C1 --- kb yazan cleanup kilitli; uzak makinedeki görevin worktree'si burada yok (C2)
+  const cfg0 = loadConfig();
+  const remote = await withKbLock(() => {
+    const t = getTask(id);
+    const m = remoteMachineOf(t, cfg0);
+    if (m) {
+      if (t.data.state !== "done" && t.data.state !== "cancelled") throw new Error(`cleanup yalnızca done/cancelled görevde yapılır (${t.data.state}): ${id}`);
+      return m;
+    }
+    cleanupTask(id, { cfg: cfg0 });
+    return null;
+  });
+  if (remote) {
+    // ağ çağrısı kb kilidi dışında; kilit yalnız `worktree: null` yazısı için
+    await remoteCleanup(brainTransport(cfg0, selfName()), remote, getTask(id));
+    await withKbLock(() => markCleaned(id));
+  }
+  // --- /machines:C1 ---
   out(o, { id }, `${id} worktree kaldırıldı`);
 });
+// --- machines:C4 --- uzak makinedeki görev/çatı için kapı işlemleri (push yok); yerel görevde /integrate akışı geçerli
+async function gateRoute(id: string): Promise<{ machine: string; transport: ReturnType<typeof brainTransport> }> {
+  const cfg0 = loadConfig();
+  const machine = gateMachineOf(getTask(id), cfg0);
+  if (!machine) throw new Error(`${id} uzak makinede değil; kapı işlemleri yerelde /integrate akışıyla yapılır`);
+  const transport = brainTransport(cfg0, selfName());
+  await syncKb(transport, machine); // işçi kartın gate'ini ve görev dosyasını kendi kb klonundan okur
+  return { machine, transport };
+}
+def(task, "gate <id>", "Uzak makinede kartın gate komutunu koşar (--target integration: çatı worktree'si, task: görevin kendisi); gate kırmızıysa çıkış 1", async (id: string, o: Opts) => {
+  const target = (o.target ?? "integration") as string;
+  if (target !== "integration" && target !== "task") throw new Error("--target integration | task olmalı");
+  const { machine, transport } = await gateRoute(id);
+  const r = await remoteGateRun(transport, machine, getTask(id), target);
+  out(o, { id, machine, target, ...r }, `${r.stdout}${r.stderr ? `
+${r.stderr}` : ""}
+[gate çıkış kodu ${r.exit}]`);
+  if (r.exit !== 0) process.exitCode = 1;
+}).option("--target <hedef>", "integration (varsayılan) | task");
+def(task, "merge-preview <id>", "Uzak makinede merge önizlemesi: log, diff --stat, çakışmalar (yazmaz)", async (id: string, o: Opts) => {
+  const { machine, transport } = await gateRoute(id);
+  const r = await remoteMergePreview(transport, machine, getTask(id), { ...(o.into ? { into: o.into as string } : {}) });
+  out(o, { id, machine, ...r }, `${r.log}${r.diffStat}${r.conflicts.length ? `çakışma: ${r.conflicts.join(", ")}` : "çakışma yok"}`);
+}).option("--into <dal>", "hedef dal (varsayılan: vlad/<çatı> ya da kartın default_branch'i)");
+def(task, "merge <id>", "Uzak makinede görev dalını hedefe --no-ff merge eder (push yok; çakışmada geri alınır)", async (id: string, o: Opts) => {
+  const { machine, transport } = await gateRoute(id);
+  const r = await remoteMerge(transport, machine, getTask(id), { ...(o.into ? { into: o.into as string } : {}), ...(o.message ? { message: o.message as string } : {}) });
+  out(o, { id, machine, ...r }, r.merged ? `${id} merge edildi -> ${r.head}` : `${id} zaten içeride (${r.head})`);
+}).option("--into <dal>", "hedef dal (varsayılan: vlad/<çatı> ya da kartın default_branch'i)").option("--message <metin>", "merge commit mesajı");
+// --- /machines:C4 ---
 def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {
   markDigested(ids);
   out(o, { ids }, `${ids.length} görev işlendi olarak işaretlendi`);
@@ -408,21 +511,29 @@ def(task, "idle", "Uzun süredir güncellenmeyen running/blocked görevler (bek�
   const tasks = idleTasks(new Date(), minutes);
   out(o, { minutes, tasks }, tasks.map((t) => `${t.id}  ${t.state.padEnd(8)} ${t.idle_minutes} dk  ${t.branch ?? "-"}  ${t.last_log ?? ""}`).join("\n"));
 }).option("--minutes <n>", "en az bu kadar dakikadır sessiz", "30");
+// --- machines:A ---
 def(task, "ready", "Başlatılmaya hazır görevler (queued, bağımlılıkları done)", (o: Opts) => {
-  const r = readyWithLimit({ parent: o.parent as string | undefined }, loadConfig().maxParallel);
+  const cfg = loadConfig();
+  const r = readyWithLimit({ parent: o.parent as string | undefined }, cfg.maxParallel, cfg);
+  for (const w of r.warnings ?? []) process.stderr.write(`uyarı: ${w}\n`);
+  const why = (id: string) => (r.held_reasons?.find((h) => h.id === id)?.reasons ?? []).map((x) => `${x.machine} ${x.reason}`).join(", ");
   const lines = [
-    ...r.tasks.map(taskLine),
-    ...r.held_by_limit.map((t) => `${taskLine(t)}  (maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor)`),
+    ...r.tasks.map((t) => taskLine(t) + (r.placements ? `  -> ${r.placements.find((p) => p.id === t.data.id)?.machine}` : "")),
+    ...r.held_by_limit.map((t) => `${taskLine(t)}  (${r.held_reasons ? `bekliyor: ${why(t.data.id)}` : `maxParallel dolu: ${r.running}/${r.maxParallel}, bekliyor`})`),
   ];
   out(
     o,
-    { tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel },
+    {
+      tasks: r.tasks.map((t) => t.data), held_by_limit: r.held_by_limit.map((t) => t.data), running: r.running, maxParallel: r.maxParallel,
+      ...(r.placements ? { placements: r.placements, held_reasons: r.held_reasons, warnings: r.warnings } : {}),
+    },
     lines.join("\n"),
   );
 }).option("--parent <id>", "yalnızca bu pipeline'ın fazları");
+// --- /machines:A ---
 
 def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
-  const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false });
+  const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false, remotePlans: o.remotePlans as RemoteStallPlan[] | undefined });
   if (o.summary) {
     // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
     const line =
@@ -631,6 +742,94 @@ def(session, "name", "Kayıtlı oturum adını yazar", (o: Opts) => {
   const name = readFileSync(file, "utf8").trim();
   out(o, { name }, name);
 });
+
+// --- machines:B --- agent, queue, remote
+const agent = program.command("agent").description("VLAD Agent (çoklu makine; T20261101-19)");
+def(agent, "start", "Agent'ı başlatır (tek örnek; kimlik VLAD_MACHINE/vlad.local.json)", async (o: Opts) => {
+  await agentStart({ port: o.port === undefined ? undefined : Number(o.port), printPort: !!o.printPort });
+}).option("--port <n>", "config portunu geçersiz kıl (0 = rastgele)").option("--print-port", "ilk stdout satırı {\"listening\":{host,port}}");
+def(agent, "status", "Yerel Agent çalışıyor mu", async (o: Opts) => {
+  const s = await agentStatus();
+  out(o, s, s.running ? `çalışıyor: ${s.host}:${s.port}${s.pid ? ` (pid ${s.pid})` : ""}` : `çalışmıyor (${s.host}:${s.port})`);
+  process.exitCode = s.running ? 0 : 1;
+});
+def(agent, "keygen <kimlik>", "Anahtar üretir, vlad.local.json'a yazar. <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey` çalıştır); <kendi-adın> = yerel çağrı anahtarı", (identity: string, o: Opts) => {
+  const r = agentKeygen(identity);
+  out(o, r, r.copy
+    ? `${r.identity}: ${r.key}
+(${r.file}'a yazıldı. Karşı uçta, güvenli kanaldan elle çalıştır:
+  ${r.copy}
+sonra iki ucun Agent'ını yeniden başlat)`
+    : `${r.identity}: ${r.key}
+(${r.file}'a yazıldı; yerel çağrı anahtarı, kopyalanmaz; Agent'ı yeniden başlat)`);
+});
+def(agent, "setkey <karsi-taraf> <anahtar>", "Karşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>)", (peer: string, key: string, o: Opts) => {
+  const r = agentSetKey(peer, key);
+  out(o, r, `${r.peer} anahtarı ${r.file}'a yazıldı (Agent'ı yeniden başlat)`);
+});
+
+def(agent, "install", "Agent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows: görev zamanlayıcı); --apply ile kurar", (o: Opts) => {
+  const cfg = loadConfig();
+  const self = selfName();
+  const m = cfg.machines?.find((x) => x.name === self);
+  if (!m) throw new Error(`agent install: ${self} config machines içinde değil`);
+  const plan = installPlan(m.os, { node: process.execPath, cli: process.argv[1]!, home: getVladHome(), path: process.env.PATH ?? "" });
+  if (o.apply) plan.apply?.();
+  const text = [plan.description, ...(plan.file ? [`dosya: ${plan.file}`] : []), ...(plan.content ? ["", plan.content] : []), `komut: ${plan.command}`, ...(o.apply ? ["uygulandı"] : ["(uygulamak için --apply)"])].join("\n");
+  out(o, { description: plan.description, file: plan.file, content: plan.content, command: plan.command, applied: !!o.apply }, text);
+}).option("--apply", "kaydı gerçekten kur (yoksa yalnız basar)");
+
+const queue = program.command("queue").description("İşçi tarafı beyin-yazma kuyruğu (yerel Agent'a sorar)");
+const queueCall = async <T>(op: "queue-list" | "queue-flush" | "queue-drop", args: unknown): Promise<T> => {
+  const w = workerContext();
+  if (!w) throw new Error("queue: yalnız beyin olmayan işçi makinede kullanılır");
+  return callLocal<T>(w.cfg, w.self, op, args);
+};
+def(queue, "list", "Bekleyen ve başarısız yazmalar", async (o: Opts) => {
+  const r = await queueCall<{ entries: { seq: number; opId: string; cmd: string; id: string; state: string }[] }>("queue-list", {});
+  out(o, r, r.entries.length ? r.entries.map((e) => `${e.seq}  ${e.state.padEnd(8)} ${e.cmd} ${e.id}  ${e.opId}`).join("\n") : "kuyruk boş");
+});
+def(queue, "flush", "Kuyruğu şimdi boşaltmayı dener", async (o: Opts) => {
+  const r = await queueCall<{ sent: number; failed: number; remaining: number }>("queue-flush", {});
+  out(o, r, `gönderilen ${r.sent}, başarısız ${r.failed}, kalan ${r.remaining}`);
+});
+def(queue, "drop <seq>", "Kuyruktaki (ya da başarısız) girdiyi siler", async (seq: string, o: Opts) => {
+  const n = Number(seq);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`seq geçersiz: ${seq}`);
+  const r = await queueCall<{ dropped: true }>("queue-drop", { seq: n });
+  out(o, r, `silindi: ${n}`);
+});
+
+program.command("remote").description("Konsol istemcisi: komutu beyin Agent'ında çalıştırır (vlad remote [--op-id id] [--stdin] -- <vlad argv…>)")
+  .option("--op-id <uuid>", "yazma tekrarında ilk sonucu döndürmek için sabit opId").option("--stdin", "stdin'i komuta ilet (--file - için)")
+  .argument("[argv...]").action(async (argv: string[], o: Opts) => {
+    try { await runRemote(argv, { opId: o.opId as string | undefined, stdin: !!o.stdin }); } catch (e) { fail(e); }
+  });
+// --- /machines:B ---
+// --- machines:C2 --- machine
+const machine = program.command("machine").description("Makine kaydı ve uzak denetim");
+const machineCfg = (): { cfg: VladConfig; self: string } => {
+  const cfg = loadConfig();
+  if (!cfg.machines) throw new Error("config'te machines tanımlı değil");
+  return { cfg, self: selfName() };
+};
+def(machine, "list", "Config'teki makineler; brain'i ve yerel kimliği işaretler", (o: Opts) => {
+  const { cfg, self } = machineCfg();
+  const rows = cfg.machines!.map((m) => ({ name: m.name, os: m.os, brain: m.name === cfg.brain, self: m.name === self, host: m.agent.host ?? null, port: m.agent.port }));
+  out(o, rows, rows.map((m) => `${m.name}  ${m.os}  ${m.host ?? "-"}:${m.port}${m.brain ? "  [brain]" : ""}${m.self ? "  [bu makine]" : ""}`).join("\n"));
+});
+def(machine, "ping <ad>", "Makinenin Agent'ına ping atar", async (name: string, o: Opts) => {
+  const { cfg, self } = machineCfg();
+  const t0 = Date.now();
+  const r = (await brainTransport(cfg, self).call<{ machine: string; proto: number; build: string }>(name, "ping", {}, { timeoutMs: 10_000 })).result;
+  out(o, { ...r, ms: Date.now() - t0 }, `${r.machine} yanıt verdi (proto ${r.proto}, build ${r.build}, ${Date.now() - t0} ms)`);
+});
+def(machine, "probe-window <ad>", "İşçide kısa ömürlü bir pencere açtırır (pencere görünüyor mu denemesi; Windows)", async (name: string, o: Opts) => {
+  const { cfg, self } = machineCfg();
+  const r = (await brainTransport(cfg, self).call<{ opened: boolean; method: string }>(name, "probe-window", {}, { timeoutMs: 30_000 })).result;
+  out(o, r, `pencere açıldı (${r.method}); işçinin ekranında "VLAD probe-window" başlıklı pencere ~45 sn görünmeli`);
+});
+// --- /machines:C2 ---
 
 def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", (o: Opts) => {
   const claudeDir = process.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");

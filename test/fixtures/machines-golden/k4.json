@@ -1,0 +1,98 @@
+[
+  {
+    "cmd": "project write alpha --file <BASE>/card.md --json",
+    "code": 0,
+    "out": "{\"slug\":\"alpha\"}\n",
+    "err": ""
+  },
+  {
+    "cmd": "task new --project alpha --title Bir --kind dev --body-file - --json",
+    "code": 0,
+    "out": "{\"id\":\"T<DATE>-01\",\"warnings\":[]}\n",
+    "err": ""
+  },
+  {
+    "cmd": "task new --project alpha --title İki --kind dev --body-file -",
+    "code": 0,
+    "out": "T<DATE>-02\n",
+    "err": ""
+  },
+  {
+    "cmd": "task ready",
+    "code": 0,
+    "out": "T<DATE>-01  queued            alpha  Bir\nT<DATE>-02  queued            alpha  İki\n",
+    "err": ""
+  },
+  {
+    "cmd": "task ready --json",
+    "code": 0,
+    "out": "{\"tasks\":[{\"id\":\"T<DATE>-01\",\"project\":\"alpha\",\"title\":\"Bir\",\"kind\":\"dev\",\"state\":\"queued\",\"autonomy\":\"commit\",\"branch\":null,\"worktree\":null,\"session_id\":null,\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"error\":null,\"role\":null,\"parent\":null,\"depends_on\":[],\"phase\":null},{\"id\":\"T<DATE>-02\",\"project\":\"alpha\",\"title\":\"İki\",\"kind\":\"dev\",\"state\":\"queued\",\"autonomy\":\"commit\",\"branch\":null,\"worktree\":null,\"session_id\":null,\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"error\":null,\"role\":null,\"parent\":null,\"depends_on\":[],\"phase\":null}],\"held_by_limit\":[],\"running\":0,\"maxParallel\":null}\n",
+    "err": ""
+  },
+  {
+    "cmd": "task list",
+    "code": 0,
+    "out": "T<DATE>-01  queued            alpha  Bir\nT<DATE>-02  queued            alpha  İki\n",
+    "err": ""
+  },
+  {
+    "cmd": "task list --json --fields id,state,title,project",
+    "code": 0,
+    "out": "{\"tasks\":[{\"id\":\"T<DATE>-01\",\"state\":\"queued\",\"title\":\"Bir\",\"project\":\"alpha\"},{\"id\":\"T<DATE>-02\",\"state\":\"queued\",\"title\":\"İki\",\"project\":\"alpha\"}],\"warnings\":[]}\n",
+    "err": ""
+  },
+  {
+    "cmd": "project set alpha exposure network",
+    "code": 0,
+    "out": "yazıldı: alpha.exposure=network\n",
+    "err": ""
+  },
+  {
+    "cmd": "project list --json",
+    "code": 0,
+    "out": "{\"projects\":[{\"slug\":\"alpha\",\"path\":\"<BASE>/alpha\",\"status\":\"active\",\"last_activity\":null,\"exposure\":\"network\"}],\"warnings\":[]}\n",
+    "err": ""
+  },
+  {
+    "cmd": "task launch T<DATE>-01 --dry-run",
+    "code": 0,
+    "out": "T<DATE>-01 başlatıldı (powershell) -> <BASE>/alpha-wt/T<DATE>-01\n(dry-run) {\"file\":\"powershell.exe\",\"args\":[\"-NoExit\",\"-ExecutionPolicy\",\"Bypass\",\"-File\",\"C:/Users/METOHA~1/AppData/Local/Temp/vlad/T<DATE>-01.ps1\"]}\n",
+    "err": ""
+  },
+  {
+    "cmd": "task list --json --fields id,state,title,branch",
+    "code": 0,
+    "out": "{\"tasks\":[{\"id\":\"T<DATE>-01\",\"state\":\"running\",\"title\":\"Bir\",\"branch\":\"vlad/T<DATE>-01\"},{\"id\":\"T<DATE>-02\",\"state\":\"queued\",\"title\":\"İki\",\"branch\":null}],\"warnings\":[]}\n",
+    "err": ""
+  },
+  {
+    "cmd": "status --no-mark",
+    "code": 0,
+    "out": "T<DATE>-01  running           alpha  Bir\ninbox: 0\n",
+    "err": ""
+  },
+  {
+    "cmd": "status --summary --json --no-mark",
+    "code": 0,
+    "out": "{\"counts\":{\"queued\":1,\"running\":1,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[{\"id\":\"T<DATE>-01\",\"project\":\"alpha\",\"title\":\"Bir\",\"kind\":\"dev\",\"state\":\"running\",\"autonomy\":\"commit\",\"branch\":\"vlad/T<DATE>-01\",\"worktree\":\"<BASE>/alpha-wt/T<DATE>-01\",\"session_id\":null,\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"error\":null,\"role\":null,\"parent\":null,\"depends_on\":[],\"phase\":null}],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"summary\":\"İşlenmemiş 0 rapor, 1 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+    "err": ""
+  },
+  {
+    "cmd": "task log T<DATE>-01 not",
+    "code": 0,
+    "out": "eklendi\n",
+    "err": ""
+  },
+  {
+    "cmd": "task ask T<DATE>-01 soru?",
+    "code": 0,
+    "out": "T<DATE>-01 -> blocked\n",
+    "err": ""
+  },
+  {
+    "cmd": "task answer T<DATE>-01 cevap",
+    "code": 0,
+    "out": "T<DATE>-01 -> running\n",
+    "err": ""
+  }
+]

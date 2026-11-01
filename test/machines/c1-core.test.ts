@@ -1,0 +1,84 @@
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { branchExists, worktreePath } from "../../src/git/git.js";
+import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
+import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
+import { ensureIntegrationGit, launchCore } from "../../src/tasks/launch-core.js";
+import { makeHome, rmTemp } from "../helpers.js";
+
+const git = (cwd: string, ...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd, stdio: "pipe", encoding: "utf8" });
+
+let repo: string;
+let cfg: VladConfig;
+let home: string;
+beforeEach(() => {
+  home = makeHome();
+  const base = mkdtempSync(join(tmpdir(), "vlad-c1core-"));
+  repo = join(base, "alpha");
+  mkdirSync(repo);
+  git(repo, "init", "-b", "main");
+  writeFileSync(join(repo, "a.txt"), "1");
+  git(repo, "add", ".");
+  git(repo, "commit", "-m", "first");
+  cfg = defaultConfig();
+  cfg.worktreeDir = join(base, "wt");
+});
+afterEach(() => { rmTemp(dirname(repo)); rmTemp(home); });
+
+const fake = (ok = true): Launcher & { reqs: LaunchRequest[] } => {
+  const reqs: LaunchRequest[] = [];
+  return { reqs, async launch(r) { reqs.push(r); return ok ? { ok: true, method: "fake", detail: "d" } : { ok: false, method: "fake", detail: "boom" }; } };
+};
+const req = (over: Record<string, unknown> = {}) => ({
+  taskId: "T20261101-90", repo, worktree: worktreePath(cfg, repo, "T20261101-90"), branch: "vlad/T20261101-90",
+  prompt: "p", env: { VLAD_TASK_ID: "T20261101-90", VLAD_HOME: home }, title: "t", ...over,
+});
+
+describe("machines:C1 launchCore", () => {
+  it("worktree + dal açar, launcher'ı çağırır, {branch, worktree, method} döner; görev dosyası gerekmez (kb'ye dokunmaz)", async () => {
+    const l = fake();
+    const r = await launchCore(req(), l);
+    expect(r).toMatchObject({ branch: "vlad/T20261101-90", method: "fake" });
+    expect(existsSync(r.worktree)).toBe(true);
+    expect(l.reqs).toHaveLength(1);
+    expect(l.reqs[0].cwd).toBe(r.worktree);
+  });
+
+  it("launcher başarısızsa worktree ve dal geri alınır, hata fırlar", async () => {
+    const r = req();
+    await expect(launchCore(r, fake(false))).rejects.toThrow(/launcher başarısız \(fake\): boom/);
+    expect(existsSync(r.worktree)).toBe(false);
+    expect(branchExists(repo, r.branch)).toBe(false);
+  });
+
+  it("worktree beklenen dalda değilse hata ve temizlik (launcher çağrılmaz)", async () => {
+    const l = fake();
+    const r = req({ branchOf: () => "baska" });
+    await expect(launchCore(r, l)).rejects.toThrow(/beklenen faz dalında değil/);
+    expect(l.reqs).toHaveLength(0);
+    expect(branchExists(repo, r.branch)).toBe(false);
+  });
+
+  it("base verilirse dal ondan açılır", async () => {
+    git(repo, "branch", "taban");
+    git(repo, "checkout", "-q", "taban");
+    writeFileSync(join(repo, "b.txt"), "2");
+    git(repo, "add", ".");
+    git(repo, "commit", "-m", "taban");
+    git(repo, "checkout", "-q", "main");
+    const r = await launchCore(req({ base: "taban" }), fake());
+    expect(existsSync(join(r.worktree, "b.txt"))).toBe(true);
+  });
+});
+
+describe("machines:C1 ensureIntegrationGit", () => {
+  it("entegrasyon dalı + worktree'yi açar; kb kaydı yazmaz; ikinci çağrı aynı sonucu verir", () => {
+    const a = ensureIntegrationGit(repo, "T20261101-80", cfg, "main");
+    expect(a.branch).toBe("vlad/T20261101-80");
+    expect(existsSync(a.worktree)).toBe(true);
+    expect(ensureIntegrationGit(repo, "T20261101-80", cfg, "main")).toEqual(a);
+  });
+});

@@ -1,0 +1,76 @@
+import type { AgentOp } from "../../machines/types.js";
+import { applyWrite } from "./apply-write.js";
+import { exec } from "./exec.js";
+import { forwardWrite } from "./forward-write.js";
+import { kbHead } from "./kb-head.js";
+import { opStatus } from "./op-status.js";
+import { ping } from "./ping.js";
+import { kbSync } from "./kb-sync.js";
+import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
+import { probeWindow } from "./probe-window.js";
+import { gateRun, mergeOp, mergePreview } from "./gate.js";
+import { liveness } from "./liveness.js";
+import { queueDrop, queueFlush, queueList } from "./queue.js";
+
+// Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
+// `notImplemented` yerine kendi modülüne bağlar (B: ping, op-status, apply-write, exec, kb-head, forward-write, queue-*;
+// C2: kb-sync, launch, resume, close, cleanup, probe-window; C3: liveness; C4: gate-run, merge-preview, merge).
+
+export type AgentKind = "worker-agent" | "brain-agent";
+/** İsteği imzalayan kimliğin rolü; `self` = worker Agent'ına aynı makineden gelen yerel istemci (from==to). */
+export type CallerRole = "brain" | "worker" | "console" | "self";
+
+export interface OpContext { from: string; opId: string }
+export type OpHandler = (args: unknown, ctx: OpContext) => Promise<unknown>;
+
+export class NotImplementedOp extends Error {
+  constructor(public op: AgentOp) { super(`op henüz gerçeklenmedi: ${op}`); this.name = "NotImplementedOp"; }
+}
+const notImplemented = (op: AgentOp): OpHandler => async () => { throw new NotImplementedOp(op); };
+
+const ALLOWED: Record<AgentKind, Partial<Record<CallerRole, readonly AgentOp[]>>> = {
+  "worker-agent": {
+    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge"],
+    self: ["forward-write", "queue-list", "queue-flush", "queue-drop"],
+  },
+  "brain-agent": {
+    worker: ["ping", "apply-write"],
+    console: ["ping", "exec", "kb-head"],
+  },
+};
+
+export const allowedOps = (agent: AgentKind, caller: CallerRole): readonly AgentOp[] => ALLOWED[agent][caller] ?? [];
+export const isAllowed = (agent: AgentKind, caller: CallerRole, op: AgentOp): boolean => allowedOps(agent, caller).includes(op);
+
+const OPS: AgentOp[] = [
+  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge",
+  "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop",
+];
+export const OP_TABLE = Object.fromEntries(OPS.map((op) => [op, notImplemented(op)])) as Record<AgentOp, OpHandler>;
+// --- machines:B --- B'nin op satırları
+OP_TABLE.ping = () => ping();
+OP_TABLE["op-status"] = (a, c) => opStatus(a, c);
+OP_TABLE["apply-write"] = (a, c) => applyWrite(a, c);
+OP_TABLE.exec = (a, c) => exec(a, c);
+OP_TABLE["kb-head"] = () => kbHead();
+OP_TABLE["forward-write"] = (a) => forwardWrite(a);
+OP_TABLE["queue-list"] = () => queueList();
+OP_TABLE["queue-flush"] = () => queueFlush();
+OP_TABLE["queue-drop"] = (a) => queueDrop(a);
+// --- /machines:B ---
+// --- machines:C2 --- C2'nin op satırları
+OP_TABLE["probe-window"] = () => probeWindow();
+OP_TABLE["kb-sync"] = (a) => kbSync(a);
+OP_TABLE.launch = (a, c) => launchOp(a, c);
+OP_TABLE.resume = (a) => resumeOp(a);
+OP_TABLE.close = (a) => closeOp(a);
+OP_TABLE.cleanup = (a) => cleanupOp(a);
+// --- /machines:C2 ---
+// --- machines:C3 ---
+OP_TABLE.liveness = (a) => liveness(a);
+// --- /machines:C3 ---
+// --- machines:C4 ---
+OP_TABLE["gate-run"] = (a) => gateRun(a);
+OP_TABLE["merge-preview"] = (a) => mergePreview(a);
+OP_TABLE.merge = (a) => mergeOp(a);
+// --- /machines:C4 ---

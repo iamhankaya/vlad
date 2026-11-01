@@ -194,7 +194,7 @@ describe("F-vlad-096 doğrulama: zaman aşımı ve okuma", { timeout: 120_000 },
     for (const [a, input] of writes) {
       const aj = a.includes("--json") ? a : [...a, "--json"]; // hata JSON biçimi yalnız --json ile
       const r = await vlad(aj, input, env);
-      expect(r.code, a.join(" ")).toBe(1);
+      expect(r.code, a.join(" ")).toBe(75);
       expect(JSON.parse(r.err).error, a.join(" ")).toMatch(/^kb kilidi alınamadı/);
     }
     expect(readFileSync(join(kb(), "tasks", `${id}.md`), "utf8")).toBe(before);
