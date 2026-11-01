@@ -278,17 +278,35 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
   const model = effectiveModel(task.data, role);
   const autoCompact = cfg.workerAutoCompact;
-  // yerel (brain) yerleşim de çatıyı pencere açılmadan önce sabitler: eşzamanlı uzak kardeş faz başka makineye kayamaz
+  // yerel (brain) yerleşim de kapasiteyi kilit altında ayırır (placeTask'ın kontrolü kilitsizdi: eşzamanlı iki launch ikisi de açılırdı)
+  // ve çatıyı pencere açılmadan önce sabitler: eşzamanlı uzak kardeş faz başka makineye kayamaz
   const parent = task.data.parent;
+  const opId = randomUUID();
   let claimed = false;
-  if (patch.machine && parent) {
+  if (patch.machine) {
+    const m = patch.machine;
     claimed = await withKbLock(() => {
-      const pin = getTask(parent).data.machine;
-      if (pin && pin !== patch.machine) throw new Error(`pipeline ${pin} makinesine sabit; ${patch.machine} olamaz`);
-      return claimPin(parent, patch.machine!);
+      const t = getTask(id);
+      if (t.data.state !== "queued") throw new LostRace(`başka deneme kazandı (${id} artık queued değil); başlatılmadı`);
+      const pin = parent ? getTask(parent).data.machine : null;
+      if (pin && pin !== m) throw new Error(`pipeline ${pin} makinesine sabit; ${m} olamaz`);
+      const { load } = machineLoad(listTasks().filter((x) => x.data.id !== id), cfg.brain!, nowMs());
+      const cap = capsOf(cfg)[m];
+      if (cap !== undefined && (load[m] ?? 0) >= cap) throw new Error(`bekliyor — ${id} için makine yok (${m}: dolu)`);
+      Object.assign(t.data, { machine: m, machine_reserved: new Date(nowMs()).toISOString(), launch_op: opId });
+      saveTask(t);
+      return claimPin(parent, m);
     });
   }
-  const unclaim = async (): Promise<void> => { if (claimed) await withKbLock(() => releasePin(parent, patch.machine!, id)); };
+  /** Hata yolu: rezervasyon hâlâ bizimse bırakılır (kb kilidi altında); pin'i yalnız bu deneme koyduysa geri alınır. */
+  const unclaim = async (): Promise<void> => {
+    if (!patch.machine) return;
+    await withKbLock(() => {
+      const t = getTask(id);
+      if (t.data.state === "queued" && t.data.launch_op === opId) { Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null }); saveTask(t); }
+      if (claimed) releasePin(parent, patch.machine!, id);
+    });
+  };
   try {
     await launchCore({
       taskId: id, repo, worktree: wt, branch, ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
@@ -306,7 +324,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
   try {
     return await withKbLock(() => {
-      const t = setState(id, "running", { branch, worktree: wt, error: null, ...patch });
+      const t = setState(id, "running", { branch, worktree: wt, error: null, ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : {}) });
       if (patch.machine) pinPipeline(t.data.parent, patch.machine);
       return t;
     });
