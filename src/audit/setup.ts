@@ -6,7 +6,7 @@ import { listFindingsWithWarnings, UNRESOLVED } from "../findings/store.js";
 import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
-import { firstAdded, installedSkills, lastChanged, skillDirs } from "./rules.js";
+import { firstAdded, installedSkills, lastChanged, roleSkillSince, skillDirs } from "./rules.js";
 import { auditSkills } from "./skills.js";
 
 const DAY = 86_400_000;
@@ -16,7 +16,7 @@ const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
 export interface Signal { tasks: number; count: number; examples: string[] }
 type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
-interface CoverageRow { role: string; skill: string; since: string | null; expected_tasks: number; loaded_tasks: number; rate: number }
+interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
 export interface SetupAudit {
   since: string;
   tasks: { total: number; ids: string[]; by_role: Record<string, number>; by_phase: Record<string, number>; by_model: Record<string, number> };
@@ -113,8 +113,9 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
 
     if (t.data.state === "cancelled") {
       out.cancelled.total++;
-      // no dedicated field: a reason is an error value or an İlerleme/Sorular line that says why (iptal/cancel)
-      if (t.data.error || /iptal|cancel/i.test(progress + questions)) out.cancelled.with_reason++;
+      // no dedicated field (and `error` may be left over from an earlier failed state): a reason is a timestamped
+      // İlerleme line whose text starts with iptal/cancel (optionally after [KARAR])
+      if (/^- \S+ (?:\[KARAR\] )?(?:iptal|cancel)/im.test(progress)) out.cancelled.with_reason++;
       else out.cancelled.without_reason_ids.push(id);
     }
   }
@@ -155,9 +156,15 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     if (!t.transcript || !role) continue;
     for (const s of role.skills) {
       const key = `${role.slug}\u0000${s}`;
-      const row = rows.get(key) ?? { role: role.slug, skill: s, since: firstAdded(home, `roles/${role.slug}.md`, s), expected_tasks: 0, loaded_tasks: 0, rate: 0 };
+      const row = rows.get(key) ?? (() => {
+        const at = roleSkillSince(home, `roles/${role.slug}.md`, s);
+        return { role: role.slug, skill: s, since: at, since_unknown: at === null, expected_tasks: 0, loaded_tasks: 0, rate: 0 };
+      })();
       rows.set(key, row);
-      if (row.since && Date.parse(created.get(t.id) ?? "") < Date.parse(row.since)) { cov.skipped_before_rule++; continue; }
+      const made = Date.parse(created.get(t.id) ?? "");
+      if (Number.isNaN(made)) continue; // no creation date: cannot be placed against the rule date, so not measured
+      // since_unknown (no git history for the skill): every task is measured; the flag tells the reader the date is missing
+      if (row.since && made < Date.parse(row.since)) { cov.skipped_before_rule++; continue; }
       row.expected_tasks++;
       if (t.scanned.includes(bare(s))) row.loaded_tasks++;
     }

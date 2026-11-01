@@ -37,6 +37,8 @@ vlad audit setup --since <tarih> --json
 - `rules` (`CLAUDE.md` ve rol dosyalarının son değişiklik tarihi, git geçmişinden).
 - `findings` (`unresolved` yaşa göre; `by_severity`, `by_project`, `by_source`, `stale`).
 
+**Veri sınırları** (raporun `### Açık noktalar`ına yaz, önerinde dayanak yapma): `coverage` satırında `since_unknown: true` ise skill rol dosyasında commit edilmemiş ya da git geçmişi yok demektir; o satırda tüm görevler ölçülmüş olur, oran şişkin olabilir, "eksik" önerisini tarihi elle doğrulamadan yazma. Kullanım çıplak ada göre eşleşir; iki plugin'de aynı çıplak adlı skill (`a:review`, `b:review`) birbirinin kullanımını gösterir, `unused` o durumda eksik raporlar. Plugin önbelleği `<pazar>/<plugin>/<sürüm>/skills` düzenini varsayar; başka düzendeki plugin envantere girmeyebilir.
+
 Skill adları: plugin skill'leri `plugin:skill` biçimindedir; kullanıcının `~/.claude/skills`'i (`user`) ve plugin önbelleği (`plugin`) envantere girer. Kullanım karşılaştırması çıplak ada göre yapılır. `source: role` skill'i bir rol adlandırıyor ama hiçbir yerde kurulu değil demektir.
 
 Ana bağlamı şişirme; ham veriyi okuyup yorumlamayı arka plan agent'larına ver, ana bağlama yalnız özet girer:

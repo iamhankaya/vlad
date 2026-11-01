@@ -10,7 +10,8 @@ import { defaultConfig } from "../../src/kb/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { claudeProjectDir } from "../../src/tasks/liveness.js";
 import { createTask } from "../../src/tasks/index.js";
-import { makeHome } from "../helpers.js";
+import { makeHome, makeJunction } from "../helpers.js";
+import { getTask } from "../../src/tasks/index.js";
 
 let home: string;
 let cfgDir: string;
@@ -152,6 +153,25 @@ describe("auditSetup", () => {
     expect(a).not.toBe(b);
   });
 
+  it("does not take a leftover error value or mid-sentence 'iptal' as a cancellation reason", () => {
+    const id = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 iptal edilen test geçti sanıldı"].map((l) => l.replace("iptal edilen", "test: iptal edilen")) });
+    const t = getTask(id);
+    t.data.error = "eski failed nedeni"; // left over from failed → cancelled
+    writeDoc(t.file, t.data, t.body);
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.cancelled).toEqual({ total: 1, with_reason: 0, without_reason_ids: [id] });
+  });
+
+  it("finds a user skill that is a junction/symlink to a directory", () => {
+    const real = join(cfgDir, "real", "linked");
+    mkdirSync(real, { recursive: true });
+    writeFileSync(join(real, "SKILL.md"), "---\nname: linked\n---\n");
+    mkdirSync(join(cfgDir, "skills"), { recursive: true });
+    makeJunction(join(cfgDir, "skills", "linked"), real, cfgDir);
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.skills.inventory.find((s) => s.name === "linked")?.source).toBe("user");
+  });
+
   it("breaks unresolved findings down by severity, project and source task", () => {
     addFinding({ project: "alpha", severity: "yüksek", source: "T20261001-01", title: "a" });
     addFinding({ project: "alpha", severity: "düşük", source: "T20261001-01", title: "b" });
@@ -203,6 +223,22 @@ describe("auditSetup", () => {
       expect(row("superpowers:test-driven-development")).toMatchObject({ role: "developer", expected_tasks: 2, loaded_tasks: 2, rate: 1 });
       expect(row("frontend-design:frontend-design")).toMatchObject({ expected_tasks: 1, loaded_tasks: 0, rate: 0, since: "2026-10-30T10:00:00+03:00" });
       expect(r.skills.coverage.skipped_before_rule).toBe(1);
+    });
+
+    it("counts a removed and re-added role skill from the re-adding, and flags an uncommitted one as since_unknown", () => {
+      roleFile(["superpowers:test-driven-development"]); // frontend-design removed
+      commitAt("2026-10-31T10:00:00+03:00", "role: drop");
+      roleFile(["superpowers:test-driven-development", "frontend-design:frontend-design"]);
+      commitAt("2026-11-01T10:00:00+03:00", "role: re-add");
+      const early = task({ at: "2026-10-31", role: "developer" }); // would count if the first adding (10-30) were used
+      loadSkill(early, "superpowers:test-driven-development");
+      roleFile(["superpowers:test-driven-development", "frontend-design:frontend-design", "other:fresh"]); // never committed
+      const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+      const row = (skill: string) => r.skills.coverage.by_skill.find((c) => c.skill === skill);
+      expect(row("frontend-design:frontend-design")).toBeUndefined(); // the only task predates the re-adding
+      expect(r.skills.coverage.skipped_before_rule).toBe(1);
+      expect(row("other:fresh")).toMatchObject({ since: null, since_unknown: true, expected_tasks: 1 });
+      expect(row("superpowers:test-driven-development")).toMatchObject({ since_unknown: false });
     });
 
     it("reports when each role file and CLAUDE.md last changed", () => {
