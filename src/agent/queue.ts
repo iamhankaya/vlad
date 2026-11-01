@@ -1,0 +1,127 @@
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { RemoteError, type QueueEntry, type WriteArgs } from "../machines/types.js";
+
+export const QUEUE_MAX_ENTRIES = 1000;
+export const QUEUE_MAX_BYTES = 64 * 1024 * 1024;
+
+export interface QueueItem extends WriteArgs {
+  seq: number;
+  opId: string;
+  state: QueueEntry["state"];
+  ts: number;
+  /** Son durdurma/başarısızlık gerekçesi (kuyrukta kalan ya da failed/ altındaki giriş için). */
+  reason?: string;
+}
+
+/** Kalıcı hata: girdi failed/ altına gider ve aynı görevin sonraki girdileri de onu izler. auth/proto_mismatch/geçici hatalar kuyruğu durdurur, girdi kalır. */
+const PERMANENT: ReadonlySet<string> = new Set(["forbidden", "failed", "bad_request", "not_found", "conflict", "too_large"]);
+
+const name = (seq: number, opId: string) => `${String(seq).padStart(8, "0")}-${opId}.json`;
+
+/**
+ * İşçi tarafı sıralı kuyruk: tek süreç (yerel Agent) sahibidir, dosya kilidi gerekmez.
+ * Her girdi atomik yazılan (tmp + rename) tek dosyadır: `<dir>/NNNNNNNN-<opId>.json`; kalıcı hatalılar `<dir>/failed/`.
+ */
+export class AgentQueue {
+  private flushing = false;
+  private count = 0;
+  private bytes = 0;
+  private seqNo = 0;
+  constructor(private dir: string, private now: () => number) {
+    mkdirSync(join(dir, "failed"), { recursive: true });
+    for (const d of [dir, join(dir, "failed")]) for (const f of readdirSync(d)) if (f.endsWith(".tmp")) rmSync(join(d, f), { force: true });
+    for (const f of readdirSync(dir)) if (f.endsWith(".json") && !this.read(join(dir, f))) renameSync(join(dir, f), join(dir, "failed", f)); // bozuk JSON → failed
+    for (const f of this.files()) { this.count++; this.bytes += statSync(join(dir, f)).size; }
+    const seqFile = join(dir, ".seq");
+    const saved = existsSync(seqFile) ? parseInt(readFileSync(seqFile, "utf8"), 10) || 0 : 0;
+    const onDisk = [...this.files(), ...readdirSync(join(dir, "failed")).filter((f) => f.endsWith(".json"))].reduce((m, f) => Math.max(m, parseInt(f, 10) || 0), 0);
+    this.seqNo = Math.max(saved, onDisk);
+  }
+  private unlink(file: string): void { // sayaçları tutarlı tutan tek silme noktası
+    this.bytes -= statSync(file).size; this.count--; rmSync(file);
+  }
+
+  private read(file: string): QueueItem | null {
+    try {
+      const it = JSON.parse(readFileSync(file, "utf8")) as QueueItem;
+      return typeof it.seq === "number" && typeof it.opId === "string" ? it : null;
+    } catch { return null; }
+  }
+  private write(file: string, it: QueueItem): void {
+    const tmp = file + ".tmp";
+    writeFileSync(tmp, JSON.stringify(it));
+    renameSync(tmp, file);
+  }
+  private files(): string[] { return readdirSync(this.dir).filter((f) => f.endsWith(".json")).sort(); }
+  private nextSeq(): number {
+    this.seqNo++;
+    writeFileSync(join(this.dir, ".seq"), String(this.seqNo)); // silinen/failed numaralar tekrar kullanılmaz
+    return this.seqNo;
+  }
+
+  /** Bekleyen + devam eden girdiler (sıralı). */
+  pending(): QueueItem[] { return this.files().map((f) => this.read(join(this.dir, f))).filter((x): x is QueueItem => !!x); }
+  isEmpty(): boolean { return this.count === 0; }
+
+  enqueue(w: WriteArgs & { opId: string }, state: "pending" | "inflight" = "pending"): QueueItem {
+    if (this.count >= QUEUE_MAX_ENTRIES || this.bytes >= QUEUE_MAX_BYTES) throw new RemoteError("busy", "busy: kuyruk dolu", "");
+    const it: QueueItem = { ...w, seq: this.nextSeq(), state, ts: this.now() };
+    const file = join(this.dir, name(it.seq, it.opId));
+    this.write(file, it);
+    this.count++; this.bytes += statSync(file).size;
+    return it;
+  }
+  setState(seq: number, state: "pending" | "inflight", reason?: string): void {
+    const f = this.files().find((x) => parseInt(x, 10) === seq);
+    if (!f) return;
+    const it = this.read(join(this.dir, f))!;
+    this.write(join(this.dir, f), { ...it, state, ...(reason ? { reason } : {}) });
+  }
+  remove(seq: number): boolean {
+    for (const d of [this.dir, join(this.dir, "failed")]) {
+      const f = readdirSync(d).find((x) => x.endsWith(".json") && parseInt(x, 10) === seq);
+      if (f) { if (d === this.dir) this.unlink(join(d, f)); else rmSync(join(d, f)); return true; }
+    }
+    return false;
+  }
+  private fail(file: string, it: QueueItem, reason: string): void {
+    this.write(join(this.dir, "failed", name(it.seq, it.opId)), { ...it, state: "failed", reason });
+    this.unlink(join(this.dir, file));
+  }
+
+  list(): QueueEntry[] {
+    const failedDir = join(this.dir, "failed");
+    const failed = readdirSync(failedDir).filter((f) => f.endsWith(".json")).sort().map((f) => this.read(join(failedDir, f))).filter((x): x is QueueItem => !!x);
+    return [...this.pending(), ...failed].map((i) => ({ seq: i.seq, opId: i.opId, cmd: i.cmd, id: i.id, state: i.state }));
+  }
+
+  /**
+   * Sıradan gönderir. `send` başarıyla döner → silinir; RemoteError: kalıcı → failed/ (+ aynı görevin kalanı), diğer → durur.
+   * Devam eden (inflight) bir doğrudan gönderim varsa sıra bozulmasın diye hiçbir şey yapmaz.
+   */
+  async flush(send: (it: QueueItem) => Promise<unknown>): Promise<{ sent: number; failed: number; remaining: number }> {
+    const r = { sent: 0, failed: 0, remaining: 0 };
+    if (this.flushing) return { ...r, remaining: this.count };
+    this.flushing = true;
+    try {
+      const poisoned = new Map<string, number>(); // görev id → başarısız ilk seq
+      for (const f of this.files()) {
+        const it = this.read(join(this.dir, f));
+        if (!it) continue;
+        if (it.state === "inflight") break;
+        const prev = poisoned.get(it.id);
+        if (prev !== undefined) { this.fail(f, it, `önceki başarısız: ${prev}`); r.failed++; continue; }
+        try { await send(it); this.unlink(join(this.dir, f)); r.sent++; } catch (e) {
+          const code = e instanceof RemoteError ? e.code : "failed";
+          if (PERMANENT.has(code)) { this.fail(f, it, `${code}: ${(e as Error).message}`); poisoned.set(it.id, it.seq); r.failed++; continue; }
+          this.write(join(this.dir, f), { ...it, reason: (e as Error).message });
+          break;
+        }
+      }
+    } finally { this.flushing = false; }
+    r.remaining = this.count;
+    return r;
+  }
+  exists(): boolean { return existsSync(this.dir); }
+}

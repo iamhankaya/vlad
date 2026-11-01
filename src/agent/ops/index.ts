@@ -1,4 +1,6 @@
 import type { AgentOp } from "../../machines/types.js";
+import { opStatus } from "./op-status.js";
+import { ping } from "./ping.js";
 
 // Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
 // `notImplemented` yerine kendi modülüne bağlar (B: ping, op-status, apply-write, exec, kb-head, forward-write, queue-*;
@@ -35,3 +37,7 @@ const OPS: AgentOp[] = [
   "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop",
 ];
 export const OP_TABLE = Object.fromEntries(OPS.map((op) => [op, notImplemented(op)])) as Record<AgentOp, OpHandler>;
+// --- machines:B --- B'nin op satırları
+OP_TABLE.ping = () => ping();
+OP_TABLE["op-status"] = (a, c) => opStatus(a, c);
+// --- /machines:B ---
