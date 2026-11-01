@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
-  addWorktree, attachWorktree, branchExists, isWorktree, ReparseCleanupError, remoteBranchExists, removeWorktree, runGit,
-  unlinkReparsePoints, worktreeBranch, worktreePath,
+  isWorktree, ReparseCleanupError, removeWorktree, runGit,
+  unlinkReparsePoints, worktreePath,
 } from "../git/git.js";
 import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
@@ -21,7 +22,14 @@ import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { expireMode, modeLine } from "../mode/store.js";
-import { trustWorktree, untrustWorktree } from "./trust.js";
+import { untrustWorktree } from "./trust.js";
+import { ensureIntegrationGit, launchCore } from "./launch-core.js";
+import { nowMs } from "../machines/clock.js";
+import { capsOf, machineLoad, pickMachine } from "../machines/placement.js";
+import { machinesOf } from "../machines/registry.js";
+import { repoNameOf } from "../machines/paths.js";
+import { RemoteError } from "../machines/types.js";
+import type { AgentCode, RemoteTransport } from "../machines/types.js";
 
 const ALL_STATES: TaskState[] = [
   "queued", "running", "blocked", "stalled", "awaiting_approval", "done", "failed", "cancelled",
@@ -90,24 +98,18 @@ export function ensureIntegration(
   if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parentId} ${p.data.state}; fazı başlatılamaz`);
   const slug = project ?? p.data.project;
   const repo = projectPath(slug);
-  const branch = `vlad/${parentId}`;
-  const worktree = worktreePath(cfg, repo, parentId);
-  if (!branchExists(repo, branch)) {
-    if (remoteBranchExists(repo, branch)) addWorktree(repo, worktree, branch, `origin/${branch}`);
-    else {
-      const def = projectDefaultBranch(slug);
-      addWorktree(repo, worktree, branch, def && branchExists(repo, def) ? def : undefined);
-    }
-  } else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
-  else if (!isWorktree(repo, worktree)) {
-    // a merge into it at the gate would fail or, inside the repo, hit the wrong branch
-    throw new Error(`entegrasyon klasörü bir git worktree'si değil: ${worktree}; klasörü kaldırıp tekrar dene`);
-  }
-  if (slug === p.data.project && (p.data.branch !== branch || p.data.worktree !== worktree)) {
+  const { branch, worktree } = ensureIntegrationGit(repo, parentId, cfg, projectDefaultBranch(slug));
+  recordIntegration(parentId, slug, branch, worktree);
+  return { repo, branch, worktree };
+}
+
+/** kb half of `ensureIntegration`: only a phase of the pipeline's own project records branch/worktree on the pipeline task. */
+export function recordIntegration(parentId: string, project: string, branch: string, worktree: string): void {
+  const p = getTask(parentId);
+  if (project === p.data.project && (p.data.branch !== branch || p.data.worktree !== worktree)) {
     Object.assign(p.data, { branch, worktree });
     saveTask(p);
   }
-  return { repo, branch, worktree };
 }
 
 /**
@@ -133,11 +135,31 @@ export function integrationWorktrees(
   return out;
 }
 
-/** Opens worktree + branch, starts the launcher and moves the task to `running`. */
-export async function launchTask(
-  id: string,
-  o: { launcher: Launcher; cfg: VladConfig; now?: Date; branchOf?: (worktree: string) => string | null },
-): Promise<Task> {
+/** Remote half of a launch (machines C1/C2): the transport to the worker Agent and an optional kb-sync step run before `launch`. */
+export interface RemoteDeps {
+  transport: RemoteTransport;
+  /** Called (outside the kb lock) before the remote `launch`; throw to refuse (e.g. kb not pushed). */
+  syncKb?: (machine: string) => Promise<void>;
+}
+
+/** A remote launch whose outcome is unknown keeps its reservation; anything else is a definite failure. */
+const RETRY_STATES: ReadonlySet<string> = new Set(["unknown", "aborted", "cancelled", "aborted-cancelled", "failed", "not_found"]);
+const UNCERTAIN: ReadonlySet<AgentCode> = new Set<AgentCode>(["unreachable", "timeout", "uncertain"]);
+
+export interface LaunchOpts {
+  launcher: Launcher; cfg: VladConfig; now?: Date; branchOf?: (worktree: string) => string | null;
+  /** machines only: transport to the worker Agents */
+  remote?: RemoteDeps;
+  /** machines only: pin the task to one of its card's machines */
+  machine?: string;
+}
+
+/**
+ * Opens worktree + branch, starts the launcher and moves the task to `running`. With `machines` in the
+ * config the task is placed first (card order, capacity, reachability); a worker machine runs the launch
+ * in three phases: reserve (kb lock) -> remote op (no lock) -> verify + write (kb lock). The brain launches locally.
+ */
+export async function launchTask(id: string, o: LaunchOpts): Promise<Task> {
   const task = getTask(id);
   if (task.data.state !== "queued") throw new Error(`görev queued değil (${task.data.state}): ${id}`);
   if (task.data.kind !== "dev") throw new Error(`yalnızca dev görevleri başlatılır (kind=${task.data.kind}): ${id}`);
@@ -147,84 +169,195 @@ export async function launchTask(
   const stale = await withKbLock(() => syncAutonomy(task, o.cfg));
   if (stale) console.error(`uyarı: ${id} yetkisi config'ten güncellendi (${stale} → ${task.data.autonomy})`);
 
+  if (!o.cfg.machines) {
+    if (o.machine) throw new Error("--machine yalnız config'te machines tanımlıyken kullanılır");
+    return launchLocal(task, o, {});
+  }
+  const machine = await placeTask(task, o);
+  if (machine === o.cfg.brain) return launchLocal(task, o, { machine });
+  if (!o.remote) throw new Error(`uzak taşıma bağlı değil (VLAD Agent istemcisi yok): ${machine}`);
+  return launchRemote(task, o, machine, o.remote);
+}
+
+/** Picks the machine: an existing (uncertain) reservation wins, else card order -> pipeline pin -> capacity -> reachability. */
+async function placeTask(task: Task, o: LaunchOpts): Promise<string> {
+  const { cfg } = o;
+  const brain = cfg.brain!;
+  if (task.data.machine && task.data.launch_op) return task.data.machine;
+  const { names } = machinesOf(cfg, projectCard(task.data.project));
+  const pin = task.data.parent ? getTask(task.data.parent).data.machine ?? undefined : undefined;
+  if (o.machine && !names.includes(o.machine)) throw new Error(`--machine kart listesinde yok: ${o.machine}`);
+  if (o.machine && pin && o.machine !== pin) throw new Error(`pipeline makinesi ${pin}; --machine ${o.machine} olamaz`);
+  let cands = o.machine ? [o.machine] : names;
+  if (pin) cands = cands.filter((n) => n === pin);
+  const { load } = machineLoad(listTasks(), brain, nowMs());
+  const transport = o.remote?.transport;
+  const reach = transport
+    ? async (m: string) => m === brain || await transport.call(m, "ping", {}).then(() => true, () => false)
+    : undefined;
+  const pick = await pickMachine(cands, load, capsOf(cfg), reach);
+  if (pick.machine === null) {
+    const why = pick.reasons.length ? pick.reasons.map((r) => `${r.machine}: ${r.reason}`).join(", ") : `${pin ?? "uygun makine"}: tanımsız`;
+    throw new Error(`bekliyor — ${task.data.id} için makine yok (${why})`);
+  }
+  return pick.machine;
+}
+
+/** Records the error and, when the reservation is still ours (`launch_op`), releases it. */
+const failReservation = (id: string, opId: string, msg: string): Promise<void> => withKbLock(() => {
+  const t = getTask(id);
+  if (t.data.state === "running" || t.data.launch_op !== opId) return; // a newer attempt owns the task: a late reply writes nothing
+  t.data.error = msg;
+  Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
+  saveTask(t);
+});
+
+/** The first phase of a pipeline pins the pipeline to its machine; later phases only go there. */
+function pinPipeline(parentId: string | null | undefined, machine: string): void {
+  if (!parentId) return;
+  const p = getTask(parentId);
+  if (p.data.machine) return;
+  p.data.machine = machine;
+  saveTask(p);
+}
+
+async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string }): Promise<Task> {
+  const { cfg } = o;
+  const id = task.data.id;
   const branch = `vlad/${id}`;
   let repo: string;
   let wt: string;
   let role: Role | undefined;
-  let created: string | null = null;
+  let base: string | undefined;
   try {
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
-    wt = worktreePath(o.cfg, repo, id);
-    // a pipeline phase branches from the pipeline's integration branch; the rollback below leaves it alone
-    const base = task.data.parent ? (await withKbLock(() => ensureIntegration(task.data.parent!, o.cfg, task.data.project))).branch : undefined;
-    addWorktree(repo, wt, branch, base);
-    // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
-    const actual = (o.branchOf ?? worktreeBranch)(wt);
-    if (actual !== branch) {
-      try { removeWorktree(repo, wt); } catch { /* the branch cleanup and the error below still matter */ }
-      // addWorktree refuses an existing branch, so `branch` (if present) was created just now; keep the name free for a retry
-      if (branchExists(repo, branch)) runGit(repo, ["branch", "-D", branch]);
-      throw new Error(`worktree beklenen faz dalında değil (beklenen ${branch}, bulunan ${actual ?? "yok"}): ${wt}`);
-    }
-    created = runGit(repo, ["rev-parse", branch]);
+    wt = worktreePath(cfg, repo, id);
+    // a pipeline phase branches from the pipeline's integration branch; the rollback in launchCore leaves it alone
+    base = task.data.parent ? (await withKbLock(() => ensureIntegration(task.data.parent!, cfg, task.data.project))).branch : undefined;
   } catch (e) {
     const msg = (e as Error).message;
     await recordError(id, msg);
     throw new Error(msg);
   }
-
-  /** Rolls back worktree + branch; returns a description of what failed to clean up, or "". */
-  const undo = (): string => {
-    const problems: string[] = [];
-    try {
-      removeWorktree(repo, wt);
-    } catch (e) {
-      problems.push(`worktree kaldırılamadı (${wt}): ${(e as Error).message}`);
-    }
-    // the branch was created by addWorktree just now; drop it so a retry can reuse the name. Still at
-    // its starting commit → nothing to lose, force it (-d refuses when the base is ahead of HEAD, as an
-    // integration branch is); new commits on it → -d, which keeps unmerged work.
-    const untouched = created !== null && runGit(repo, ["rev-parse", branch]) === created;
-    if (runGit(repo, ["branch", untouched ? "-D" : "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
-    return problems.join("; ");
-  };
-
-  // a worktree missing from ~/.claude.json parks the worker on the "Quick safety check" screen
-  const trustWarning = trustWorktree(wt);
-  if (trustWarning) console.error(`uyarı: ${trustWarning}`);
-
   const model = effectiveModel(task.data, role);
-  const autoCompact = o.cfg.workerAutoCompact;
-  let failure: string | null = null;
+  const autoCompact = cfg.workerAutoCompact;
   try {
-    const res = await o.launcher.launch({
-      taskId: id,
-      cwd: wt,
+    await launchCore({
+      taskId: id, repo, worktree: wt, branch, ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
       prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
       ...(autoCompact ? { autoCompact } : {}),
-    });
-    if (!res.ok) failure = `launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`;
+    }, o.launcher);
   } catch (e) {
-    failure = `launcher başarısız: ${(e as Error).message}`;
-  }
-  if (failure) {
-    const cleanup = undo();
-    untrustWorktree(wt);
-    if (cleanup) failure += `; temizlik başarısız: ${cleanup}`;
-    await recordError(id, failure);
-    throw new Error(failure);
+    const msg = (e as Error).message;
+    await recordError(id, msg);
+    throw new Error(msg);
   }
   try {
-    return await withKbLock(() => setState(id, "running", { branch, worktree: wt, error: null }));
+    return await withKbLock(() => {
+      const t = setState(id, "running", { branch, worktree: wt, error: null, ...patch });
+      if (patch.machine) pinPipeline(t.data.parent, patch.machine);
+      return t;
+    });
   } catch (e) {
     const msg = `terminal açıldı ama durum güncellenemedi: ${(e as Error).message}; worktree: ${wt}`;
     try { await recordError(id, msg); } catch { /* best effort */ }
     throw new Error(msg);
   }
+}
+
+class LostRace extends Error {}
+
+interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
+interface OpStatus { state: string; result?: RemoteLaunched }
+
+async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: RemoteDeps): Promise<Task> {
+  const { cfg } = o;
+  const { transport } = remote;
+  const id = task.data.id;
+  const card = projectCard(task.data.project);
+  const parent = task.data.parent ?? null;
+  const busy = (op: string) => new Error(`önceki launch sürüyor (${machine}, op ${op}); sonra tekrar dene`);
+
+  /** Reserves capacity on `machine` under a fresh `launch_op`, replacing `old` (kb lock, no network). */
+  const reserve = (old: string | null): Promise<string> => withKbLock(() => {
+    const t = getTask(id);
+    if (t.data.state !== "queued" || (t.data.launch_op ?? null) !== old) {
+      throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); başlatılmadı`);
+    }
+    const pin = parent ? getTask(parent).data.machine : null;
+    if (pin && pin !== machine) throw new Error(`pipeline ${pin} makinesine sabit; ${machine} olamaz`);
+    const { load } = machineLoad(listTasks().filter((x) => x.data.id !== id), cfg.brain!, nowMs());
+    const cap = capsOf(cfg)[machine];
+    if (cap !== undefined && (load[machine] ?? 0) >= cap) throw new Error(`bekliyor — ${id} için makine yok (${machine}: dolu)`);
+    const opId = randomUUID();
+    Object.assign(t.data, { machine, machine_reserved: new Date(nowMs()).toISOString(), launch_op: opId });
+    saveTask(t);
+    return opId;
+  });
+
+  /** Verify the reservation is still ours, then record the running task (kb lock). */
+  const commit = (opId: string, r: RemoteLaunched): Promise<Task> => withKbLock(() => {
+    const t = getTask(id);
+    if (t.data.launch_op !== opId || t.data.state !== "queued") {
+      throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); yazılmadı`);
+    }
+    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null });
+    if (r.integration && parent) recordIntegration(parent, task.data.project, r.integration.branch, r.integration.worktree);
+    pinPipeline(parent, machine);
+    return run;
+  });
+
+  const old = task.data.launch_op ?? null;
+  if (old) {
+    // an earlier attempt's outcome is unknown: ask the worker before launching again
+    let st = (await transport.call<OpStatus>(machine, "op-status", { target: old })).result;
+    if (st.state === "unknown") st = (await transport.call<OpStatus>(machine, "op-status", { target: old, cancel: true })).result; // tombstone: it can no longer start
+    if (st.state === "done") {
+      if (!st.result) throw new Error(`önceki launch tamamlanmış ama sonuç yok (${machine}, op ${old}); elle incele`);
+      return commit(old, st.result);
+    }
+    if (st.state === "started") throw busy(old);
+    if (!RETRY_STATES.has(st.state)) throw new Error(`beklenmeyen op-status durumu: ${st.state} (${machine}, op ${old})`);
+  }
+  if (parent && CLOSED.includes(getTask(parent).data.state)) throw new Error(`çatı görev ${parent} ${getTask(parent).data.state}; fazı başlatılamaz`);
+  // built before the reservation: a missing role file must not leave a reservation behind
+  const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
+  const model = effectiveModel(task.data, role);
+  const def = card.default_branch ?? undefined;
+  const args = {
+    taskId: id, project: task.data.project, repoName: repoNameOf(card.path), branch: `vlad/${id}`,
+    base: parent ? { kind: "integration", parent, ...(def ? { defaultBranch: def } : {}) } : { kind: "default", ...(def ? { defaultBranch: def } : {}) },
+    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills }),
+    title: `VLAD ${id} — ${task.data.title}`,
+    ...(model ? { model } : {}),
+    ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
+  };
+  const op = await reserve(old);
+
+  let res: { result: RemoteLaunched };
+  try {
+    await remote.syncKb?.(machine);
+    res = await transport.call<RemoteLaunched>(machine, "launch", args, { opId: op });
+  } catch (e) {
+    // no answer: the worker may have launched anyway -> keep the reservation, the next `task launch` asks op-status
+    if (e instanceof RemoteError && UNCERTAIN.has(e.code)) throw e;
+    await failReservation(id, op, (e as Error).message);
+    throw e;
+  }
+  // the worker did launch: a failure while recording it keeps the reservation (the next launch adopts via op-status)
+  return commit(op, res.result);
+}
+
+/**
+ * machines C1: the worker machine a task runs on, when that is not the brain (null otherwise). Its worktree is not on
+ * this machine, so the local resume/cleanup/skills paths must not read or forget it; remote resume/cleanup is C2.
+ */
+export function remoteMachineOf(t: Task, cfg: VladConfig): string | null {
+  return cfg.machines && t.data.machine && t.data.machine !== cfg.brain ? t.data.machine : null;
 }
 
 /** Closes the task's worker window/process tree; the state and the worktree stay as they are. */

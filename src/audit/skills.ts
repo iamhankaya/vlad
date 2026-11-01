@@ -94,10 +94,12 @@ export function auditSkills(o: { configDir?: string; since?: string; project?: s
   const all = listTasks().filter((t) => Date.parse(t.data.created) >= sinceMs && (!o.project || t.data.project === o.project));
 
   const tasks: TaskAudit[] = [];
+  const { machines, brain } = loadConfig();
   for (const t of all) {
     // `task cleanup` empties the field; the path is still derivable from the card and `worktreeDir`
     const wt = t.data.worktree ?? (t.data.kind === "dev" && t.data.state !== "queued" ? derivedWorktree(t.data.project, t.data.id) : null);
     if (t.data.kind === "pipeline" || !wt) continue;
+    if (machines && t.data.machine && t.data.machine !== brain) continue; // worker machine: its transcripts are not here
     const scan = scanDir(dirOf(wt));
     const base = { id: t.data.id, project: t.data.project, role: t.data.role ?? null };
     if (!scan) { tasks.push({ ...base, transcript: false, expected: [], loaded: [], missing: [] }); continue; }

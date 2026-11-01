@@ -73,6 +73,7 @@ export function markSilentWorkers(
   for (const t of listTasks({ state: ["running"] })) {
     const wt = t.data.worktree;
     if (t.data.kind === "pipeline" || !wt || String(t.data.session_id ?? "").startsWith("session_")) continue;
+    if (cfg.machines && t.data.machine && t.data.machine !== cfg.brain) continue; // worker machine: its worktree/transcripts are not here (remote probe: C3)
     const updated = Date.parse(t.data.updated);
     if (Number.isNaN(updated)) continue;
     probe ??= defaultProbe();

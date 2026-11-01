@@ -17,14 +17,15 @@ import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
+import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, listTasksWithWarnings, modelInfo,
-  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeInfo, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, remoteMachineOf, listTasksWithWarnings, modelInfo,
+  eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
 
@@ -108,7 +109,7 @@ const KB_WRITES = new Set([
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const before = async (_key: string, _args: any[]): Promise<boolean> => false;
 /** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
-const lockPolicy = (key: string): "outer" | "inner" | "none" => (KB_WRITES.has(key) ? "outer" : "none");
+const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyOf(key, KB_WRITES, INNER_LOCK.has(key) ? loadConfig() : {}); // C1: resume/cleanup lock in phases once `machines` is set
 // --- /machines:S ---
 
 /** Registers a command with --json and a uniform error path. */
@@ -285,13 +286,16 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
         ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
         : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
-  const t = await launchTask(id, { launcher, cfg });
+  // --- machines:C1 --- yerleştirme; uzak taşıma (AgentClient) C2'de bağlanır
+  const t = await launchTask(id, { launcher, cfg, ...(o.machine ? { machine: o.machine as string } : {}) });
+  // --- /machines:C1 ---
   out(
     o,
     { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}) },
     `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}`,
   );
 }).option("--dry-run", "terminal açmadan komutu göster")
+  .option("--machine <ad>", "görevi kartın makinelerinden birine sabitle (yalnız config'te machines varken)")
   .option("--external", "terminal açma; betiği yaz, script/command/cwd döndür (gömülü kullanım)");
 
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
@@ -344,8 +348,16 @@ def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiş
   .option("--add <ids>", "listeye ekle")
   .option("--remove <ids>", "listeden çıkar")
   .option("--clear", "tüm bağımlılıkları kaldır");
-def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", (id: string, o: Opts) => {
-  const r = resumeInfo(id);
+def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", async (id: string, o: Opts) => {
+  // --- machines:C1 --- hazırlık kilitli (kb yazar), worktree denetimi kilitsiz; uzak makinedeki görev C2'de
+  const cfg0 = loadConfig();
+  const plan = await withKbLock(() => {
+    const remote = remoteMachineOf(getTask(id), cfg0);
+    if (remote) throw new Error(`görev ${id} ${remote} makinesinde; uzak resume henüz bağlı değil`);
+    return resumePrepare(id);
+  });
+  const r = resumeLocalCheck(plan);
+  // --- /machines:C1 ---
   if (o.external) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
@@ -369,8 +381,15 @@ def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacın
   const r = closeTaskWindow(id);
   out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
 });
-def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", (id: string, o: Opts) => {
-  cleanupTask(id, { cfg: loadConfig() });
+def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", async (id: string, o: Opts) => {
+  // --- machines:C1 --- kb yazan cleanup kilitli; uzak makinedeki görevin worktree'si burada yok (C2)
+  const cfg0 = loadConfig();
+  await withKbLock(() => {
+    const remote = remoteMachineOf(getTask(id), cfg0);
+    if (remote) throw new Error(`görev ${id} ${remote} makinesinde; uzak cleanup henüz bağlı değil`);
+    cleanupTask(id, { cfg: cfg0 });
+  });
+  // --- /machines:C1 ---
   out(o, { id }, `${id} worktree kaldırıldı`);
 });
 def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {
