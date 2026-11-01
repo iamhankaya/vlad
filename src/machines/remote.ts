@@ -32,7 +32,8 @@ export const makeRemote = (cfg: VladConfig, self: string): RemoteDeps => {
 export async function syncKb(transport: RemoteTransport, machine: string): Promise<void> {
   const paths = kbPaths();
   const cwd = isSeparateKb(paths.home) ? paths.kb : paths.home;
-  const c = commitKb("uzak çalışan için kb eşitleme", { push: true });
+  let c: ReturnType<typeof commitKb>;
+  try { c = commitKb("uzak çalışan için kb eşitleme", { push: true }); } catch (e) { throw new Error(`kb push edilmedi: uzak çalışan görev dosyasını göremez (${(e as Error).message})`); }
   if (c.warning) console.error(`uyarı: ${c.warning}`);
   let ahead: string;
   try { ahead = git(cwd, ["rev-list", "--count", "@{u}..HEAD"]).trim(); } catch (e) { throw new Error(`kb upstream bulunamadı, işçiye eşitlenemez: ${(e as Error).message}`); }
