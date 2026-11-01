@@ -20,6 +20,14 @@ export const signReq = (key: string, r: { v: number; from: string; to: string; o
 export const signResp = (key: string, r: { v?: number; opId: string; ok?: boolean; code: string; result?: unknown; error?: unknown; meta?: unknown }) =>
   createHmac("sha256", hmacKey(key)).update(`VLAD1R\n${r.v ?? 1}\n${r.opId}\n${r.ok ?? r.code === "ok"}\n${r.code}\n${sha(canonicalJson(r.result ?? null))}\n${sha(canonicalJson(r.error ?? null))}\n${sha(canonicalJson(r.meta ?? null))}`).digest("hex");
 
+/** Çift anahtar (D-vlad-057): iki makine arasındaki anahtar karşı taraf (beyin dışındaki uç) adıyla tutulur; anahtar seçimi YALNIZ burada. */
+export const pairKey = (keys: Record<string, string>, from: string, to: string, brain = "mac"): string => {
+  const peer = from === brain ? to : from;
+  const k = keys[peer];
+  if (!k) throw new Error(`çift anahtar yok: ${from}↔${to}`);
+  return k;
+};
+
 export const frame = (json: string): Buffer => {
   const body = Buffer.from(json, "utf8");
   const h = Buffer.alloc(4);

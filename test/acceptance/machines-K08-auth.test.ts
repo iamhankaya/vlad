@@ -68,6 +68,37 @@ describe("machines:K — K8 kimlik ve yetki", () => {
     await unchanged(id, w, before);
   }, 60_000);
 
+  it("ele geçen işçi anahtarı (çift anahtar, D-vlad-057): başka işçi/konsol/beyin kimliğine ve başka hedefe imzalanamaz; hepsi auth, dosya değişmez", async () => {
+    const { w, id, port, k } = await setup();
+    const before = w.readTask(w.brain, id);
+    // Saldırgan yalnız windows↔mac çift anahtarını (k.windows) biliyor. Her istek o anahtarla DOĞRU imzalanır (mutate yok):
+    // red anahtarın o kimlik için geçerli olmamasından gelmeli, bozuk imzadan değil.
+    for (const [from, to] of [["desktop", "mac"], ["linux", "mac"], ["mac", "mac"], ["windows", "windows"], ["windows", "linux"]] as const) {
+      const r = resp(await rawCall({ port, key: k.windows, from, to, op: "apply-write", args: write(id, { text: `SALDIRI-${from}-${to}` }) }));
+      expect(r.code, `${from}→${to}`).toBe("auth");
+    }
+    // Kontrol: aynı anahtar kendi çiftinde (windows→mac) geçerlidir; yani ret anahtar eşleşmesinden gelir.
+    const ok = resp(await rawCall({ port, key: k.windows, from: "windows", to: "mac", op: "ping" }));
+    expect(ok.code).toBe("ok");
+    expect(w.readTask(w.brain, id)).not.toContain("SALDIRI-");
+    await unchanged(id, w, before);
+  }, 60_000);
+
+  it("ele geçen işçi anahtarı işçide: işçi başka bir kimliğin (konsol) adına gelen isteği kabul etmez; beyin kimliği yalnız çift anahtarla", async () => {
+    w = await makeWorld({ cardMachines: ["windows"] });
+    await w.startAgents(["worker"]);
+    const k = w.pair.keys, port = w.agents.worker!.port;
+    // konsol adına, işçinin bildiği tek anahtarla (beyin çifti) imzalı istek: işçi keys[desktop] tutmaz → auth
+    const a = resp(await rawCall({ port, key: k.windows, from: "desktop", to: "windows", op: "ping" }));
+    expect(a.code).toBe("auth");
+    // konsolun kendi (beyin↔konsol) anahtarı işçide hiç tanımlı değil
+    const b = resp(await rawCall({ port, key: k.desktop, from: "desktop", to: "windows", op: "ping" }));
+    expect(b.code).toBe("auth");
+    // beyin kimliği + beyin↔işçi anahtarı: geçerli
+    const c = resp(await rawCall({ port, key: k.windows, from: "mac", to: "windows", op: "ping" }));
+    expect(c.code).toBe("ok");
+  }, 60_000);
+
   it("yansıtılmış istek: başka uca (to=windows) imzalı istek brain Agent'ında geçmez; brain kimliğiyle gelen istek reddedilir", async () => {
     const { w, id, port, k } = await setup();
     const before = w.readTask(w.brain, id);
