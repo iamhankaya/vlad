@@ -8,7 +8,7 @@ export interface MachineDef {
   name: string;
   os: Os;
   /** host: IP ya da ad ^[A-Za-z0-9.-]+$ ('-' ile başlamaz); port 1024-65535 (varsayılan 7437). */
-  agent: { host: string; port: number; bind?: string };
+  agent: { host?: string; port: number; bind?: string }; // host brain dışındaki makinelerde zorunlu (config doğrular), IPv6 yok; port zorunlu, DEFAULT_AGENT_PORT yalnız önerilen değer
   /** Yoksa genel maxParallel. */
   maxParallel?: number;
   /** İşçinin kendi `{repo}-wt` kalıbı; yoksa genel worktreeDir. */

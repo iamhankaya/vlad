@@ -39,6 +39,10 @@ describe("machines:S config", () => {
     write({ ...ok, consoles: [{ name: "windows" }] });
     expect(() => loadConfig(home)).toThrow(/^config: .*konsol.*windows/);
   });
+  it("'self' is a reserved identity name", () => {
+    write({ ...ok, consoles: [{ name: "self" }] });
+    expect(() => loadConfig(home)).toThrow(/^config: .*self/);
+  });
   it("non-brain machines need agent.host", () => {
     const w = { name: "windows", os: "win32", agent: { port: 7437 } };
     write({ ...ok, machines: [ok.machines[0], w] });

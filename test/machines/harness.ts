@@ -1,6 +1,6 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -28,6 +28,8 @@ export interface HomePair {
   keys: Record<string, string>;
   /** Konsol kimliği için ayrı yerel ayar dosyası (yalnız kendi anahtarı) döndürür; env olarak VLAD_LOCAL_FILE verilir. */
   consoleLocal(name: string): string;
+  /** İki home'u ve geçici dizini siler. */
+  cleanup(): void;
 }
 
 const SUBDIRS = ["projects", "tasks", "inbox", "inbox/processed", "logs", "journal"];
@@ -60,6 +62,7 @@ export function makeHomePair(o: { config?: object; brain?: string; worker?: stri
   const worker = makeSide(base, "worker", wn, { [wn]: keys[wn] }, o.config);
   return {
     brain, worker, keys,
+    cleanup: () => { try { rmSync(base, { recursive: true, force: true }); } catch { /* OS temizler */ } },
     consoleLocal(name) {
       const f = join(base, `console-${name}.json`);
       writeFileSync(f, JSON.stringify({ self: name, keys: { [name]: keys[name] } }));
@@ -79,6 +82,7 @@ export interface RunningAgent { port: number; host: string; proc: ChildProcess; 
 export async function startAgent(side: Side, o: { nowFile?: string; test?: Record<string, string>; timeoutMs?: number } = {}): Promise<RunningAgent> {
   const env = { ...process.env, ...side.env, ...(o.nowFile ? { VLAD_NOW_FILE: o.nowFile } : {}), ...(o.test ? { VLAD_AGENT_TEST: "1", ...o.test } : {}) };
   const proc = spawn(process.execPath, [CLI, "agent", "start", "--port", "0", "--print-port"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  proc.stderr!.resume(); // dolu boru Agent'ı asmasın
   const first = await new Promise<{ host: string; port: number }>((res, rej) => {
     let buf = "";
     const t = setTimeout(() => rej(new Error("agent başlamadı: ilk satır gelmedi")), o.timeoutMs ?? 10_000);

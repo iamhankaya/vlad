@@ -51,6 +51,7 @@ function checkMachines(cfg: VladConfig): void {
     return;
   }
   const names = machines.map((m) => m.name);
+  if ([...names, ...(consoles ?? []).map((c) => c.name)].includes("self")) throw new Error("config: 'self' ayrılmış bir ad (makine/konsol adı olamaz)");
   const dup = names.find((n, i) => names.indexOf(n) !== i);
   if (dup) throw new Error(`config: makine adı birden fazla tanımlı: ${dup}`);
   if (!brain) throw new Error("config: machines varsa brain zorunlu");
