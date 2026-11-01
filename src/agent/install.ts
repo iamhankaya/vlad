@@ -34,7 +34,7 @@ export function schtasksArgs(c: Pick<InstallCtx, "node" | "cli" | "home">): stri
 /** schtasks süreç ortamını taşımaz; VLAD_HOME'u (launchd gibi) bu başlatma betiği sabitler. */
 const winStartCmd = (home: string): string => `${home}\\.vlad-agent\\agent-start.cmd`;
 const winStartContent = (c: Pick<InstallCtx, "node" | "cli" | "home">): string =>
-  `@echo off\r\nset "VLAD_HOME=${c.home.replace(/%/g, "%%")}"\r\n"${c.node}" "${c.cli}" agent start\r\n`;
+  `@echo off\r\nchcp 65001 >nul\r\nset "VLAD_HOME=${c.home.replace(/%/g, "%%")}"\r\n"${c.node}" "${c.cli}" agent start\r\n`;
 
 export interface Plan { description: string; command?: string; file?: string; content?: string; apply?: () => void }
 

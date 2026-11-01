@@ -80,12 +80,16 @@ describe("P2: çok satırlı task.log uzlaştırması", () => {
     expect(reconcileApplyWrite(rec("birinci\nüçüncü"))).toBe("not-applied");
     // yalnız ilk satır eşleşmesi yetmez
     expect(reconcileApplyWrite(rec("birinci\nikinci\nüçüncü"))).toBe("not-applied");
+    // CRLF'li istek ve sondaki boşluk/satır sonu: kayıtlı gövde normalize/kırpılmıştır
+    expect(reconcileApplyWrite(rec("birinci\r\nikinci"))).toBe("applied");
+    expect(reconcileApplyWrite(rec("birinci\nikinci  \n"))).toBe("applied");
   });
 });
 
 describe("P2: Windows zamanlanmış görevi VLAD_HOME'u korur", () => {
   it("başlatma betiği VLAD_HOME'u ayarlar ve görev o betiği çalıştırır", () => {
     const w = installPlan("win32", { node: "C:\\n\\node.exe", cli: "C:\\v\\dist\\cli.js", home: "D:\\my vlad", path: "p" });
+    expect(w.content).toContain("chcp 65001 >nul"); // cmd OEM kod sayfasıyla okur; UTF-8 yazılan ASCII dışı yollar bozulmasın
     expect(w.content).toContain('set "VLAD_HOME=D:\\my vlad"');
     expect(w.content).toContain('"C:\\n\\node.exe" "C:\\v\\dist\\cli.js" agent start');
     expect(w.file).toBe("D:\\my vlad\\.vlad-agent\\agent-start.cmd");

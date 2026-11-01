@@ -59,7 +59,7 @@ export function reconcileApplyWrite(rec: JournalRecord): Verdict {
   switch (w.cmd) {
     case "task.session": return t.data.session_id === w.sessionId!.trim() ? "applied" : "not-applied";
     case "task.log": { // `- <iso> <ilk satır>` + devam satırları aynen; tüm girdi eşleşmeli (çok satırlı log tek kayıttır)
-      const want = escHeads(w.text!).split("\n");
+      const want = escHeads(w.text!.replace(/\r\n/g, "\n").trimEnd()).split("\n"); // kayıtlı gövde LF'e normalize ve bölüm sonu kırpılmıştır
       const lines = t.body.split("\n");
       return lines.some((l, i) => {
         const m = /^- (\S+) (.*)$/.exec(l);
