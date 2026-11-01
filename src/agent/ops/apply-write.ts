@@ -27,11 +27,14 @@ export function parseWriteArgs(a: unknown): WriteArgs {
 }
 
 /** Mevcut CLI'ın tam argv'si; rapor metni stdin'den (`--file -`). `-` ile başlayan metin için `--` kullanılır. */
+/** Satır başındaki `#`/`##` başlığı görev dosyasının bölümünü bölerdi; başına `\` konur. */
+export const escHeads = (t: string): string => t.replace(/^(#{1,2}\s)/gm, "\\$1");
+
 export function writeArgv(w: WriteArgs): { argv: string[]; stdin?: string } {
   const verb = w.cmd.slice(5);
   const json = w.json ? ["--json"] : [];
   if (w.cmd === "task.report") return { argv: ["task", verb, w.id, "--file", "-", ...json], stdin: w.text };
-  const val = w.cmd === "task.session" ? w.sessionId! : w.text!;
+  const val = w.cmd === "task.session" ? w.sessionId! : escHeads(w.text!);
   return { argv: ["task", verb, ...json, ...(val.startsWith("-") ? ["--"] : []), w.id, val] };
 }
 
@@ -57,9 +60,9 @@ export function reconcileApplyWrite(rec: JournalRecord): Verdict {
     case "task.session": return t.data.session_id === w.sessionId!.trim() ? "applied" : "not-applied";
     case "task.log": return t.body.split("\n").some((l) => { // `- <iso> <metin>`; başlangıçtan sonra yazılmış satır
       const m = /^- (\S+) (.*)$/.exec(l);
-      return !!m && m[2] === w.text && Date.parse(m[1]!) >= rec.ts - 2000;
+      return !!m && m[2] === escHeads(w.text!) && Date.parse(m[1]!) >= rec.ts - 2000;
     }) ? "applied" : "not-applied";
-    case "task.ask": return t.data.state === "blocked" && t.body.includes(w.text!) ? "applied" : "not-applied";
+    case "task.ask": return t.data.state === "blocked" && t.body.includes(escHeads(w.text!)) ? "applied" : "not-applied";
     case "task.report": return t.data.state === "awaiting_approval" && t.body.includes(w.text!.trim()) ? "applied" : "not-applied";
   }
 }

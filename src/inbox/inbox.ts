@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { kbPaths, type InboxRecord } from "../kb/index.js";
 
 function jsonFiles(): string[] {
@@ -38,6 +38,7 @@ export function markDone(files: string[]): void {
   const p = kbPaths();
   mkdirSync(p.processed, { recursive: true });
   for (const f of files) {
+    if (basename(f) !== f || !f.endsWith(".json") || f.includes("..")) throw new Error(`geçersiz inbox dosya adı: ${f}`);
     const src = join(p.inbox, f);
     if (!existsSync(src)) throw new Error(`inbox dosyası yok: ${f}`);
     renameSync(src, join(p.processed, f));

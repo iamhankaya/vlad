@@ -23,8 +23,8 @@ export function readLocal(): LocalSettings {
 }
 export function writeLocal(s: LocalSettings): void {
   const f = localFile();
-  mkdirSync(dirname(f), { recursive: true });
-  writeFileSync(f, JSON.stringify(s, null, 2) + "\n");
+  mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
+  writeFileSync(f, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
   try { chmodSync(f, 0o600); } catch { /* Windows: kullanıcıya özel dizinde ACL */ }
 }
 

@@ -91,7 +91,7 @@ export function validateConsoleArgv(argv: string[], stdin?: string): { entry: Ca
   const files = new Set(entry.fileFlags ?? []);
   for (let i = entry.path.length; i < argv.length; i++) {
     const t = argv[i]!;
-    if (t === "--") break; // sonrası düz veri
+    // "--" ATLANMAZ: değer alan bir seçeneğin değeri olarak tüketilebilir (--title -- --body-file x); tüm token'lar taranır
     const name = t.split("=")[0]!;
     if (files.has(name)) {
       if (t.includes("=") || argv[i + 1] !== "-") throw new RemoteError("forbidden", `forbidden: ${name} değeri yalnız '-' olabilir (içerik stdin ile)`);

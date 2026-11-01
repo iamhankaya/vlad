@@ -21,10 +21,11 @@ const same = (a: unknown, b: string) => {
   return x.length === y.length && timingSafeEqual(x, y);
 };
 
-const reqMsg = (r: Omit<AgentRequest, "sig">) => `VLAD1\n${r.from}\n${r.to}\n${r.opId}\n${r.ts}\n${r.op}\n${sha(canonicalJson(r.args))}`;
+const reqMsg = (r: Omit<AgentRequest, "sig">) => `VLAD1\n${r.v}\n${r.from}\n${r.to}\n${r.opId}\n${r.ts}\n${r.op}\n${sha(canonicalJson(r.args))}`;
 export const signRequest = (key: string, r: Omit<AgentRequest, "sig">): AgentRequest => ({ ...r, sig: mac(key, reqMsg(r)) });
 export const verifyRequest = (key: string, r: AgentRequest): boolean => { try { return same(r.sig, mac(key, reqMsg(r))); } catch { return false; } };
 
-const resMsg = (r: Pick<AgentResponse, "opId" | "code" | "result">) => `VLAD1R\n${r.opId}\n${r.code}\n${sha(canonicalJson(r.result ?? null))}`;
-export const signResponse = (key: string, r: Omit<AgentResponse, "sig">): AgentResponse => ({ ...r, sig: mac(key, resMsg(r)) });
-export const verifyResponse = (key: string, r: AgentResponse): boolean => { try { return same(r.sig, mac(key, resMsg(r))); } catch { return false; } };
+type Signable = Pick<AgentResponse, "v" | "opId" | "ok" | "code" | "result" | "error"> & { meta?: unknown };
+const resMsg = (r: Signable) => `VLAD1R\n${r.v}\n${r.opId}\n${r.ok}\n${r.code}\n${sha(canonicalJson(r.result ?? null))}\n${sha(canonicalJson(r.error ?? null))}\n${sha(canonicalJson(r.meta ?? null))}`;
+export const signResponse = <T extends Omit<AgentResponse, "sig"> & { meta?: unknown }>(key: string, r: T): T & { sig: string } => ({ ...r, sig: mac(key, resMsg(r)) });
+export const verifyResponse = (key: string, r: AgentResponse & { meta?: unknown }): boolean => { try { return same(r.sig, mac(key, resMsg(r))); } catch { return false; } };

@@ -35,6 +35,8 @@ const defaultJournaled = (op: AgentOp): boolean => !READ_ONLY.has(op);
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
 const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
+const MAX_REPLY_CHARS = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (UTF-8 payı)
+const OPID_RE = /^[A-Za-z0-9._:-]{1,64}$/;
 const iso = (ms: number) => new Date(ms).toISOString();
 
 export function callerRole(cfg: VladConfig, self: string, from: string): CallerRole | null {
@@ -51,12 +53,12 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
   const serverTs = nowMs();
   const base = { v: PROTO_VERSION, serverTs, build: o.build };
   const reply = (opId: string, code: WireCode, o2: { result?: unknown; error?: string; key?: string; meta?: OpMeta }): WireResponse => {
-    const r = { ...base, opId, ok: code === "ok", code, ...(o2.result !== undefined ? { result: o2.result } : {}), ...(o2.error ? { error: o2.error } : {}) };
-    const signed = o2.key ? signResponse(o2.key, r) : { ...r, sig: "" };
-    return o2.meta ? { ...signed, meta: o2.meta } : signed;
+    let r: WireResponse = { ...base, opId, ok: code === "ok", code, ...(o2.result !== undefined ? { result: o2.result } : {}), ...(o2.error ? { error: o2.error } : {}), ...(o2.meta ? { meta: o2.meta } : {}), sig: "" };
+    if (JSON.stringify(r).length > MAX_REPLY_CHARS) r = { ...base, opId, ok: false, code: "too_large", error: "too_large: yanıt çerçeve sınırını aşıyor", sig: "" };
+    return o2.key ? signResponse(o2.key, r) : r;
   };
   const r = raw as Partial<AgentRequest> | null;
-  if (!r || typeof r !== "object" || typeof r.from !== "string" || typeof r.to !== "string" || typeof r.opId !== "string" || typeof r.op !== "string" || typeof r.ts !== "number" || typeof r.sig !== "string") {
+  if (!r || typeof r !== "object" || typeof r.from !== "string" || typeof r.to !== "string" || typeof r.opId !== "string" || typeof r.op !== "string" || typeof r.ts !== "number" || typeof r.sig !== "string" || !OPID_RE.test(r.opId)) {
     return reply(typeof r?.opId === "string" ? r.opId : "", "bad_request", { error: "bad_request: istek biçimi geçersiz" });
   }
   const req = r as AgentRequest;
@@ -131,7 +133,10 @@ export function startServer(o: ServerOpts): Promise<RunningServer> {
     const dec = new FrameDecoder();
     let handled = false;
     const timer = setTimeout(() => sock.destroy(), o.readTimeoutMs ?? 10_000); // yarım çerçeve / slow-loris
-    const respond = (r: WireResponse) => { clearTimeout(timer); sock.end(encodeFrame(r)); };
+    const respond = (r: WireResponse) => {
+      clearTimeout(timer);
+      try { sock.end(encodeFrame(r)); } catch { sock.destroy(); } // kodlanamayan yanıt Agent'ı düşürmez
+    };
     sock.on("close", () => clearTimeout(timer));
     sock.on("data", (d: Buffer) => {
       if (handled) return;

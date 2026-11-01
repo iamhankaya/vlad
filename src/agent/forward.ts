@@ -68,9 +68,11 @@ export async function runRemote(argv: string[], o: { opId?: string; stdin?: bool
   const self = selfName();
   if (roleOf(cfg, self) !== "console") throw new Error(`remote: ${self} bir konsol kimliği değil (config consoles)`);
   if (!argv.length) throw new Error("remote: komut verilmedi (vlad remote -- <vlad argv…>)");
+  if (o.opId !== undefined && !/^[A-Za-z0-9._:-]{1,64}$/.test(o.opId)) throw new Error("remote: --op-id yalnız harf, rakam ve . _ : - (en çok 64)");
   const client = new AgentClient({ self, keys: readLocal().keys, config: () => cfg });
   const stdin = o.stdin ? readStdinSync() : undefined;
   const r = await client.call<ExecResult>(cfg.brain, "exec", { argv, ...(stdin !== undefined ? { stdin } : {}) }, { opId: o.opId ?? randomUUID(), timeoutMs: 120_000 });
+  if (!r.result) throw new Error("remote: sonuç belirsiz (Agent yeniden başlamış olabilir); tekrar denemeden önce `vlad remote -- task list` ile durumu kontrol et");
   process.stdout.write(r.result.stdout);
   process.stderr.write(r.result.stderr);
   process.exitCode = r.result.exit;

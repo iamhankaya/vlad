@@ -9,6 +9,9 @@ export function cliPath(): string {
 }
 
 /** `node cli.js <argv…>` — shell yok, argv dizi; çıktı/çıkış kodu aynen döner. */
+const MAX_OUT = 3 * 1024 * 1024;
+const clip = (b: Buffer): string => (b.length > MAX_OUT ? b.subarray(0, MAX_OUT).toString("utf8") + "\n…[çıktı 3 MiB'da kesildi]" : b.toString("utf8"));
+
 export function runCli(argv: string[], o: { stdin?: string; forwarded: string; opId: string; timeoutMs: number }): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cliPath(), ...argv], {
@@ -22,7 +25,7 @@ export function runCli(argv: string[], o: { stdin?: string; forwarded: string; o
     child.on("error", (e) => { clearTimeout(timer); reject(new RemoteError("busy", `busy: alt süreç başlamadı: ${e.message}`)); });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ stdout: Buffer.concat(out).toString("utf8"), stderr: Buffer.concat(err).toString("utf8"), exit: code ?? 1 });
+      resolve({ stdout: clip(Buffer.concat(out)), stderr: clip(Buffer.concat(err)), exit: code ?? 1 });
     });
     child.stdin.on("error", () => { /* çocuk stdin'i okumadan çıktı */ });
     child.stdin.end(o.stdin ?? "");

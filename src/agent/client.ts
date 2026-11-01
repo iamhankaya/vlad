@@ -32,8 +32,9 @@ export class AgentClient implements RemoteTransport {
     const req: AgentRequest = signRequest(key, { v: PROTO_VERSION, from, to, opId, ts: nowMs(), op, args });
     const res = await this.exchange(to, addr, req, c.timeoutMs ?? this.o.defaultTimeoutMs ?? 30_000);
     if (res.opId !== opId) throw new RemoteError("auth", "auth: yanıt başka isteğe ait", to);
-    if (!UNSIGNED.has(res.code) && !verifyResponse(key, res)) throw new RemoteError("auth", "auth: yanıt imzası geçersiz", to);
-    if (UNSIGNED.has(res.code) && res.code !== "auth") throw new RemoteError("timeout", `timeout: imzasız ${res.code} yanıtı (${res.error ?? ""}); yeniden denenir`, to); // imzasız yanıt kalıcı karar tetiklemez
+    if (res.sig) { if (!verifyResponse(key, res)) throw new RemoteError("auth", "auth: yanıt imzası geçersiz", to); }
+    else if (res.code !== "auth" && UNSIGNED.has(res.code)) throw new RemoteError("timeout", `timeout: imzasız ${res.code} yanıtı (${res.error ?? ""}); yeniden denenir`, to); // imzasız yanıt kalıcı karar tetiklemez
+    else if (res.code !== "auth") throw new RemoteError("auth", "auth: yanıt imzasız", to);
     if (res.code !== "ok") throw new RemoteError(res.code as AgentCode, res.error ?? res.code, to); // ok alanı imzalı değil; imzalı olan code'dur
     return { opId, result: res.result as T, ...(res.meta ? { meta: res.meta } : {}) };
   }
