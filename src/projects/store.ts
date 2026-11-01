@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { appendToSection, kbPaths, parseDoc, readDoc, validate, writeDoc, type Exposure, type ProjectCard } from "../kb/index.js";
+import { appendToSection, kbPaths, loadConfig, parseDoc, readDoc, validate, writeDoc, type Exposure, type ProjectCard } from "../kb/index.js";
 
 export function writeProject(slug: string, md: string): ProjectCard {
   if (!/^[a-z0-9-]+$/.test(slug)) {
@@ -22,6 +22,7 @@ export type ProjectSummary = {
   last_activity: string | null;
   exposure?: Exposure;
   gate?: string;
+  machines?: string[];
 };
 
 /** Valid cards in name order; unreadable or invalid cards are skipped and reported as warnings. */
@@ -41,6 +42,7 @@ export function listProjectsWithWarnings(): { projects: ProjectSummary[]; warnin
         last_activity: data.last_activity,
         ...(data.exposure ? { exposure: data.exposure } : {}),
         ...(data.gate ? { gate: data.gate } : {}),
+        ...(data.machines ? { machines: data.machines } : {}),
       });
     } catch (e) {
       warnings.push(`${f}: ${(e as Error).message}`);
@@ -53,7 +55,7 @@ export function listProjects(): ProjectSummary[] {
   return listProjectsWithWarnings().projects;
 }
 
-export const SETTABLE_FIELDS = ["exposure", "repo", "default_branch", "local_only", "local_only_reason", "gate"] as const;
+export const SETTABLE_FIELDS = ["exposure", "repo", "default_branch", "local_only", "local_only_reason", "gate", "machines"] as const;
 export type SettableField = (typeof SETTABLE_FIELDS)[number];
 
 /** Sets (or, with an empty value, removes) one optional card field; the rest of the card and its body stay as they are. */
@@ -70,6 +72,12 @@ export function setProjectField(slug: string, field: string, value: string): Pro
   } else if (field === "local_only") {
     if (value !== "true" && value !== "false") throw new Error(`local_only için true|false bekleniyor: "${value}"`);
     next[field] = value === "true";
+  } else if (field === "machines") {
+    const names = value.split(",").map((n) => n.trim()).filter(Boolean);
+    const defined = loadConfig().machines?.map((m) => m.name) ?? [];
+    const bad = names.find((n) => !defined.includes(n));
+    if (bad) throw new Error(`config'te tanımlı değil: ${bad}`);
+    next[field] = names;
   } else {
     next[field] = value;
   }
