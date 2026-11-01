@@ -55,7 +55,11 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
     if (miss.length) {
       const file = join(paths.kb, ".gitignore");
       const cur = existsSync(file) ? readFileSync(file, "utf8") : "";
-      appendFileSync(file, (cur && !cur.endsWith("\n") ? "\n" : "") + miss.join("\n") + "\n");
+      try {
+        appendFileSync(file, (cur && !cur.endsWith("\n") ? "\n" : "") + miss.join("\n") + "\n");
+      } catch {
+        r.warning = `kb .gitignore güncellenemedi: ${miss.join(", ")} ekle (yerel durum commit'lenmesin)`;
+      }
     }
   }
   // lock files are excluded explicitly too: they appear/vanish mid-`git add` (unable to index) and legacy kb/ has no kb .gitignore
