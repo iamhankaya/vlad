@@ -121,6 +121,12 @@ describe("machines:C2 uzak close/resume/cleanup (beyin)", () => {
     await expect(remoteCleanup(t, "windows", getTask(id))).rejects.toMatchObject({ transient: true });
   });
 
+  it("remoteCleanup: işçide kayıt zaten silinmişse (kaybolan markCleaned sonrası yeniden deneme) görev temizlenmiş sayılır", async () => {
+    const id = mkRunning(); setState(id, "cancelled" as any);
+    const t: RemoteTransport = { call: async () => { throw new RemoteError("forbidden", "forbidden: başlatma kaydı yok: " + id); } };
+    await expect(remoteCleanup(t, "windows", getTask(id))).resolves.toBeUndefined();
+  });
+
   it("markCleaned worktree alanını boşaltır", () => {
     const id = mkRunning();
     markCleaned(id);

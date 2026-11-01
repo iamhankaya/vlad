@@ -17,7 +17,7 @@ import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
-import { brainTransport, makeRemote, markCleaned, remoteCleanup, remoteClose, remoteResume } from "./machines/remote.js";
+import { brainTransport, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, remoteResume } from "./machines/remote.js";
 import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
 import { agentKeygen, agentStart, agentStatus } from "./agent/start.js";
@@ -360,7 +360,9 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   if (remote) {
     // uzak görev: worktree denetimi ve yeniden başlatma işçide (Agent), kb kilidi dışında
     if (o.external) throw new Error("--external uzak makinede desteklenmez");
-    const rr = await remoteResume(brainTransport(cfg0, selfName()), remote, getTask(id), plan, cfg0);
+    const transport = brainTransport(cfg0, selfName());
+    await syncKb(transport, remote); // the worker reads the task file from its kb clone
+    const rr = await remoteResume(transport, remote, getTask(id), plan, cfg0);
     out(o, { id, mode: "remote", machine: remote, ...rr }, `${id} ${remote} makinesinde sürdürüldü (${rr.method}) -> ${rr.worktree}${rr.dirty.length ? `\nkaydedilmemiş: ${rr.dirty.join(", ")}` : ""}`);
     return;
   }

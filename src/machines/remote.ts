@@ -88,7 +88,11 @@ export async function remoteCleanup(transport: RemoteTransport, machine: string,
       throw e;
     }
   }
-  await call(own);
+  try { await call(own); } catch (e) {
+    // retry after a lost `markCleaned`: the worker already removed its record and worktree
+    if (e instanceof RemoteError && e.code === "forbidden" && e.message.includes("başlatma kaydı yok")) return;
+    throw e;
+  }
 }
 
 /** Kilit altında: görevin worktree alanını temizler (uzak cleanup başarılıysa). */

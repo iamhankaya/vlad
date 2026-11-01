@@ -178,6 +178,18 @@ describe("machines:C2 resume op (işçi)", () => {
     expect(reqs[0]!.prompt).not.toContain("{{");
   });
 
+  it("yeniden başlatmadan önce eski pencereyi kapatır (yanında ikinci pencere açılmaz)", async () => {
+    await launchOp(L(), ctx(), { launcher }); reqs = [];
+    const asked: string[] = [];
+    await resumeOp(R(), { launcher, close: (id) => { asked.push(id); return []; } });
+    expect(asked).toEqual([ID]);
+  });
+
+  it("sessionId '-' ile başlayamaz (claude'a seçenek gibi görünmesin)", async () => {
+    await launchOp(L(), ctx(), { launcher });
+    await expect(resumeOp(R({ sessionId: "-x" }), { launcher })).rejects.toMatchObject({ code: "bad_request" });
+  });
+
   it("sessionId yoksa --continue (resume.sessionId undefined)", async () => {
     await launchOp(L(), ctx(), { launcher }); reqs = [];
     await resumeOp(R(), { launcher });

@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { currentBranch } from "../../git/git.js";
+import { branchExists, currentBranch } from "../../git/git.js";
 import { getVladHome } from "../../kb/home.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
@@ -16,7 +16,8 @@ import { argObject, bad, isInside, projectArg, repoNameArg, resolveRepo, taskFil
 import type { WorkerCtx } from "./worker.js";
 
 export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string } }
-interface LaunchRecord { taskId: string; repo: string; worktree: string; branch: string; opId: string | null; result?: LaunchResultW }
+interface RecEntry { repo: string; worktree: string; branch: string }
+interface LaunchRecord extends RecEntry { taskId: string; opId: string | null; result?: LaunchResultW; /** a pipeline parent's integration worktrees in further repos */ extra?: RecEntry[] }
 type CloseFn = (id: string) => number[] | void;
 
 const MAX_TEXT = 256 * 1024;
@@ -56,8 +57,18 @@ function verifiedRecord(ctx: WorkerCtx, id: string, repoName: string): { repo: s
   if (!rec) throw forbidden(`başlatma kaydı yok: ${id}`);
   const repo = resolveRepo(ctx.def, repoName);
   const wt = workerWorktree(ctx, repo, id);
-  if (rec.taskId !== id || rec.worktree !== wt || rec.repo !== repo) throw forbidden("başlatma kaydı hesaplanan yolla uyuşmuyor");
+  if (rec.taskId !== id || !entriesOf(rec).some((e) => e.worktree === wt && e.repo === repo)) throw forbidden("başlatma kaydı hesaplanan yolla uyuşmuyor");
   return { repo, wt };
+}
+const entriesOf = (r: LaunchRecord): RecEntry[] => [{ repo: r.repo, worktree: r.worktree, branch: r.branch }, ...(r.extra ?? [])];
+/** Removes the entry of a cleaned worktree; the record file goes when nothing is left. */
+function dropEntry(id: string, repo: string, wt: string): void {
+  const rec = readRecord(id);
+  if (!rec) return;
+  const rest = entriesOf(rec).filter((e) => !(e.repo === repo && e.worktree === wt));
+  if (!rest.length) { rmSync(recordFile(id), { force: true }); return; }
+  const [first, ...extra] = rest;
+  writeRecord({ ...rec, ...first!, extra });
 }
 
 const fill = (s: string, ctx: WorkerCtx, id: string): string => s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id));
@@ -90,7 +101,8 @@ export async function launchOp(args: unknown, c: { from: string; opId: string },
   try {
     if (parent) integration = ensureIntegrationGit(repo, parent, wcfg, defaultBranch);
     res = await launchCore({
-      taskId: id, repo, worktree, branch: `vlad/${id}`, ...(integration ? { base: integration.branch } : {}),
+      taskId: id, repo, worktree, branch: `vlad/${id}`,
+      ...(integration ? { base: integration.branch } : defaultBranch && branchExists(repo, defaultBranch) ? { base: defaultBranch } : {}),
       prompt: fill(template, ctx, id), env: envOf(id), title,
       ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),
     }, launcher);
@@ -99,7 +111,12 @@ export async function launchOp(args: unknown, c: { from: string; opId: string },
   }
   const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}) };
   writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, result });
-  if (parent && integration && !readRecord(parent)) writeRecord({ taskId: parent, repo, worktree: integration.worktree, branch: integration.branch, opId: null });
+  if (parent && integration) {
+    const pr = readRecord(parent);
+    const entry = { repo, worktree: integration.worktree, branch: integration.branch };
+    if (!pr) writeRecord({ taskId: parent, ...entry, opId: null });
+    else if (!entriesOf(pr).some((e) => e.repo === repo && e.worktree === entry.worktree)) writeRecord({ ...pr, extra: [...(pr.extra ?? []), entry] });
+  }
   return result;
 }
 
@@ -129,18 +146,18 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   if (a.terminal !== true) throw forbidden("cleanup yalnız done/cancelled görev için (terminal:true)");
   const ctx = workerCtx();
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
-  if (!existsSync(wt)) { rmSync(recordFile(id), { force: true }); return { removed: false }; }
-  if (!isInside(dirname(wt), wt) || dirname(wt) !== dirname(workerWorktree(ctx, repo, "T00000000-00"))) throw forbidden(`worktree kök dışında: ${wt}`);
+  if (!existsSync(wt)) { dropEntry(id, repo, wt); return { removed: false }; }
+  if (!isInside(dirname(wt), wt)) throw forbidden(`worktree kök dışında: ${wt}`);
   try { (o.close ?? defaultClose)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
   let warn: string | null = null;
   try { warn = untrustWorktree(wt); } catch (e) { warn = (e as Error).message; }
   if (warn) throw failed(`güven kaydı kaldırılamadı, worktree silinmedi: ${warn}`); // fail-closed
   try { removeTaskWorktree(repo, wt, id); } catch (e) { throw failed((e as Error).message); }
-  rmSync(recordFile(id), { force: true });
+  dropEntry(id, repo, wt);
   return { removed: true };
 }
 
-export async function resumeOp(args: unknown, o: { launcher?: Launcher } = {}): Promise<{ worktree: string; method: string; dirty: string[] }> {
+export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: CloseFn } = {}): Promise<{ worktree: string; method: string; dirty: string[] }> {
   const a = argObject(args, ["taskId", "project", "repoName", "promptTemplate", "title", "model", "autoCompact", "sessionId"]);
   const id = taskIdArg(a);
   projectArg(a);
@@ -149,7 +166,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher } = {}): 
   const title = text(a, "title", 300);
   const model = optStr(a, "model", MODEL);
   const autoCompact = optStr(a, "autoCompact", COMPACT);
-  const sessionId = optStr(a, "sessionId", /^[A-Za-z0-9._:-]{1,128}$/);
+  const sessionId = optStr(a, "sessionId", /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
   const ctx = workerCtx();
   const { wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) throw new RemoteError("not_found", `not_found: worktree yok: ${wt}; görev ${id} bu makinede sürdürülemez`);
@@ -158,6 +175,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher } = {}): 
   const dirty = dirtyPaths(wt);
   const prompt = fill(template, ctx, id).split("{{WORKTREE}}").join(wt).split("{{DIRTY_LINE}}").join(dirtyLine(dirty));
   const launcher = o.launcher ?? workerLauncher(ctx.cfg);
+  try { (o.close ?? defaultClose)(id); } catch { /* no window to close, or it could not be closed: the launcher reports real failures */ } // no second window beside a live one
   let r;
   try {
     r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), resume: { sessionId } });
