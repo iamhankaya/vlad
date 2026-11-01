@@ -2,6 +2,7 @@ export * from "./home.js";
 export * from "./env.js";
 export * from "./time.js";
 export * from "./atomic.js";
+export * from "./lock.js";
 export * from "./doc.js";
 export * from "./sections.js";
 export * from "./schema.js";

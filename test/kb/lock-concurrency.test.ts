@@ -8,9 +8,9 @@ const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 let home: string;
 beforeEach(() => { home = makeHome(); });
 
-function vlad(args: string[], input = ""): Promise<{ code: number | null; out: string; err: string }> {
+function vlad(args: string[], input = "", env: Record<string, string> = {}): Promise<{ code: number | null; out: string; err: string }> {
   return new Promise((done) => {
-    const p = spawn("node", [cli, ...args], { env: { ...process.env, VLAD_HOME: home }, stdio: ["pipe", "pipe", "pipe"] });
+    const p = spawn("node", [cli, ...args], { env: { ...process.env, VLAD_HOME: home, ...env }, stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
     p.stdout.on("data", (d) => (out += d));
     p.stderr.on("data", (d) => (err += d));
@@ -65,5 +65,21 @@ describe("kb yazma kilidi: eşzamanlı süreçler (F-vlad-096)", { timeout: 120_
     expect(journal.match(/- w\d+-i\d+/g)).toHaveLength(n);
     const task = readFileSync(join(home, "kb", "tasks", `${id}.md`), "utf8");
     expect(task.match(/log-w\d+-i\d+/g)).toHaveLength(n);
+  });
+
+  it("kilit tutulurken yazan komut zaman aşımında JSON hata + çıkış 1 verir; okuma komutları ve kb commit beklemez", async () => {
+    writeFileSync(join(home, "card.md"), CARD);
+    await vlad(["project", "write", "alpha", "--file", join(home, "card.md")]);
+    const id = JSON.parse((await vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", "-", "--json"], "## Tanım\nx\n")).out).id as string;
+    writeFileSync(join(home, "kb", ".vlad.lock"), JSON.stringify({ pid: process.pid, started: Date.now(), token: "test" })); // canlı sahip: bu test süreci
+    const env = { VLAD_LOCK_TIMEOUT_MS: "300" };
+
+    const w = await vlad(["task", "log", id, "x", "--json"], "", env);
+    expect(w.code).toBe(1);
+    expect(JSON.parse(w.err).error).toMatch(/^kb kilidi alınamadı/);
+    expect((await vlad(["task", "list", "--json"], "", env)).code).toBe(0);
+    expect((await vlad(["status", "--no-mark", "--json"], "", env)).code).toBe(0);
+    expect((await vlad(["project", "list", "--json"], "", env)).code).toBe(0);
+    expect((await vlad(["kb", "commit", "x"], "", env)).err).not.toMatch(/kilid/); // git yok/kb repo değil: başka hata olabilir, kilit hatası olmamalı
   });
 });
