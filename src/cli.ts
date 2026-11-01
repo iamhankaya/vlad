@@ -113,7 +113,7 @@ const KB_WRITES = new Set([
 
 // --- machines:S --- kancalar; varsayılan = mevcut davranış. B `before`'ı (iletim), C `lockPolicy`'yi (resume/cleanup iç kilit) doldurur.
 /** true → komut başka makineye iletildi (çıktı yazıldı), yerel handler çalışmaz. */
-const before = (key: string, args: any[]): Promise<boolean> => forwardIfWorker(key, args, KB_WRITES);
+const before = (key: string, args: any[]): Promise<boolean> => forwardIfWorker(key, args);
 /** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
 const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyOf(key, KB_WRITES, INNER_LOCK.has(key) ? loadConfig() : {}); // C1: resume/cleanup lock in phases once `machines` is set
 // --- /machines:S ---

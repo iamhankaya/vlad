@@ -27,9 +27,14 @@ export function launchdPlist(c: InstallCtx): string {
 }
 
 /** Windows: oturum açılışında kullanıcının etkileşimli oturumunda (/it) başlar; hizmet olarak kurulmaz (masaüstü penceresi açamaz). */
-export function schtasksArgs(c: Pick<InstallCtx, "node" | "cli">): string[] {
-  return ["/create", "/tn", "VladAgent", "/sc", "onlogon", "/it", "/rl", "limited", "/tr", `"${c.node}" "${c.cli}" agent start`, "/f"];
+export function schtasksArgs(c: Pick<InstallCtx, "node" | "cli" | "home">): string[] {
+  return ["/create", "/tn", "VladAgent", "/sc", "onlogon", "/it", "/rl", "limited", "/tr", `"${winStartCmd(c.home)}"`, "/f"];
 }
+
+/** schtasks süreç ortamını taşımaz; VLAD_HOME'u (launchd gibi) bu başlatma betiği sabitler. */
+const winStartCmd = (home: string): string => `${home}\\.vlad-agent\\agent-start.cmd`;
+const winStartContent = (c: Pick<InstallCtx, "node" | "cli" | "home">): string =>
+  `@echo off\r\nset "VLAD_HOME=${c.home.replace(/%/g, "%%")}"\r\n"${c.node}" "${c.cli}" agent start\r\n`;
 
 export interface Plan { description: string; command?: string; file?: string; content?: string; apply?: () => void }
 
@@ -37,7 +42,13 @@ export interface Plan { description: string; command?: string; file?: string; co
 export function installPlan(os: Os, c: InstallCtx): Plan {
   if (os === "win32") {
     const a = schtasksArgs(c);
-    return { description: "Windows Görev Zamanlayıcı: oturum açılışında Agent", command: `schtasks ${a.map((x) => (/\s/.test(x) && !x.startsWith('"') ? `"${x}"` : x)).join(" ")}`, apply: () => { execFileSync("schtasks", a, { stdio: "inherit" }); } };
+    const file = winStartCmd(c.home);
+    const content = winStartContent(c);
+    return {
+      description: "Windows Görev Zamanlayıcı: oturum açılışında Agent (VLAD_HOME'u sabitleyen başlatma betiği)", file, content,
+      command: `schtasks ${a.map((x) => (/\s/.test(x) && !x.startsWith('"') ? `"${x}"` : x)).join(" ")}`,
+      apply: () => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, content); execFileSync("schtasks", a, { stdio: "inherit" }); },
+    };
   }
   if (os === "darwin") {
     const file = join(homedir(), "Library", "LaunchAgents", "com.vlad.agent.plist");
