@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { worktreePath } from "../../src/git/git.js";
 import { defaultConfig } from "../../src/kb/index.js";
 import { front, git, makeWorld, runVlad, type World } from "./machines-world.js";
-import { rawCall } from "./machines-raw.js";
+import { rawCall, pairKey } from "./machines-raw.js";
 
 let w: World | undefined;
 afterEach(async () => { await w?.cleanup(); w = undefined; });
@@ -16,7 +16,8 @@ const journal = (side: { home: string }) => {
   const f = join(side.home, ".vlad-agent", "journal.jsonl");
   return existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
 };
-const ops = (side: { home: string }, op: string) => journal(side).filter((r) => r.op === op);
+// Günlük işlem başına "started" + sonuç kaydı yazar (C2 yazan-işlem günlüğü); işlemleri opId başına tek (son) kayıt say.
+const ops = (side: { home: string }, op: string) => [...new Map(journal(side).filter((r) => r.op === op).map((r) => [r.opId, r])).values()];
 const claudeJson = (side: { env: Record<string, string> }) => (existsSync(side.env.VLAD_CLAUDE_JSON) ? readFileSync(side.env.VLAD_CLAUDE_JSON, "utf8") : "");
 const wtList = (repo: string) => slash(git(repo, "worktree", "list", "--porcelain"));
 
@@ -91,7 +92,7 @@ describe("machines:K — K10 uzak yaşam döngüsü doğru makinede", () => {
 
   describe("cleanup güvenliği (doğrudan op, brain anahtarı)", () => {
     const cleanupOp = (world: World, args: object) =>
-      rawCall({ port: world.agents.worker!.port, key: world.pair.keys.mac, from: "mac", to: "windows", op: "cleanup", args });
+      rawCall({ port: world.agents.worker!.port, key: pairKey(world.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "cleanup", args });
 
     it("başlatma kaydı olmayan görev, ../ kaçışı, terminal:false, istekteki yol → forbidden/bad_request; hiçbir şey silinmez", async () => {
       const { w, id, wt } = await launched();
@@ -132,10 +133,12 @@ describe("machines:K — K10 uzak yaşam döngüsü doğru makinede", () => {
 
     it("worker/konsol kimlikleri cleanup/launch/close çağıramaz", async () => {
       const { w, id } = await launched();
+      // Çift anahtar (D-vlad-057): işçi yalnız beyinle paylaştığı anahtarı bilir; kendi adıyla ya da konsol adıyla gelen istek
+      // kendi anahtarıyla imzalansa bile kimlik doğrulamasında düşer (auth) — rol kontrolüne (forbidden) hiç varmaz.
       for (const [from, key] of [["windows", w.pair.keys.windows], ["desktop", w.pair.keys.desktop]] as const) {
         for (const op of ["cleanup", "close", "launch"]) {
           const o = resp(await rawCall({ port: w.agents.worker!.port, key, from, to: "windows", op, args: { taskId: id } }));
-          expect(o.code, `${from}/${op}`).toBe("forbidden");
+          expect(o.code, `${from}/${op}`).toBe("auth");
         }
       }
     }, 90_000);
@@ -167,7 +170,8 @@ describe("machines:K — K15 yol sözleşmesi", () => {
     const cfg2 = w.config() as any;
     cfg2.machines[1].roots.push(root2);
     for (const s of [w.brain, w.worker]) writeFileSync(join(s.home, "vlad.config.json"), JSON.stringify(cfg2));
-    w.config = () => cfg2; // setPorts yeniden yazarken kök listesi korunsun
+    const base2 = w; // setPorts yeniden yazarken kök listesi korunsun; portlar canlı değerden okunur (sabit cfg2 bayat port taşırdı)
+    w.config = () => { cfg2.machines[0].agent.port = base2.ports.mac; cfg2.machines[1].agent.port = base2.ports.windows; return cfg2; };
     await w.startAgents(["worker"]);
     const id = await w.newTask();
     const r = await runVlad(w.brain, ["task", "launch", id]);
@@ -210,12 +214,12 @@ describe("machines:K — K19 kapı işlemleri (uzak makinede gate-run / merge-pr
     const c = await runVlad(w.brain, ["kb", "commit", "gate", "--push"]);
     expect(c.code, c.err).toBe(0);
     const sha = git(w.brain.kb, "rev-parse", "HEAD").trim();
-    const sync = resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "kb-sync", args: { expectSha: sha } }));
+    const sync = resp(await rawCall({ port: w.agents.worker!.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "kb-sync", args: { expectSha: sha } }));
     expect(sync.code, JSON.stringify(sync)).toBe("ok");
     return { w, pid, phase, wt };
   }
   const op = (world: World, name: string, args: object, k = "mac") =>
-    rawCall({ port: world.agents.worker!.port, key: world.pair.keys[k], from: k, to: "windows", op: name, args });
+    rawCall({ port: world.agents.worker!.port, key: pairKey(world.pair.keys, k, "windows"), from: k, to: "windows", op: name, args });
 
   it("merge-preview yazmaz; gate-run entegrasyon worktree'sinde kartın gate komutunu koşar; merge entegrasyona alır, push yok", async () => {
     const { w, pid, phase } = await pipelineOnWindows();
@@ -278,7 +282,7 @@ describe("machines:K — K19 kapı işlemleri (uzak makinede gate-run / merge-pr
     expect(["forbidden", "not_found"]).toContain(o2.code);
     for (const [k, name] of [["windows", "gate-run"], ["desktop", "merge"], ["desktop", "merge-preview"]] as const) {
       const o = resp(await op(w, name, { ...base, taskId: phase, target: "task", from: "a", into: "b" }, k));
-      expect(o.code, `${k}/${name}`).toBe("forbidden");
+      expect(o.code, `${k}/${name}`).toBe("auth") // çift anahtar (D-vlad-057): işçi/konsol kimliği işçide kimlikte düşer;
     }
   }, 120_000);
 });

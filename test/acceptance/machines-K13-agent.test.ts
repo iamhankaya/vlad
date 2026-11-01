@@ -4,7 +4,7 @@ import net from "node:net";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeWorld, runVlad, type World } from "./machines-world.js";
-import { frame, rawCall, sendRaw } from "./machines-raw.js";
+import { frame, rawCall, sendRaw, pairKey } from "./machines-raw.js";
 
 let w: World | undefined;
 afterEach(async () => { await w?.cleanup(); w = undefined; });
@@ -17,7 +17,7 @@ describe("machines:K — K13 Agent yaşamı", () => {
     const second = await runVlad(w.worker, ["agent", "start", "--port", String(w.agents.worker!.port)]);
     expect(second.code, second.err).toBe(0);
     expect(second.out + second.err).toContain("zaten çalışıyor");
-    expect(resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "ping" })).code).toBe("ok");
+    expect(resp(await rawCall({ port: w.agents.worker!.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "ping" })).code).toBe("ok");
   }, 60_000);
 
   it.each(["0.0.0.0", "8.8.8.8", "::", "example.invalid"])("bind=%s → başlatma reddi 'genel adrese bağlanılamaz'", async (bind) => {
@@ -35,7 +35,7 @@ describe("machines:K — K13 Agent yaşamı", () => {
   it("ping: proto/build/os/machine/uptimeS döner, yanıt imzalıdır", async () => {
     w = await makeWorld();
     await w.startAgents(["worker"]);
-    const r = resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "ping" }));
+    const r = resp(await rawCall({ port: w.agents.worker!.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "ping" }));
     expect(r.code).toBe("ok");
     expect(r.result).toMatchObject({ machine: "windows", proto: 1 });
     expect(typeof r.result.build).toBe("string");
@@ -46,7 +46,7 @@ describe("machines:K — K13 Agent yaşamı", () => {
   it("protokol sürümü uyuşmazlığı: proto_mismatch (ping hariç, ping sürümü sonuçta bildirir), iki sürüm mesajda", async () => {
     w = await makeWorld();
     await w.startAgents(["worker"]);
-    const call = async (op: string, v: number) => resp(await rawCall({ port: w!.agents.worker!.port, key: w!.pair.keys.mac, from: "mac", to: "windows", op, v }));
+    const call = async (op: string, v: number) => resp(await rawCall({ port: w!.agents.worker!.port, key: pairKey(w!.pair.keys, "mac", "windows"), from: "mac", to: "windows", op, v }));
     // B (server.ts: `req.v !== PROTO_VERSION && req.op !== "ping"`, T20261101-24 raporu "proto (ping muaf)"): ping sürüm keşfi için muaf; diğer op'lar reddedilir.
     const r = await call("op-status", 2);
     expect(r.code).toBe("proto_mismatch");
@@ -59,7 +59,7 @@ describe("machines:K — K13 Agent yaşamı", () => {
   it("saat farkı: clock_skew mesajı sunucu ve istemci saatini gösterir", async () => {
     w = await makeWorld();
     await w.startAgents(["worker"]);
-    const r = resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "ping", ts: Date.now() - 5 * 60_000 }));
+    const r = resp(await rawCall({ port: w.agents.worker!.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "ping", ts: Date.now() - 5 * 60_000 }));
     expect(r.code).toBe("clock_skew");
     expect(r.error).toMatch(/\d{4}-\d{2}-\d{2}T.*\d{4}-\d{2}-\d{2}T/);
   }, 60_000);
@@ -72,9 +72,9 @@ describe("machines:K — K13 Agent yaşamı", () => {
     w.writeConfig();
     const { startAgent } = await import("../machines/harness.js");
     w.agents.worker = await startAgent(w.worker, { nowFile });
-    const near = resp(await rawCall({ port: w.agents.worker.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "ping", ts: base + 3 * 3600_000 - 1000 }));
+    const near = resp(await rawCall({ port: w.agents.worker.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "ping", ts: base + 3 * 3600_000 - 1000 }));
     expect(near.code).toBe("ok");
-    const real = resp(await rawCall({ port: w.agents.worker.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "ping" }));
+    const real = resp(await rawCall({ port: w.agents.worker.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "ping" }));
     expect(real.code).toBe("clock_skew");
   }, 60_000);
 
@@ -112,7 +112,7 @@ describe("machines:K — K17 çerçeve ve soket", () => {
       if (o.kind === "response") expect(["bad_request", "too_large"]).toContain(o.resp.code);
       else expect(o.kind === "closed" || o.kind === "timeout").toBe(true);
     }
-    expect(await ping(port, k.mac)).toBe("ok");
+    expect(await ping(port, k.windows)).toBe("ok");
   }, 90_000);
 
   it("8 MiB'ı aşan çerçeve başlığı: too_large ya da bağlantı kesilir; ardından Agent çalışır", async () => {
@@ -122,7 +122,7 @@ describe("machines:K — K17 çerçeve ve soket", () => {
     const o = await sendRaw(port, h, { timeoutMs: 6000 });
     if (o.kind === "response") expect(o.resp.code).toBe("too_large");
     else expect(o.kind).toBe("closed");
-    expect(await ping(port, k.mac)).toBe("ok");
+    expect(await ping(port, k.windows)).toBe("ok");
   }, 60_000);
 
   it("yarım çerçeve (slow-loris): okuma zaman aşımında bağlantı kapanır, kaynak tükenmez", async () => {
@@ -132,7 +132,7 @@ describe("machines:K — K17 çerçeve ve soket", () => {
     // plan: 10 sn okuma zaman aşımı; üst sınır geniş (yük altında)
     const o = await sendRaw(port, [h, Buffer.from("0123456789")], { timeoutMs: 25_000 });
     expect(o.kind === "closed" || (o.kind === "response" && o.resp.code !== "ok")).toBe(true);
-    expect(await ping(port, k.mac)).toBe("ok");
+    expect(await ping(port, k.windows)).toBe("ok");
   }, 60_000);
 
   it("17. eşzamanlı bağlantı hemen kapatılır; ilk 16'ya dokunulmaz; bırakılınca yeniden bağlanılır", async () => {
@@ -150,7 +150,7 @@ describe("machines:K — K17 çerçeve ve soket", () => {
       expect(held.filter((s) => !s.destroyed)).toHaveLength(16);
     } finally { for (const s of held) s.destroy(); }
     await new Promise((r) => setTimeout(r, 300));
-    expect(await ping(port, k.mac)).toBe("ok");
+    expect(await ping(port, k.windows)).toBe("ok");
   }, 60_000);
 });
 
@@ -203,14 +203,14 @@ describe("machines:K — K18 konsol kimliği", () => {
   it("worker kimliğiyle exec reddedilir (kimlik rolü anahtardan)", async () => {
     w = await makeWorld();
     await w.startAgents(["brain"]);
-    const o = resp(await rawCall({ port: w.agents.brain!.port, key: w.pair.keys.windows, from: "windows", to: "mac", op: "exec", args: { argv: ["task", "list", "--json"] } }));
+    const o = resp(await rawCall({ port: w.agents.brain!.port, key: pairKey(w.pair.keys, "windows", "mac"), from: "windows", to: "mac", op: "exec", args: { argv: ["task", "list", "--json"] } }));
     expect(o.code).toBe("forbidden");
   }, 60_000);
 
   it("kb-head (konsol): sha ve pushed döner", async () => {
     w = await makeWorld();
     await w.startAgents(["brain"]);
-    const o = resp(await rawCall({ port: w.agents.brain!.port, key: w.pair.keys.desktop, from: "desktop", to: "mac", op: "kb-head" }));
+    const o = resp(await rawCall({ port: w.agents.brain!.port, key: pairKey(w.pair.keys, "desktop", "mac"), from: "desktop", to: "mac", op: "kb-head" }));
     expect(o.code).toBe("ok");
     expect(o.result.sha).toMatch(/^[0-9a-f]{40}$/);
     expect(typeof o.result.pushed).toBe("boolean");

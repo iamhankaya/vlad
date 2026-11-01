@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { startAgent, startProxy, type Proxy } from "../machines/harness.js";
 import { front, git, makeWorld, runVlad, type World } from "./machines-world.js";
-import { rawCall } from "./machines-raw.js";
+import { rawCall, pairKey } from "./machines-raw.js";
 
 let w: World | undefined;
 const proxies: Proxy[] = [];
@@ -141,10 +141,10 @@ describe("machines:K — K12 eşzamanlılık ve rezervasyon", () => {
     const t = w.readTask(w.brain, id);
     expect(front(t, "state")).toBe("running");
     expect(w.noop(w.worker).filter((l) => l.taskId === id)).toHaveLength(1);
-    const st = resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "op-status", args: { target: old } }));
+    const st = resp(await rawCall({ port: w.agents.worker!.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "op-status", args: { target: old } }));
     expect(st.result.state).toMatch(/cancelled|aborted/);
     // eski opId ile geç gelen launch reddedilir (conflict), pencere açılmaz
-    const late = resp(await rawCall({ port: w.agents.worker!.port, key: w.pair.keys.mac, from: "mac", to: "windows", op: "launch", opId: old, args: { taskId: id, project: w.slug, repoName: w.repoName, branch: `vlad/${id}`, base: { kind: "default" }, promptTemplate: "x {{TASK_FILE}}", title: "T" } }));
+    const late = resp(await rawCall({ port: w.agents.worker!.port, key: pairKey(w.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "launch", opId: old, args: { taskId: id, project: w.slug, repoName: w.repoName, branch: `vlad/${id}`, base: { kind: "default" }, promptTemplate: "x {{TASK_FILE}}", title: "T" } }));
     expect(late.code).toBe("conflict");
     expect(w.noop(w.worker).filter((l) => l.taskId === id)).toHaveLength(1);
   }, 90_000);
@@ -217,7 +217,7 @@ describe("machines:K — K14 kb eşitleme (gerçek git klonları)", () => {
   it("kb-sync: beklenen sha origin'de yoksa failed; var ise ok ve HEAD'in atası", async () => {
     w = await makeWorld({ cardMachines: ["windows"] });
     await w.startAgents(["worker"]);
-    const call = async (expectSha: string) => resp(await rawCall({ port: w!.agents.worker!.port, key: w!.pair.keys.mac, from: "mac", to: "windows", op: "kb-sync", args: { expectSha } }));
+    const call = async (expectSha: string) => resp(await rawCall({ port: w!.agents.worker!.port, key: pairKey(w!.pair.keys, "mac", "windows"), from: "mac", to: "windows", op: "kb-sync", args: { expectSha } }));
     expect((await call("a".repeat(40))).code).toBe("failed");
     expect((await call(brainSha(w))).code).toBe("ok");
     expect((await call("--upload-pack=x")).code).toBe("bad_request");

@@ -66,8 +66,7 @@ export async function makeWorld(o: WorldOpts = {}): Promise<World> {
   const pair = makeHomePair({ consoles: o.consoles ?? ["desktop"] });
   const base = dirname(pair.brain.home);
   const { brain, worker } = pair;
-  // İşçi Agent çağıranların (beyin, konsollar) anahtarını bilmeden isteği doğrulayamaz (server.ts:65 anahtarı req.from ile arar); harness yalnız kendi anahtarını yazıyor.
-  writeFileSync(worker.local, JSON.stringify({ self: JSON.parse(readFileSync(worker.local, "utf8")).self, keys: pair.keys }));
+  // Çift anahtar (D-vlad-057): işçi yalnız beyinle paylaştığı anahtarı tutar (harness yazar); burada anahtar eklenmez.
 
   // kb: bare origin + iki klon (gerçek git; ayrı kb düzeni)
   const origin = join(base, "kb-origin.git");

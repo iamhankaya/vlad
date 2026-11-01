@@ -82,7 +82,7 @@ describe("machines:K — K2 [windows] projesi asla Mac'te başlamaz", () => {
     const id = await w.newTask();
     const j = await readyJson(w);
     expect(heldIds(j)).toContain(id);
-    expect(JSON.stringify((j.held_by_limit as any[]).find((x) => idOf(x) === id))).toContain("dolu");
+    expect(JSON.stringify((j.held_reasons as any[]).find((x) => idOf(x) === id))).toContain("dolu"); // neden held_reasons'ta (cli.ts:495), görev kaydında değil
     const r = await runVlad(w.brain, ["task", "launch", id, "--json"]);
     expect(r.code).not.toBe(0);
     expect(w.noop(w.brain)).toHaveLength(0);
