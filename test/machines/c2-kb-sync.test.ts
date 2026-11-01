@@ -78,4 +78,20 @@ describe("machines:C2 kb-sync (işçi)", () => {
     const sha = push("e.md");
     await expect(kbSync({ expectSha: sha })).resolves.toMatchObject({ head: sha });
   });
+
+  it("yavaş fetch sürerken olay döngüsü serbest kalır (Agent ping cevaplanır)", async () => {
+    const sha = push("slow.md");
+    // fetch'in upload-pack adımı 1.5 sn uyur: eşzamanlı git bunca süre döngüyü dondururdu
+    git(worker, "config", "remote.origin.uploadpack", "sleep 1.5; git-upload-pack");
+    let ticks = 0;
+    const timer = setInterval(() => { ticks++; }, 20);
+    const t0 = Date.now();
+    try {
+      const r = await kbSync({ expectSha: sha });
+      expect(r.head).toBe(sha);
+    } finally { clearInterval(timer); }
+    const ms = Date.now() - t0;
+    expect(ms).toBeGreaterThan(1200); // yavaşlatma gerçekten çalıştı
+    expect(ticks).toBeGreaterThan(Math.floor(ms / 20 / 2)); // zamanlayıcı en az yarı hızda işledi
+  });
 });

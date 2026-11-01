@@ -5,7 +5,29 @@ import {
 } from "../git/git.js";
 import type { VladConfig } from "../kb/index.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "../launcher/index.js";
+import {
+  addWorktreeAsync, attachWorktreeAsync, branchExistsAsync, isWorktreeAsync, remoteBranchExistsAsync, removeWorktreeAsync,
+  runGitAsync, worktreeBranchAsync,
+} from "../git/git-async.js";
 import { trustWorktree, untrustWorktree } from "./trust.js";
+
+type Maybe<T> = T | Promise<T>;
+/** The git calls a launch makes. The brain uses the sync set (default); a worker Agent the async one so its event loop stays free. */
+export interface GitApi {
+  addWorktree(repo: string, dir: string, branch: string, base?: string): Maybe<void>;
+  attachWorktree(repo: string, dir: string, branch: string): Maybe<void>;
+  worktreeBranch(dir: string): Maybe<string | null>;
+  removeWorktree(repo: string, dir: string): Maybe<void>;
+  branchExists(repo: string, branch: string): Maybe<boolean>;
+  remoteBranchExists(repo: string, branch: string): Maybe<boolean>;
+  isWorktree(repo: string, dir: string): Maybe<boolean>;
+  runGit(cwd: string, args: string[]): Maybe<string | null>;
+}
+export const SYNC_GIT: GitApi = { addWorktree, attachWorktree, worktreeBranch, removeWorktree, branchExists, remoteBranchExists, isWorktree, runGit: (c, a) => runGit(c, a) };
+export const ASYNC_GIT: GitApi = {
+  addWorktree: addWorktreeAsync, attachWorktree: attachWorktreeAsync, worktreeBranch: worktreeBranchAsync, removeWorktree: removeWorktreeAsync,
+  branchExists: branchExistsAsync, remoteBranchExists: remoteBranchExistsAsync, isWorktree: isWorktreeAsync, runGit: (c, a) => runGitAsync(c, a),
+};
 
 /**
  * The kb-free core of a launch (machines C1): worktree + branch + folder trust + launcher, with the
@@ -23,32 +45,32 @@ export interface LaunchCoreReq extends Omit<LaunchRequest, "cwd"> {
 export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string };
 
 /** Throws with the same messages the pre-split `launchTask` recorded; the caller records the error. */
-export async function launchCore(req: LaunchCoreReq, launcher: Launcher): Promise<LaunchCoreResult> {
+export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitApi = SYNC_GIT): Promise<LaunchCoreResult> {
   const { repo, worktree: wt, branch, base, branchOf, ...lr } = req;
-  addWorktree(repo, wt, branch, base);
+  await g.addWorktree(repo, wt, branch, base);
   // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
-  const actual = (branchOf ?? worktreeBranch)(wt);
+  const actual = await (branchOf ?? g.worktreeBranch)(wt);
   if (actual !== branch) {
-    try { removeWorktree(repo, wt); } catch { /* the branch cleanup and the error below still matter */ }
+    try { await g.removeWorktree(repo, wt); } catch { /* the branch cleanup and the error below still matter */ }
     // addWorktree refuses an existing branch, so `branch` (if present) was created just now; keep the name free for a retry
-    if (branchExists(repo, branch)) runGit(repo, ["branch", "-D", branch]);
+    if (await g.branchExists(repo, branch)) await g.runGit(repo, ["branch", "-D", branch]);
     throw new Error(`worktree beklenen faz dalında değil (beklenen ${branch}, bulunan ${actual ?? "yok"}): ${wt}`);
   }
-  const created = runGit(repo, ["rev-parse", branch]);
+  const created = await g.runGit(repo, ["rev-parse", branch]);
 
   /** Rolls back worktree + branch; returns a description of what failed to clean up, or "". */
-  const undo = (): string => {
+  const undo = async (): Promise<string> => {
     const problems: string[] = [];
     try {
-      removeWorktree(repo, wt);
+      await g.removeWorktree(repo, wt);
     } catch (e) {
       problems.push(`worktree kaldırılamadı (${wt}): ${(e as Error).message}`);
     }
     // the branch was created by addWorktree just now; drop it so a retry can reuse the name. Still at
     // its starting commit → nothing to lose, force it (-d refuses when the base is ahead of HEAD, as an
     // integration branch is); new commits on it → -d, which keeps unmerged work.
-    const untouched = created !== null && runGit(repo, ["rev-parse", branch]) === created;
-    if (runGit(repo, ["branch", untouched ? "-D" : "-d", branch]) === null) problems.push(`branch silinemedi: ${branch}`);
+    const untouched = created !== null && (await g.runGit(repo, ["rev-parse", branch])) === created;
+    if ((await g.runGit(repo, ["branch", untouched ? "-D" : "-d", branch])) === null) problems.push(`branch silinemedi: ${branch}`);
     return problems.join("; ");
   };
 
@@ -65,7 +87,7 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher): Promis
     failure = `launcher başarısız: ${(e as Error).message}`;
   }
   if (failure || !res) {
-    const cleanup = undo();
+    const cleanup = await undo();
     untrustWorktree(wt);
     throw new Error(`${failure}${cleanup ? `; temizlik başarısız: ${cleanup}` : ""}`);
   }
@@ -88,6 +110,22 @@ export function ensureIntegrationGit(
   } else if (!existsSync(worktree)) attachWorktree(repo, worktree, branch);
   else if (!isWorktree(repo, worktree)) {
     // a merge into it at the gate would fail or, inside the repo, hit the wrong branch
+    throw new Error(`entegrasyon klasörü bir git worktree'si değil: ${worktree}; klasörü kaldırıp tekrar dene`);
+  }
+  return { branch, worktree };
+}
+
+/** `ensureIntegrationGit` over a `GitApi` (a worker Agent's async git). */
+export async function ensureIntegrationGitWith(
+  g: GitApi, repo: string, parentId: string, cfg: VladConfig, defaultBranch?: string,
+): Promise<{ branch: string; worktree: string }> {
+  const branch = `vlad/${parentId}`;
+  const worktree = worktreePath(cfg, repo, parentId);
+  if (!(await g.branchExists(repo, branch))) {
+    if (await g.remoteBranchExists(repo, branch)) await g.addWorktree(repo, worktree, branch, `origin/${branch}`);
+    else await g.addWorktree(repo, worktree, branch, defaultBranch && (await g.branchExists(repo, defaultBranch)) ? defaultBranch : undefined);
+  } else if (!existsSync(worktree)) await g.attachWorktree(repo, worktree, branch);
+  else if (!(await g.isWorktree(repo, worktree))) {
     throw new Error(`entegrasyon klasörü bir git worktree'si değil: ${worktree}; klasörü kaldırıp tekrar dene`);
   }
   return { branch, worktree };

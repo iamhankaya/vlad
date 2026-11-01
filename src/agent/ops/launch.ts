@@ -1,14 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { branchExists, currentBranch } from "../../git/git.js";
+import { branchExistsAsync, runGitAsync } from "../../git/git-async.js";
 import { getVladHome } from "../../kb/home.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
 import { RemoteError } from "../../machines/types.js";
-import { ensureIntegrationGit, launchCore } from "../../tasks/launch-core.js";
+import { ASYNC_GIT, ensureIntegrationGitWith, launchCore } from "../../tasks/launch-core.js";
 import { removeTaskWorktree } from "../../tasks/launch.js";
-import { dirtyLine, dirtyPaths } from "../../tasks/resume.js";
+import { dirtyLine } from "../../tasks/resume.js";
 import { untrustWorktree } from "../../tasks/trust.js";
 import type { Reconciler } from "../reconcile.js";
 import { agentDir } from "../state.js";
@@ -17,7 +17,7 @@ import type { WorkerCtx } from "./worker.js";
 
 export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string } }
 interface RecEntry { repo: string; worktree: string; branch: string }
-interface LaunchRecord extends RecEntry { taskId: string; opId: string | null; result?: LaunchResultW; /** a pipeline parent's integration worktrees in further repos */ extra?: RecEntry[] }
+interface LaunchRecord extends RecEntry { taskId: string; opId: string | null; /** set once the launch finished; a record without it is a launch that started and may or may not have opened a window */ result?: LaunchResultW; /** a pipeline parent's integration worktrees in further repos */ extra?: RecEntry[] }
 type CloseFn = (id: string) => number[] | void;
 
 const MAX_TEXT = 256 * 1024;
@@ -96,17 +96,23 @@ export async function launchOp(args: unknown, c: { from: string; opId: string },
   const worktree = workerWorktree(ctx, repo, id);
   const launcher = o.launcher ?? workerLauncher(ctx.cfg);
   const wcfg = { ...ctx.cfg, worktreeDir: ctx.def.worktreeDir ?? ctx.cfg.worktreeDir };
+  if (existing?.result) return existing.result; // same opId replayed after the launch finished
+  if (existing) throw new RemoteError("conflict", `conflict: bu launch (op ${c.opId}) yarım kaldı; pencere açılmış olabilir, kontrol et`);
+  // The record goes down BEFORE anything opens: a crash after the window opened still leaves proof the launch started,
+  // so reconcile reports it uncertain instead of letting a retry open a second window.
+  writeRecord({ taskId: id, repo, worktree, branch: `vlad/${id}`, opId: c.opId });
   let integration: { branch: string; worktree: string } | undefined;
   let res;
   try {
-    if (parent) integration = ensureIntegrationGit(repo, parent, wcfg, defaultBranch);
+    if (parent) integration = await ensureIntegrationGitWith(ASYNC_GIT, repo, parent, wcfg, defaultBranch);
     res = await launchCore({
       taskId: id, repo, worktree, branch: `vlad/${id}`,
-      ...(integration ? { base: integration.branch } : defaultBranch && branchExists(repo, defaultBranch) ? { base: defaultBranch } : {}),
+      ...(integration ? { base: integration.branch } : defaultBranch && (await branchExistsAsync(repo, defaultBranch)) ? { base: defaultBranch } : {}),
       prompt: fill(template, ctx, id), env: envOf(id), title,
       ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),
-    }, launcher);
+    }, launcher, ASYNC_GIT);
   } catch (e) {
+    rmSync(recordFile(id), { force: true }); // launchCore undid its own work: nothing is running, a retry starts clean
     throw failed((e as Error).message);
   }
   const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}) };
@@ -120,14 +126,14 @@ export async function launchOp(args: unknown, c: { from: string; opId: string },
   return result;
 }
 
-/** Açılış uzlaştırması: bu opId'ye ait kayıt varsa launch uygulanmıştır (sonucuyla); yoksa güvenle yeniden denenebilir. */
+/** Açılış uzlaştırması: sonuçlu kayıt → uygulandı (sonucuyla); sonuçsuz kayıt → başladı ama bitişi bilinmiyor (pencere açılmış olabilir: uncertain); kayıt yok → güvenle yeniden denenebilir. */
 export const reconcileLaunch: Reconciler = (rec) => {
   const dir = launchesDir();
   if (!existsSync(dir)) return "not-applied";
   for (const f of readdirSync(dir)) {
     try {
       const r = JSON.parse(readFileSync(join(dir, f), "utf8")) as LaunchRecord;
-      if (r.opId === rec.opId && r.result) return { verdict: "applied", result: r.result };
+      if (r.opId === rec.opId) return r.result ? { verdict: "applied", result: r.result } : "unknown";
     } catch { /* bozuk kayıt: atla */ }
   }
   return "not-applied";
@@ -170,9 +176,10 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: 
   const ctx = workerCtx();
   const { wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) throw new RemoteError("not_found", `not_found: worktree yok: ${wt}; görev ${id} bu makinede sürdürülemez`);
-  const cur = currentBranch(wt);
+  const cur = (await runGitAsync(wt, ["branch", "--show-current"])) || null;
   if (cur !== `vlad/${id}`) throw failed(`worktree yanlış branch'te (${cur ?? "bilinmiyor"}, beklenen vlad/${id}): ${wt}`);
-  const dirty = dirtyPaths(wt);
+  const dirty = ((await runGitAsync(wt, ["-c", "core.quotepath=false", "status", "--porcelain", "-uall"], 30_000)) ?? "")
+    .split("\n").filter((l) => l.length >= 4).map((l) => l.slice(3));
   const prompt = fill(template, ctx, id).split("{{WORKTREE}}").join(wt).split("{{DIRTY_LINE}}").join(dirtyLine(dirty));
   const launcher = o.launcher ?? workerLauncher(ctx.cfg);
   try { (o.close ?? defaultClose)(id); } catch { /* no window to close, or it could not be closed: the launcher reports real failures */ } // no second window beside a live one

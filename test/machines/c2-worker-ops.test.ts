@@ -98,6 +98,30 @@ describe("machines:C2 launch op (işçi)", () => {
     expect(reconcileLaunch(rec)).toEqual({ verdict: "applied", result: r });
     expect(reconcileLaunch({ ...rec, opId: "op-yok" })).toBe("not-applied");
   });
+
+  it("kayıt başlatıcıdan ÖNCE yazılır (sonuçsuz); çökme sonrası uzlaştırma 'unknown', aynı opId yeniden denemesi çift pencere açmaz", async () => {
+    let seen: Record<string, unknown> | null = null;
+    const crashing: Launcher = { launch: async () => { seen = record(); throw new Error("süreç öldü"); } };
+    // başlatıcı çökmeden önce kaydı gördü; kesin hata olduğundan kayıt silinir
+    await expect(launchOp(L(), ctx("op-c"), { launcher: crashing })).rejects.toMatchObject({ code: "failed" });
+    expect(seen).toMatchObject({ taskId: ID, opId: "op-c" });
+    expect((seen as unknown as { result?: unknown }).result).toBeUndefined();
+    // gerçek çökme: kayıt sonuçsuz diskte kalır (başlatıcı hiç dönmedi)
+    mkdirSync(join(home, ".vlad-agent", "launches"), { recursive: true });
+    writeFileSync(join(home, ".vlad-agent", "launches", `${ID}.json`), JSON.stringify({ taskId: ID, repo, worktree: `${repo}-wt\\${ID}`, branch: `vlad/${ID}`, opId: "op-x" }));
+    const rec = { opId: "op-x", from: "mac", op: "launch" as const, state: "started" as const, ts: 0, argsHash: "" };
+    expect(reconcileLaunch(rec)).toBe("unknown");
+    reqs = [];
+    await expect(launchOp(L(), ctx("op-x"), { launcher })).rejects.toMatchObject({ code: "conflict" });
+    expect(reqs).toHaveLength(0);
+  });
+
+  it("sonuçlu kayıtla aynı opId tekrarı sonucu geri verir, ikinci pencere açmaz", async () => {
+    const r1 = await launchOp(L(), ctx("op-r"), { launcher });
+    const r2 = await launchOp(L(), ctx("op-r"), { launcher });
+    expect(r2).toEqual(r1);
+    expect(reqs).toHaveLength(1);
+  });
 });
 
 describe("machines:C2 close op", () => {
