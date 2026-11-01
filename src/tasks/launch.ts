@@ -4,7 +4,7 @@ import {
   addWorktree, attachWorktree, branchExists, isWorktree, ReparseCleanupError, remoteBranchExists, removeWorktree, runGit,
   unlinkReparsePoints, worktreeBranch, worktreePath,
 } from "../git/git.js";
-import { readDoc, kbPaths, loadConfig, withKbLock } from "../kb/index.js";
+import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
@@ -195,7 +195,7 @@ export async function launchTask(
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
 
   const model = effectiveModel(task.data, role);
-  const autoCompact = loadConfig().workerAutoCompact;
+  const autoCompact = o.cfg.workerAutoCompact;
   let failure: string | null = null;
   try {
     const res = await o.launcher.launch({

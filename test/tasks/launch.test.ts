@@ -76,6 +76,14 @@ describe("launchTask", () => {
     expect(l.reqs[0].prompt).toContain("Yetki seviyen: `pr`");
     expect(l.reqs[0].prompt).toContain("Yetki (autonomy pr)");
   });
+  it("passes cfg.workerAutoCompact to the launcher request, and nothing when unset", async () => {
+    const l = fakeLauncher();
+    await launchTask(mk().data.id, { launcher: l, cfg });
+    expect(l.reqs[0]).not.toHaveProperty("autoCompact");
+    const l2 = fakeLauncher();
+    await launchTask(mk().data.id, { launcher: l2, cfg: { ...cfg, workerAutoCompact: "300k" } });
+    expect(l2.reqs[0].autoCompact).toBe("300k");
+  });
   it("creates worktree, runs launcher and sets running", async () => {
     const t = mk();
     const l = fakeLauncher();
