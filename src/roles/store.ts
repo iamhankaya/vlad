@@ -11,6 +11,16 @@ export type Role = Omit<RoleData, "model"> & { file: string; skills: string[]; m
  */
 const VENDORED_SKILLS: Record<string, string> = { ponytail: "vendor/skills/ponytail/SKILL.md" };
 
+/**
+ * Uzak istem şablonundaki `{{ROLE_FILE:<slug>}}` / `{{VENDOR_SKILL:<ad>}}` yer tutucularını verilen VLAD_HOME'a göre doldurur
+ * (işçi kendi yoluyla çözer). Bilinmeyen ad/slug dokunulmadan kalır: yol dışarı kaçamaz.
+ */
+export function fillRolePlaceholders(s: string, home: string): string {
+  return s
+    .replace(/\{\{ROLE_FILE:([a-z0-9][a-z0-9-]{0,63})\}\}/g, (_m, slug: string) => join(home, "roles", `${slug}.md`))
+    .replace(/\{\{VENDOR_SKILL:([a-z0-9-]+)\}\}/g, (m, name: string) => (Object.hasOwn(VENDORED_SKILLS, name) ? join(home, VENDORED_SKILLS[name]!) : m));
+}
+
 /** Splits a role's skills into ones the worker loads by name and vendored ones with the file to read. */
 export function splitSkills(skills: string[], roleFile: string): { load: string[]; vendored: { name: string; file: string }[] } {
   const home = resolve(dirname(roleFile), "..");

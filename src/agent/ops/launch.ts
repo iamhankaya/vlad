@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:f
 import { dirname, join } from "node:path";
 import { branchExistsAsync, runGitAsync, runGitRawAsync } from "../../git/git-async.js";
 import { getVladHome } from "../../kb/home.js";
+import { fillRolePlaceholders } from "../../roles/store.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
@@ -71,7 +72,7 @@ function dropEntry(id: string, repo: string, wt: string): void {
   writeRecord({ ...rec, ...first!, extra });
 }
 
-const fill = (s: string, ctx: WorkerCtx, id: string): string => s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id));
+const fill = (s: string, ctx: WorkerCtx, id: string): string => fillRolePlaceholders(s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id)), getVladHome());
 const envOf = (id: string) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome() });
 
 let launchChain: Promise<unknown> = Promise.resolve();
