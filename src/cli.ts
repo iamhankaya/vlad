@@ -503,7 +503,8 @@ def(audit, "setup", "Kurulum denetimi verisi (salt okuma): biten görevler, öl�
     `ölçüm: ${r.measures.tasks_with_measure} görevde; ${Object.entries(r.measures.sums).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
     `açık nokta: ${r.open_points.total} (${sev})`,
     `işaretler: test itirazı ${sg.test_itirazi.count}, değişiklik turu ${sg.degisiklik_istegi.count}, [KARAR] ${sg.karar.count}, izin reddi ${sg.izin_reddi.count}`,
-    `skill: ${r.skills.inventory.length} envanterde, ${r.skills.unused.length} hiç yüklenmemiş (${r.skills.transcripts} oturum kaydı)`,
+    `skill: ${r.skills.inventory.length} envanterde, ${r.skills.unused.length} hiç yüklenmemiş (${r.skills.transcripts} oturum kaydı); rol skill oranı ${r.skills.coverage.rate === null ? "-" : `%${Math.round(r.skills.coverage.rate * 100)} (${r.skills.coverage.loaded}/${r.skills.coverage.expected}, kuraldan önceki ${r.skills.coverage.skipped_before_rule} atlandı)`}`,
+    `iptal: ${r.cancelled.total} görev, ${r.cancelled.with_reason} gerekçeli`,
     `bulgu: ${r.findings.unresolved.length} açık/ertelenmiş, ${r.findings.stale} tanesi 30 günden eski`,
   ].join("\n"));
 }).option("--since <tarih>", "bu tarihten sonra biten görevler (YYYY-MM-DD; varsayılan: 14 gün önce)");

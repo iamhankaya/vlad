@@ -44,6 +44,12 @@ describe("skills/ references and de-duplication", () => {
     expect(c).toMatch(/task new\|launch[^\n]*deps/);
   });
 
+  it("setup-audit keeps its verification contract: optional items, mandatory check against later fixes, time coherence, doğrulandı column", () => {
+    const t = read(".claude/skills/setup-audit/SKILL.md");
+    for (const w of ["Madde zorunlu değil", "## 5. Doğrulama (zorunlu)", "decision list --project <slug> --all", "Zaman uyumu", "| doğrulandı", "plugin:skill", "vlad audit setup"]) expect(t, w).toContain(w);
+    expect(t).not.toMatch(/en az \d+ öneri yaz/i);
+  });
+
   it("second-opinion owns the Codex commands; delegate and status only point to it", () => {
     const so = read(".claude/skills/second-opinion/SKILL.md");
     expect(so).toContain("codex exec");

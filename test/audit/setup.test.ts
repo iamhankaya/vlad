@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -103,7 +104,7 @@ describe("auditSetup", () => {
     expect(byName.digest.source).toBe("repo");
     expect(byName["vlad-worker"].source).toBe("global");
     expect(byName.ponytail.source).toBe("vendor");
-    expect(byName["test-driven-development"].roles).toEqual(["developer"]);
+    expect(byName["superpowers:test-driven-development"].roles).toEqual(["developer"]); // keyed by the name the role uses
     expect(r.skills.unused).toEqual(expect.arrayContaining(["digest", "ponytail"]));
   });
 
@@ -129,6 +130,86 @@ describe("auditSetup", () => {
     expect(r.findings.unresolved.map((f) => f.id)).toEqual([f1.data.id, "F-alpha-002"]);
     expect(r.findings.unresolved[0]).toMatchObject({ severity: "yüksek", age_days: 61 });
     expect(r.findings.stale).toBe(1);
+  });
+
+  it("anchors [KARAR] and Ölçüm to line starts so quoted or template text does not count", () => {
+    const id = task({
+      at: "2026-10-28",
+      progress: ["- 2026-10-28T11:00:00+03:00 [KARAR] gerçek", "- 2026-10-28T11:05:00+03:00 şablon: '[KARAR] ...' yazılır"],
+      closing: "### Yapılanlar\nÖlçüm satırı biçimi `Ölçüm: dosya=<n>` ile yazılır\n\nÖlçüm: dosya=2 yeni_test=1\n",
+    });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.signals.karar).toEqual({ tasks: 1, count: 1, examples: [id] });
+    expect(r.measures.sums).toEqual({ dosya: 2, yeni_test: 1 });
+  });
+
+  it("splits cancelled tasks by whether a reason is recorded", () => {
+    const a = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 iptal: kullanıcı vazgeçti"] });
+    const b = task({ at: "2026-10-28", state: "cancelled" });
+    task({ at: "2026-10-28" });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.cancelled).toEqual({ total: 2, with_reason: 1, without_reason_ids: [b] });
+    expect(a).not.toBe(b);
+  });
+
+  it("breaks unresolved findings down by severity, project and source task", () => {
+    addFinding({ project: "alpha", severity: "yüksek", source: "T20261001-01", title: "a" });
+    addFinding({ project: "alpha", severity: "düşük", source: "T20261001-01", title: "b" });
+    addFinding({ project: "alpha", severity: "düşük", source: "T20261002-01", title: "c" });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.findings.by_severity).toEqual({ yüksek: 1, düşük: 2 });
+    expect(r.findings.by_project).toEqual({ alpha: 3 });
+    expect(r.findings.by_source).toEqual({ "T20261001-01": 2, "T20261002-01": 1 });
+  });
+
+  it("lists user and plugin skills as plugin:skill and matches role skills by that name", () => {
+    const put = (rel: string) => { mkdirSync(join(cfgDir, rel), { recursive: true }); writeFileSync(join(cfgDir, rel, "SKILL.md"), "---\nname: x\n---\n"); };
+    put("skills/my-global");
+    put("plugins/cache/mkt/superpowers/6.4.2/skills/test-driven-development");
+    put("plugins/cache/mkt/superpowers/6.4.1/skills/test-driven-development"); // older cached version: one entry
+    role("developer", ["superpowers:test-driven-development", "frontend-design:frontend-design"]);
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    const byName = Object.fromEntries(r.skills.inventory.map((s) => [s.name, s]));
+    expect(byName["my-global"].source).toBe("user");
+    expect(r.skills.inventory.filter((s) => s.name === "superpowers:test-driven-development")).toHaveLength(1);
+    expect(byName["superpowers:test-driven-development"]).toMatchObject({ source: "plugin", roles: ["developer"] });
+    expect(byName["frontend-design:frontend-design"]).toMatchObject({ source: "role", roles: ["developer"] }); // named by a role, installed nowhere
+  });
+
+  describe("time coherence (rule dates from the VLAD repo's git history)", () => {
+    const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: home, env: { ...process.env, GIT_COMMITTER_DATE: process.env.D, GIT_AUTHOR_DATE: process.env.D } });
+    const commitAt = (iso: string, msg: string) => { process.env.D = iso; git("add", "roles"); git("commit", "-q", "-m", msg); };
+    const roleFile = (skills: string[]) => role("developer", skills);
+    const loadSkill = (id: string, skill: string) => {
+      const dir = join(cfgDir, "projects", claudeProjectDir(worktreePath(defaultConfig(), join(tmpdir(), "vlad-setup-repo"), id)));
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, "s.jsonl"), JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] } }) + "\n");
+    };
+    beforeEach(() => {
+      git("init", "-q");
+      roleFile(["superpowers:test-driven-development"]);
+      commitAt("2026-10-01T10:00:00+03:00", "role: tdd");
+      roleFile(["superpowers:test-driven-development", "frontend-design:frontend-design"]);
+      commitAt("2026-10-30T10:00:00+03:00", "role: frontend-design");
+    });
+
+    it("measures a task only against rules that already existed on its creation date", () => {
+      const before = task({ at: "2026-10-20", role: "developer" }); // frontend-design not yet in the role
+      const after = task({ at: "2026-10-31", role: "developer" });
+      loadSkill(before, "superpowers:test-driven-development");
+      loadSkill(after, "superpowers:test-driven-development"); // never loads frontend-design
+      const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+      const row = (skill: string) => r.skills.coverage.by_skill.find((c) => c.skill === skill);
+      expect(row("superpowers:test-driven-development")).toMatchObject({ role: "developer", expected_tasks: 2, loaded_tasks: 2, rate: 1 });
+      expect(row("frontend-design:frontend-design")).toMatchObject({ expected_tasks: 1, loaded_tasks: 0, rate: 0, since: "2026-10-30T10:00:00+03:00" });
+      expect(r.skills.coverage.skipped_before_rule).toBe(1);
+    });
+
+    it("reports when each role file and CLAUDE.md last changed", () => {
+      const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+      expect(r.rules.roles.developer).toBe("2026-10-30T10:00:00+03:00");
+      expect(r.rules.claude_md).toBeNull(); // not committed in the fixture repo
+    });
   });
 
   it("rejects an invalid since", () => {
