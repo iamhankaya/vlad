@@ -10,10 +10,11 @@ import { listTasks, effectiveModel, getTask, roleFor, saveTask } from "../tasks/
 import type { Task } from "../tasks/store.js";
 import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
+import { remoteMachineOf } from "../tasks/launch.js";
 import type { RemoteDeps } from "../tasks/launch.js";
 import { repoNameOf } from "./paths.js";
 import { RemoteError } from "./types.js";
-import type { RemoteTransport } from "./types.js";
+import type { GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "./types.js";
 
 /** Beyin kimliğiyle işçi Agent'larına konuşan gerçek taşıma (anahtarlar `vlad.local.json`'dan). */
 export const brainTransport = (cfg: VladConfig, self: string): RemoteTransport =>
@@ -101,3 +102,33 @@ export function markCleaned(id: string): void {
   t.data.worktree = null;
   saveTask(t);
 }
+
+// --- machines:C4 --- kapı işlemleri: uzak makinedeki görev/çatı için gate, merge önizleme ve merge (push YOK)
+const GATE_CALL_TIMEOUT_MS = 30 * 60_000; // işçinin gate zaman aşımından (25 dk) uzun
+
+/** Kapı işlemlerinin gideceği işçi: görevin kendi uzak makinesi; çatıda uzak makinede koşan ilk faz. Yerelse null. */
+export function gateMachineOf(task: Task, cfg: VladConfig): string | null {
+  const own = remoteMachineOf(task, cfg);
+  if (own || task.data.kind !== "pipeline") return own;
+  for (const c of listTasks({ parent: task.data.id })) { const m = remoteMachineOf(c, cfg); if (m) return m; }
+  return null;
+}
+
+const gateIds = (task: Task) => ({ taskId: task.data.id, project: task.data.project, repoName: repoNameOf(cardOf(task.data.project).path) });
+/** Faz → çatı entegrasyon dalı; çatısız (çatı/tek) görev → kartın ana dalı. */
+function mergeRefs(task: Task, into?: string): { from: string; into: string } {
+  const to = into ?? (task.data.parent ? `vlad/${task.data.parent}` : cardOf(task.data.project).default_branch);
+  if (!to) throw new Error(`${task.data.project} kartında default_branch yok; --into ver ya da project set default_branch`);
+  return { from: `vlad/${task.data.id}`, into: to };
+}
+
+export async function remoteGateRun(transport: RemoteTransport, machine: string, task: Task, target: "integration" | "task"): Promise<GateRunResult> {
+  return (await transport.call<GateRunResult>(machine, "gate-run", { ...gateIds(task), target }, { timeoutMs: GATE_CALL_TIMEOUT_MS })).result;
+}
+export async function remoteMergePreview(transport: RemoteTransport, machine: string, task: Task, o: { into?: string } = {}): Promise<MergePreviewResult> {
+  return (await transport.call<MergePreviewResult>(machine, "merge-preview", { ...gateIds(task), ...mergeRefs(task, o.into) })).result;
+}
+export async function remoteMerge(transport: RemoteTransport, machine: string, task: Task, o: { into?: string; message?: string } = {}): Promise<MergeResult> {
+  return (await transport.call<MergeResult>(machine, "merge", { ...gateIds(task), ...mergeRefs(task, o.into), ...(o.message ? { message: o.message } : {}) }, { timeoutMs: 330_000 })).result;
+}
+// --- /machines:C4 ---
