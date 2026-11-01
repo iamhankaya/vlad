@@ -56,6 +56,11 @@ describe("machines:C2 launch op (işçi)", () => {
     expect(reqs[0]!.env).toEqual({ VLAD_TASK_ID: ID, VLAD_HOME: home });
   });
 
+  it("{{ROLE_FILE:<slug>}} ve {{VENDOR_SKILL:<ad>}} işçinin kendi VLAD_HOME yoluyla dolar; bilinmeyen ad olduğu gibi kalır", async () => {
+    await launchOp(L({ promptTemplate: "r {{ROLE_FILE:developer}} v {{VENDOR_SKILL:ponytail}} x {{VENDOR_SKILL:../../etc}}" }), ctx(), { launcher });
+    expect(reqs[0]!.prompt).toBe(`r ${join(home, "roles", "developer.md")} v ${join(home, "vendor/skills/ponytail/SKILL.md")} x {{VENDOR_SKILL:../../etc}}`);
+  });
+
   it("pipeline fazı: entegrasyon dalı işçide açılır, faz dalı ondan çıkar, sonuçta integration döner, çatı için de kayıt yazılır", async () => {
     const r = await launchOp(L({ base: { kind: "integration", parent: PARENT } }), ctx(), { launcher });
     expect(r.integration).toEqual({ branch: `vlad/${PARENT}`, worktree: `${repo}-wt\\${PARENT}` });

@@ -304,7 +304,7 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
   if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
-  const t = await launchTask(id, { launcher, cfg, ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
+  const t = await launchTask(id, { launcher, cfg, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
   // --- /machines:C1 ---
   out(
     o,

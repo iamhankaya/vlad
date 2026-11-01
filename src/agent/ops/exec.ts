@@ -1,5 +1,5 @@
 import { RemoteError, type ExecResult } from "../../machines/types.js";
-import { validateConsoleArgv } from "../console-catalog.js";
+import { consoleExecTimeoutMs, validateConsoleArgv } from "../console-catalog.js";
 import { runCli } from "./run-cli.js";
 
 interface ExecArgs { argv: string[]; stdin?: string; json?: boolean }
@@ -20,5 +20,5 @@ export async function exec(args: unknown, ctx: { from: string; opId: string }): 
   const x = parse(args);
   validateConsoleArgv(x.argv, x.stdin);
   const argv = x.json && !x.argv.includes("--json") ? [...x.argv, "--json"] : x.argv;
-  return runCli(argv, { stdin: x.stdin, forwarded: `console:${ctx.from}`, opId: ctx.opId, timeoutMs: 110_000 });
+  return runCli(argv, { stdin: x.stdin, forwarded: `console:${ctx.from}`, opId: ctx.opId, timeoutMs: consoleExecTimeoutMs(argv) });
 }

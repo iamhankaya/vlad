@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
 import { nowMs } from "../machines/clock.js";
@@ -30,6 +31,24 @@ export async function probeLocal(): Promise<{ alive: boolean; host: string; port
   }
 }
 
+/** Adres başkasında mı? Journal/kuyruğa dokunmadan ÖNCE sorulur: canlı Agent'ın uçuştaki işlemlerini ikinci süreç bozmasın. */
+function portTaken(host: string, port: number): Promise<boolean> {
+  if (port === 0) return Promise.resolve(false);
+  return new Promise((res) => {
+    const s = createServer();
+    s.once("error", (e) => res((e as NodeJS.ErrnoException).code === "EADDRINUSE"));
+    s.listen({ host, port, exclusive: true }, () => s.close(() => res(false)));
+  });
+}
+
+/** Adres doluysa: VLAD Agent canlıysa "zaten çalışıyor" yazar, değilse hata. */
+async function reportTaken(bind: string, port: number): Promise<void> {
+  const p = await probeLocal();
+  if (!p.alive) throw new Error(`agent: ${bind}:${port} başka bir süreç tarafından kullanılıyor (VLAD Agent yanıt vermiyor)`);
+  process.stdout.write(`VLAD Agent zaten çalışıyor (${p.host}:${p.port})
+`);
+}
+
 /** `vlad agent start`: tek örnek; sürecin ömrü boyunca dinler. */
 export async function agentStart(o: { port?: number; printPort?: boolean }): Promise<void> {
   const cfg = loadConfig();
@@ -43,6 +62,8 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const bind = def.agent.bind ?? def.agent.host ?? "127.0.0.1";
   const bindIp = await assertPrivateBind(bind); // doğrulanan IP ile dinle (yeniden çözümleme yok)
   const port = o.port ?? def.agent.port;
+
+  if (await portTaken(bindIp, port)) return reportTaken(bind, port);
 
   const test = process.env.VLAD_AGENT_TEST === "1";
   const dir = agentDir();

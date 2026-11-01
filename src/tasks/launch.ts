@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   isWorktree, ReparseCleanupError, removeWorktree, runGit,
   unlinkReparsePoints, worktreePath,
@@ -56,29 +56,36 @@ const recordError = (id: string, msg: string): Promise<void> => withKbLock(() =>
 export function buildPrompt(
   taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
   ctx?: { taskId: string; parent: string | null; projectSkills?: string[] },
+  portable = false,
 ): string {
-  const core = promptCore(taskFile, autonomy, role);
+  const core = promptCore(taskFile, autonomy, role, portable);
   if (!ctx) return core;
   const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local", projectSkills: ctx.projectSkills });
   return [core, BLOCKS_HEADING, ...blocks].join("\n\n");
 }
 
-function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] }): string {
+/**
+ * `portable` (uzak işçi): rol dosyası ve vendored skill yolları beynin yerel yolları olamaz (Mac yolu Windows'ta yok);
+ * `{{ROLE_FILE:<slug>}}` / `{{VENDOR_SKILL:<ad>}}` bırakılır, işçi kendi VLAD_HOME'una göre doldurur.
+ */
+function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; slug?: string }, portable = false): string {
   const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
   if (!role) return base;
   const withRole =
-    `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${role.file}\` dosyasını oku ` +
+    `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${portable ? `{{ROLE_FILE:${slugOf(role.file)}}}` : role.file}\` dosyasını oku ` +
     `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
   const { load, vendored } = splitSkills(role.skills ?? [], role.file);
   const parts = [withRole];
   if (load.length) {
     parts.push(`İşe başlamadan şu skill'leri yükle: ${load.map((s) => `\`${s}\``).join(", ")}. Yüklenemeyen olursa kapanış raporunda belirt.`);
   }
-  for (const v of vendored) parts.push(`\`${v.name}\` skill'i yüklü değildir; \`${v.file}\` dosyasını oku ve uygula.`);
+  for (const v of vendored) parts.push(`\`${v.name}\` skill'i yüklü değildir; \`${portable ? `{{VENDOR_SKILL:${v.name}}}` : v.file}\` dosyasını oku ve uygula.`);
   return parts.join(" ");
 }
+
+const slugOf = (file: string): string => basename(file).replace(/\.md$/, "");
 
 const CLOSED: TaskState[] = ["done", "cancelled", "failed"];
 
@@ -152,6 +159,8 @@ export interface LaunchOpts {
   remote?: RemoteDeps;
   /** machines only: pin the task to one of its card's machines */
   machine?: string;
+  /** CLI bayrakları: uzak makinede anlamsız, açık hata verir (yok sayılıp gerçek pencere açılmasın) */
+  external?: boolean; dryRun?: boolean;
 }
 
 /**
@@ -175,6 +184,7 @@ export async function launchTask(id: string, o: LaunchOpts): Promise<Task> {
   }
   const machine = await placeTask(task, o);
   if (machine === o.cfg.brain) return launchLocal(task, o, { machine });
+  if (o.external || o.dryRun) throw new Error(`${o.external ? "--external" : "--dry-run"} uzak makinede desteklenmez (görev ${machine} makinesine yerleşti); yerelde çalıştırmak için kartın makinelerini ya da --machine ${o.cfg.brain} kullan`);
   if (!o.remote) throw new Error(`uzak taşıma bağlı değil (VLAD Agent istemcisi yok): ${machine}`);
   return launchRemote(task, o, machine, o.remote);
 }
@@ -204,13 +214,39 @@ async function placeTask(task: Task, o: LaunchOpts): Promise<string> {
 }
 
 /** Records the error and, when the reservation is still ours (`launch_op`), releases it. */
-const failReservation = (id: string, opId: string, msg: string): Promise<void> => withKbLock(() => {
+const failReservation = (id: string, opId: string, msg: string, releaseMachinePin = false): Promise<void> => withKbLock(() => {
   const t = getTask(id);
   if (t.data.state === "running" || t.data.launch_op !== opId) return; // a newer attempt owns the task: a late reply writes nothing
   t.data.error = msg;
+  const was = t.data.machine;
   Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
   saveTask(t);
+  if (was && releaseMachinePin) releasePin(t.data.parent, was, id); // yalnız bu deneme koyduysa: önceki fazların pin'i kalır
 });
+
+/**
+ * Kb kilidi altında çağrılır. Sabitlenmemiş pipeline'ın ilk rezervasyonu çatıyı hemen sabitler: eşzamanlı ikinci faz
+ * pin'i görüp başka makineye kayamaz. Pin'i bu çağrı koyduysa true döner (hata yolunda `releasePin` ile geri alınır).
+ */
+function claimPin(parentId: string | null | undefined, machine: string): boolean {
+  if (!parentId) return false;
+  const p = getTask(parentId);
+  if (p.data.machine) return false;
+  p.data.machine = machine;
+  saveTask(p);
+  return true;
+}
+
+/** Pin'i bu rezervasyon koymuştu ve çatıda o makinede başka çalışan/rezerve faz yoksa kaldırır (kb kilidi altında). */
+function releasePin(parentId: string | null | undefined, machine: string, selfId: string): void {
+  if (!parentId) return;
+  const p = getTask(parentId);
+  if (p.data.machine !== machine) return;
+  const busy = listTasks({ parent: parentId }).some((x) => x.data.id !== selfId && x.data.machine === machine && (x.data.launch_op || ["running", "blocked", "stalled", "awaiting_approval", "done"].includes(x.data.state)));
+  if (busy) return;
+  p.data.machine = null;
+  saveTask(p);
+}
 
 /** The first phase of a pipeline pins the pipeline to its machine; later phases only go there. */
 function pinPipeline(parentId: string | null | undefined, machine: string): void {
@@ -242,6 +278,17 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
   const model = effectiveModel(task.data, role);
   const autoCompact = cfg.workerAutoCompact;
+  // yerel (brain) yerleşim de çatıyı pencere açılmadan önce sabitler: eşzamanlı uzak kardeş faz başka makineye kayamaz
+  const parent = task.data.parent;
+  let claimed = false;
+  if (patch.machine && parent) {
+    claimed = await withKbLock(() => {
+      const pin = getTask(parent).data.machine;
+      if (pin && pin !== patch.machine) throw new Error(`pipeline ${pin} makinesine sabit; ${patch.machine} olamaz`);
+      return claimPin(parent, patch.machine!);
+    });
+  }
+  const unclaim = async (): Promise<void> => { if (claimed) await withKbLock(() => releasePin(parent, patch.machine!, id)); };
   try {
     await launchCore({
       taskId: id, repo, worktree: wt, branch, ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
@@ -253,6 +300,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     }, o.launcher);
   } catch (e) {
     const msg = (e as Error).message;
+    await unclaim();
     await recordError(id, msg);
     throw new Error(msg);
   }
@@ -283,6 +331,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const busy = (op: string) => new Error(`önceki launch sürüyor (${machine}, op ${op}); sonra tekrar dene`);
 
   /** Reserves capacity on `machine` under a fresh `launch_op`, replacing `old` (kb lock, no network). */
+  let claimedPin = false;
   const reserve = (old: string | null): Promise<string> => withKbLock(() => {
     const t = getTask(id);
     if (t.data.state !== "queued" || (t.data.launch_op ?? null) !== old) {
@@ -296,6 +345,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     const opId = randomUUID();
     Object.assign(t.data, { machine, machine_reserved: new Date(nowMs()).toISOString(), launch_op: opId });
     saveTask(t);
+    claimedPin = claimPin(parent, machine); // aynı kilit bölgesinde: eşzamanlı kardeş faz pin'i görür
     return opId;
   });
 
@@ -331,7 +381,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const args = {
     taskId: id, project: task.data.project, repoName: repoNameOf(card.path), branch: `vlad/${id}`,
     base: parent ? { kind: "integration", parent, ...(def ? { defaultBranch: def } : {}) } : { kind: "default", ...(def ? { defaultBranch: def } : {}) },
-    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills }),
+    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills }, true),
     title: `VLAD ${id} — ${task.data.title}`,
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
@@ -345,7 +395,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   } catch (e) {
     // no answer: the worker may have launched anyway -> keep the reservation, the next `task launch` asks op-status
     if (e instanceof RemoteError && UNCERTAIN.has(e.code)) throw e;
-    await failReservation(id, op, (e as Error).message);
+    await failReservation(id, op, (e as Error).message, claimedPin);
     throw e;
   }
   // the worker did launch: a failure while recording it keeps the reservation (the next launch adopts via op-status)

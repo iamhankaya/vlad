@@ -8,6 +8,7 @@ import type { VladConfig } from "../kb/types.js";
 import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../machines/types.js";
 import { readStdinSync } from "../kb/input.js";
 import { AgentClient } from "./client.js";
+import { consoleExecTimeoutMs } from "./console-catalog.js";
 import { readLocal, roleOf, selfName } from "./state.js";
 
 /** Bu makinede çoklu makine etkin ve ben beyin değilim (ve iletilmiş bir çağrı değilim) → {cfg, self}. */
@@ -71,7 +72,7 @@ export async function runRemote(argv: string[], o: { opId?: string; stdin?: bool
   if (o.opId !== undefined && !/^[A-Za-z0-9._:-]{1,64}$/.test(o.opId)) throw new Error("remote: --op-id yalnız harf, rakam ve . _ : - (en çok 64)");
   const client = new AgentClient({ self, keys: readLocal().keys, config: () => cfg });
   const stdin = o.stdin ? readStdinSync() : undefined;
-  const r = await client.call<ExecResult>(cfg.brain, "exec", { argv, ...(stdin !== undefined ? { stdin } : {}) }, { opId: o.opId ?? randomUUID(), timeoutMs: 120_000 });
+  const r = await client.call<ExecResult>(cfg.brain, "exec", { argv, ...(stdin !== undefined ? { stdin } : {}) }, { opId: o.opId ?? randomUUID(), timeoutMs: consoleExecTimeoutMs(argv) + 10_000 });
   if (!r.result) throw new Error("remote: sonuç belirsiz (Agent yeniden başlamış olabilir); tekrar denemeden önce `vlad remote -- task list` ile durumu kontrol et");
   process.stdout.write(r.result.stdout);
   process.stderr.write(r.result.stderr);
