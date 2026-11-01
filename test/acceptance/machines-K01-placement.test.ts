@@ -103,29 +103,35 @@ describe("machines:K — K2 [windows] projesi asla Mac'te başlamaz", () => {
 });
 
 describe("machines:K — K3 erişilemeyen makine yerleştirmede atlanır", () => {
-  it("[windows], agent yok: held_by_limit 'erişilemez', tek ping", async () => {
+  // Karar (VLAD, A fazı sapması): `task ready` bilinçli olarak ağsız önizlemedir; erişilemezlik `task launch` içindeki pickMachine/ping'de tutar.
+  it("[windows], agent yok: ready ağsız önizleme (ping yok); launch 'erişilemez' ile reddeder, tek ping, pencere yok", async () => {
     w = await makeWorld({ cardMachines: ["windows"] });
     const px = await startProxy({ port: await freePort() }); // hedef dinlemiyor
     proxies.push(px);
     w.setPorts({ windows: px.port });
     const id = await w.newTask();
     const j = await readyJson(w);
-    expect(heldIds(j)).toContain(id);
-    expect(JSON.stringify((j.held_by_limit as any[]).find((x) => idOf(x) === id))).toContain("erişilemez");
+    expect(JSON.stringify(j.tasks)).toContain(id); // ağsız önizleme: erişilebilirlik sorulmaz
+    expect(px.count).toBe(0);
+    const r = await runVlad(w.brain, ["task", "launch", id]);
+    expect(r.code).not.toBe(0);
+    expect(r.err + r.out).toContain("erişilemez");
     expect(px.count).toBe(1);
+    expect(front(w.readTask(w.brain, id), "state")).toBe("queued");
     expect(w.noop(w.brain)).toHaveLength(0);
   }, 60_000);
 
-  it("[mac,windows], mac dolu + windows erişilemez: bekletilir; geri gelince (agent açılınca) yerleşir", async () => {
+  it("[mac,windows], mac dolu + windows erişilemez: launch reddedilir; geri gelince (agent açılınca) yerleşir", async () => {
     w = await makeWorld({ cardMachines: ["mac", "windows"] });
     await fillMachine(w, "mac");
     const dead = await freePort();
     w.setPorts({ windows: dead });
     const id = await w.newTask();
-    expect(heldIds(await readyJson(w))).toContain(id);
-    expect((await runVlad(w.brain, ["task", "launch", id])).code).not.toBe(0);
+    const held = await runVlad(w.brain, ["task", "launch", id]);
+    expect(held.code).not.toBe(0);
+    expect(held.err + held.out).toContain("erişilemez");
+    expect(front(w.readTask(w.brain, id), "state")).toBe("queued");
     await w.startAgents(["worker"]); // aynı config'e gerçek port yazılır
-    expect(heldIds(await readyJson(w))).not.toContain(id);
     expect((await runVlad(w.brain, ["task", "launch", id, "--json"])).code).toBe(0);
     expect(w.noop(w.worker).map((l) => l.taskId)).toContain(id);
   }, 60_000);

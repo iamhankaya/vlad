@@ -32,6 +32,30 @@ describe("machines:B queue", () => {
     expect(r).toEqual({ sent: 0, failed: 0, remaining: 2 });
     expect(q.pending()[0]!.reason).toContain(code);
   });
+  it("flush moves an unreadable entry (written while running) to failed/ and still sends the rest", async () => {
+    const { d, q } = mk();
+    q.enqueue(w("T1", "a"));
+    writeFileSync(join(d, "queue", "00000000-bozuk.json"), "{{{ bozuk");
+    const sent: string[] = [];
+    expect(await q.flush(async (i) => { sent.push(i.text!); })).toMatchObject({ sent: 1, remaining: 0 });
+    expect(sent).toEqual(["a"]);
+    expect(readdirSync(join(d, "queue")).filter((n) => n.endsWith(".json"))).toEqual([]);
+    expect(readdirSync(join(d, "queue", "failed"))).toContain("00000000-bozuk.json");
+  });
+  it("a flush that overlaps a running one waits for it and then drains what is left", async () => {
+    const { q } = mk();
+    q.enqueue(w("T1", "a"));
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const sent: string[] = [];
+    const first = q.flush(async (i) => { await gate; sent.push(i.text!); });
+    q.enqueue(w("T1", "b"));
+    const second = q.flush(async (i) => { sent.push(i.text!); });
+    release();
+    await first;
+    expect(await second).toMatchObject({ remaining: 0 });
+    expect(sent).toEqual(["a", "b"]);
+  });
   it("a permanent error moves the entry and the same task's later entries to failed/, other tasks continue", async () => {
     const { d, q } = mk();
     q.enqueue(w("T1", "a")); q.enqueue(w("T2", "b")); q.enqueue(w("T1", "c")); q.enqueue(w("T3", "d"));
