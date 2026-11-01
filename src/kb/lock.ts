@@ -5,8 +5,11 @@ import { kbPaths } from "./home.js";
 
 const TIMEOUT_MS = 30_000;
 const STALE_MS = 10 * 60_000;
-const GUARD_STALE_MS = 30_000;
+const GUARD_STALE_MS = 5_000;
 const envMs = (name: string, dflt: number) => { const n = Number(process.env[name]); return process.env[name] !== undefined && Number.isFinite(n) ? n : dflt; };
+
+/** Thrown when the lock could not be taken in time (callers may degrade instead of failing). */
+export class KbLockTimeout extends Error {}
 
 let depth = 0; // >0: this process already holds the lock (re-entry must not wait for itself)
 
@@ -18,7 +21,7 @@ const alive = (pid: number) => {
 function isStale(file: string, raw: string, staleMs: number): boolean {
   let pid: number | undefined, started: number | undefined;
   try { ({ pid, started } = JSON.parse(raw) as { pid?: number; started?: number }); } catch { /* fall through to mtime */ }
-  if (typeof pid === "number" && !alive(pid)) return true;
+  if (Number.isInteger(pid) && pid! > 0 && !alive(pid!)) return true;
   if (typeof started !== "number") { try { started = statSync(file).mtimeMs; } catch { return false; } }
   return Date.now() - started >= staleMs;
 }
@@ -66,7 +69,7 @@ function acquire(file: string, timeoutMs: number, staleMs: number): () => void {
     if (Date.now() - start >= timeoutMs) {
       let who = "";
       try { const o = JSON.parse(raw) as { pid?: number; started?: number }; who = `; sahip pid ${o.pid}, ${Math.round((Date.now() - (o.started ?? start)) / 1000)} sn önce başladı`; } catch { /* unreadable owner */ }
-      throw new Error(`kb kilidi alınamadı (${Math.round(timeoutMs / 1000)} sn beklendi${who}): ${file}`);
+      throw new KbLockTimeout(`kb kilidi alınamadı (${Math.round(timeoutMs / 1000)} sn beklendi${who}): ${file}`);
     }
     sleepMs(delay + Math.floor(Math.random() * delay));
   }

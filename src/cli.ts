@@ -12,7 +12,7 @@ import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
-import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState } from "./kb/index.js";
 import { NoopLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
@@ -81,13 +81,13 @@ program
 /**
  * Commands that write the kb run under the cross-process kb lock (F-vlad-096): ID generation and the write
  * share one lock region. Read-only commands, `kb commit` (files are written atomically) and
- * `task resume|close-window` (no kb write) stay lock-free. `status`/`mode status` write only as a side effect
+ * `task close-window` (no kb write) stay lock-free. `status`/`mode status` write only as a side effect
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
  */
 const KB_WRITES = new Set([
   "project write", "project set", "project note", "project summary",
   "finding add", "finding set",
-  "task new", "task launch", "task ingest", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
+  "task new", "task launch", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
   "mode night", "mode watch", "mode off", "mode status",
   "inbox done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
 ]);
@@ -99,8 +99,14 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
   c.action(async (...args: any[]) => {
     try {
       const opts = args[args.length - 2] as Opts;
-      const locked = KB_WRITES.has(key) || (key === "vlad status" && opts.mark !== false);
-      await (locked ? withKbLock(() => fn(...args)) : fn(...args));
+      if (key === "vlad status" && opts.mark !== false) {
+        // SessionStart hook runs this: never block it behind a long writer; fall back to the side-effect-free read
+        try { await withKbLock(() => fn(...args), { timeoutMs: 2000 }); } catch (e) {
+          if (!(e instanceof KbLockTimeout)) throw e;
+          opts.mark = false;
+          await fn(...args);
+        }
+      } else await (KB_WRITES.has(key) ? withKbLock(() => fn(...args)) : fn(...args));
     } catch (e) {
       fail(e);
     }

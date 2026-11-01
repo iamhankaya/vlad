@@ -40,6 +40,7 @@ describe("kb yazma kilidi: eşzamanlı süreçler (F-vlad-096)", { timeout: 120_
     expect((await vlad(["project", "write", "alpha", "--file", join(home, "card.md")])).code).toBe(0);
     const id = JSON.parse((await vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", "-", "--json"], "## Tanım\nx\n")).out).id as string;
 
+    process.env.VLAD_LOCK_TIMEOUT_MS = "120000"; // yük altında bekleme payı
     const WORKERS = 4, ROUNDS = 6;
     const ids: string[] = [];
     const failures: string[] = [];
@@ -79,6 +80,7 @@ describe("kb yazma kilidi: eşzamanlı süreçler (F-vlad-096)", { timeout: 120_
     expect(JSON.parse(w.err).error).toMatch(/^kb kilidi alınamadı/);
     expect((await vlad(["task", "list", "--json"], "", env)).code).toBe(0);
     expect((await vlad(["status", "--no-mark", "--json"], "", env)).code).toBe(0);
+    expect((await vlad(["status", "--json"], "", env)).code).toBe(0); // kilitliyken yazmadan okuma moduna düşer (SessionStart hook'u bloklanmaz)
     expect((await vlad(["project", "list", "--json"], "", env)).code).toBe(0);
     expect((await vlad(["kb", "commit", "x"], "", env)).err).not.toMatch(/kilid/); // git yok/kb repo değil: başka hata olabilir, kilit hatası olmamalı
   });
