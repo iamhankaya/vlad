@@ -25,8 +25,11 @@ export class AgentClient implements RemoteTransport {
 
   async call<T = unknown>(to: string, op: AgentOp, args: unknown, c: { opId?: string; timeoutMs?: number; as?: string } = {}): Promise<{ opId: string; result: T; meta?: OpMeta }> {
     const from = c.as ?? this.o.self;
-    const key = this.o.keys[from];
-    if (!key) throw new RemoteError("auth", `auth: ${from} için anahtar yok (vlad.local.json)`, to);
+    // Çift anahtar (D-vlad-057): anahtar KARŞI taraf adıyla tutulur ve yalnız bu iki makine arasında geçerlidir. Bir işçi yalnız
+    // beyinle paylaştığı anahtarı bilir; başka bir işçiye ya da beyin gibi davranan istek imzalayamaz.
+    const peer = from === this.o.self ? to : from;
+    const key = Object.hasOwn(this.o.keys, peer) ? this.o.keys[peer] : undefined;
+    if (!key) throw new RemoteError("auth", `auth: ${from}↔${to} çifti için anahtar yok (vlad.local.json keys.${peer})`, to);
     const addr = addressOf(this.o.config(), to, this.o.self);
     const opId = c.opId ?? randomUUID();
     const req: AgentRequest = signRequest(key, { v: PROTO_VERSION, from, to, opId, ts: nowMs(), op, args });

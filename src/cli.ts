@@ -21,7 +21,7 @@ import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { brainTransport, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, remoteResume } from "./machines/remote.js";
 import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
-import { agentKeygen, agentStart, agentStatus } from "./agent/start.js";
+import { agentKeygen, agentSetKey, agentStart, agentStatus } from "./agent/start.js";
 import { installPlan } from "./agent/install.js";
 import { readLocal, selfName } from "./agent/state.js";
 import { AgentClient } from "./agent/client.js";
@@ -706,9 +706,19 @@ def(agent, "status", "Yerel Agent çalışıyor mu", async (o: Opts) => {
   out(o, s, s.running ? `çalışıyor: ${s.host}:${s.port}${s.pid ? ` (pid ${s.pid})` : ""}` : `çalışmıyor (${s.host}:${s.port})`);
   process.exitCode = s.running ? 0 : 1;
 });
-def(agent, "keygen <kimlik>", "Kimlik için yeni anahtar üretir, vlad.local.json'a yazar (varsa değiştirir)", (identity: string, o: Opts) => {
+def(agent, "keygen <kimlik>", "Anahtar üretir, vlad.local.json'a yazar. <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey` çalıştır); <kendi-adın> = yerel çağrı anahtarı", (identity: string, o: Opts) => {
   const r = agentKeygen(identity);
-  out(o, r, `${r.identity}: ${r.key}\n(${r.file}'a yazıldı; anahtarı diğer uca güvenli kanaldan elle kopyala, Agent'ı yeniden başlat)`);
+  out(o, r, r.copy
+    ? `${r.identity}: ${r.key}
+(${r.file}'a yazıldı. Karşı uçta, güvenli kanaldan elle çalıştır:
+  ${r.copy}
+sonra iki ucun Agent'ını yeniden başlat)`
+    : `${r.identity}: ${r.key}
+(${r.file}'a yazıldı; yerel çağrı anahtarı, kopyalanmaz; Agent'ı yeniden başlat)`);
+});
+def(agent, "setkey <karsi-taraf> <anahtar>", "Karşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>)", (peer: string, key: string, o: Opts) => {
+  const r = agentSetKey(peer, key);
+  out(o, r, `${r.peer} anahtarı ${r.file}'a yazıldı (Agent'ı yeniden başlat)`);
 });
 
 def(agent, "install", "Agent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows: görev zamanlayıcı); --apply ile kurar", (o: Opts) => {

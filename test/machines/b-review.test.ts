@@ -16,7 +16,8 @@ import { RemoteError } from "../../src/machines/types.js";
 import { rmTemp } from "../helpers.js";
 
 // Review düzeltmeleri (T20261101-24): her biri düzeltmeden önce kırmızıydı.
-const K = { mac: "a".repeat(64), windows: "b".repeat(64) };
+// tek çift (mac↔windows): çift anahtar aynı değer; karşı taraf adıyla iki yerde de tutulur (D-vlad-057)
+const K = { mac: "a".repeat(64), windows: "a".repeat(64) };
 const cleanups: (() => unknown)[] = [];
 afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
 const cfg = () => ({ ...defaultConfig(), brain: "mac", machines: [{ name: "mac", os: "darwin" as const, agent: { host: "127.0.0.1", port: 7437 } }, { name: "windows", os: "win32" as const, agent: { host: "127.0.0.1", port: 7437 } }] });

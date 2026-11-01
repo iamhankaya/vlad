@@ -24,9 +24,14 @@ export interface Side {
 export interface HomePair {
   brain: Side;
   worker: Side;
-  /** kimlik adı -> 64 hex anahtar (brain, worker ve konsollar) */
+  /**
+   * Çift anahtarlar (D-vlad-057): `keys[brain]` = beynin kendi anahtarı, `keys[worker]` = beyin↔işçi çifti,
+   * `keys[konsol]` = beyin↔konsol çifti. Beyin hepsini tutar; işçi/konsol yalnız beyinle paylaştığı anahtarı (beyin adıyla) bilir.
+   */
   keys: Record<string, string>;
-  /** Konsol kimliği için ayrı yerel ayar dosyası (yalnız kendi anahtarı) döndürür; env olarak VLAD_LOCAL_FILE verilir. */
+  /** İşçinin kendi (yerel çağrı) anahtarı; çiftlerden ayrı. */
+  workerSelfKey: string;
+  /** Konsol kimliği için ayrı yerel ayar dosyası (yalnız beyinle paylaştığı anahtar) döndürür; env olarak VLAD_LOCAL_FILE verilir. */
   consoleLocal(name: string): string;
   /** İki home'u ve geçici dizini siler. */
   cleanup(): void;
@@ -51,7 +56,7 @@ function makeSide(base: string, name: string, self: string, keys: Record<string,
 
 /**
  * İki bağımsız VLAD home'u (beyin + işçi). `config` iki home'a da aynen yazılır. Beyin tüm anahtarları, işçi yalnız
- * kendisininkini tutar. Yalnız yol/dosya üretir; hiçbir süreç başlatmaz.
+ * yalnız beyinle paylaştığı çift anahtarı ve kendi anahtarını tutar. Yalnız yol/dosya üretir; hiçbir süreç başlatmaz.
  */
 export function makeHomePair(o: { config?: object; brain?: string; worker?: string; consoles?: string[] } = {}): HomePair {
   const base = mkdtempSync(join(tmpdir(), "vlad-mp-"));
@@ -59,13 +64,14 @@ export function makeHomePair(o: { config?: object; brain?: string; worker?: stri
   const keys: Record<string, string> = {};
   for (const n of [bn, wn, ...(o.consoles ?? [])]) keys[n] = randomBytes(32).toString("hex");
   const brain = makeSide(base, "brain", bn, keys, o.config);
-  const worker = makeSide(base, "worker", wn, { [wn]: keys[wn] }, o.config);
+  const workerSelfKey = randomBytes(32).toString("hex");
+  const worker = makeSide(base, "worker", wn, { [wn]: workerSelfKey, [bn]: keys[wn] }, o.config);
   return {
-    brain, worker, keys,
+    brain, worker, keys, workerSelfKey,
     cleanup: () => { try { rmSync(base, { recursive: true, force: true }); } catch { /* OS temizler */ } },
     consoleLocal(name) {
       const f = join(base, `console-${name}.json`);
-      writeFileSync(f, JSON.stringify({ self: name, keys: { [name]: keys[name] } }));
+      writeFileSync(f, JSON.stringify({ self: name, keys: { [bn]: keys[name] } }));
       return f;
     },
   };

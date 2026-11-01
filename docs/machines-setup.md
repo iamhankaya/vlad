@@ -18,12 +18,12 @@ Tek beyin (Mac, kb'nin tek yazarı), bir ya da daha çok işçi (Windows). İş�
 - `roots`: işçide repoların aranacağı kökler. Görev başlarken `<root>/<repoName>` (içinde `.git`) tek bulunmalı; yoksa `not_found: repo yok`, iki kökte varsa `conflict: belirsiz repo adı`. Yol beyinden gelmez, yalnız ad gelir.
 - `kbDir`: işçideki kb klonu (beyin push eder, işçi `kb-sync` ile alır; aynı `vlad-kb` upstream'i).
 
-## 2. Anahtarlar
+## 2. Anahtarlar (çift anahtar, D-vlad-057)
 
-Her makinede `vlad.local.json` (git'e girmez): `{ "self": "<makine>", "keys": { ... } }`.
+Her makinede `vlad.local.json` (git'e girmez): `{ "self": "<makine>", "keys": { "<karşı-taraf>": "<64 hex>" } }`. Anahtar **iki makine arasındadır** ve karşı tarafın adıyla tutulur; işçi yalnız beyinle paylaştığı anahtarı bilir (bir işçi ele geçse bile başka işçiye ya da beyin gibi davranan istek imzalayamaz).
 
-1. Beyinde: `vlad agent keygen mac`, `vlad agent keygen windows`.
-2. Her anahtarı **güvenli kanaldan elle** ilgili işçiye kopyala (işçi yalnız kendi anahtarını tutar; beyin hepsini).
+1. Her makinede yerel çağrı anahtarı: `vlad agent keygen <kendi-adın>` (kopyalanmaz).
+2. Her işçi için beyinde: `vlad agent keygen windows` → anahtarı üretir, `keys.windows` olarak yazar ve işçide çalıştırılacak komutu basar: `vlad agent setkey mac <anahtar>` (anahtarı **güvenli kanaldan elle** taşı). Konsol için de aynı: `keygen desktop` → konsolda `setkey mac <anahtar>`.
 3. Agent'ları (yeniden) başlat: `vlad agent start`; durum: `vlad agent status`.
 4. Oturum açılışında otomatik başlatma: `vlad agent install` kaydı basar, `--apply` ile kurar (Windows görev zamanlayıcı, Mac launchd). Kayıt kalıcılık oluşturur; kullanıcı kendisi çalıştırır.
 

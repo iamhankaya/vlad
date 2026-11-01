@@ -160,6 +160,18 @@ describe("machines:B end-to-end (real Agent processes)", () => {
     expect(spawnVlad(p.worker, ["agent", "keygen", "ghost"]).code).toBe(1);
   }, 60_000);
 
+  it("`agent keygen <karşı-taraf>` makes a pair key and prints the setkey command for the other end; `setkey` installs it there", async () => {
+    const { p } = await setup();
+    const k = JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "mac", "--json"]).out);
+    expect(k.copy).toBe(`vlad agent setkey windows ${k.key}`);
+    expect(JSON.parse(readFileSync(p.worker.local, "utf8")).keys.mac).toBe(k.key);
+    expect(JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "windows", "--json"]).out).copy).toBeUndefined(); // kendi anahtarı kopyalanmaz
+    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", "short"]).code).toBe(1);
+    expect(spawnVlad(p.brain, ["agent", "setkey", "ghost", k.key]).code).toBe(1);
+    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", k.key]).code).toBe(0);
+    expect(JSON.parse(readFileSync(p.brain.local, "utf8")).keys.windows).toBe(k.key);
+  }, 60_000);
+
   it("console: `vlad remote` runs catalog commands on the brain and mirrors stdout/exit; off-catalog and bad file flags are forbidden", async () => {
     const { p, id, consoleSide, stop } = await setup();
     const direct = spawnVlad(p.brain, ["task", "list", "--json"]);
