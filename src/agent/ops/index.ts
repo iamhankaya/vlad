@@ -5,6 +5,9 @@ import { forwardWrite } from "./forward-write.js";
 import { kbHead } from "./kb-head.js";
 import { opStatus } from "./op-status.js";
 import { ping } from "./ping.js";
+import { kbSync } from "./kb-sync.js";
+import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
+import { probeWindow } from "./probe-window.js";
 import { liveness } from "./liveness.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
 
@@ -54,6 +57,14 @@ OP_TABLE["queue-list"] = () => queueList();
 OP_TABLE["queue-flush"] = () => queueFlush();
 OP_TABLE["queue-drop"] = (a) => queueDrop(a);
 // --- /machines:B ---
+// --- machines:C2 --- C2'nin op satırları
+OP_TABLE["probe-window"] = () => probeWindow();
+OP_TABLE["kb-sync"] = (a) => kbSync(a);
+OP_TABLE.launch = (a, c) => launchOp(a, c);
+OP_TABLE.resume = (a) => resumeOp(a);
+OP_TABLE.close = (a) => closeOp(a);
+OP_TABLE.cleanup = (a) => cleanupOp(a);
+// --- /machines:C2 ---
 // --- machines:C3 ---
 OP_TABLE.liveness = (a) => liveness(a);
 // --- /machines:C3 ---

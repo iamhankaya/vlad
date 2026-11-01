@@ -409,7 +409,7 @@ export function cleanupTask(
  * then unregisters the worktree but fails to delete it. A leftover, unregistered folder is
  * deleted directly (retrying while a just-killed window releases it) so that a retry succeeds.
  */
-function removeTaskWorktree(repo: string, wt: string, id: string): void {
+export function removeTaskWorktree(repo: string, wt: string, id: string): void {
   try {
     if (isWorktree(repo, wt)) removeWorktree(repo, wt);
     else { unlinkReparsePoints(wt); rmSync(wt, { recursive: true, force: true }); }

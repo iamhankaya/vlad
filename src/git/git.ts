@@ -165,7 +165,7 @@ export function removeWorktree(repo: string, dir: string): void {
   mustGit(repo, ["worktree", "remove", "--force", dir]);
 }
 
-const samePath = (a: string, b: string): boolean => {
+export const samePath = (a: string, b: string): boolean => {
   const norm = (p: string) => {
     // realpath expands Windows 8.3 short names (METOHA~1) that git never prints
     let full = resolve(p);

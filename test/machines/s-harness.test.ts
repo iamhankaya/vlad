@@ -26,13 +26,14 @@ describe("machines:S harness", () => {
     }
     expect(p.brain.env.VLAD_CLAUDE_JSON).not.toBe(p.worker.env.VLAD_CLAUDE_JSON);
   });
-  it("brain holds every key, the worker only its own; keys are 64 hex", () => {
+  it("pair keys: the brain holds every pair; the worker and a console only the one shared with the brain (+ own local key); keys are 64 hex", () => {
     const p = pair();
     expect(Object.keys(p.keys).sort()).toEqual(["desktop", "mac", "windows"]);
-    for (const k of Object.values(p.keys)) expect(k).toMatch(/^[0-9a-f]{64}$/);
+    for (const k of [...Object.values(p.keys), p.workerSelfKey]) expect(k).toMatch(/^[0-9a-f]{64}$/);
     expect(Object.keys(JSON.parse(readFileSync(p.brain.local, "utf8")).keys).sort()).toEqual(["desktop", "mac", "windows"]);
-    expect(JSON.parse(readFileSync(p.worker.local, "utf8"))).toEqual({ self: "windows", keys: { windows: p.keys.windows } });
-    expect(JSON.parse(readFileSync(p.consoleLocal("desktop"), "utf8"))).toEqual({ self: "desktop", keys: { desktop: p.keys.desktop } });
+    expect(JSON.parse(readFileSync(p.worker.local, "utf8"))).toEqual({ self: "windows", keys: { windows: p.workerSelfKey, mac: p.keys.windows } });
+    expect(JSON.parse(readFileSync(p.consoleLocal("desktop"), "utf8"))).toEqual({ self: "desktop", keys: { mac: p.keys.desktop } });
+    expect(new Set([p.keys.mac, p.keys.windows, p.keys.desktop, p.workerSelfKey]).size).toBe(4); // çiftler birbirinden ayrı
   });
   it("two homes do not leak into each other through spawnVlad", () => {
     const p = pair();

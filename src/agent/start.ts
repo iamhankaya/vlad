@@ -11,6 +11,7 @@ import { reconcileApplyWrite } from "./ops/apply-write.js";
 import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
 import { OP_TABLE } from "./ops/index.js";
+import { reconcileLaunch } from "./ops/launch.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
@@ -47,7 +48,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const dir = agentDir();
   mkdirSync(dir, { recursive: true });
   const journal = new Journal(join(dir, "journal.jsonl"), nowMs);
-  reconcile(journal, { "apply-write": reconcileApplyWrite });
+  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch });
   const queue = kind === "worker-agent" ? new AgentQueue(join(dir, "queue"), nowMs) : undefined;
   const build = buildId();
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });
@@ -85,12 +86,37 @@ export async function agentStatus(): Promise<{ running: boolean; machine: string
   return { running: p.alive, machine: p.machine, host: p.host, port: p.port, pid };
 }
 
-/** Kimlik için yeni 32 bayt anahtar üretir ve yerel dosyaya yazar (varsa değiştirir = döndürme). */
-export function agentKeygen(identity: string): { identity: string; key: string; file: string } {
+export interface KeygenResult {
+  /** anahtarın tutulduğu ad: karşı taraf (çift anahtar) ya da kendi adın (yerel çağrı anahtarı) */
+  identity: string;
+  key: string;
+  file: string;
+  /** karşı uca elle uygulanacak komut (yalnız çift anahtarda) */
+  copy?: string;
+}
+
+/**
+ * Anahtar üretir ve yerel dosyaya yazar (varsa değiştirir = döndürme). Çift anahtar (D-vlad-057): `keygen <karşı-taraf>` bu makine ile
+ * karşı taraf arasında YALNIZ o ikisinin bildiği bir anahtardır; `keys.<karşı-taraf>` olarak tutulur. Karşı uçta aynı değer
+ * `keys.<bu-makine>` olmalı: `copy` o ucun çalıştıracağı komutu verir. `keygen <kendi-adın>` yerel çağrı anahtarıdır, kopyalanmaz.
+ */
+export function agentKeygen(identity: string): KeygenResult {
   const cfg = loadConfig();
   if (cfg.machines && !roleOf(cfg, identity)) throw new Error(`agent keygen: kimlik config'te tanımlı değil: ${identity}`);
-  const local = readLocal();
   const key = randomBytes(32).toString("hex");
+  const self = selfName();
+  const local = readLocal();
   writeLocal({ ...local, keys: { ...local.keys, [identity]: key } });
-  return { identity, key, file: localFile() };
+  return { identity, key, file: localFile(), ...(identity !== self ? { copy: `vlad agent setkey ${self} ${key}` } : {}) };
+}
+
+/** Karşı uçta üretilmiş çift anahtarı bu makineye yazar: `keys.<karşı-taraf>`. */
+export function agentSetKey(peer: string, key: string): { peer: string; file: string } {
+  const cfg = loadConfig();
+  if (cfg.machines && !roleOf(cfg, peer)) throw new Error(`agent setkey: kimlik config'te tanımlı değil: ${peer}`);
+  if (peer === selfName()) throw new Error("agent setkey: kendi adın için çift anahtar olmaz (keygen <kendi-adın>)");
+  if (!/^[0-9a-f]{64}$/.test(key)) throw new Error("agent setkey: anahtar 64 hex olmalı");
+  const local = readLocal();
+  writeLocal({ ...local, keys: { ...local.keys, [peer]: key } });
+  return { peer, file: localFile() };
 }

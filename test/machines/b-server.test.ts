@@ -16,6 +16,7 @@ import type { VladConfig } from "../../src/kb/types.js";
 import { MAX_FRAME_BYTES, RemoteError, type AgentOp, type AgentRequest } from "../../src/machines/types.js";
 import { rmTemp } from "../helpers.js";
 
+// K: sunucunun (windows) anahtarları, KARŞI taraf adıyla (çift anahtar, D-vlad-057): K.mac = mac↔windows, K.desktop = desktop↔windows, K.windows = kendi.
 const K = { mac: "11".repeat(32), windows: "22".repeat(32), desktop: "33".repeat(32) };
 const cfg = (): VladConfig => ({
   ...defaultConfig(), brain: "mac", consoles: [{ name: "desktop" }],
@@ -36,7 +37,7 @@ async function worker(ops: Partial<Record<AgentOp, OpHandler>> = {}, o: { readTi
   const srv: RunningServer = await startServer({ self: "windows", kind: "worker-agent", cfg: () => c, keys: K, ops: { ...OP_TABLE, ...ops }, journal, build: "t", bind: "127.0.0.1", port: 0, ...o });
   cleanups.push(() => srv.close());
   c.machines![1]!.agent.port = srv.port;
-  return { c, srv, journal, as: (self: string) => new AgentClient({ self, keys: K, config: () => c }) };
+  return { c, srv, journal, as: (self: string) => new AgentClient({ self, keys: { windows: K[self as keyof typeof K] }, config: () => c }) };
 }
 
 /** İmzalı ham istek gönderip tek yanıt çerçevesi okur. */
@@ -175,7 +176,7 @@ describe("machines:B server+client (loopback)", () => {
     cleanups.push(() => new Promise<void>((r) => fake.close(() => r())));
     const c = cfg();
     c.machines![1]!.agent.port = (fake.address() as net.AddressInfo).port;
-    const e = await new AgentClient({ self: "mac", keys: K, config: () => c }).call("windows", "ping", {}).catch((x) => x);
+    const e = await new AgentClient({ self: "mac", keys: { windows: K.mac }, config: () => c }).call("windows", "ping", {}).catch((x) => x);
     expect(e).toMatchObject({ code: "auth", message: "auth: yanıt imzası geçersiz" });
   });
 });
