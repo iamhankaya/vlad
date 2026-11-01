@@ -50,6 +50,13 @@ describe("withKbLock", () => {
     await expect(withKbLock(() => 1, fast)).rejects.toThrow(/kb kilidi alınamadı/);
     expect(await withKbLock(() => "ok", { ...fast, staleMs: 0 })).toBe("ok");
   });
+  it("bayat kilit kırılamıyorsa (taze .break guard'ı) zaman aşımını uygular, meşgul döngüye girmez (F-vlad-106)", async () => {
+    owner({ pid: deadPid(), started: Date.now() });
+    writeFileSync(`${lock}.break`, ""); // başka bir kırıcı tutuyor, 5 sn dolmadan alınamaz
+    const t0 = Date.now();
+    await expect(withKbLock(() => 1, fast)).rejects.toThrow(/kb kilidi alınamadı/);
+    expect(Date.now() - t0).toBeLessThan(3_000); // yamasız: guard bayatlayana (5 sn) kadar dönüp sonra alır
+  });
   it("bırakırken başkasının kilidini silmez", async () => {
     await withKbLock(() => { owner({ pid: process.pid, started: Date.now() }); });
     expect(existsSync(lock)).toBe(true);

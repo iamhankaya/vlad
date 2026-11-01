@@ -4,7 +4,7 @@ import {
   addWorktree, attachWorktree, branchExists, isWorktree, ReparseCleanupError, remoteBranchExists, removeWorktree, runGit,
   unlinkReparsePoints, worktreeBranch, worktreePath,
 } from "../git/git.js";
-import { readDoc, kbPaths } from "../kb/index.js";
+import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { countInbox } from "../inbox/inbox.js";
@@ -38,11 +38,12 @@ const projectPath = (slug: string): string => projectCard(slug).path;
 const projectDefaultBranch = (slug: string): string | undefined => projectCard(slug).default_branch ?? undefined;
 
 /** Persists the last error on a task without touching its state. */
-function recordError(id: string, msg: string): void {
+const recordError = (id: string, msg: string): Promise<void> => withKbLock(() => {
   const t = getTask(id);
+  if (t.data.state === "running") return; // started elsewhere while the launcher ran: the error field is not ours to set (F-vlad-102)
   t.data.error = msg;
   saveTask(t);
-}
+});
 
 export function buildPrompt(
   taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
@@ -143,7 +144,7 @@ export async function launchTask(
   const unmet = unmetDependencies(task);
   if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
 
-  const stale = syncAutonomy(task, o.cfg);
+  const stale = await withKbLock(() => syncAutonomy(task, o.cfg));
   if (stale) console.error(`uyarı: ${id} yetkisi config'ten güncellendi (${stale} → ${task.data.autonomy})`);
 
   const branch = `vlad/${id}`;
@@ -156,7 +157,7 @@ export async function launchTask(
     repo = projectPath(task.data.project);
     wt = worktreePath(o.cfg, repo, id);
     // a pipeline phase branches from the pipeline's integration branch; the rollback below leaves it alone
-    const base = task.data.parent ? ensureIntegration(task.data.parent, o.cfg, task.data.project).branch : undefined;
+    const base = task.data.parent ? (await withKbLock(() => ensureIntegration(task.data.parent!, o.cfg, task.data.project))).branch : undefined;
     addWorktree(repo, wt, branch, base);
     // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
     const actual = (o.branchOf ?? worktreeBranch)(wt);
@@ -169,7 +170,7 @@ export async function launchTask(
     created = runGit(repo, ["rev-parse", branch]);
   } catch (e) {
     const msg = (e as Error).message;
-    recordError(id, msg);
+    await recordError(id, msg);
     throw new Error(msg);
   }
 
@@ -212,14 +213,14 @@ export async function launchTask(
     const cleanup = undo();
     untrustWorktree(wt);
     if (cleanup) failure += `; temizlik başarısız: ${cleanup}`;
-    recordError(id, failure);
+    await recordError(id, failure);
     throw new Error(failure);
   }
   try {
-    return setState(id, "running", { branch, worktree: wt, error: null });
+    return await withKbLock(() => setState(id, "running", { branch, worktree: wt, error: null }));
   } catch (e) {
     const msg = `terminal açıldı ama durum güncellenemedi: ${(e as Error).message}; worktree: ${wt}`;
-    try { recordError(id, msg); } catch { /* best effort */ }
+    try { await recordError(id, msg); } catch { /* best effort */ }
     throw new Error(msg);
   }
 }

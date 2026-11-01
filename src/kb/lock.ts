@@ -31,15 +31,15 @@ function isStale(file: string, raw: string, staleMs: number): boolean {
  * re-read under the guard, and rename to a unique name (never unlink the path someone else may recreate).
  * shortcut: a live owner that outlives staleMs and releases in the same microseconds as the break is not covered.
  */
-function breakStale(file: string, raw: string, staleMs: number): void {
+function breakStale(file: string, raw: string, staleMs: number): boolean {
   const guard = `${file}.break`;
   try { writeFileSync(guard, "", { flag: "wx" }); } catch (e) {
     if ((e as { code?: string }).code !== "EEXIST") throw e;
     try { if (Date.now() - statSync(guard).mtimeMs >= GUARD_STALE_MS) rmSync(guard, { force: true }); } catch { /* gone already */ }
-    return;
+    return false; // another breaker holds the guard: the caller must still honor its deadline and back off (F-vlad-106)
   }
   try {
-    if (readFileSync(file, "utf8") !== raw || !isStale(file, raw, staleMs)) return; // changed hands meanwhile
+    if (readFileSync(file, "utf8") !== raw || !isStale(file, raw, staleMs)) return true; // changed hands meanwhile
     const trash = `${file}.stale-${process.pid}-${Math.random().toString(36).slice(2, 8)}`;
     renameSync(file, trash);
     rmSync(trash, { force: true });
@@ -48,6 +48,7 @@ function breakStale(file: string, raw: string, staleMs: number): void {
   } finally {
     rmSync(guard, { force: true });
   }
+  return true;
 }
 
 function acquire(file: string, timeoutMs: number, staleMs: number): () => void {
@@ -65,7 +66,7 @@ function acquire(file: string, timeoutMs: number, staleMs: number): () => void {
     }
     let raw: string;
     try { raw = readFileSync(file, "utf8"); } catch { continue; } // released between attempts
-    if (isStale(file, raw, staleMs)) { breakStale(file, raw, staleMs); continue; }
+    if (isStale(file, raw, staleMs) && breakStale(file, raw, staleMs)) continue;
     if (Date.now() - start >= timeoutMs) {
       let who = "";
       try { const o = JSON.parse(raw) as { pid?: number; started?: number }; who = `; sahip pid ${o.pid}, ${Math.round((Date.now() - (o.started ?? start)) / 1000)} sn önce başladı`; } catch { /* unreadable owner */ }

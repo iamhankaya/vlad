@@ -123,7 +123,11 @@ describe("F-vlad-096 doğrulama: sahibi ölen kilit", { timeout: 300_000 }, () =
     const p = spawn("node", ["-e", "setTimeout(()=>{},600000)"], { stdio: "ignore" });
     return p;
   };
-  const kill = (pid: number) => spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)]);
+  // F-vlad-107: taskkill yalnız Windows'ta var; diğer platformlarda SIGKILL (ağaç gerekmez: süreçler doğrudan `node`)
+  const kill = (pid: number) => {
+    if (process.platform === "win32") spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)]);
+    else try { process.kill(pid, "SIGKILL"); } catch { /* zaten çıkmış */ }
+  };
 
   it("ölü pid'li kilit varken 4 yazan makul sürede devam eder ve kilit kırılır", async () => {
     await setup();
@@ -141,7 +145,7 @@ describe("F-vlad-096 doğrulama: sahibi ölen kilit", { timeout: 300_000 }, () =
     expect(leftovers(kb())).toEqual([]);
   });
 
-  it("yazma sırasında rastgele süreçler taskkill /F ile öldürülünce: sağ kalanlar tamamlanır, dosyalar bozulmaz, kilit artığı kalmaz", async () => {
+  it("yazma sırasında rastgele süreçler zorla (taskkill /F, SIGKILL) öldürülünce: sağ kalanlar tamamlanır, dosyalar bozulmaz, kilit artığı kalmaz", async () => {
     await setup();
     const env = { VLAD_LOCK_TIMEOUT_MS: "120000" };
     const { id } = await newTask("T", env);

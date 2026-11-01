@@ -81,13 +81,14 @@ program
 /**
  * Commands that write the kb run under the cross-process kb lock (F-vlad-096): ID generation and the write
  * share one lock region. Read-only commands, `kb commit` (files are written atomically) and
- * `task close-window` (no kb write) stay lock-free. `status`/`mode status` write only as a side effect
+ * `task close-window` (no kb write) stay lock-free. `task launch` locks only its kb write regions inside
+ * `launchTask` (F-vlad-102), never the worktree/terminal wait. `status`/`mode status` write only as a side effect
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
  */
 const KB_WRITES = new Set([
   "project write", "project set", "project note", "project summary",
   "finding add", "finding set",
-  "task new", "task launch", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
+  "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
   "mode night", "mode watch", "mode off", "mode status",
   "inbox done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
 ]);
@@ -249,7 +250,7 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   }
   if (mode === "cloud") {
     if (o.external) throw new Error("--external yerel çalışan içindir; bulut modunda kullanılamaz");
-    const r = prepareCloudLaunch(id);
+    const r = await withKbLock(() => prepareCloudLaunch(id));
     out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
       `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}` +
       r.warnings.map((w) => `\nuyarı: ${w}`).join(""));
