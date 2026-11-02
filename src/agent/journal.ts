@@ -1,6 +1,10 @@
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
+import { ensurePrivateDir } from "./state.js";
 import { JOURNAL_RETENTION_DAYS, type AgentOp, type OpMeta, type OpRecord } from "../machines/types.js";
+
+/** Günlükte saklanan sonuç üst sınırı (bayt); ötesi kırpılır (F-vlad-127). Canlı yanıt tam sonucu taşır, yalnız replay kırpılmış kaydı görür. */
+const MAX_RESULT_BYTES = 64 * 1024;
 
 /** Günlük kaydı; `meta` yalnız uzlaştırmanın bıraktığı notlar (recovered/uncertain). */
 export interface JournalRecord extends OpRecord { meta?: OpMeta; /** yalnız uzlaştırması argüman isteyen işlemlerde, `started` süresince */ args?: unknown }
@@ -11,7 +15,7 @@ export class Journal {
   private waiters = new Map<string, ((r: JournalRecord) => void)[]>();
 
   constructor(private file: string, private now: () => number) {
-    mkdirSync(dirname(file), { recursive: true });
+    ensurePrivateDir(dirname(file));
     let dropped = false;
     if (existsSync(file)) {
       for (const line of readFileSync(file, "utf8").split("\n")) {
@@ -34,7 +38,9 @@ export class Journal {
     const prev = this.recs.get(opId);
     if (!prev) throw new Error(`günlükte yok: ${opId}`);
     const { args: _args, ...rest } = prev; // sonuçlanınca argüman günlükte tutulmaz
-    const rec: JournalRecord = { ...rest, state, ts: this.now(), ...(result !== undefined ? { result } : {}), ...(meta ? { meta } : {}) };
+    const size = result === undefined ? 0 : Buffer.byteLength(JSON.stringify(result));
+    const kept = size > MAX_RESULT_BYTES ? { __journalTruncated: true, bytes: size } : result;
+    const rec: JournalRecord = { ...rest, state, ts: this.now(), ...(kept !== undefined ? { result: kept } : {}), ...(meta ? { meta } : {}) };
     this.put(rec);
     for (const w of this.waiters.get(opId)?.splice(0) ?? []) w(rec);
   }

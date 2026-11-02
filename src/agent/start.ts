@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
@@ -13,10 +13,11 @@ import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
 import { OP_TABLE } from "./ops/index.js";
 import { reconcileLaunch } from "./ops/launch.js";
+import { reconcileMerge } from "./ops/merge-reconcile.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
-import { addressOf, agentDir, assertPrivateBind, buildId, localFile, readLocal, roleOf, selfName, writeLocal } from "./state.js";
+import { addressOf, agentDir, ensurePrivateDir, assertPrivateBind, buildId, localFile, readLocal, roleOf, selfName, writeLocal } from "./state.js";
 
 const pidFile = () => join(agentDir(), "agent.pid");
 
@@ -67,12 +68,12 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
 
   const test = process.env.VLAD_AGENT_TEST === "1";
   const dir = agentDir();
-  mkdirSync(dir, { recursive: true });
+  ensurePrivateDir(dir);
   const journal = new Journal(join(dir, "journal.jsonl"), nowMs);
-  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch });
   const queue = kind === "worker-agent" ? new AgentQueue(join(dir, "queue"), nowMs) : undefined;
   const build = buildId();
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });
+  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
 
   let srv;
   try {
