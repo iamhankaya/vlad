@@ -47,6 +47,7 @@ Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set
 1. **Session adını kaydet:** `ListAgents` aracını çalıştır. Çıktının ilk satırı `This session is <ad> [<ref>]` biçimindedir; `<ad>`'ı al ve `vlad session register <ad>` çalıştır. Böylece çalışanlar sana `SendMessage` ile bildirim gönderebilir. `ListAgents` yoksa veya başarısızsa bu adımı atla (bildirimler devre dışı kalır, dosyalar yeterlidir).
 2. **Özeti değerlendir:** SessionStart hook'u bağlama şu satırı ekler: `İşlenmemiş N rapor, M aktif görev (K onay bekliyor, L takıldı, B soru soruyor, F hatalı)`.
    - N > 0 ise `/digest` öner.
+   - Satırda `N bayat/eksik proje özeti: <proje (kayıt sayısı)>` varsa (aktif projelerden özeti `bayat`/`yok` olanlar; `--json`'da `staleSummaries`) `/digest` öner ve projeleri adlandır.
    - K, L, B veya F > 0 ise `/status` öner.
    - Hepsi 0 ise kısaca selam ver ve ne yapmak istediğini sor.
    Önerini tek kısa mesajda ver; kullanıcı onaylamadan skill'i başlatma.
