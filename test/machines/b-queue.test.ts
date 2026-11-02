@@ -89,6 +89,15 @@ describe("machines:B queue", () => {
     for (let i = 0; i < QUEUE_MAX_ENTRIES; i++) q.enqueue(w("T1", String(i), `o${i}`));
     expect(() => q.enqueue(w("T1", "x"))).toThrowError(expect.objectContaining({ code: "busy", transient: true }));
   });
+  it("setState: okunamayan girdide geçişi sessizce atmaz (hata fırlatır); bilinen girdi verilirse geçiş yazılır", () => {
+    const { d, q } = mk();
+    const a = q.enqueue(w("T1", "a"), "inflight");
+    const f = join(d, "queue", readdirSync(join(d, "queue")).find((x) => x.endsWith(".json"))!);
+    writeFileSync(f, "{bozuk");
+    expect(() => q.setState(a.seq, "pending", "ağ")).toThrow();
+    q.setState(a.seq, "pending", "ağ", a);
+    expect(q.pending()).toMatchObject([{ seq: a.seq, state: "pending", reason: "ağ" }]);
+  });
   it("an inflight entry blocks flush (order is kept) until it settles", async () => {
     const { q } = mk();
     const a = q.enqueue(w("T1", "a"), "inflight");

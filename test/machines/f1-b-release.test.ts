@@ -8,7 +8,7 @@ import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { RemoteError } from "../../src/machines/index.js";
 import type { AgentOp, RemoteTransport } from "../../src/machines/index.js";
 import { writeProject } from "../../src/projects/store.js";
-import { createTask, getTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
 import { launchTask, releaseTask } from "../../src/tasks/launch.js";
 import { makeHome, rmTemp } from "../helpers.js";
 
@@ -120,6 +120,19 @@ describe("F-vlad-125/142: belirsiz uzak launch rezervasyonu serbest bırakılır
     await releaseTask(a, { cfg, transport: dead.t, force: true });
     expect(getTask(a).data).toMatchObject({ machine: null, launch_op: null });
     expect(getTask(pipe).data.machine ?? null).toBeNull();
+  });
+
+  it("beyin-yerel rezervasyon (machine = beyin): iptal protokolü çalışmaz, reddedilir, rezervasyon ve pin kalır", async () => {
+    card(["mac"]);
+    const pipe = createTask({ project: "alpha", title: "P", kind: "pipeline", body: "## Tanım\np\n" } as any);
+    const a = mk({ parent: pipe.data.id, phase: "a" });
+    const t = getTask(a.data.id);
+    Object.assign(t.data, { machine: "mac", machine_reserved: new Date().toISOString(), launch_op: "local-op" });
+    saveTask(t);
+    const f = fakeTransport({ "op-status": () => ({ state: "cancelled" }) });
+    await expect(releaseTask(a.data.id, { cfg, transport: f.t, force: true })).rejects.toThrow(/yerel|beyin/);
+    expect(f.calls).toHaveLength(0);
+    expect(getTask(a.data.id).data).toMatchObject({ machine: "mac", launch_op: "local-op" });
   });
 
   it("rezervasyonu olmayan görevde net hata", async () => {
