@@ -54,7 +54,7 @@ const listCommand = (): [string, string[]] => process.platform === "win32"
     "-NoProfile", "-NonInteractive", "-Command",
     "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine } | Where-Object { $_ }",
   ]]
-  : ["ps", ["-eo", "args="]];
+  : ["ps", ["-ww", "-eo", "args="]];
 
 /** One lower-cased command line per non-empty output line. */
 export const parseProcessList = (out: string): string[] => out.split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean);

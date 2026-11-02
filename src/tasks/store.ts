@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
-  appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, readDoc, serializeDoc,
+  appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, parseDoc, readDoc, serializeDoc,
   setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
 import type { ProjectCard, TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
@@ -318,8 +318,9 @@ function readTaskFile(file: string): { data: TaskData; body: string } {
   const stamp = `${st.mtimeNs}:${st.size}:${st.ino}`;
   let hit = parsedTasks.get(file);
   if (hit?.stamp !== stamp) {
+    const text = readFileSync(file, "utf8"); // an I/O error (EBUSY during a rename) is transient: thrown, never cached
     try {
-      const { data, body } = readDoc<TaskData>(file);
+      const { data, body } = parseDoc<TaskData>(text);
       validate("task", data);
       hit = { stamp, data, body };
     } catch (e) {
