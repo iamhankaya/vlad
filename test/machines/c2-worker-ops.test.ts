@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -172,6 +172,14 @@ describe("machines:C2 cleanup op (güvenlik)", () => {
     const j = JSON.parse(readFileSync(f, "utf8")); j.worktree = outside; writeFileSync(f, JSON.stringify(j));
     await expect(cleanupOp(C(), { close: () => [] })).rejects.toMatchObject({ code: "forbidden" });
     expect(existsSync(wt)).toBe(true);
+    expect(readFileSync(join(outside, "a.txt"), "utf8")).toBe("x");
+  });
+
+  it("F-154: silmeden hemen önce yol kök dışına çevrilirse forbidden, hedef silinmez", async () => {
+    const wt = await launched();
+    const outside = join(base, "kritik3"); mkdirSync(outside); writeFileSync(join(outside, "a.txt"), "x");
+    const close = () => { rmSync(wt, { recursive: true, force: true }); symlinkSync(outside, wt); return []; }; // close adımı sırasında yol oynanır
+    await expect(cleanupOp(C(), { close })).rejects.toMatchObject({ code: "forbidden" });
     expect(readFileSync(join(outside, "a.txt"), "utf8")).toBe("x");
   });
 
