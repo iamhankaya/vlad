@@ -68,6 +68,11 @@ describe("searchKb", () => {
     expect(arch[0].id).toBe(t.data.id);
     expect(arch[0].path.replace(/\\/g, "/")).toContain("/tasks/archive/2026-09/");
   });
+  it("strips only known suffixes: kararları finds karar, basarisiz no longer finds basarili", () => {
+    addDecision({ project: "vlad", title: "Karar", body: "- **Karar:** build basarili" }, NOW);
+    expect(searchKb({ query: "kararları" }).map((h) => h.id)).toEqual(["D-vlad-001"]);
+    expect(searchKb({ query: "basarisiz" })).toEqual([]);
+  });
   it("finds findings and journal sections; type, project and limit narrow", () => {
     addFinding({ project: "vlad", severity: "orta", source: "T20261030-01", title: "Denetim eksik", detail: "yavaş liste" });
     appendJournal("2026-10-29", "## vlad\n- yavaş liste ölçüldü\n## watchparty\n- başka");

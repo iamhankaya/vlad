@@ -168,6 +168,7 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   let warn: string | null = null;
   try { warn = untrustWorktree(wt); } catch (e) { warn = (e as Error).message; }
   if (warn) throw failed(`güven kaydı kaldırılamadı, worktree silinmedi: ${warn}`); // fail-closed
+  if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree silmeden hemen önce kök denetimi başarısız: ${wt}`); // pencere kapatma/güven adımları sırasında yol değişmiş olabilir (F-vlad-154)
   try { removeTaskWorktree(repo, wt, id); } catch (e) { throw failed((e as Error).message); }
   dropEntry(id, repo, wt);
   return { removed: true };

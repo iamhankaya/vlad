@@ -29,6 +29,18 @@ describe("F-vlad-138/139: runGate", () => {
     expect(r.head).toBe(git(d, "rev-parse", "HEAD"));
   }, 15_000);
 
+  it("F-154: gate commit atarsa sonuç tutarsızlığı bildirir (yeşil sayılmaz)", async () => {
+    const d = tmpRepo();
+    const before = git(d, "rev-parse", "HEAD");
+    const r = await runGate(`git -c user.name=T -c user.email=t@t commit --allow-empty -m gate`, d);
+    const after = git(d, "rev-parse", "HEAD");
+    expect(after).not.toBe(before);
+    expect(r.headBefore).toBe(before);
+    expect(r.head).toBe(after);
+    expect(r.exit).not.toBe(0);
+    expect(r.stderr).toContain("HEAD değişti");
+  }, 15_000);
+
   it.skipIf(process.platform === "win32")("F-137: POSIX'te zaman aşımı süreç ağacını (torunu) öldürür", async () => {
     const d = tmpRepo();
     const marker = join(d, "alive.txt");

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { installPlan, launchdPlist, schtasksArgs } from "../../src/agent/install.js";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rotateLog } from "../../src/agent/start.js";
 
 describe("machines:B agent install (print-only)", () => {
   it("launchd plist keeps the Agent alive and does not kill tmux workers when it restarts", () => {
@@ -29,5 +33,24 @@ describe("machines:B agent install (print-only)", () => {
     expect(m.file).toMatch(/Library[\\/]LaunchAgents[\\/]com\.vlad\.agent\.plist$/);
     expect(m.content).toContain("AbandonProcessGroup");
     expect(() => installPlan("linux", { node: "n", cli: "c", home: "h", path: "p" })).toThrow(/desteklenmiyor/);
+  });
+});
+
+describe("install girdi doğrulaması ve log rotasyonu (F-vlad-153)", () => {
+  it.each(['a"b', "a\nb", "a\rb"])("win32: %j içeren yolu reddeder", (bad) => {
+    for (const k of ["home", "node", "cli"] as const) {
+      expect(() => installPlan("win32", { node: "n.exe", cli: "c.js", home: "h", path: "p", [k]: bad })).toThrow(/çift tırnak ya da satır sonu/);
+    }
+  });
+  it("rotateLog büyük günlüğü .1'e kopyalayıp keser, küçüğe dokunmaz", () => {
+    const d = mkdtempSync(join(tmpdir(), "vlad-rot-"));
+    const f = join(d, "agent.log");
+    writeFileSync(f, "x".repeat(50));
+    rotateLog(f, 100);
+    expect(readFileSync(f, "utf8")).toHaveLength(50);
+    rotateLog(f, 10);
+    expect(readFileSync(f, "utf8")).toBe("");
+    expect(readFileSync(`${f}.1`, "utf8")).toHaveLength(50);
+    rmSync(d, { recursive: true, force: true });
   });
 });
