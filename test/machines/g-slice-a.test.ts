@@ -7,7 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Journal } from "../../src/agent/journal.js";
 import { installPlan } from "../../src/agent/install.js";
 import { mergeVerdict } from "../../src/agent/ops/merge-reconcile.js";
+import { setAgentEnv } from "../../src/agent/ops/env.js";
 import { OP_TABLE, type OpHandler } from "../../src/agent/ops/index.js";
+import { opStatus } from "../../src/agent/ops/op-status.js";
 import { AgentQueue } from "../../src/agent/queue.js";
 import { handleRequest, type ServerOpts } from "../../src/agent/server.js";
 import { signRequest } from "../../src/agent/sign.js";
@@ -60,6 +62,59 @@ describe("F-vlad-127: günlük sonucu kırpılır", () => {
     expect(again.get("small")?.result).toEqual({ stdout: "ok" });
     expect(again.get("big")?.result).toMatchObject({ __journalTruncated: true });
     expect(statSync(f).size).toBeLessThan(100 * 1024);
+  });
+});
+
+describe("F-vlad-152: kırpılmış sonuç sahte başarı değil; mutasyon opları küçük özet saklar", () => {
+  const big = { exit: 0, stdout: "x".repeat(3 * 1024 * 1024), stderr: "" };
+  it("mutasyon op'u (apply-write) büyük sonucu kırpma yerine küçük sabit özet olarak saklar; replay ok döner", async () => {
+    const j = new Journal(join(tmp(), "j.jsonl"), () => Date.now());
+    const o = { ...serverOpts(j, { "apply-write": async () => big as never }), self: "mac", kind: "brain-agent" as const }; // apply-write: işçi → beyin
+    const rq = (opId: string) => signRequest(K.windows, { v: 1, from: "windows", to: "mac", opId, ts: Date.now(), op: "apply-write", args: w });
+    const w = { cmd: "task.log", id: "T20261102-01", text: "x" };
+    const live = await handleRequest(o, rq("aw-1"));
+    expect(live.code).toBe("ok");
+    const rec = j.get("aw-1")?.result as Record<string, unknown>;
+    expect(rec).toMatchObject({ __journalSummary: true, exit: 0 });
+    expect(JSON.stringify(rec).length).toBeLessThan(2048);
+    const replay = await handleRequest(o, rq("aw-1"));
+    expect(replay.code).toBe("ok");
+    expect((replay as { result?: unknown }).result).toMatchObject({ __journalSummary: true, exit: 0 });
+  });
+  it("mutasyon olmayan op kırpılırsa op-status state:done + truncated:true döner, işaret nesnesini sonuç diye vermez", async () => {
+    const j = new Journal(join(tmp(), "j.jsonl"), () => Date.now());
+    j.start("cl-1", "mac", "close", "h"); j.finish("cl-1", "done", big);
+    setAgentEnv({ self: "windows", kind: "worker-agent", cfg: cfg(), startedAt: Date.now(), build: "t", journal: j, now: () => Date.now() } as never);
+    try {
+      const r = await opStatus({ target: "cl-1" }, { from: "mac" });
+      expect(r).toMatchObject({ state: "done", truncated: true });
+      expect(r.result).toBeUndefined();
+    } finally { setAgentEnv(undefined); }
+  });
+  it("eski kırpılmış launch kaydının too_large mesajı 'yeni opId ile çalıştır' demez (mutasyon çift uygulanır)", async () => {
+    const f = join(tmp(), "j.jsonl");
+    writeFileSync(f, JSON.stringify({ opId: "ln-1", from: "mac", op: "launch", state: "done", ts: Date.now(), argsHash: "", result: { __journalTruncated: true, bytes: 9 } }) + "\n");
+    const r = await handleRequest(serverOpts(new Journal(f, () => Date.now()), {}), req({ op: "launch", opId: "ln-1", args: {} }));
+    expect(r.code).toBe("too_large");
+    expect(JSON.stringify(r)).not.toContain("yeni opId");
+  });
+});
+
+describe("F-vlad-155: açılışta okunamayan inflight girdi sonradan pending'e döner", () => {
+  it("EBUSY ile okunamayan inflight girdi drain öncesi yeniden denenip gönderilir (kuyruk takılmaz)", async () => {
+    const d = tmp();
+    const q1 = new AgentQueue(d, () => 1);
+    q1.enqueue({ cmd: "task.log", id: "T20261102-01", text: "a", opId: "op-a" }, "inflight"); // çökme kalıntısı
+    vi.mocked(fs.readFileSync).mockImplementation(((p: fs.PathOrFileDescriptor, ...r: unknown[]) => {
+      if (String(p).endsWith("-op-a.json")) throw ebusy();
+      return (real.readFileSync as (...a: unknown[]) => unknown)(p, ...r);
+    }) as never);
+    const q2 = new AgentQueue(d, () => 1); // açılışta okunamadı → pending'e çevrilemedi
+    vi.mocked(fs.readFileSync).mockImplementation(real.readFileSync); // sürücü/antivirüs kilidi kalktı
+    const sent: string[] = [];
+    const r = await q2.flush(async (it) => { sent.push(it.opId); });
+    expect(sent).toEqual(["op-a"]);
+    expect(r).toMatchObject({ sent: 1, remaining: 0 });
   });
 });
 

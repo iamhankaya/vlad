@@ -33,6 +33,7 @@ const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "
 const defaultJournaled = (op: AgentOp): boolean => !READ_ONLY.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
+const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
 const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
 const MAX_REPLY_BYTES = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (imza/meta payı); sınır bayt, karakter değil (F-vlad-126)
@@ -102,7 +103,7 @@ async function runJournaled(o: ServerOpts, req: AgentRequest, handler: OpHandler
     if (rec.state === "aborted-cancelled") throw new Fail("conflict", "conflict: işlem iptal edilmiş");
     if (rec.state === "started" && !running.has(req.opId)) throw new Fail("conflict", "conflict: önceki deneme belirsiz kaldı; op-status ile sorgula");
     const done = rec.state === "started" ? await j.waitFor(req.opId) : rec;
-    if (done.state === "done" && (done.result as { __journalTruncated?: boolean } | undefined)?.__journalTruncated) throw new Fail("too_large", "too_large: sonuç günlükte kırpıldı; tekrar gerekiyorsa yeni opId ile çalıştır");
+    if (done.state === "done" && (done.result as { __journalTruncated?: boolean } | undefined)?.__journalTruncated) throw new Fail("too_large", `too_large: sonuç günlükte kırpıldı; ${MUTATING.has(req.op) ? "işlem uygulanmış olabilir, aynı işi tekrar çalıştırma (durumu op-status/kayıttan doğrula)" : "tekrar gerekiyorsa yeni opId ile çalıştır"}`);
     if (done.state === "done") return sign("ok", { ...(done.result !== undefined ? { result: done.result } : {}), meta: { ...done.meta, replayed: true } });
     // bekleyen işlem hata ile bitti (aborted): yeniden denenebilir
   }
