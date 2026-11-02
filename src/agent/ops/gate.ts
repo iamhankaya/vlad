@@ -129,8 +129,8 @@ function runGate(cmd: string, cwd: string): Promise<GateRunResult> {
   });
 }
 
-interface MergeCtx { repo: string; cwd: string; into: string; from: string }
-function mergeCtx(args: unknown, extra: string[]): MergeCtx & { a: Record<string, unknown> } {
+export interface MergeCtx { repo: string; cwd: string; into: string; from: string }
+export function mergeCtx(args: unknown, extra: string[]): MergeCtx & { a: Record<string, unknown> } {
   const a = argObject(args, ["taskId", "project", "repoName", "from", "into", ...extra]);
   const id = taskIdArg(a);
   const project = projectArg(a);

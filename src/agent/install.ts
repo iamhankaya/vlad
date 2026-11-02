@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import type { Os } from "../machines/types.js";
 
 export interface InstallCtx { node: string; cli: string; home: string; path: string }
@@ -32,9 +32,12 @@ export function schtasksArgs(c: Pick<InstallCtx, "node" | "cli" | "home">): stri
 }
 
 /** schtasks süreç ortamını taşımaz; VLAD_HOME'u (launchd gibi) bu başlatma betiği sabitler. */
-const winStartCmd = (home: string): string => `${home}\\.vlad-agent\\agent-start.cmd`;
-const winStartContent = (c: Pick<InstallCtx, "node" | "cli" | "home">): string =>
-  `@echo off\r\nchcp 65001 >nul\r\nset "VLAD_HOME=${c.home.replace(/%/g, "%%")}"\r\n"${c.node}" "${c.cli}" agent start\r\n`;
+const winStartCmd = (home: string): string => `${win32.normalize(home)}\\.vlad-agent\\agent-start.cmd`;
+const winStartContent = (c: Pick<InstallCtx, "node" | "cli" | "home">): string => {
+  const home = win32.normalize(c.home).replace(/%/g, "%%"); // ileri eğik çizgili VLAD_HOME karışık ayraçlı yol üretmesin
+  // çıktı agent.log'a gider (launchd ile aynı); oturum açılışında konsol içeriği görünmez
+  return `@echo off\r\nchcp 65001 >nul\r\nset "VLAD_HOME=${home}"\r\n"${c.node}" "${c.cli}" agent start >> "${home}\\.vlad-agent\\agent.log" 2>&1\r\n`;
+};
 
 export interface Plan { description: string; command?: string; file?: string; content?: string; apply?: () => void }
 

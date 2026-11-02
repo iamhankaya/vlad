@@ -29,13 +29,13 @@ export interface ServerOpts {
   crashAt?: string;
 }
 
-const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "probe-window", "merge-preview", "forward-write", "queue-drop"]);
+const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "merge-preview", "forward-write", "queue-drop"]);
 const defaultJournaled = (op: AgentOp): boolean => !READ_ONLY.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
-const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume"]);
+const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
-const MAX_REPLY_CHARS = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (UTF-8 payı)
+const MAX_REPLY_BYTES = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (imza/meta payı); sınır bayt, karakter değil (F-vlad-126)
 const OPID_RE = /^[A-Za-z0-9._:-]{1,64}$/;
 const iso = (ms: number) => new Date(ms).toISOString();
 
@@ -54,7 +54,7 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
   const base = { v: PROTO_VERSION, serverTs, build: o.build };
   const reply = (opId: string, code: WireCode, o2: { result?: unknown; error?: string; key?: string; meta?: OpMeta }): WireResponse => {
     let r: WireResponse = { ...base, opId, ok: code === "ok", code, ...(o2.result !== undefined ? { result: o2.result } : {}), ...(o2.error ? { error: o2.error } : {}), ...(o2.meta ? { meta: o2.meta } : {}), sig: "" };
-    if (JSON.stringify(r).length > MAX_REPLY_CHARS) r = { ...base, opId, ok: false, code: "too_large", error: "too_large: yanıt çerçeve sınırını aşıyor", sig: "" };
+    if (Buffer.byteLength(JSON.stringify(r)) > MAX_REPLY_BYTES) r = { ...base, opId, ok: false, code: "too_large", error: "too_large: yanıt çerçeve sınırını aşıyor", sig: "" };
     return o2.key ? signResponse(o2.key, r) : r;
   };
   const r = raw as Partial<AgentRequest> | null;
@@ -102,6 +102,7 @@ async function runJournaled(o: ServerOpts, req: AgentRequest, handler: OpHandler
     if (rec.state === "aborted-cancelled") throw new Fail("conflict", "conflict: işlem iptal edilmiş");
     if (rec.state === "started" && !running.has(req.opId)) throw new Fail("conflict", "conflict: önceki deneme belirsiz kaldı; op-status ile sorgula");
     const done = rec.state === "started" ? await j.waitFor(req.opId) : rec;
+    if (done.state === "done" && (done.result as { __journalTruncated?: boolean } | undefined)?.__journalTruncated) throw new Fail("too_large", "too_large: sonuç günlükte kırpıldı; tekrar gerekiyorsa yeni opId ile çalıştır");
     if (done.state === "done") return sign("ok", { ...(done.result !== undefined ? { result: done.result } : {}), meta: { ...done.meta, replayed: true } });
     // bekleyen işlem hata ile bitti (aborted): yeniden denenebilir
   }

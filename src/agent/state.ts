@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { userInfo } from "node:os";
 import { lookup } from "node:dns/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,7 +27,22 @@ export function writeLocal(s: LocalSettings): void {
   const f = localFile();
   mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
   writeFileSync(f, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
-  try { chmodSync(f, 0o600); } catch { /* Windows: kullanıcıya özel dizinde ACL */ }
+  lockDownFile(f);
+}
+
+/** Durum dizini yalnız sahibine açık: yeni dizinler 0700, var olanın modu da çekilir (Windows'ta chmod etkisiz, yok sayılır). */
+export function ensurePrivateDir(dir: string): void {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try { chmodSync(dir, 0o700); } catch { /* shortcut: chmod başarısız, dizin yine oluştu; Windows ACL'i dosya düzeyinde (lockDownFile) */ }
+}
+
+/** Anahtar dosyası yalnız sahibine açık: POSIX'te 0600, Windows'ta icacls ile miras kesilir ve yalnız geçerli kullanıcıya tam yetki verilir (en iyi çaba). */
+export function lockDownFile(f: string, o: { platform?: NodeJS.Platform; user?: string; exec?: (file: string, args: string[]) => void } = {}): void {
+  try {
+    if ((o.platform ?? process.platform) !== "win32") { chmodSync(f, 0o600); return; }
+    const user = o.user ?? (process.env.USERDOMAIN && process.env.USERNAME ? `${process.env.USERDOMAIN}\\${process.env.USERNAME}` : userInfo().username);
+    (o.exec ?? ((file, args) => { execFileSync(file, args, { stdio: "ignore", windowsHide: true }); }))("icacls", [f, "/inheritance:r", "/grant:r", `${user}:F`]);
+  } catch { /* shortcut: ACL/chmod uygulanamadı, dosya yine yazıldı; kullanıcıya özel profil dizinine güvenilir */ }
 }
 
 /** Bu makinenin kimliği: VLAD_MACHINE > vlad.local.json self. */
