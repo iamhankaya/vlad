@@ -285,7 +285,11 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     expect(body).toContain("adım bir");
     expect(body).toContain("hangi yol?");
     expect(body).toContain("şu yol");
-    expect(vlad(["task", "set", id, "cancelled", "--json"]).code).toBe(0);
+    const noReason = vlad(["task", "set", id, "cancelled", "--json"]);
+    expect(noReason.code).toBe(1);
+    expect(noReason.err).toMatch(/--reason/);
+    expect(vlad(["task", "set", id, "cancelled", "--reason", "vazgeçildi", "--json"]).code).toBe(0);
+    expect(readFileSync(f, "utf8")).toMatch(/İptal: vazgeçildi/);
     const l = JSON.parse(vlad(["task", "list", "--state", "cancelled", "--json"]).out);
     expect(l.tasks.map((t: { id: string }) => t.id)).toEqual([id]);
   });

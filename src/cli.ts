@@ -34,7 +34,7 @@ import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, releaseWarning, remoteMachineOf, listTasksWithWarnings, modelInfo,
+  TRANSITIONS, TransitionError, answerTask, askTask, cancelTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, releaseWarning, remoteMachineOf, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -361,9 +361,10 @@ def(task, "report <id>", "Kapanış raporunu yazar, awaiting_approval yapar", (i
 }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
 def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, state: string, o: Opts) => {
   if (!(state in TRANSITIONS)) throw new Error(`bilinmeyen durum: ${state}; geçerliler: ${Object.keys(TRANSITIONS).join(", ")}`);
-  const t = setState(id, state as TaskState);
+  if (o.reason !== undefined && state !== "cancelled") throw new Error("--reason yalnızca cancelled için");
+  const t = state === "cancelled" ? cancelTask(id, String(o.reason ?? "")) : setState(id, state as TaskState);
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
-});
+}).option("--reason <metin>", "iptal gerekçesi (cancelled için zorunlu; İlerleme'ye 'İptal: <metin>' yazılır)");
 def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod)", (id: string, o: Opts) => {
   const ids = (v: unknown) => (v === undefined ? undefined : String(v).split(",").map((x) => x.trim()).filter(Boolean));
   const r = setDependencies(id, { set: ids(o.set), add: ids(o.add), remove: ids(o.remove), clear: o.clear ? true : undefined });
