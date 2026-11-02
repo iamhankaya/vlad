@@ -153,7 +153,12 @@ describe("machines:B end-to-end (real Agent processes)", () => {
 
   it("`agent keygen` writes a new 64-hex key to the local file and the old key stops working", async () => {
     const { p } = await setup();
-    const k = JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "windows", "--json"]).out);
+    const hidden = spawnVlad(p.worker, ["agent", "keygen", "windows", "--json"]); // F-vlad-132: varsayılan anahtarı basmaz
+    expect(JSON.parse(hidden.out).key).toBeUndefined();
+    const stored = JSON.parse(readFileSync(p.worker.local, "utf8")).keys.windows as string;
+    expect(stored).toMatch(/^[0-9a-f]{64}$/);
+    expect(hidden.out).not.toContain(stored);
+    const k = JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "windows", "--json", "--show"]).out);
     expect(k.key).toMatch(/^[0-9a-f]{64}$/);
     expect(JSON.parse(readFileSync(p.worker.local, "utf8")).keys.windows).toBe(k.key);
     expect(k.key).not.toBe(p.keys.windows);
@@ -162,13 +167,15 @@ describe("machines:B end-to-end (real Agent processes)", () => {
 
   it("`agent keygen <karşı-taraf>` makes a pair key and prints the setkey command for the other end; `setkey` installs it there", async () => {
     const { p } = await setup();
-    const k = JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "mac", "--json"]).out);
-    expect(k.copy).toBe(`vlad agent setkey windows ${k.key}`);
+    expect(JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "mac", "--json"]).out).key).toBeUndefined();
+    const k = JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "mac", "--json", "--show"]).out);
+    expect(k.copy).toBe("vlad agent setkey windows -"); // anahtar argv'de değil stdin'den
     expect(JSON.parse(readFileSync(p.worker.local, "utf8")).keys.mac).toBe(k.key);
     expect(JSON.parse(spawnVlad(p.worker, ["agent", "keygen", "windows", "--json"]).out).copy).toBeUndefined(); // kendi anahtarı kopyalanmaz
-    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", "short"]).code).toBe(1);
-    expect(spawnVlad(p.brain, ["agent", "setkey", "ghost", k.key]).code).toBe(1);
-    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", k.key]).code).toBe(0);
+    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", "-"], { stdin: "short\n" }).code).toBe(1);
+    expect(spawnVlad(p.brain, ["agent", "setkey", "ghost", "-"], { stdin: k.key + "\n" }).code).toBe(1);
+    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", k.key]).code).toBe(1); // argv'deki anahtar reddedilir
+    expect(spawnVlad(p.brain, ["agent", "setkey", "windows", "-"], { stdin: k.key + "\n" }).code).toBe(0);
     expect(JSON.parse(readFileSync(p.brain.local, "utf8")).keys.windows).toBe(k.key);
   }, 60_000);
 

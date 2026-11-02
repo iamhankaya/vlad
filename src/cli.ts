@@ -767,18 +767,20 @@ def(agent, "status", "Yerel Agent çalışıyor mu", async (o: Opts) => {
   out(o, s, s.running ? `çalışıyor: ${s.host}:${s.port}${s.pid ? ` (pid ${s.pid})` : ""}` : `çalışmıyor (${s.host}:${s.port})`);
   process.exitCode = s.running ? 0 : 1;
 });
-def(agent, "keygen <kimlik>", "Anahtar üretir, vlad.local.json'a yazar. <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey` çalıştır); <kendi-adın> = yerel çağrı anahtarı", (identity: string, o: Opts) => {
-  const r = agentKeygen(identity);
+def(agent, "keygen <kimlik>", "Anahtar üretir, vlad.local.json'a yazar (anahtarı basmaz; --show ile basar). <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey <ad> -` çalıştır); <kendi-adın> = yerel çağrı anahtarı", (identity: string, o: Opts) => {
+  const r = agentKeygen(identity, !!o.show);
+  const shown = r.key ? `${r.identity}: ${r.key}
+` : `${r.identity}: anahtar üretildi (basmak için --show)
+`;
   out(o, r, r.copy
-    ? `${r.identity}: ${r.key}
-(${r.file}'a yazıldı. Karşı uçta, güvenli kanaldan elle çalıştır:
+    ? `${shown}(${r.file}'a yazıldı. Karşı uçta anahtarı stdin'den ver (argv'ye yazma):
   ${r.copy}
 sonra iki ucun Agent'ını yeniden başlat)`
-    : `${r.identity}: ${r.key}
-(${r.file}'a yazıldı; yerel çağrı anahtarı, kopyalanmaz; Agent'ı yeniden başlat)`);
-});
-def(agent, "setkey <karsi-taraf> <anahtar>", "Karşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>)", (peer: string, key: string, o: Opts) => {
-  const r = agentSetKey(peer, key);
+    : `${shown}(${r.file}'a yazıldı; yerel çağrı anahtarı, kopyalanmaz; Agent'ı yeniden başlat)`);
+}).option("--show", "anahtarı çıktıya bas (varsayılan basmaz)");
+def(agent, "setkey <karsi-taraf> <anahtar>", "Karşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>); <anahtar> `-` olmalı, anahtar stdin'den okunur", (peer: string, key: string, o: Opts) => {
+  if (key !== "-") throw new Error("agent setkey: anahtar argv'de verilmez (süreç listesine/kabuk geçmişine sızar); `-` ver ve anahtarı stdin'den ilet");
+  const r = agentSetKey(peer, readInput("-").trim());
   out(o, r, `${r.peer} anahtarı ${r.file}'a yazıldı (Agent'ı yeniden başlat)`);
 });
 

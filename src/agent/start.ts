@@ -111,9 +111,10 @@ export async function agentStatus(): Promise<{ running: boolean; machine: string
 export interface KeygenResult {
   /** anahtarın tutulduğu ad: karşı taraf (çift anahtar) ya da kendi adın (yerel çağrı anahtarı) */
   identity: string;
-  key: string;
+  /** yalnız `show` ile döner: varsayılan çıktı anahtarı basmaz (F-vlad-132) */
+  key?: string;
   file: string;
-  /** karşı uca elle uygulanacak komut (yalnız çift anahtarda) */
+  /** karşı uca elle uygulanacak komut (yalnız çift anahtarda); anahtar stdin'den verilir, argv'de değil (F-vlad-132) */
   copy?: string;
 }
 
@@ -122,14 +123,14 @@ export interface KeygenResult {
  * karşı taraf arasında YALNIZ o ikisinin bildiği bir anahtardır; `keys.<karşı-taraf>` olarak tutulur. Karşı uçta aynı değer
  * `keys.<bu-makine>` olmalı: `copy` o ucun çalıştıracağı komutu verir. `keygen <kendi-adın>` yerel çağrı anahtarıdır, kopyalanmaz.
  */
-export function agentKeygen(identity: string): KeygenResult {
+export function agentKeygen(identity: string, show = false): KeygenResult {
   const cfg = loadConfig();
   if (cfg.machines && !roleOf(cfg, identity)) throw new Error(`agent keygen: kimlik config'te tanımlı değil: ${identity}`);
   const key = randomBytes(32).toString("hex");
   const self = selfName();
   const local = readLocal();
   writeLocal({ ...local, keys: { ...local.keys, [identity]: key } });
-  return { identity, key, file: localFile(), ...(identity !== self ? { copy: `vlad agent setkey ${self} ${key}` } : {}) };
+  return { identity, ...(show ? { key } : {}), file: localFile(), ...(identity !== self ? { copy: `vlad agent setkey ${self} -` } : {}) };
 }
 
 /** Karşı uçta üretilmiş çift anahtarı bu makineye yazar: `keys.<karşı-taraf>`. */
