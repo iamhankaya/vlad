@@ -32,6 +32,7 @@ import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
 import { staleSummaryText } from "./projects/status.js";
+import { addPending, donePending, listPending } from "./digest/pending.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
@@ -113,7 +114,7 @@ const KB_WRITES = new Set([
   "finding add", "finding set",
   "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
   "mode night", "mode watch", "mode off", "mode status",
-  "inbox done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
+  "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
 ]);
 
 // --- machines:S --- kancalar; varsayılan = mevcut davranış. B `before`'ı (iletim), C `lockPolicy`'yi (resume/cleanup iç kilit) doldurur.
@@ -558,6 +559,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
       `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
       `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)` +
       (s.staleSummaries.length ? `, ${s.staleSummaries.length} bayat/eksik proje özeti: ${staleSummaryText(s.staleSummaries)}` : "") +
+      (s.pendingDigest ? `, ${s.pendingDigest} onay bekleyen digest maddesi` : "") +
       (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
       (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {
@@ -657,6 +659,26 @@ def(inbox, "done <dosyalar...>", "Raporları processed/'a taşır", (files: stri
   markDone(files);
   out(o, { moved: files }, `${files.length} rapor taşındı`);
 });
+
+const digestCmd = program.command("digest").description("Digest yardımcıları");
+const pendingCmd = digestCmd.command("pending").description("Onay bekleyen digest maddeleri (otomatik digest, D-vlad-061)");
+const pendingLine = (i: { id: string; state: string; task: string | null; project: string | null; text: string }) =>
+  `${i.id}  ${i.state}  ${i.project ?? "-"}  ${i.task ?? "-"}  ${i.text}`;
+def(pendingCmd, "add", "Kullanıcı onayı bekleyen digest maddesi ekler", (o: Opts) => {
+  const i = addPending({ text: o.text as string, task: o.task as string | undefined, project: o.project as string | undefined });
+  out(o, { id: i.id, item: i }, i.id);
+})
+  .requiredOption("--text <metin>", "madde metni")
+  .option("--task <id>", "ilgili görev ID'si")
+  .option("--project <slug>", "ilgili proje");
+def(pendingCmd, "list", "Açık maddeleri listeler (--all: kapalılar dahil)", (o: Opts) => {
+  const items = listPending(o.all === true);
+  out(o, { items }, items.map(pendingLine).join("\n"));
+}).option("--all", "kapalı maddeleri de göster");
+def(pendingCmd, "done <id>", "Maddeyi kapatır (kullanıcı karar verdi / işlendi)", (id: string, o: Opts) => {
+  const i = donePending(id, o.note as string | undefined);
+  out(o, { item: i }, `${i.id} kapatıldı`);
+}).option("--note <metin>", "kapanış notu (karar/sonuç)");
 
 const decision = program.command("decision").description("Karar günlüğü");
 def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID'si döner", (o: Opts) => {
