@@ -1,6 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,9 +25,12 @@ export function readLocal(): LocalSettings {
 export function writeLocal(s: LocalSettings, o: { lock?: (f: string) => void } = {}): void {
   const f = localFile();
   mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
-  writeFileSync(f, "", { mode: 0o600 }); // önce boş dosya kilitlenir, anahtar kilitli dosyaya yazılır (F-vlad-151)
-  (o.lock ?? lockDownFile)(f);
-  writeFileSync(f, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
+  // önce boş geçici dosya kilitlenir, anahtar kilitli dosyaya yazılır, sonra rename: okuyucu boş/yarım dosya görmez, çökme anahtarları silmez (F-vlad-151)
+  const tmp = f + ".tmp";
+  writeFileSync(tmp, "", { mode: 0o600 });
+  (o.lock ?? lockDownFile)(tmp);
+  writeFileSync(tmp, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
+  renameSync(tmp, f);
 }
 
 /** Durum dizini yalnız sahibine açık: yeni dizinler 0700, var olanın modu da çekilir (Windows'ta chmod etkisiz, yok sayılır). */

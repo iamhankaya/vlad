@@ -16,6 +16,7 @@ function summarize(result: unknown, bytes: number): Record<string, unknown> {
     for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
       if (typeof v === "string") out[k] = v.length > SUMMARY_STR_MAX ? v.slice(0, SUMMARY_STR_MAX) + "…" : v;
       else if (typeof v === "number" || typeof v === "boolean" || v === null) out[k] = v;
+      else if (k === "integration" && v && typeof v === "object") out[k] = summarize(v, 0); // launch'ın pipeline entegrasyon worktree'si commit'te gerekir
     }
   }
   return out;

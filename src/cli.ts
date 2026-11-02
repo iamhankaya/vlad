@@ -771,7 +771,7 @@ def(agent, "status", "Yerel Agent çalışıyor mu", async (o: Opts) => {
 def(agent, "keygen <kimlik>", "Anahtar üretir, vlad.local.json'a yazar (anahtarı basmaz; --show ile basar). <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey <ad> -` çalıştır); <kendi-adın> = yerel çağrı anahtarı", (identity: string, o: Opts) => {
   const r = agentKeygen(identity, !!o.show);
   const shown = r.key ? `${r.identity}: ${r.key}
-` : `${r.identity}: anahtar üretildi (basmak için --show)
+` : `${r.identity}: anahtar üretildi (basmak için --show; yeniden üretmek eskisini değiştirir: bir kez --show ile bas, stdin'e ilet)
 `;
   out(o, r, r.copy
     ? `${shown}(${r.file}'a yazıldı. Karşı uçta anahtarı stdin'den ver (argv'ye yazma):
