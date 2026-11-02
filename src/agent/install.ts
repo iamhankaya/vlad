@@ -34,6 +34,9 @@ export function schtasksArgs(c: Pick<InstallCtx, "node" | "cli" | "home">): stri
 /** schtasks süreç ortamını taşımaz; VLAD_HOME'u (launchd gibi) bu başlatma betiği sabitler. */
 const winStartCmd = (home: string): string => `${win32.normalize(home)}\\.vlad-agent\\agent-start.cmd`;
 const winStartContent = (c: Pick<InstallCtx, "node" | "cli" | "home">): string => {
+  for (const [k, v] of Object.entries({ home: c.home, node: c.node, cli: c.cli })) {
+    if (/["\r\n]/.test(v)) throw new Error(`agent install: ${k} yolu çift tırnak ya da satır sonu içeremez (agent-start.cmd güvenli üretilemez)`);
+  }
   const home = win32.normalize(c.home).replace(/%/g, "%%"); // ileri eğik çizgili VLAD_HOME karışık ayraçlı yol üretmesin
   // çıktı agent.log'a gider (launchd ile aynı); oturum açılışında konsol içeriği görünmez
   return `@echo off\r\nchcp 65001 >nul\r\nset "VLAD_HOME=${home}"\r\n"${c.node}" "${c.cli}" agent start >> "${home}\\.vlad-agent\\agent.log" 2>&1\r\n`;
