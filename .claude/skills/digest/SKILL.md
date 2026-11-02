@@ -84,8 +84,8 @@ Bulunursa madde açılmaz (bulgu varsa doğrudan `fixed`/`wontfix`: `vlad findin
 ## 4. Proje kartları
 
 Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamamını** güncellenmiş hâliyle geçici dosyaya yaz:
-- `## Son aktivite`: en yeni olaylar üstte, tarih + kısa özet + kaynak ID; en fazla ~10 madde tut.
-- `## Açık konular`: yeni açılanları ekle, kapananları çıkar. Açık bulguların özetini de yansıt (`vlad finding list --project <slug> --state open,deferred --json`): önem sırasıyla kısa liste, `F-…` ID'leriyle; kritik/yüksek olanlar üstte. Düzelen/wontfix olanları çıkar.
+- `## Son aktivite`: **elle yazma.** Tamamen koddan üretilir (`<!-- vlad:derived recent-activity -->` bloğu: son ~10 done görev + geçerli karar); elle satır eklersen bir sonraki tazelemede silinir. Bloğu olduğu gibi bırak.
+- `## Açık konular`: **bulgu listesini elle yazma.** Açık+ertelenen bulgular `<!-- vlad:derived open-findings -->` bloğunda koddan üretilir (önem sırası, `F-…` ID'leri); bloğa dokunma. Yalnız blok dışındaki elle anlatıyı güncelle (kullanıcı kararı bekleyenler, makine/ortam notları): yeni açılanı ekle, kapananı çıkar.
 - `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` ve retro yazar). Kartı yeniden yazarken bölümü aynen koru.
 - `## Durum özeti`'ne **dokunma** (yalnızca `vlad project summary` yazar, adım 5b). Kartı yeniden yazarken bölümü aynen koru.
 - `last_activity`: en yeni `ended` (mevcuttan yeniyse).
@@ -94,7 +94,8 @@ Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamam�
 ```
 vlad project write <slug> --file <geçici.md> --json
 ```
-**Doğrula:** yazdıktan sonra kartı yeniden oku (`vlad project list --json` ya da kart dosyası) ve `## Son aktivite` ile `## Açık konular`'ın gerçekten güncellendiğini, `## Çalışma notları`'nın değişmediğini kontrol et (2026-10-25'te Son aktivite/Açık konular yarım uygulandı). Eksikse kartı tamamlayıp tekrar yaz.
+`project write`, `finding add|set`, `task set` ve `decision add|set` ilgili kartın türetilen bloklarını kendiliğinden tazeler; yine de adımların sonunda `vlad project refresh <slug>` (ya da `--all`) çalıştır — blokları kayıtlardan yeniden üretir, blok dışı metne dokunmaz.
+**Doğrula:** yazdıktan sonra kartı yeniden oku (`vlad project list --json` ya da kart dosyası) ve türetilen blokların (`open-findings`, `recent-activity`) kayıtlarla uyuştuğunu, elle yazılan Açık konular anlatısının ve `## Çalışma notları`'nın değişmediğini kontrol et (2026-10-25'te Son aktivite/Açık konular yarım uygulandı).
 
 ## 4b. Bulgular
 

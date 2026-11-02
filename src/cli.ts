@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
-import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
+import { addFinding, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
 import { auditSetup } from "./audit/setup.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
@@ -31,6 +31,7 @@ import { readLocal, selfName } from "./agent/state.js";
 import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
+import { refreshAllProjects, refreshProject } from "./projects/derived.js";
 import { staleSummaryText } from "./projects/status.js";
 import { addPending, donePending, listPending } from "./digest/pending.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -110,7 +111,7 @@ program
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
  */
 const KB_WRITES = new Set([
-  "project write", "project set", "project note", "project summary",
+  "project write", "project set", "project note", "project summary", "project refresh",
   "finding add", "finding set",
   "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
   "mode night", "mode watch", "mode off", "mode status",
@@ -134,6 +135,27 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
 // --- /machines:C3 ---
 
 /** Registers a command with --json and a uniform error path. */
+/** Records a command changed show up in the project card's derived blocks (open findings, Son aktivite) right away; a refresh failure never fails the command. */
+function projectOf(key: string, args: any[]): string | undefined {
+  const o = args[args.length - 2] as Opts;
+  switch (key) {
+    case "project write": return String(args[0]);
+    case "finding add": case "decision add": return String(o.project);
+    case "finding set": return getFinding(String(args[0])).data.project;
+    case "task set": return getTask(String(args[0])).data.project;
+    case "decision set": return listDecisions({ all: true }).find((d) => d.id === String(args[0]))?.file;
+  }
+}
+const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
+async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
+  await fn(...args);
+  if (!REFRESH_KEYS.has(key)) return;
+  try {
+    const slug = projectOf(key, args);
+    if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug);
+  } catch (e) { process.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
+}
+
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
   const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
   const key = `${parent.name()} ${spec.split(" ")[0]}`;
@@ -150,7 +172,7 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
           await fn(...args);
         }
       } else if (await before(key, args)) return;
-      else await (lockPolicy(key) === "outer" ? withKbLock(() => fn(...args)) : fn(...args));
+      else await (lockPolicy(key) === "outer" ? withKbLock(() => runAndRefresh(key, args, fn)) : fn(...args));
     } catch (e) {
       fail(e);
     }
@@ -202,6 +224,17 @@ def(project, "summary <slug>", "Kartın `## Durum özeti` bölümünü yazar (/d
   const stamp = setProjectSummary(slug, readInput(o.file as string));
   out(o, { slug, as_of: stamp }, `özet yazıldı: ${slug} (${stamp})`);
 }).requiredOption("--file <md>", "özet metni (- = stdin); en çok ~1000 token");
+def(project, "refresh [slug]", "Kartın koddan üretilen bloklarını (açık bulgular, Son aktivite) yeniden üretir; blok dışı metne dokunmaz", (slug: string | undefined, o: Opts) => {
+  if (o.all) {
+    const r = refreshAllProjects();
+    out(o, r, [`tazelendi: ${r.refreshed.join(", ") || "(değişen yok)"}`, ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+    return;
+  }
+  if (!slug) throw new Error("proje slug'ı ya da --all gerekli");
+  if (!/^[a-z0-9-]+$/.test(slug) || !existsSync(join(kbPaths().projects, `${slug}.md`))) throw new Error(`proje kartı bulunamadı: ${slug}`);
+  const changed = refreshProject(slug);
+  out(o, { slug, changed }, changed ? `tazelendi: ${slug}` : `güncel: ${slug}`);
+}).option("--all", "tüm kartlar");
 def(project, "list", "Kartları listeler", (o: Opts) => {
   const { projects, warnings } = listProjectsWithWarnings();
   out(
