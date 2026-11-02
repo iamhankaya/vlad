@@ -57,3 +57,20 @@ describe("F-vlad-148: entegrasyon worktree yolu işçinin işletim sistemi ayır
     expect((await ensureIntegrationGitWith(fakeGit(), "C:\\r", "T20261101-60", { ...cfg, worktreeDir: "C:\\wt" }, undefined, "win32")).worktree).toBe("C:\\wt\\T20261101-60");
   });
 });
+
+import { cleanupOp } from "../../src/agent/ops/launch.js";
+import { existsSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+
+describe("F-vlad-133: cleanup, worktree'nin kendi görev klasörü olduğunu doğrular", () => {
+  it("worktree yolu kardeş görevin klasörüne junction ise forbidden; kardeşin içeriği silinmez", async () => {
+    const r = await launchOp(L, { from: "mac", opId: "op-1" }, { launcher });
+    const sibling = join(r.worktree, "..", "T20261102-72");
+    mkdirSync(sibling, { recursive: true });
+    writeFileSync(join(sibling, "keep.txt"), "x");
+    rmSync(r.worktree, { recursive: true, force: true });
+    symlinkSync(sibling, r.worktree, "junction");
+    await expect(cleanupOp({ taskId: ID, project: "alpha", repoName: "alpha", terminal: true }, { close: () => [] })).rejects.toMatchObject({ code: "forbidden" });
+    expect(readFileSync(join(sibling, "keep.txt"), "utf8")).toBe("x");
+    expect(existsSync(sibling)).toBe(true);
+  });
+});

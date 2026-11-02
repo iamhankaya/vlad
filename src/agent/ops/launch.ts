@@ -13,7 +13,7 @@ import { dirtyLine } from "../../tasks/resume.js";
 import { untrustWorktree } from "../../tasks/trust.js";
 import type { Reconciler } from "../reconcile.js";
 import { agentDir } from "../state.js";
-import { argObject, bad, isInside, projectArg, repoNameArg, resolveRepo, taskFileOf, taskIdArg, workerCtx, workerLauncher, workerWorktree } from "./worker.js";
+import { argObject, bad, isOwnWorktree, projectArg, repoNameArg, resolveRepo, taskFileOf, taskIdArg, workerCtx, workerLauncher, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";
 
 export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string } }
@@ -163,7 +163,7 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   const ctx = workerCtx();
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) { dropEntry(id, repo, wt); return { removed: false }; }
-  if (!isInside(dirname(wt), wt)) throw forbidden(`worktree kök dışında: ${wt}`);
+  if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree kendi görev klasörü değil / kök dışında: ${wt}`); // kök config'ten, wt'den değil (F-vlad-133)
   try { (o.close ?? defaultClose)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
   let warn: string | null = null;
   try { warn = untrustWorktree(wt); } catch (e) { warn = (e as Error).message; }
