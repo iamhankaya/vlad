@@ -424,8 +424,9 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
  * machines C1: the worker machine a task runs on, when that is not the brain (null otherwise). Its worktree is not on
  * this machine, so the local resume/cleanup/skills paths must not read or forget it; remote resume/cleanup is C2.
  */
-export function remoteMachineOf(t: Task, cfg: VladConfig): string | null {
-  return cfg.machines && t.data.machine && t.data.machine !== cfg.brain ? t.data.machine : null;
+export function remoteMachineOf(t: Task, cfg: VladConfig, self?: string): string | null {
+  // `self`: a worker's own name; its own tasks are local to it (F-vlad-149: no remote call to its own Agent)
+  return cfg.machines && t.data.machine && t.data.machine !== cfg.brain && t.data.machine !== self ? t.data.machine : null;
 }
 
 /** Closes the task's worker window/process tree; the state and the worktree stay as they are. */

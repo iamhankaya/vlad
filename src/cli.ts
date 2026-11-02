@@ -403,7 +403,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
 }).option("--external", "yerel çalışan için betik yaz (terminal açma); script/command/cwd döner");
 def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", async (id: string, o: Opts) => {
   const cfg0 = loadConfig();
-  const remote = remoteMachineOf(getTask(id), cfg0);
+  const remote = remoteMachineOf(getTask(id), cfg0, workerContext()?.self); // işçide kendi görevi yerel kapanır (F-vlad-149)
   const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id);
   out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
 });
