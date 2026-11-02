@@ -120,8 +120,15 @@ function killTree(p: ReturnType<typeof spawn>): void {
 }
 
 export async function runGate(cmd: string, cwd: string, timeoutMs = GATE_TIMEOUT_MS): Promise<GateRunResult> {
-  const head = (await runGit(cwd, ["rev-parse", "HEAD"])).stdout.trim() || undefined; // yeşil gate hangi commit'e ait (F-vlad-139)
+  const before = (await runGit(cwd, ["rev-parse", "HEAD"])).stdout.trim() || undefined; // yeşil gate hangi commit'e ait (F-vlad-139)
   const r = await spawnGate(cmd, cwd, timeoutMs);
+  const after = (await runGit(cwd, ["rev-parse", "HEAD"])).stdout.trim() || undefined; // gate commit atabilir (F-vlad-154)
+  if (before && after && before !== after) {
+    // sonuç gate'in koştuğu commit'e ait değil: yeşil sayılmaz
+    const note = `\ngate sırasında HEAD değişti (${before.slice(0, 12)} → ${after.slice(0, 12)}); sonuç tutarsız`;
+    return { ...r, exit: r.exit === 0 ? 1 : r.exit, stderr: r.stderr + note, head: after, headBefore: before };
+  }
+  const head = after ?? before;
   return head ? { ...r, head } : r;
 }
 function spawnGate(cmd: string, cwd: string, timeoutMs: number): Promise<GateRunResult> {
