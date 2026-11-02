@@ -356,6 +356,9 @@ export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: 
   const t0 = getTask(id);
   const machine = t0.data.machine, op = t0.data.launch_op;
   if (t0.data.state !== "queued" || !machine || !op) throw new Error(`serbest bırakılacak rezervasyon yok (${id}: ${t0.data.state}, makine ${machine ?? "-"})`);
+  // beyin-yerel launch'ın rezervasyonu (launcher beklerken yazılır) beynin günlüğünde yoktur: iptal protokolü onu
+  // "görülmemiş" sayıp çalışan bir launch'ın rezervasyonunu ve pin'ini silerdi
+  if (o.cfg.brain && machine === o.cfg.brain) throw new Error(`rezervasyon beyin-yerel launch'a ait (${machine}); sürüyor olabilir, serbest bırakılamaz; ölüyse rezervasyon süresi dolunca kendiliğinden düşer`);
   let verdict: string | null = null;
   try {
     if (!o.transport) throw new Error("uzak taşıma bağlı değil");

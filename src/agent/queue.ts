@@ -77,11 +77,12 @@ export class AgentQueue {
     this.count++; this.bytes += statSync(file).size;
     return it;
   }
-  setState(seq: number, state: "pending" | "inflight", reason?: string): void {
+  /** `known`: çağıranın elindeki girdi; dosya okunamıyorsa/bozuksa geçiş onunla yazılır (okuma hatası başarı sayılmaz). */
+  setState(seq: number, state: "pending" | "inflight", reason?: string, known?: QueueItem): void {
     const f = this.files().find((x) => parseInt(x, 10) === seq);
     if (!f) return;
-    const it = this.read(join(this.dir, f));
-    if (!it) return;
+    const it = known ?? this.read(join(this.dir, f));
+    if (!it) throw new Error(`kuyruk girdisi okunamadı (seq ${seq}); durum ${state} yapılamadı`);
     this.write(join(this.dir, f), { ...it, state, ...(reason ? { reason } : {}) });
   }
   remove(seq: number): boolean {
