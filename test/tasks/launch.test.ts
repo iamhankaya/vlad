@@ -151,7 +151,8 @@ describe("launchTask", () => {
     expect(git(repo, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
   });
 
-  it("setState failure after a successful launch is recorded and rethrown", async () => {
+  // F-vlad-109: the old contract left the opened window/worktree orphaned when the task was cancelled mid-launch
+  it("task cancelled while the launcher ran: window closed, worktree removed, error says so", async () => {
     const t = mk();
     const launcher: Launcher = {
       async launch() {
@@ -160,10 +161,10 @@ describe("launchTask", () => {
       },
     };
     const wt = worktreePath(cfg, repo, t.data.id);
-    await expect(launchTask(t.data.id, { launcher, cfg })).rejects.toThrow(/terminal açıldı ama durum güncellenemedi/);
-    const err = getTask(t.data.id).data.error!;
-    expect(err).toContain("terminal açıldı ama durum güncellenemedi");
-    expect(err).toContain(`worktree: ${wt}`);
+    const closed: string[] = [];
+    await expect(launchTask(t.data.id, { launcher, cfg, closeWorker: (i) => { closed.push(i); } })).rejects.toThrow(/cancelled yapıldı; açılan pencere kapatıldı, worktree kaldırıldı/);
+    expect(closed).toEqual([t.data.id]);
+    expect(existsSync(wt)).toBe(false);
   });
 
   const writeRole = (slug: string) => {
