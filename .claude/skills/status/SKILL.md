@@ -107,6 +107,7 @@ vlad task cleanup <id> --json
 `cleanup` "worktree klasörü silinemedi, çalışan penceresi hâlâ açık olabilir" hatası verirse kullanıcıdan çalışanın penceresini kapatmasını iste, sonra aynı `cleanup` komutunu tekrar çalıştır. Klasörü elle silme.
 Kapanan görevin kapanış raporu `/digest` ile günlüğe işlenir; açılış özetindeki "işlenmemiş rapor" sayısına dahildir.
 **Bayat özet kontrolü:** görev `done` olduktan sonra `vlad status --summary --json` çıktısında `staleSummaries` (aktif projelerden özeti `bayat`/`yok` olanlar; arşivlenmiş/duraklatılmış sayılmaz) doluysa kullanıcıya tek satır söyle ve `/digest` öner ("özet bayat: vlad (20 kayıt)"); onaysız başlatma.
+**Görevi digest et (otomatik):** görev `done` olunca bekleme; "Görevi digest et" bölümünü (aşağıda) o görev için uygula (`/digest <id>`, otomatik mod). Tek görev yeter, toplu digest gerekmez. Bunu bayat özet kontrolünden önce yap; digest özeti güncellediği için çoğu zaman `/digest` önerisi gereksiz kalır.
 Görevin `parent`'ı doluysa ardından adım 3.
 
 ## 3. Pipeline'ı ilerlet
@@ -134,6 +135,14 @@ Seçenekler (açık onay):
 4. **İptal et:** aşağıdaki "pipeline'ı iptal et".
 
 1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
+
+**Faz kapısı ve son kapı digest'i:** her faz `done` olunca (adım 2'deki gibi) o faz görevi, çatı `done` olunca çatı görevi için "Görevi digest et" bölümünü uygula (çatının kapanış raporu yoktur; `/digest` pipeline kuralıyla fazların açık noktalarını işler). Son kapıda retrodan önce çalıştır.
+
+### Görevi digest et (otomatik, D-vlad-061)
+
+Kapanan (`done`) tek görev için `.claude/skills/digest/SKILL.md` akışını **otomatik mod**da yalnız o görev için uygula: `vlad task list --undigested --json` yerine doğrudan `/digest <görev-id>`. Sırayla: günlük, bulgular (`vlad finding add`), kartın Son aktivite/Açık konular, durum özeti (`vlad project summary`), `vlad task digested <id>`, `vlad kb commit "digest <id>" --push`. Çok görevli toplu digest bu adımın işi değildir (kullanıcı `/digest` der).
+
+Kullanıcı sorusu yok: emin olunmayan karar ve "kullanıcı kararı bekliyor" maddesi yazılmaz, `vlad digest pending add --text "<madde>" --task <id> --project <slug>` ile onay bekleyen listeye eklenir. Sonunda kullanıcıya tek satır: "digest edildi: <id>; N madde onayını bekliyor" (N = `vlad digest pending list --json`). Digest hata verirse görevi `digested` işaretleme, kullanıcıya söyle; `done` durumu geri alınmaz.
 
 ### Gece / yetki modu ve bekçi
 

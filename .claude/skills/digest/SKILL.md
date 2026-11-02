@@ -9,6 +9,17 @@ description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin
 - **Session raporları:** global SessionEnd hook'unun yazdığı ham raporlar. Her rapor: `session_id`, `cwd`, `project` (null olabilir), `task_id`, `ended`, `git` (branch, son commit'ler, değişen dosyalar), `excerpt` (son mesajlar), `user_message_count`.
 - **Biten görevler:** kapanış raporu henüz işlenmemiş `done` görevler. Çalışan pencereleri `vlad task cleanup` ile zorla kapatıldığı için çoğu çalışan session'ının inbox raporu olmaz; o işin kaydı görev dosyasındaki `## Kapanış raporu`'dur.
 
+## Otomatik mod ve tek görev kipi (D-vlad-061)
+
+- **Tek görev kipi:** `/digest <görev-id>` yalnız o görevi işler: adım 1'de inbox ve `task list --undigested` yerine `vlad kb get <id> --json` okunur (inbox'ta `task_id` eşleşen kayıt varsa onu da al); adım 2–7 aynen, yalnız o görev (pipeline fazıysa çatı altına yazılır; çatı `done` ise çatı görevi). `/status` görev `done` olunca bunu çağırır.
+- **Otomatik mod:** kullanıcıya soru soramadığın her bağlamda (`/status`'un otomatik digest adımı, zamanlanmış görev, gece modu) geçerlidir. Kural: **soru sorma, emin olmadığını yazma, listeye ekle.** Şunlar kayda geçmez; bunun yerine `vlad digest pending add --text "<madde, kaynağıyla>" --task <id> --project <slug> --json` çalıştır:
+  - adım 5'te "emin olmadığın karar" ("Bunu karar olarak kaydedeyim mi?" diye sorulacak olan);
+  - adım 4'te kartın Açık konular'ına "kullanıcı kararı bekliyor" türü madde (3b kontrolü onay bulmadıysa bile yazma, listeye ekle);
+  - adım 4b'de önemi belirsiz bulgu (önemi tahmin etme; `bilgi` yazma, listeye ekle).
+  Emin olunan her şey (raporun açıkça söylediği sonuç, günlük, bulgular, kart, özet) normal yazılır.
+- **Onay bekleyen liste:** `vlad digest pending list [--all] --json` / `done <id> --note "<karar>"`. Kullanıcı bir maddeye karar verince ilgili kaydı (karar/bulgu/kart) CLI ile yaz, sonra maddeyi kapat. `vlad status --summary` açık madde sayısını verir; `CLAUDE.md` Açılış maddeleri gösterir.
+- **Güvenlik ağı:** olay tetikli yol (status) kaçırılırsa Mac beyin oturumu için günlük zamanlanmış görev: `docs/otomatik-digest.md`. Bulutta ve Windows'ta güvenlik ağı yoktur.
+
 ## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
 
 kb ayrı private repoda (`iamhankaya/vlad-kb`; konum: `VLAD_KB_DIR` ya da `vlad.config.json`'daki `kbDir`). Bulutta bu akış kb'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) kb reposunu eşitle:

@@ -22,6 +22,7 @@ import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { staleSummaries } from "../projects/status.js";
+import { countPending } from "../digest/pending.js";
 import type { StaleSummary } from "../projects/status.js";
 import { expireMode, modeLine } from "../mode/store.js";
 import { untrustWorktree } from "./trust.js";
@@ -608,7 +609,7 @@ export function statusSummary(
   opts: { mark?: boolean; /** machines C3: remote probe results, applied here under the kb lock */ remotePlans?: RemoteStallPlan[] } = {},
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
-  undigested: number; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[];
+  undigested: number; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number;
 } {
   const mark = opts.mark !== false;
   // a read-only/locked kb must not take the startup summary (SessionStart hook) down: marking is best effort (F-vlad-052)
@@ -632,6 +633,7 @@ export function statusSummary(
     undigested: tasks.filter((t) => t.data.state === "done" && !t.data.digested).length,
     openSevereFindings: countOpenSevere(),
     mode,
+    pendingDigest: (() => { try { return countPending(); } catch { return 0; } })(),
     staleSummaries: (() => { try { return staleSummaries(); } catch { return []; } })(),
   };
 }
