@@ -161,6 +161,8 @@ export interface LaunchOpts {
   machine?: string;
   /** CLI bayrakları: uzak makinede anlamsız, açık hata verir (yok sayılıp gerçek pencere açılmasın) */
   external?: boolean; dryRun?: boolean;
+  /** test seam: closes the worker window when a launch is rolled back after the launcher ran (default: closeWorkerWindow) */
+  closeWorker?: (taskId: string) => number[] | void;
 }
 
 /**
@@ -329,10 +331,48 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
       return t;
     });
   } catch (e) {
+    // F-vlad-109: the task was cancelled/failed/done while the launcher ran: nothing may keep running for it
+    const now = (() => { try { return getTask(id).data.state; } catch { return null; } })();
+    if (now && now !== "queued" && now !== "running") {
+      const problems: string[] = [];
+      try { (o.closeWorker ?? closeWorkerWindow)(id); } catch (x) { problems.push(`pencere kapatılamadı: ${(x as Error).message}`); }
+      try { removeTaskWorktree(repo, wt, id); } catch (x) { problems.push(`worktree kaldırılamadı: ${(x as Error).message}`); }
+      try { untrustWorktree(wt); } catch { /* best effort */ }
+      throw new Error(`görev başlatılırken ${now} yapıldı; açılan pencere kapatıldı, worktree kaldırıldı${problems.length ? ` (${problems.join("; ")}; elle temizle: ${wt})` : ""}`);
+    }
     const msg = `terminal açıldı ama durum güncellenemedi: ${(e as Error).message}; worktree: ${wt}`;
     try { await recordError(id, msg); } catch { /* best effort */ }
     throw new Error(msg);
   }
+}
+
+/**
+ * F-vlad-125/142: frees the reservation of a queued task whose remote launch outcome is unknown (dead machine, expired
+ * reservation) and the pipeline pin it set. The worker is asked first (`op-status` with cancel: an unseen op gets a
+ * tombstone and can never start); a finished or running launch is refused. `force` skips an unreachable worker: if it
+ * did launch, its window and worktree stay orphaned there.
+ */
+export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: RemoteTransport; force?: boolean }): Promise<Task> {
+  const t0 = getTask(id);
+  const machine = t0.data.machine, op = t0.data.launch_op;
+  if (t0.data.state !== "queued" || !machine || !op) throw new Error(`serbest bırakılacak rezervasyon yok (${id}: ${t0.data.state}, makine ${machine ?? "-"})`);
+  let verdict: string | null = null;
+  try {
+    if (!o.transport) throw new Error("uzak taşıma bağlı değil");
+    verdict = (await o.transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result.state;
+  } catch (e) {
+    if (!o.force) throw new Error(`${machine} makinesine ulaşılamadı (${(e as Error).message}); makine kalıcı ölüyse --force ile bırak (launch açılmışsa orada yetim kalır)`);
+  }
+  if (verdict === "done") throw new Error(`işçide launch tamamlanmış (op ${op}); serbest bırakma yerine \`task launch ${id}\` ile sahiplen`);
+  if (verdict === "started") throw new Error(`işçide launch sürüyor (op ${op}); bitince tekrar dene`);
+  return withKbLock(() => {
+    const t = getTask(id);
+    if (t.data.state !== "queued" || t.data.launch_op !== op) throw new Error(`rezervasyon bu arada değişti (${id}); tekrar dene`);
+    Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
+    saveTask(t);
+    releasePin(t.data.parent, machine, id);
+    return t;
+  });
 }
 
 class LostRace extends Error {}
