@@ -3,6 +3,8 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["id", "project", "title", "kind", "state", "autonomy", "created", "updated"],
+  "if": { "properties": { "model": { "const": "opus" } }, "required": ["model"] },
+  "then": { "required": ["model_reason"], "properties": { "model_reason": { "type": "string", "minLength": 1 } } },
   "properties": {
     "id": { "type": "string", "pattern": "^T\\d{8}-\\d{2,}$" },
     "project": { "type": "string" },

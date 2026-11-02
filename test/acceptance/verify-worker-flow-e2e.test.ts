@@ -132,9 +132,9 @@ describe("sahte süreç listesiyle stalled tespiti (kb üzerinde)", () => {
     expect(cloudStill.data.state).toBe("running");
   });
 
-  it("Windows dışında hiçbir şeyi stalled yapmaz", () => {
-    localRunning(500);
-    expect(markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), "linux")).toEqual([]);
+  it("Windows dışında da ölü işçiyi stalled yapar (F-vlad-111)", () => {
+    const id = localRunning(500);
+    expect(markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), "linux").map((t) => t.data.id)).toEqual([id]);
   });
 });
 

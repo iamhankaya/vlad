@@ -360,10 +360,18 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(j.command).toContain(`${id}.ps1`);
       expect(j.cwd).toBe(j.worktree);
     });
-    it("task resume --external continues the recorded session, or the last one without a session_id", () => {
+    it("task resume re-adds the worktree trust record (F-vlad-081)", () => {
+      const claudeJson = join(tmp, "claude.json");
+      const e = { ...env(), VLAD_CLAUDE_JSON: claudeJson };
+      const j = JSON.parse(vlad(["task", "launch", id, "--external", "--json"], undefined, e).out);
+      writeFileSync(claudeJson, "{}"); // record lost
+      expect(vlad(["task", "resume", id, "--external", "--json"], undefined, e).code).toBe(0);
+      expect(JSON.parse(readFileSync(claudeJson, "utf8")).projects[j.worktree.replaceAll("\\", "/")].hasTrustDialogAccepted).toBe(true);
+    });
+    it("task resume --external resumes the recorded session; without one it starts fresh instead of guessing --continue (F-vlad-097)", () => {
       vlad(["task", "launch", id, "--external", "--json"], undefined, env());
       const without = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
-      expect(readFileSync(without.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--continue \$p\n$/);
+      expect(readFileSync(without.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?\$p\n$/);
       expect(vlad(["task", "session", id, "sess-42", "--json"]).code).toBe(0);
       const withSid = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
       expect(readFileSync(withSid.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--resume 'sess-42' \$p\n$/);
@@ -373,7 +381,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(readFileSync(plain.script, "utf8")).not.toContain("--autocompact");
       writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt"), workerAutoCompact: "300k" }));
       const res = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
-      expect(readFileSync(res.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--autocompact '300k' --continue \$p\n$/);
+      expect(readFileSync(res.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--autocompact '300k' \$p\n$/);
       // fresh launch path: new task so launch itself writes the script
       const id2 = mkTask();
       const l = JSON.parse(vlad(["task", "launch", id2, "--external", "--json"], undefined, env()).out);

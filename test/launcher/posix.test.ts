@@ -28,7 +28,7 @@ describe("resolveLaunchMode (darwin/linux)", () => {
   });
   it("auto on Windows and Linux is unchanged", () => {
     expect(resolveLaunchMode("auto", "win32", {})).toBe("auto-terminal");
-    expect(() => resolveLaunchMode("auto", "linux", {})).toThrow(/bulut algılanmadı/);
+    expect(resolveLaunchMode("auto", "linux", {})).toBe("tmux");
   });
 });
 

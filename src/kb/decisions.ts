@@ -41,7 +41,8 @@ function blocks(lines: string[]): Block[] {
   });
   out.forEach((b, i) => {
     if (i + 1 < out.length) b.end = out[i + 1].start;
-    for (let j = b.start + 1; j < b.end; j++) {
+    // metadata is the run of bullets right under the heading; a "- **Durum:**" line in the body is text (F-vlad-100)
+    for (let j = b.start + 1; j < b.end && META.test(lines[j]); j++) {
       const m = META.exec(lines[j]);
       const key = m && (Object.keys(KEYS) as MetaKey[]).find((k) => KEYS[k] === m[1]);
       if (key && m) b.meta[key] = m[2];
@@ -80,7 +81,9 @@ function locate(id: string): { path: string; lines: string[]; block: Block } {
 /** Replaces a metadata bullet of a block, or inserts it after the block's existing ones; undefined removes it. */
 function setMeta(lines: string[], block: Block, key: MetaKey, value: string | undefined): void {
   const label = KEYS[key];
-  const at = lines.findIndex((l, i) => i > block.start && i < block.end && META.exec(l)?.[1] === label);
+  let end = block.start + 1;
+  while (end < block.end && META.test(lines[end])) end++;
+  const at = lines.findIndex((l, i) => i > block.start && i < end && META.exec(l)?.[1] === label);
   const line = value === undefined ? null : `- **${label}:** ${value}`;
   if (at >= 0) {
     if (line === null) lines.splice(at, 1); else lines[at] = line;

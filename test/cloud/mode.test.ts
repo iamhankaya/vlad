@@ -17,9 +17,9 @@ describe("resolveLaunchMode", () => {
   it("auto on Linux picks cloud when CLAUDE_CODE_REMOTE=true", () => {
     expect(resolveLaunchMode("auto", "linux", { CLAUDE_CODE_REMOTE: "true" })).toBe("cloud");
   });
-  it("auto on Linux without the cloud fails clearly", () => {
-    expect(() => resolveLaunchMode("auto", "linux", {})).toThrow(/bulut algılanmadı/);
-    expect(() => resolveLaunchMode("auto", "linux", { CLAUDE_CODE_REMOTE: "false" })).toThrow(/CLAUDE_CODE_REMOTE/);
+  it("auto on Linux without the cloud uses tmux (F-vlad-112)", () => {
+    expect(resolveLaunchMode("auto", "linux", {})).toBe("tmux");
+    expect(resolveLaunchMode("auto", "linux", { CLAUDE_CODE_REMOTE: "false" })).toBe("tmux");
   });
   it("wt and powershell are passed through", () => {
     expect(resolveLaunchMode("wt", "linux", {})).toBe("wt");
