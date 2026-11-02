@@ -136,7 +136,7 @@ export function integrationWorktrees(
     // a phase project whose card is gone must not block listing or cleanup of the rest
     if (!existsSync(join(kbPaths().projects, `${project}.md`))) continue;
     const repo = projectPath(project);
-    const worktree = worktreePath(cfg, repo, parentId);
+    const worktree = worktreePath(cfg, repo, parentId, process.platform as "win32" | "darwin" | "linux");
     if (!out.some((w) => w.worktree === worktree)) out.push({ project, repo, branch, worktree });
   }
   return out;
@@ -268,7 +268,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   try {
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     repo = projectPath(task.data.project);
-    wt = worktreePath(cfg, repo, id);
+    wt = worktreePath(cfg, repo, id, process.platform as "win32" | "darwin" | "linux");
     // a pipeline phase branches from the pipeline's integration branch; the rollback in launchCore leaves it alone
     base = task.data.parent ? (await withKbLock(() => ensureIntegration(task.data.parent!, cfg, task.data.project))).branch : undefined;
   } catch (e) {

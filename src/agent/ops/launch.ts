@@ -73,7 +73,8 @@ function dropEntry(id: string, repo: string, wt: string): void {
 }
 
 const fill = (s: string, ctx: WorkerCtx, id: string): string => fillRolePlaceholders(s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id)), getVladHome());
-const envOf = (id: string) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome() });
+// işçinin kbDir'i oturuma da geçer: yoksa `vlad kb get`/`task list` yanlış kb'yi okur (F-vlad-147)
+const envOf = (id: string, ctx: WorkerCtx) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome(), ...(ctx.def.kbDir ? { VLAD_KB_DIR: ctx.def.kbDir } : {}) });
 
 let launchChain: Promise<unknown> = Promise.resolve();
 /** Async git removed the accidental serialisation sync calls gave: launches on one worker run one at a time again (worktree/branch/lock races). */
@@ -117,7 +118,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
     res = await launchCore({
       taskId: id, repo, worktree, branch: `vlad/${id}`,
       ...(integration ? { base: integration.branch } : defaultBranch && (await branchExistsAsync(repo, defaultBranch)) ? { base: defaultBranch } : {}),
-      prompt: fill(template, ctx, id), env: envOf(id), title,
+      prompt: fill(template, ctx, id), env: envOf(id, ctx), title,
       ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),
     }, launcher, ASYNC_GIT);
   } catch (e) {
@@ -194,7 +195,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: 
   try { (o.close ?? defaultClose)(id); } catch { /* no window to close, or it could not be closed: the launcher reports real failures */ } // no second window beside a live one
   let r;
   try {
-    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), resume: { sessionId } });
+    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id, ctx), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), resume: { sessionId } });
   } catch (e) { throw failed(`launcher başarısız: ${(e as Error).message}`); }
   if (!r.ok) throw failed(`launcher başarısız (${r.method}): ${r.detail ?? "bilinmeyen hata"}`);
   return { worktree: wt, method: r.method, dirty };

@@ -11,6 +11,8 @@ import {
 } from "../git/git-async.js";
 import { trustWorktree, untrustWorktree } from "./trust.js";
 
+/** Path separator style of the machine the worktree lives on (F-vlad-148: never assume win32). */
+type HostOs = "win32" | "darwin" | "linux";
 type Maybe<T> = T | Promise<T>;
 /** The git calls a launch makes. The brain uses the sync set (default); a worker Agent the async one so its event loop stays free. */
 export interface GitApi {
@@ -100,10 +102,10 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
  * `defaultBranch` (HEAD when unset or absent). Touches no kb.
  */
 export function ensureIntegrationGit(
-  repo: string, parentId: string, cfg: VladConfig, defaultBranch?: string,
+  repo: string, parentId: string, cfg: VladConfig, defaultBranch?: string, os: HostOs = process.platform as HostOs,
 ): { branch: string; worktree: string } {
   const branch = `vlad/${parentId}`;
-  const worktree = worktreePath(cfg, repo, parentId);
+  const worktree = worktreePath(cfg, repo, parentId, os);
   if (!branchExists(repo, branch)) {
     if (remoteBranchExists(repo, branch)) addWorktree(repo, worktree, branch, `origin/${branch}`);
     else addWorktree(repo, worktree, branch, defaultBranch && branchExists(repo, defaultBranch) ? defaultBranch : undefined);
@@ -117,10 +119,10 @@ export function ensureIntegrationGit(
 
 /** `ensureIntegrationGit` over a `GitApi` (a worker Agent's async git). */
 export async function ensureIntegrationGitWith(
-  g: GitApi, repo: string, parentId: string, cfg: VladConfig, defaultBranch?: string,
+  g: GitApi, repo: string, parentId: string, cfg: VladConfig, defaultBranch?: string, os: HostOs = process.platform as HostOs,
 ): Promise<{ branch: string; worktree: string }> {
   const branch = `vlad/${parentId}`;
-  const worktree = worktreePath(cfg, repo, parentId);
+  const worktree = worktreePath(cfg, repo, parentId, os);
   if (!(await g.branchExists(repo, branch))) {
     if (await g.remoteBranchExists(repo, branch)) await g.addWorktree(repo, worktree, branch, `origin/${branch}`);
     else await g.addWorktree(repo, worktree, branch, defaultBranch && (await g.branchExists(repo, defaultBranch)) ? defaultBranch : undefined);
