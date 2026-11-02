@@ -58,7 +58,7 @@ describe("launch: ponytail A/B", () => {
     cfg.worktreeDir = join(base, "wt");
     writeProject("alpha", `---\nslug: alpha\nname: Alpha\npath: ${JSON.stringify(repo)}\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n`);
     mkdirSync(join(home, "roles"), { recursive: true });
-    writeFileSync(join(home, "roles", "developer.md"), `---\nslug: developer\ntitle: Dev\nkind: executor\nsummary: s\nskills:\n  - superpowers:test-driven-development\n  - ponytail\n---\n`);
+    writeFileSync(join(home, "roles", "developer.md"), `---\nslug: developer\ntitle: Dev\nkind: executor\nsummary: s\nskills:\n  - superpowers:test-driven-development\n  - ponytail\n---\n\nSen Dev'sin.\n- **ponytail (deneme):** ponytail kuralı burada, vendor/skills/ponytail/SKILL.md\n- Test hijyeni kuralı.\n`);
   });
   const fake = (): Launcher & { reqs: LaunchRequest[] } => {
     const reqs: LaunchRequest[] = [];
@@ -72,11 +72,12 @@ describe("launch: ponytail A/B", () => {
     const l = fake();
     await launchTask(odd.data.id, { launcher: l, cfg: withAb(cfg) });
     await launchTask(even.data.id, { launcher: l, cfg: withAb(cfg) });
-    expect(l.reqs[0].prompt).not.toContain("SKILL.md"); // vendored ponytail file is not offered
-    expect(l.reqs[0].prompt).toContain(PONYTAIL_OFF_NOTE);
+    expect(l.reqs[0].prompt).not.toMatch(/ponytail/i); // F-vlad-161: neither the bullet, the vendored path nor the note reach the off arm
+    expect(l.reqs[0].prompt).toContain("Test hijyeni kuralı."); // the rest of the role body is inlined
     expect(l.reqs[0].prompt).toContain("superpowers:test-driven-development");
     expect(getTask(odd.data.id).data.experiment).toEqual({ ponytail: "off" });
     expect(l.reqs[1].prompt).toContain("ponytail");
+    expect(l.reqs[1].prompt).toContain(join(home, "roles", "developer.md")); // on arm: role file path, unchanged
     expect(l.reqs[1].prompt).not.toContain(PONYTAIL_OFF_NOTE);
     expect(getTask(even.data.id).data.experiment).toEqual({ ponytail: "on" });
   });
@@ -112,12 +113,21 @@ x
     };
     await launchTask(odd.data.id, { launcher: fake(), cfg: c, remote: { transport } });
     await launchTask(even.data.id, { launcher: fake(), cfg: c, remote: { transport } });
-    expect(prompts[0]).toContain(PONYTAIL_OFF_NOTE);
-    expect(prompts[0]).not.toContain("VENDOR_SKILL:ponytail");
+    expect(prompts[0]).not.toMatch(/ponytail/i);
+    expect(prompts[0]).toContain("Test hijyeni kuralı.");
     expect(prompts[1]).toContain("VENDOR_SKILL:ponytail");
     expect(prompts[1]).not.toContain(PONYTAIL_OFF_NOTE);
     expect(getTask(odd.data.id).data).toMatchObject({ machine: "windows", experiment: { ponytail: "off" } });
     expect(getTask(even.data.id).data).toMatchObject({ machine: "windows", experiment: { ponytail: "on" } });
+  });
+
+  it("external launch: off arm prompt has no ponytail, on arm keeps it", async () => {
+    const odd = mk(); const even = mk();
+    const l = fake();
+    await launchTask(odd.data.id, { launcher: l, cfg: withAb(cfg), external: true } as never);
+    await launchTask(even.data.id, { launcher: l, cfg: withAb(cfg), external: true } as never);
+    expect(l.reqs[0].prompt).not.toMatch(/ponytail/i);
+    expect(l.reqs[1].prompt).toContain("ponytail");
   });
 
   it("default (no experiments): ponytail always in the prompt, no experiment field", async () => {
