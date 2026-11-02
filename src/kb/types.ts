@@ -81,6 +81,8 @@ export interface TaskData {
   machine_reserved?: string | null;
   launch_op?: string | null;
   /** `task release --force` ile işçiye sorulmadan bırakılan launch op'ları: işçide başlamış olabilirler, makine erişilebilir olunca iptal edilir (F-vlad-150). */
+  /** Uzak `task gate` yeşil koşusu (yalnız recordGreenGate yazar; çalışan yazamaz): merge öncesi dal ucuyla karşılaştırılır (F-vlad-139). */
+  last_green_gate?: { head: string; target: "task" | "integration"; at: string } | null;
   released_ops?: { machine: string; op: string }[] | null;
   /** ponytail A/B (config `experiments.ponytail: "ab"`): hangi kolda koşuldu; deney dışı görevde yok. */
   experiment?: { ponytail: "on" | "off" } | null;

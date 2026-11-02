@@ -129,7 +129,24 @@ export async function remoteGateRun(transport: RemoteTransport, machine: string,
 export async function remoteMergePreview(transport: RemoteTransport, machine: string, task: Task, o: { into?: string } = {}): Promise<MergePreviewResult> {
   return (await transport.call<MergePreviewResult>(machine, "merge-preview", { ...gateIds(task), ...mergeRefs(task, o.into) })).result;
 }
+/** Yeşil gate'i görevin frontmatter'ına yazar (kilit çağıranda). Çalışan bu alanı yazamaz; merge öncesi karşılaştırma buradan okur (F-vlad-139). */
+export function recordGreenGate(id: string, r: GateRunResult, target: "integration" | "task"): void {
+  if (r.exit !== 0 || !r.head) return;
+  const t = getTask(id);
+  t.data.last_green_gate = { head: r.head, target, at: new Date().toISOString() };
+  saveTask(t);
+}
+/** Merge edilen dal (vlad/<id>) için geçerli gate hedefi: çatıda entegrasyon worktree'si, diğerinde görevin kendisi. */
+const gateTargetOf = (task: Task): "integration" | "task" => (task.data.kind === "pipeline" ? "integration" : "task");
+/** Görevin son yeşil gate head'i (merge edilecek dalın hedefiyle eşleşen); yoksa null. */
+export function lastGreenGateHead(task: Task): string | null {
+  const g = task.data.last_green_gate;
+  return g && g.target === gateTargetOf(task) ? g.head : null;
+}
 export async function remoteMerge(transport: RemoteTransport, machine: string, task: Task, o: { into?: string; message?: string } = {}): Promise<MergeResult> {
-  return (await transport.call<MergeResult>(machine, "merge", { ...gateIds(task), ...mergeRefs(task, o.into), ...(o.message ? { message: o.message } : {}) }, { timeoutMs: 330_000 })).result;
+  const refs = mergeRefs(task, o.into);
+  const expectHead = lastGreenGateHead(task);
+  if (!expectHead) throw new Error(`${task.data.id} için yeşil gate kaydı yok; önce vlad task gate ${task.data.id} koş, sonra merge et`);
+  return (await transport.call<MergeResult>(machine, "merge", { ...gateIds(task), ...refs, expectHead, ...(o.message ? { message: o.message } : {}) }, { timeoutMs: 330_000 })).result;
 }
 // --- /machines:C4 ---
