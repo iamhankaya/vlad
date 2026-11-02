@@ -34,7 +34,7 @@ import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, remoteMachineOf, listTasksWithWarnings, modelInfo,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, releaseWarning, remoteMachineOf, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -323,7 +323,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
 def(task, "release <id>", "Belirsiz uzak launch rezervasyonunu (ve çatı makine pin'ini) bırakır; işçi launch'ı görmediyse iptal işareti yazılır", async (id: string, o: Opts) => {
   const cfg = loadConfig();
   const t = await releaseTask(id, { cfg, ...(cfg.machines ? { transport: brainTransport(cfg, selfName()) } : {}), ...(o.force ? { force: true } : {}) });
-  out(o, { id, state: t.data.state }, `${id} rezervasyonu bırakıldı (${t.data.state})`);
+  const warn = releaseWarning(t);
+  out(o, { id, state: t.data.state, ...(warn ? { warning: warn } : {}) }, `${id} rezervasyonu bırakıldı (${t.data.state})${warn ? `\n${warn}` : ""}`);
 }).option("--force", "işçiye ulaşılamıyorsa da bırak (kalıcı ölü makine; launch açılmışsa orada yetim kalır)");
 
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
