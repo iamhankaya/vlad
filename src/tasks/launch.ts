@@ -23,7 +23,7 @@ import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { expireMode, modeLine } from "../mode/store.js";
 import { untrustWorktree } from "./trust.js";
-import { ponytailArm, withoutPonytail } from "./experiment.js";
+import { PONYTAIL_OFF_NOTE, ponytailArm, withoutPonytail } from "./experiment.js";
 import type { PonytailArm } from "./experiment.js";
 import { ensureIntegrationGit, launchCore } from "./launch-core.js";
 import { nowMs } from "../machines/clock.js";
@@ -56,7 +56,7 @@ const recordError = (id: string, msg: string): Promise<void> => withKbLock(() =>
 });
 
 export function buildPrompt(
-  taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
+  taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; ponytailOff?: boolean },
   ctx?: { taskId: string; parent: string | null; projectSkills?: string[] },
   portable = false,
 ): string {
@@ -70,7 +70,7 @@ export function buildPrompt(
  * `portable` (uzak işçi): rol dosyası ve vendored skill yolları beynin yerel yolları olamaz (Mac yolu Windows'ta yok);
  * `{{ROLE_FILE:<slug>}}` / `{{VENDOR_SKILL:<ad>}}` bırakılır, işçi kendi VLAD_HOME'una göre doldurur.
  */
-function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; slug?: string }, portable = false): string {
+function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; slug?: string; ponytailOff?: boolean }, portable = false): string {
   const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
@@ -84,6 +84,7 @@ function promptCore(taskFile: string, autonomy: string, role?: { title: string; 
     parts.push(`İşe başlamadan şu skill'leri yükle: ${load.map((s) => `\`${s}\``).join(", ")}. Yüklenemeyen olursa kapanış raporunda belirt.`);
   }
   for (const v of vendored) parts.push(`\`${v.name}\` skill'i yüklü değildir; \`${portable ? `{{VENDOR_SKILL:${v.name}}}` : v.file}\` dosyasını oku ve uygula.`);
+  if (role.ponytailOff) parts.push(PONYTAIL_OFF_NOTE);
   return parts.join(" ");
 }
 

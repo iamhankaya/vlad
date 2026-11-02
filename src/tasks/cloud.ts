@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { getSection, getVladHome, kbPaths, kbRelativePath, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
-import { ponytailArm, withoutPonytail } from "./experiment.js";
+import { PONYTAIL_OFF_NOTE, ponytailArm, stripPonytailParagraph, withoutPonytail } from "./experiment.js";
 import type { PonytailArm } from "./experiment.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
@@ -244,7 +244,7 @@ function inlineReport(dep: Task, report: string, base: string): string {
 }
 
 function buildCloudPrompt(
-  task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task, gate?: string,
+  task: Task, role: { title: string; file: string; skills: string[]; ponytailOff?: boolean } | undefined, vladSession?: string, parent?: Task, gate?: string,
   base = "master", kb: CloudKb = "inline", vladSha?: string,
 ): string {
   const readonly = kb === "readonly";
@@ -275,8 +275,10 @@ function buildCloudPrompt(
       const rel = (f: string) => relative(getVladHome(), f).split("\\").join("/");
       parts.push(vladOpening(vladSha, { title: role.title, rel: rel(role.file) }, vendored.map((v) => ({ name: v.name, rel: rel(v.file) }))));
     } else {
-      parts.push(`## Rolün: ${role.title}\n${readDoc<unknown>(role.file).body.trim()}`);
+      const body = readDoc<unknown>(role.file).body.trim();
+      parts.push(`## Rolün: ${role.title}\n${role.ponytailOff ? stripPonytailParagraph(body) : body}`);
     }
+    if (role.ponytailOff && vladSha) parts.push(PONYTAIL_OFF_NOTE); // pinned clone: the worker reads the role file itself
     if (load.length) {
       parts.push(
         `İşe başlamadan şu skill'leri yüklemeyi dene: ${load.map((s) => `\`${s}\``).join(", ")}. ` +

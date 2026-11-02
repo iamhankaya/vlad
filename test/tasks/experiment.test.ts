@@ -7,7 +7,7 @@ import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { launchTask } from "../../src/tasks/launch.js";
-import { ponytailArm, withoutPonytail } from "../../src/tasks/experiment.js";
+import { PONYTAIL_OFF_NOTE, ponytailArm, stripPonytailParagraph, withoutPonytail } from "../../src/tasks/experiment.js";
 import { createTask, getTask } from "../../src/tasks/index.js";
 import type { RemoteTransport } from "../../src/machines/index.js";
 import { makeHome, rmTemp } from "../helpers.js";
@@ -32,6 +32,13 @@ describe("ponytailArm", () => {
   });
   it("withoutPonytail drops only ponytail", () => {
     expect(withoutPonytail({ title: "t", skills: ["a", "ponytail", "b"] }).skills).toEqual(["a", "b"]);
+  });
+});
+
+describe("stripPonytailParagraph", () => {
+  it("removes only the ponytail rule bullet from a role body", () => {
+    const body = ["- a", "- **ponytail (deneme):** x y z", "- b", ""].join("\n");
+    expect(stripPonytailParagraph(body)).toBe(["- a", "- b", ""].join("\n"));
   });
 });
 
@@ -65,10 +72,12 @@ describe("launch: ponytail A/B", () => {
     const l = fake();
     await launchTask(odd.data.id, { launcher: l, cfg: withAb(cfg) });
     await launchTask(even.data.id, { launcher: l, cfg: withAb(cfg) });
-    expect(l.reqs[0].prompt).not.toContain("ponytail");
+    expect(l.reqs[0].prompt).not.toContain("SKILL.md"); // vendored ponytail file is not offered
+    expect(l.reqs[0].prompt).toContain(PONYTAIL_OFF_NOTE);
     expect(l.reqs[0].prompt).toContain("superpowers:test-driven-development");
     expect(getTask(odd.data.id).data.experiment).toEqual({ ponytail: "off" });
     expect(l.reqs[1].prompt).toContain("ponytail");
+    expect(l.reqs[1].prompt).not.toContain(PONYTAIL_OFF_NOTE);
     expect(getTask(even.data.id).data.experiment).toEqual({ ponytail: "on" });
   });
 
@@ -103,8 +112,10 @@ x
     };
     await launchTask(odd.data.id, { launcher: fake(), cfg: c, remote: { transport } });
     await launchTask(even.data.id, { launcher: fake(), cfg: c, remote: { transport } });
-    expect(prompts[0]).not.toContain("ponytail");
-    expect(prompts[1]).toContain("ponytail");
+    expect(prompts[0]).toContain(PONYTAIL_OFF_NOTE);
+    expect(prompts[0]).not.toContain("VENDOR_SKILL:ponytail");
+    expect(prompts[1]).toContain("VENDOR_SKILL:ponytail");
+    expect(prompts[1]).not.toContain(PONYTAIL_OFF_NOTE);
     expect(getTask(odd.data.id).data).toMatchObject({ machine: "windows", experiment: { ponytail: "off" } });
     expect(getTask(even.data.id).data).toMatchObject({ machine: "windows", experiment: { ponytail: "on" } });
   });

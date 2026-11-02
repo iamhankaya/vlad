@@ -77,6 +77,20 @@ describe("prepareCloudLaunch", () => {
     expect(p).not.toMatch(/yüklemeyi dene:.*ponytail/);
   });
 
+  it("ponytail A/B off arm: role body is embedded without the ponytail bullet, vendored skill not inlined, experiment recorded", () => {
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ cloudKb: "inline", experiments: { ponytail: "ab" } }));
+    const role = join(home, "roles", "developer.md");
+    writeFileSync(role, readFileSync(role, "utf8").replace("skills:\n", "skills:\n  - ponytail\n") + "- **ponytail (deneme):** PONYTAIL-KURALI\n");
+    mkdirSync(join(home, "vendor", "skills", "ponytail"), { recursive: true });
+    writeFileSync(join(home, "vendor", "skills", "ponytail", "SKILL.md"), "PONYTAIL-GÖVDESİ lazy senior\n");
+    const t = mk();
+    const off = Number(t.data.id.slice(-1)) % 2 === 1;
+    const p = prepareCloudLaunch(t.data.id).prompt;
+    expect(p.includes("PONYTAIL-KURALI")).toBe(!off);
+    expect(p.includes("PONYTAIL-GÖVDESİ")).toBe(!off);
+    expect(getTask(t.data.id).data.experiment).toEqual({ ponytail: off ? "off" : "on" });
+  });
+
   it("task model overrides the role's model in create_session; no task model keeps the role's", () => {
     expect(prepareCloudLaunch(mk("alpha", { model: "haiku" }).data.id).model).toBe("haiku");
     expect(prepareCloudLaunch(mk("alpha", { model: "opus", modelReason: "kritik" }).data.id).model).toBe("opus");

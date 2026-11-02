@@ -12,4 +12,10 @@ export function ponytailArm(taskId: string, role: { skills?: string[] } | null |
   return d && Number(d[1]) % 2 === 1 ? "off" : "on";
 }
 
-export const withoutPonytail = <R extends { skills?: string[] }>(role: R): R => ({ ...role, skills: (role.skills ?? []).filter((s) => s !== "ponytail") });
+export const withoutPonytail = <R extends { skills?: string[] }>(role: R): R & { ponytailOff: true } => ({ ...role, skills: (role.skills ?? []).filter((s) => s !== "ponytail"), ponytailOff: true });
+
+/** Added to the prompt of an off-arm task whose worker still reads the role file (local/remote): the role's ponytail bullet must not apply. */
+export const PONYTAIL_OFF_NOTE = "ponytail KAPALI (A/B deney kolu): rol dosyasındaki `**ponytail (deneme):**` maddesini tamamen yok say; ponytail'i yükleme ve uygulama.";
+
+/** Role body without the ponytail rule bullet (cloud prompts embed the body, so the off arm never sees it). */
+export const stripPonytailParagraph = (body: string): string => body.split("\n").filter((l) => !l.includes("**ponytail (deneme):**")).join("\n");
