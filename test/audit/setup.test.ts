@@ -144,12 +144,40 @@ describe("auditSetup", () => {
     expect(r.measures.sums).toEqual({ dosya: 2, yeni_test: 1 });
   });
 
+  it("splits measure sums by the ponytail experiment arm (tasks without the field are in neither)", () => {
+    const withArm = (arm: "on" | "off", measure: string) => {
+      const id = task({ at: "2026-10-28", closing: `### Yapılanlar\n${measure}\n` });
+      const t = getTask(id);
+      t.data.experiment = { ponytail: arm };
+      writeDoc(t.file, t.data, t.body);
+    };
+    withArm("on", "Ölçüm: dosya=3 yeni_test=2");
+    withArm("on", "Ölçüm: dosya=1 yeni_test=1");
+    withArm("off", "Ölçüm: dosya=5 yeni_test=4");
+    task({ at: "2026-10-28", closing: "### Yapılanlar\nÖlçüm: dosya=9\n" });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.measures.by_ponytail).toEqual({
+      on: { tasks: 2, tasks_with_measure: 2, sums: { dosya: 4, yeni_test: 3 } },
+      off: { tasks: 1, tasks_with_measure: 1, sums: { dosya: 5, yeni_test: 4 } },
+    });
+    expect(r.measures.sums.dosya).toBe(18); // totals still include every task
+  });
+
   it("splits cancelled tasks by whether a reason is recorded", () => {
     const a = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 iptal: kullanıcı vazgeçti"] });
     const b = task({ at: "2026-10-28", state: "cancelled" });
     task({ at: "2026-10-28" });
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
     expect(r.cancelled).toEqual({ total: 2, with_reason: 1, without_reason_ids: [b] });
+    expect(a).not.toBe(b);
+  });
+
+  it("recognises Turkish capital İ: 'İptal: …' reason and 'İzin reddi' signal (JS /i does not fold İ to i)", () => {
+    const a = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 İptal: kullanıcı vazgeçti"] });
+    const b = task({ at: "2026-10-28", progress: ["- 2026-10-28T11:00:00+03:00 İzin reddi: git push"] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.cancelled).toEqual({ total: 1, with_reason: 1, without_reason_ids: [] });
+    expect(r.signals.izin_reddi).toEqual({ tasks: 1, count: 1, examples: [b] });
     expect(a).not.toBe(b);
   });
 
@@ -239,6 +267,19 @@ describe("auditSetup", () => {
       expect(r.skills.coverage.skipped_before_rule).toBe(1);
       expect(row("other:fresh")).toMatchObject({ since: null, since_unknown: true, expected_tasks: 1 });
       expect(row("superpowers:test-driven-development")).toMatchObject({ since_unknown: false });
+    });
+
+    it("does not expect ponytail from a task that ran on the experiment's off arm", () => {
+      roleFile(["superpowers:test-driven-development", "ponytail"]);
+      const on = task({ at: "2026-10-31", role: "developer" });
+      const off = task({ at: "2026-10-31", role: "developer" });
+      const t = getTask(off); t.data.experiment = { ponytail: "off" }; writeDoc(t.file, t.data, t.body);
+      loadSkill(on, "superpowers:test-driven-development"); loadSkill(on, "ponytail");
+      loadSkill(off, "superpowers:test-driven-development");
+      const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+      const row = (skill: string) => r.skills.coverage.by_skill.find((c) => c.skill === skill);
+      expect(row("ponytail")).toMatchObject({ expected_tasks: 1, loaded_tasks: 1, rate: 1 });
+      expect(row("superpowers:test-driven-development")).toMatchObject({ expected_tasks: 2 });
     });
 
     it("reports when each role file and CLAUDE.md last changed", () => {

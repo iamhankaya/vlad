@@ -178,6 +178,7 @@ Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bas
 ```
 vlad task launch <id> --json
 ```
+- **Çok makine** (`vlad.config.json`'da `machines` varken): kartın `machines` listesi (`vlad project set <slug> machines …`; sıra = tercih) görevin nereye yerleşebileceğini belirler. `launch` makineyi kartın sırası, kapasite (`maxParallel`) ve ulaşılabilirliğe göre kendisi seçer; belirli bir makine için `vlad task launch <id> --machine <ad> --json` (ad kartın listesinde olmalı). Pipeline'da çatı ilk fazın makinesine sabitlenir (pin); sonraki fazlar aynı makinede açılır. Uzak launch'ta beyin önce kb'yi commit+push eder, işçi senkronlar, sonra çalışan işçide açılır. Taslakta kartta `machines` varsa yerleşimi (otomatik ya da `--machine`) bir satırla göster. Makine ulaşılamazsa komut çıkış kodu **75** verir: görev `queued` kalır, `vlad machine ping <ad>` ile bak ve tekrar dene; belirsiz rezervasyon için `vlad task release <id>` (`/status`). `--external` uzak makinede desteklenmez.
 - Başarılı: görev `running`; yeni terminal sekmesi/penceresinde çalışan açılır. Kullanıcıya branch (`vlad/<id>`) ve worktree yolunu göster.
 - Pipeline fazı (`parent` dolu): ilk fazda entegrasyon branch'i `vlad/<çatı-id>` ve worktree'si (`<worktreeDir>/<çatı-id>`) açılır, çatı `running` olur; fazın branch'i entegrasyon branch'inden açılır. Kullanıcıya ikisini de göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.

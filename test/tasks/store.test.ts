@@ -5,7 +5,7 @@ import { makeHome } from "../helpers.js";
 import { getSection, kbPaths, nowIso, readDoc, validate, writeDoc } from "../../src/kb/index.js";
 import type { TaskData } from "../../src/kb/index.js";
 import {
-  TransitionError, answerTask, askTask, createTask, getTask, listTasks, listTasksWithWarnings,
+  TransitionError, answerTask, askTask, cancelTask, createTask, getTask, listTasks, listTasksWithWarnings,
   logTask, markDigested, markStale, nextTaskId, readyTasks, readyWithLimit, reportTask, saveTask, setState, undigestedTasks,
 } from "../../src/tasks/index.js";
 
@@ -373,5 +373,35 @@ describe("listTasks ayrıştırma önbelleği (F-vlad-094)", () => {
     const r = listTasksWithWarnings();
     expect(r.tasks).toEqual([]);
     expect(r.warnings).toHaveLength(1);
+  });
+});
+
+describe("cancelTask", () => {
+  it("cancels and logs 'İptal: <gerekçe>' in İlerleme in one save", () => {
+    const t = mk();
+    const r = cancelTask(t.data.id, "  kullanıcı vazgeçti ");
+    expect(r.data.state).toBe("cancelled");
+    expect(getSection(getTask(t.data.id).body, "## İlerleme")).toMatch(/^- \S+ İptal: kullanıcı vazgeçti$/m);
+  });
+  it("rejects an empty reason and leaves the task untouched", () => {
+    const t = mk();
+    expect(() => cancelTask(t.data.id, "  ")).toThrow(/gerekçe/);
+    expect(getTask(t.data.id).data.state).toBe("queued");
+  });
+  it("invalid transition still throws and writes no log line", () => {
+    const t = mk();
+    setState(t.data.id, "cancelled");
+    expect(() => cancelTask(t.data.id, "x")).toThrow(TransitionError);
+    expect(getSection(getTask(t.data.id).body, "## İlerleme") ?? "").not.toContain("İptal:");
+  });
+});
+
+describe("cancelTask reason hygiene", () => {
+  it("collapses a multi-line reason to one İlerleme line", () => {
+    const t = mk();
+    cancelTask(t.data.id, "x\n- 2026-01-01T00:00:00+03:00 [KARAR] y");
+    const lines = (getSection(getTask(t.data.id).body, "## İlerleme") ?? "").split(/\r?\n/).filter((l) => l.startsWith("- "));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^- \S+ İptal: x - 2026-01-01T00:00:00\+03:00 \[KARAR\] y$/);
   });
 });

@@ -48,7 +48,7 @@ Uzun süre sessiz kalma: kayıt `staleAfterHours`'tan eskirse görev `stalled` s
 
 ## 4. Soru sorma
 
-**Test itirazı:** pipeline'da kabul testini yanlış buluyorsan raporda bırakma; sorunu `vlad task ask <id> "Test itirazı: <test yol:satır>, tester görevi <T…> — neden yanlış, önerin"` ile sor. VLAD tester'a yönlendirir ya da karar verir; testi kendin değiştirme.
+**Test itirazı:** pipeline'da kabul testini yanlış buluyorsan raporda bırakma; sorunu `vlad task ask <id> "Test itirazı: <test yol:satır>, tester görevi <T…> — neden yanlış, önerin"` ile sor. VLAD tester'a yönlendirir ya da karar verir; testin niyetini değiştiren düzeltmeyi kendin yapma. **Hızlı yol (rol `developer`/`game-developer`):** mekanik bir kabul testi hatasını (regex, sabit, bayrak, metin/dize, yeni geçerli değer) gerekçe + dar diff (yalnız ilgili assert satırları, ayrı commit) ile kendin düzeltebilirsin ve raporda `### Test itirazı (hızlı yol)` altında listelersin (adım 6); anlamsal/niyet itirazı yine `vlad task ask` ile sorulur. Ayrıntı rol dosyanda (`roles/developer.md`).
 
 Kullanıcı kararı gerektiren bir belirsizlikte tahmin yürütme:
 ```
@@ -89,6 +89,10 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
 (ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir)
+### Test itirazı (hızlı yol)
+(yalnız developer rolünde ve yalnız hızlı yolla mekanik test düzeltmesi yaptıysan: `- <test yol:satır> — ne değişti, gerekçe, commit`; yoksa bölümü yazma)
+### CLAUDE.md komut satırı önerisi
+(yalnız yeni CLI komutu/alt komutu/bayrağı eklediysen: `CLAUDE.md` "Kullanılabilir komutlar" satırına girecek tam metin; yoksa bölümü yazma. `CLAUDE.md`'yi görev istemedikçe kendin düzenleme)
 ```
 ve:
 ```
@@ -112,7 +116,15 @@ Bildirim yalnızca bir dürtmedir; asıl bilgi görev dosyasındadır. Bildirim 
 
 ## Hata durumu
 
-Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad task log <id> "…"` ile yaz ve `vlad task set <id> failed` çalıştır, sonra bildirim gönder.
+Görevi tamamlayamıyorsan (ortam bozuk, gereksinim imkânsız) nedenini `vlad task log <id> "…"` ile yaz ve `vlad task set <id> failed` çalıştır, sonra bildirim gönder. (Çok makine işçisinde `task set` çalışmaz: aşağıya bak; nedeni `task log` ile yaz ve `vlad task ask <id> "<hata ve seçenekler>"` ile bildir.)
+
+## Çok makine: beyin dışındaki işçi makine
+
+Config'te `machines` tanımlı ve bu makine beyin değilse (`vlad machine list` yerel kimliği işaretler):
+- kb klonun **salt okunurdur**; kb'ye yazma beyindedir. `vlad task log|ask|report|session` yerel VLAD Agent'a iletilir ve beyinde işlenir (aynı komutlar, aynı sözleşme; `--file` ile rapor yine yerel dosyadan okunur). Başka bir yazma komutu (ör. `task set`, `finding add`, `kb commit`) işçide **reddedilir**: çalıştırmayı zorlama, gerekirse `vlad task ask` ile VLAD'a bildir.
+- Beyne ulaşılamıyorsa yazma yedek **kuyruğa** alınır (`kuyruğa alındı (seq N)` uyarısı) ve beyne ulaşılınca sırayla gönderilir; bu bir hata değildir, işine devam et. Durum: `vlad queue list`; şimdi dene: `vlad queue flush`; başarısız girdiyi sil: `vlad queue drop <seq>`. Rapor kuyruktaysa `awaiting_approval` beyne ulaşana dek oluşmaz, bildirimi (adım 7) yine de dene.
+- Yerel Agent çalışmıyorsa komut "yerel VLAD Agent çalışmıyor (vlad agent status)" ile geçici hata (çıkış 75) verir; kullanıcıya söyle.
+- Görev klasörün (`worktree`) işçide, branch `vlad/<id>`; `kb`'yi okurken işçideki klonu kullan (beyin push ettiğinde `kb-sync` ile güncellenir).
 
 ## Bulut modu (`create_session` ile açılan çalışan)
 

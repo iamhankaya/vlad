@@ -34,7 +34,7 @@ import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, releaseWarning, remoteMachineOf, listTasksWithWarnings, modelInfo,
+  TRANSITIONS, TransitionError, answerTask, askTask, cancelTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, releaseWarning, remoteMachineOf, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -361,9 +361,10 @@ def(task, "report <id>", "Kapanış raporunu yazar, awaiting_approval yapar", (i
 }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
 def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, state: string, o: Opts) => {
   if (!(state in TRANSITIONS)) throw new Error(`bilinmeyen durum: ${state}; geçerliler: ${Object.keys(TRANSITIONS).join(", ")}`);
-  const t = setState(id, state as TaskState);
+  if (o.reason !== undefined && state !== "cancelled") throw new Error("--reason yalnızca cancelled için");
+  const t = state === "cancelled" ? cancelTask(id, String(o.reason ?? "")) : setState(id, state as TaskState);
   out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
-});
+}).option("--reason <metin>", "iptal gerekçesi (cancelled için zorunlu; İlerleme'ye 'İptal: <metin>' yazılır)");
 def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod)", (id: string, o: Opts) => {
   const ids = (v: unknown) => (v === undefined ? undefined : String(v).split(",").map((x) => x.trim()).filter(Boolean));
   const r = setDependencies(id, { set: ids(o.set), add: ids(o.add), remove: ids(o.remove), clear: o.clear ? true : undefined });
@@ -627,6 +628,7 @@ def(audit, "setup", "Kurulum denetimi verisi (salt okuma): biten görevler, öl�
   out(o, r, [
     `aralık: ${r.since} → ${r.tasks.total} biten görev`,
     `ölçüm: ${r.measures.tasks_with_measure} görevde; ${Object.entries(r.measures.sums).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
+    ...(r.measures.by_ponytail.on.tasks + r.measures.by_ponytail.off.tasks ? [`ponytail A/B: ` + (['on', 'off'] as const).map((k) => `${k} ${r.measures.by_ponytail[k].tasks} görev (${r.measures.by_ponytail[k].tasks_with_measure} ölçümlü; ${Object.entries(r.measures.by_ponytail[k].sums).map(([n, v]) => `${n}=${v}`).join(' ') || '-'})`).join(' | ')] : []),
     `açık nokta: ${r.open_points.total} (${sev})`,
     `işaretler: test itirazı ${sg.test_itirazi.count}, değişiklik turu ${sg.degisiklik_istegi.count}, [KARAR] ${sg.karar.count}, izin reddi ${sg.izin_reddi.count}`,
     `skill: ${r.skills.inventory.length} envanterde, ${r.skills.unused.length} hiç yüklenmemiş (${r.skills.transcripts} oturum kaydı); rol skill oranı ${r.skills.coverage.rate === null ? "-" : `%${Math.round(r.skills.coverage.rate * 100)} (${r.skills.coverage.loaded}/${r.skills.coverage.expected}, kuraldan önceki ${r.skills.coverage.skipped_before_rule} atlandı)`}`,

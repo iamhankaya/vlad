@@ -14,13 +14,15 @@ const STALE_DAYS = 30;
 const EXAMPLES = 5;
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
+export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: Record<string, number> }
 export interface Signal { tasks: number; count: number; examples: string[] }
 type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
 interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
 export interface SetupAudit {
   since: string;
   tasks: { total: number; ids: string[]; by_role: Record<string, number>; by_phase: Record<string, number>; by_model: Record<string, number> };
-  measures: { tasks_with_measure: number; sums: Record<string, number> };
+  /** `by_ponytail`: the same sums split by the task's `experiment.ponytail` arm (T20261102-16); tasks outside the experiment are in neither. */
+  measures: { tasks_with_measure: number; sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
   open_points: { total: number; by_severity: Record<string, number> };
   signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal };
   cancelled: { total: number; with_reason: number; without_reason_ids: string[] };
@@ -64,7 +66,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   const out: SetupAudit = {
     since,
     tasks: { total: tasks.length, ids: tasks.map((t) => t.data.id).sort(), by_role: {}, by_phase: {}, by_model: {} },
-    measures: { tasks_with_measure: 0, sums: {} },
+    measures: { tasks_with_measure: 0, sums: {}, by_ponytail: { on: { tasks: 0, tasks_with_measure: 0, sums: {} }, off: { tasks: 0, tasks_with_measure: 0, sums: {} } } },
     open_points: { total: 0, by_severity: {} },
     signals: {
       test_itirazi: { tasks: 0, count: 0, examples: [] }, degisiklik_istegi: { tasks: 0, count: 0, examples: [] },
@@ -90,9 +92,13 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     const closing = getSection(t.body, "## Kapanış raporu") ?? "";
     // line start only: template text ("Ölçüm satırı…") or a quoted example is not a measure
     const m = [...closing.matchAll(/^Ölçüm:(.*)$/gm)].pop();
+    const arm = t.data.experiment?.ponytail;
+    const armOut = arm ? out.measures.by_ponytail[arm] : undefined;
+    if (armOut) armOut.tasks++;
     if (m) {
       out.measures.tasks_with_measure++;
-      const add = (k: string, v: string) => { out.measures.sums[k] = (out.measures.sums[k] ?? 0) + Number(v); };
+      if (armOut) armOut.tasks_with_measure++;
+      const add = (k: string, v: string) => { for (const sums of [out.measures.sums, armOut?.sums]) if (sums) sums[k] = (sums[k] ?? 0) + Number(v); };
       for (const [, k, v] of m[1].matchAll(/([a-zçğıöşü_]+)=(\d+)/gi)) add(k, v);
       const lines = /satır=\+(\d+)\/-(\d+)/i.exec(m[1]); // worker format: satır=+<eklenen>/-<silinen>
       if (lines) { add("satir_eklenen", lines[1]); add("satir_silinen", lines[2]); }
@@ -109,13 +115,13 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     signal(out.signals.test_itirazi, id, matches(questions, /\*\*Soru:\*\*\s*Test itirazı:/g));
     signal(out.signals.degisiklik_istegi, id, matches(getSection(t.body, "## Önceki raporlar") ?? "", /^### Önceki rapor #\d+/gm));
     signal(out.signals.karar, id, matches(progress, /^- \S+ \[KARAR\]/gm));
-    signal(out.signals.izin_reddi, id, matches(progress, /izin reddi|permission denied/gi));
+    signal(out.signals.izin_reddi, id, matches(progress, /[iİ]zin reddi|permission denied/gi));
 
     if (t.data.state === "cancelled") {
       out.cancelled.total++;
       // no dedicated field (and `error` may be left over from an earlier failed state): a reason is a timestamped
-      // İlerleme line whose text starts with iptal/cancel (optionally after [KARAR])
-      if (/^- \S+ (?:\[KARAR\] )?(?:iptal|cancel)/im.test(progress)) out.cancelled.with_reason++;
+      // İlerleme line whose text starts with iptal/İptal/cancel (optionally after [KARAR])
+      if (/^- \S+ (?:\[KARAR\] )?(?:[iİ]ptal|cancel)/im.test(progress)) out.cancelled.with_reason++;
       else out.cancelled.without_reason_ids.push(id);
     }
   }
@@ -148,13 +154,16 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   // rule dates and time-coherent coverage: a task is measured only against rules in force on its creation date
   out.rules.claude_md = lastChanged(home, "CLAUDE.md");
   for (const r of roles) out.rules.roles[r.slug] = lastChanged(home, `roles/${r.slug}.md`);
-  const created = new Map(listTasks().map((t) => [t.data.id, t.data.created]));
+  const allTasks = listTasks();
+  const created = new Map(allTasks.map((t) => [t.data.id, t.data.created]));
+  const ponytailOff = new Set(allTasks.filter((t) => t.data.experiment?.ponytail === "off").map((t) => t.data.id)); // A/B off arm: ponytail was left out on purpose
   const rows = new Map<string, CoverageRow>();
   const cov = out.skills.coverage;
   for (const t of usage.tasks) {
     const role = roles.find((r) => r.slug === t.role);
     if (!t.transcript || !role) continue;
     for (const s of role.skills) {
+      if (s === "ponytail" && ponytailOff.has(t.id)) continue;
       const key = `${role.slug}\u0000${s}`;
       const row = rows.get(key) ?? (() => {
         const at = roleSkillSince(home, `roles/${role.slug}.md`, s);

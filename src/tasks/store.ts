@@ -437,6 +437,13 @@ function transitionWith(id: string, to: TaskState, edit: (body: string) => strin
   return t;
 }
 
+/** Cancels with a mandatory reason, written to İlerleme as `İptal: <reason>` in the same save (the setup audit reads it). */
+export function cancelTask(id: string, reason: string): Task {
+  const r = reason.replace(/\s*[\r\n]+\s*/g, " ").trim(); // one line: a multi-line reason must not forge extra İlerleme entries
+  if (!r) throw new Error("iptal için gerekçe zorunlu: vlad task set <id> cancelled --reason \"<metin>\"");
+  return transitionWith(id, "cancelled", (b) => appendToSection(b, "## İlerleme", `- ${nowIso()} İptal: ${r}`));
+}
+
 export function askTask(id: string, q: string): Task {
   return transitionWith(id, "blocked", (b) =>
     appendToSection(b, "## Sorular", `- ${nowIso()} **Soru:** ${q}`));

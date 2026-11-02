@@ -59,6 +59,10 @@ Son kapı (`vlad/<çatı-id>` → ana branch) ayrı bir PR ve ayrı açık onayd
 
 Kapı yordamı (gate koşusu, ön kontrol, ingest-preview, kayıt dosyası yeniden üretimi, merge adımları) `integrate` skill'inde tek kaynaktır: kapı eyleminden önce `integrate` skill'ini **Skill aracıyla yükle** (komutları ezberden/kopyadan koşma) ve uygula. Skill yüklenemezse kapı eylemi **durur** ve kullanıcıya söylenir; sessiz yedek yok. Kırmızı gate'te merge önerme. **Merge, push ve PR yine açık onay ister.**
 
+### Uzak makinedeki görev (`vlad machine list`, görev bir işçiye yerleşmişse)
+
+Görev beyin dışında bir makinede koşuyorsa (`vlad task list --json` → görevin makinesi; config'te `machines` varken) kapı komutları yerel `git -C` yerine uzak op'larla yapılır (ayrıntı `integrate` skill'inde): `vlad task gate <id> [--target integration|task]`, `vlad task merge-preview <id> [--into <dal>]`, `vlad task merge <id> [--into <dal>] [--message …]`. Görev yerelse bu komutlar reddedilir (`/integrate` yerel akışı). Uzak `merge` push etmez (çakışmada geri alır); push/PR yine yalnız açık onayla. Makine kapalı/ulaşılamazsa komutlar çıkış kodu **75** (geçici hata) verir: sonra tekrar dene, yerelde elle merge etme. Ölü bir makinedeki belirsiz launch rezervasyonu ve pipeline pin'i `vlad task release <id>` ile bırakılır; işçi ulaşılamıyorsa `--force` (işçide yetim pencere kalabilir; kullanıcıya söyle).
+
 ## 2. `awaiting_approval` görevler
 
 `kind: pipeline` (çatı) ise adım 3'teki **son kapıya** git. Diğerleri için görevi `vlad kb get <id> --json` ile oku (arşivdekini de bulur; dosya yolunu varsayma) ve göster:
@@ -72,6 +76,8 @@ Kapı yordamı (gate koşusu, ön kontrol, ingest-preview, kayıt dosyası yenid
 **`role: tester` ise:** Tester hatayı kanıtlamak için kasıtlı başarısız testler commit'leyebilir. Raporun `### Kırmızı bırakılan testler` bölümünü seçeneklerden önce göster. Liste boş değilse merge ana branch'in test suite'ini kırmızıya çevirir; varsayılan öneri merge değil, `### Önerilen düzeltmeler`'den bir Developer görevi açmaktır (`/delegate`, `--role developer`, kabul kriteri: o testlerin yeşile dönmesi). Merge yine seçenek olarak kalır ama bu riski açıkça söyle.
 Pipeline'da kural entegrasyon branch'ine uyarlanır: `kabul`/`karakterizasyon` fazının kırmızı testleri beklenendir (developer'ın hedefi), entegrasyon branch'ine merge varsayılan öneridir. `doğrulama` fazında kırmızı test varsa varsayılan öneri, aynı çatı altında yeni bir `uygulama` fazı (developer, kabul kriteri: o testlerin yeşile dönmesi) ve ona bağlı yeni bir `doğrulama` fazı açmaktır (`/delegate` adım 4). Ana branch'e merge, doğrulama fazı yeşil bitmeden önerilmez.
 **Güvenlik incelemesi:** faz auth, yetki, oturum veya veri silmeye dokunuyorsa (rapor/diff'ten ya da fazın Tanım'ındaki işaretten anla) ya da VLAD güvenlik etkili bir kararı otonom vermişse, merge'den önce kısa bir güvenlik incelemesi yürüt: `security-reviewer` rolüyle arka plan agent'ı (yalnızca okur; `security-audit` skill'i guidance modunda; auth/yetki/oturum/silme yolları, girdi doğrulama, sır sızıntısı). Bulguları (önem + `dosya:satır`) kapıda göster. **Kademeli güvenlik kuralı:** kritik/yüksek bulgu varsa merge yok, değişiklik isteği (düzeltme fazı); orta/düşük/bilgi bulgular için değişiklik turu açılmaz: `vlad finding add` ile kaydedilir (deferred ya da open) ve son kapı listesine girer, faz merge edilebilir; faz başına en çok 1 güvenlik değişiklik turu, ikinci turda kalan yüksek bulgu kullanıcıya sorulur. İstisna (bulguya bağlı): orta bulgu yalnız şu iki koşul birlikte sağlanırsa tur açar: kartın `exposure`'ı `internet` ve bulgu dışarıdan doğrudan istismar edilebilir (kimlik doğrulamasız erişim, sır/anahtar sızıntısı, imza/onay atlatma, yetki yükseltme). VLAD'ın otonom verdiği güvenlik etkili kararı kullanıcıya açıkça söyle ve onay iste; sessizce geçme.
+
+**Test itirazı hızlı yolu listesi:** raporda `### Test itirazı (hızlı yol)` varsa kapıda her maddeyi gözden geçir: yalnız **mekanik** düzeltmeler (regex, sabit, bayrak, metin/dize, yeni geçerli değer) kabul edilir ve diff yalnız ilgili assert satırlarına dokunmalıdır (`git diff <taban>...HEAD -- <test dosyası>`). Testin **niyetini** değiştiren (bekleneni gevşeten, assert silen, senaryoyu atlayan) bir değişiklik hızlı yol sayılmaz: merge önerme, kullanıcıya göster ve "Test itirazı" akışına (adım 4) çevir ya da değişiklik iste. Liste kullanıcıya özetlenir; tester görevi açıksa ona `vlad task log <tester-id>` ile bilgi düş.
 
 **Entegrasyon öncesi kontrol (yalnız pipeline dev fazı, `parent` dolu):** raporun `### Test sonuçları`'nda entegrasyon branch'i merge + lint + gate sonucu yoksa veya kırmızıysa (çakışma, kırmızı) merge önerme; çalışana düzeltme iste (seçenek 3). Tek görevde (`parent` boş) entegrasyon branch'i yoktur, bu kanıt istenmez. Raporda yeşilse kapıdaki doğrulamayı yine de yap.
 
@@ -89,7 +95,7 @@ Sonra seçenekleri sun:
    `vlad task log <id> "Değişiklik isteği: <özet>"` ve `vlad task set <id> running --json`.
    Çalışanın session'ı açıksa (`ListAgents`) ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder; kapalıysa kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa `claude --continue`. Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır (`/delegate` 5b).
 4. **Olduğu gibi kabul et** (dışa eylem yok). Pipeline **dev** fazında sunma: merge'süz `done`, bağımlı fazların bu değişikliği görmeden başlaması demektir (spec §2, §6). Kullanıcı yine de isterse bu sonucu açıkça söyle ve bağımlı fazları başlatmadan önce ayrıca onay al.
-5. **İptal et:** `vlad task set <id> cancelled --json`, ardından `vlad task cleanup <id> --json`.
+5. **İptal et:** gerekçe **zorunludur** (`--reason` olmadan CLI hata verir); kullanıcıdan kısa gerekçeyi al, yoksa sor. `vlad task set <id> cancelled --reason "<gerekçe>" --json` gerekçeyi `## İlerleme`'ye `İptal: <gerekçe>` olarak yazar (`/setup-audit` bunu sayar); ardından `vlad task cleanup <id> --json`.
 
 Seçenek 1, 2 veya 4 tamamlandıktan sonra:
 ```
@@ -151,7 +157,7 @@ Retro ve "nerede kalmıştık" soruları için kart/günlük dosyalarını başt
 **Faz `failed`/`cancelled`:** bağımlı fazlar `queued` kalır. Ağaçta göster ve seçenekleri sun:
 - **Fazı yeniden oluştur:** aynı faz/rol/bağımlılıkla yeni görev (`/delegate` adım 4). Eski faza bağlı `queued` fazları iptal etmeden yeni ID'ye bağla: `vlad task deps <bağımlı-id> --set <yeni-id,…>` (yalnız `queued` fazda; doğrulama ve döngü kontrolü CLI'dadır).
 - **Bağımlılığı kaldırarak devam et:** bağımlı fazları `cancelled` yapıp o bağımlılık olmadan yeniden oluştur, sonra `vlad task ready --parent <çatı-id> --json`.
-- **Pipeline'ı iptal et:** açık tüm fazlar için `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`, sonra çatı için aynısı.
+- **Pipeline'ı iptal et:** açık tüm fazlar için `vlad task set <id> cancelled --reason "<gerekçe>" --json` + `vlad task cleanup <id> --json`, sonra çatı için aynısı.
 Kullanıcı döngüyü ortada büyütmek/küçültmek isterse de böyle: çatı altına faz ekle veya fazı iptal et; mevcut fazlar korunur.
 
 ## 4. `blocked` görevler
@@ -172,14 +178,15 @@ Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
   - Gömülü istemci (vlad-desktop) için `vlad task resume <id> --external --json` devam prompt'lu betik yazar ve `script`/`command`/`cwd` döner (terminal açmaz). Çalışan penceresini kapatmak için `vlad task close-window <id>` (durum ve worktree değişmez). Yan etkisiz durum okuması: `vlad status --json --no-mark`.
   - `mode: "cloud"`: `stalled` ise `vlad task set <id> running --json`; `args` ile `send_message` çağır (`session_id`, `message`). Bu bir dış eylem değil, mevcut çalışana devam mesajıdır.
   Kesilen çalışanları (oturum limiti, çökme) bu yolla sürdür; yeni görev açma.
-- **İptal:** `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`.
+- **Uzak makine erişilemiyor:** `error: makine erişilemiyor: <ad>` ile `stalled` olan görevde önce `vlad machine ping <ad>`; makine dönünce `vlad task resume <id> --json` işçide `claude --resume` ile sürdürür (çıkış kodu 75 = geçici, tekrar dene). Makine kalıcı ölüyse `vlad task release <id> --force` rezervasyonu bırakır; yetim pencere riskini kullanıcıya söyle.
+- **İptal:** `vlad task set <id> cancelled --reason "<gerekçe>" --json` + `vlad task cleanup <id> --json`.
 
 ## 6. Hatalı görevler (`failed` listesi)
 
 `vlad status --json` çıktısındaki `failed` listesini kullan; her biri için `error` alanını göster.
-- **`failed` durumundaki dev görevi** (birincil öneri): `vlad task set <id> cancelled --json` → `vlad task cleanup <id> --json` → kullanıcıya yeni bir görev oluşturmayı (`/delegate`) öner. Pipeline fazıysa adım 3'teki "faz `failed`/`cancelled`" seçeneklerini sun.
+- **`failed` durumundaki dev görevi** (birincil öneri): `vlad task set <id> cancelled --reason "<gerekçe>" --json` → `vlad task cleanup <id> --json` → kullanıcıya yeni bir görev oluşturmayı (`/delegate`) öner. Pipeline fazıysa adım 3'teki "faz `failed`/`cancelled`" seçeneklerini sun.
 - **`queued` durumunda `error` dolu görev** (launch başarısız olmuş, worktree geri alınmıştır): yalnızca `vlad task launch <id> --json` ile yeniden dene.
-- İstersen iptal de sunulur: `vlad task set <id> cancelled --json` + `vlad task cleanup <id> --json`. Worktree zaten varsa `launch` durur; üzerine yazma, kullanıcıya sor.
+- İstersen iptal de sunulur: `vlad task set <id> cancelled --reason "<gerekçe>" --json` + `vlad task cleanup <id> --json`. Worktree zaten varsa `launch` durur; üzerine yazma, kullanıcıya sor.
 
 ## 7. Hafızayı commit'le
 
