@@ -138,7 +138,8 @@ describe("sahte süreç listesiyle stalled tespiti (kb üzerinde)", () => {
   });
 });
 
-describe("test ortamında gerçek launcher reddi", () => {
+// tasklist is Windows-only (F-vlad-076)
+describe.skipIf(process.platform !== "win32")("test ortamında gerçek launcher reddi", () => {
   const countClaude = () => {
     const r = spawnSync("tasklist", { encoding: "utf8" });
     return (r.stdout.match(/claude/gi) ?? []).length;
