@@ -109,13 +109,13 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     signal(out.signals.test_itirazi, id, matches(questions, /\*\*Soru:\*\*\s*Test itirazı:/g));
     signal(out.signals.degisiklik_istegi, id, matches(getSection(t.body, "## Önceki raporlar") ?? "", /^### Önceki rapor #\d+/gm));
     signal(out.signals.karar, id, matches(progress, /^- \S+ \[KARAR\]/gm));
-    signal(out.signals.izin_reddi, id, matches(progress, /izin reddi|permission denied/gi));
+    signal(out.signals.izin_reddi, id, matches(progress, /[iİ]zin reddi|permission denied/gi));
 
     if (t.data.state === "cancelled") {
       out.cancelled.total++;
       // no dedicated field (and `error` may be left over from an earlier failed state): a reason is a timestamped
-      // İlerleme line whose text starts with iptal/cancel (optionally after [KARAR])
-      if (/^- \S+ (?:\[KARAR\] )?(?:iptal|cancel)/im.test(progress)) out.cancelled.with_reason++;
+      // İlerleme line whose text starts with iptal/İptal/cancel (optionally after [KARAR])
+      if (/^- \S+ (?:\[KARAR\] )?(?:[iİ]ptal|cancel)/im.test(progress)) out.cancelled.with_reason++;
       else out.cancelled.without_reason_ids.push(id);
     }
   }

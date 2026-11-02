@@ -153,6 +153,15 @@ describe("auditSetup", () => {
     expect(a).not.toBe(b);
   });
 
+  it("recognises Turkish capital İ: 'İptal: …' reason and 'İzin reddi' signal (JS /i does not fold İ to i)", () => {
+    const a = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 İptal: kullanıcı vazgeçti"] });
+    const b = task({ at: "2026-10-28", progress: ["- 2026-10-28T11:00:00+03:00 İzin reddi: git push"] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.cancelled).toEqual({ total: 1, with_reason: 1, without_reason_ids: [] });
+    expect(r.signals.izin_reddi).toEqual({ tasks: 1, count: 1, examples: [b] });
+    expect(a).not.toBe(b);
+  });
+
   it("does not take a leftover error value or mid-sentence 'iptal' as a cancellation reason", () => {
     const id = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 iptal edilen test geçti sanıldı"].map((l) => l.replace("iptal edilen", "test: iptal edilen")) });
     const t = getTask(id);
