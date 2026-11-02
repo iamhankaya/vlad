@@ -1,3 +1,4 @@
+import { isolatedEnv } from "./isolate-env.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +14,7 @@ beforeEach(() => { home = makeHome(); });
 
 function vlad(args: string[], input?: string, extraEnv: Record<string, string> = {}) {
   const r = spawnSync("node", [cli, ...args], {
-    encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home, ...extraEnv },
+    encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: home, ...extraEnv },
   });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }

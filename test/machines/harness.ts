@@ -1,3 +1,4 @@
+import { isolatedEnv } from "../isolate-env.js";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -79,14 +80,14 @@ export function makeHomePair(o: { config?: object; brain?: string; worker?: stri
 
 export interface SpawnResult { code: number | null; out: string; err: string }
 export function spawnVlad(side: Side, argv: string[], o: { stdin?: string; env?: Record<string, string> } = {}): SpawnResult {
-  const r = spawnSync(process.execPath, [CLI, ...argv], { encoding: "utf8", input: o.stdin, env: { ...process.env, ...side.env, ...o.env } });
+  const r = spawnSync(process.execPath, [CLI, ...argv], { encoding: "utf8", input: o.stdin, env: { ...isolatedEnv(), ...side.env, ...o.env } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 
 export interface RunningAgent { port: number; host: string; proc: ChildProcess; stop(): Promise<void> }
 /** Gerçek alt süreç: `vlad agent start --port 0 --print-port`; ilk stdout satırı `{"listening":{"host","port"}}` (B gerçekler). */
 export async function startAgent(side: Side, o: { nowFile?: string; test?: Record<string, string>; timeoutMs?: number } = {}): Promise<RunningAgent> {
-  const env = { ...process.env, ...side.env, ...(o.nowFile ? { VLAD_NOW_FILE: o.nowFile } : {}), ...(o.test ? { VLAD_AGENT_TEST: "1", ...o.test } : {}) };
+  const env = { ...isolatedEnv(), ...side.env, ...(o.nowFile ? { VLAD_NOW_FILE: o.nowFile } : {}), ...(o.test ? { VLAD_AGENT_TEST: "1", ...o.test } : {}) };
   const proc = spawn(process.execPath, [CLI, "agent", "start", "--port", "0", "--print-port"], { env, stdio: ["ignore", "pipe", "pipe"] });
   let errBuf = "";
   proc.stderr!.on("data", (d: Buffer) => { if (errBuf.length < 4000) errBuf += d; }); // dolu boru Agent'ı asmasın; hata mesajı için ilk 4 KB tutulur
