@@ -15,6 +15,7 @@
     "cloudKb": { "enum": ["readonly", "inline"] },
     "experiments": { "type": "object", "additionalProperties": false, "properties": { "ponytail": { "enum": ["ab"] } } },
     "workerAutoCompact": { "type": "string", "pattern": "^([0-9]+(\\.[0-9]+)?[kKmM]?)?$" },
+    "memoryDirs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "kbDir": { "type": "string", "minLength": 1 },
     "brain": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "consoles": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } } } },
