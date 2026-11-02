@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OP_TABLE } from "../../src/agent/ops/index.js";
-import { capText, checkMergeRefs, conflictsOf } from "../../src/agent/ops/gate.js";
+import { capText, checkExpectHead, checkMergeRefs, conflictsOf } from "../../src/agent/ops/gate.js";
 
 const T = { id: "T20261101-33", parent: "T20261101-19", defaultBranch: "master" };
 
@@ -28,6 +28,12 @@ describe("machines:C4 kapı op'ları — saf yardımcılar", () => {
     const root = { id: "T20261101-19", parent: null };
     expect(() => checkMergeRefs({ ...root }, "vlad/T20261101-19", "master")).toThrow(/bad_request/);
     expect(() => checkMergeRefs({ ...root, defaultBranch: "-evil" }, "vlad/T20261101-19", "-evil")).toThrow(/bad_request/);
+  });
+
+  it("checkExpectHead: aynı sha geçer; dal ilerlemişse reddedilir ve gate'in yeniden koşulması istenir", () => {
+    const a = "a".repeat(40), b = "b".repeat(40);
+    expect(() => checkExpectHead("vlad/T1", a, a)).not.toThrow();
+    expect(() => checkExpectHead("vlad/T1", b, a)).toThrow(/yeniden koş/);
   });
 
   it("capText: sınır altı aynen; sınır üstü sondan kırpılır ve işaretlenir", () => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { AgentOp, RemoteTransport } from "../../src/machines/index.js";
-import { gateMachineOf, remoteGateRun, remoteMerge, remoteMergePreview } from "../../src/machines/remote.js";
+import { gateMachineOf, recordGreenGate, remoteGateRun, remoteMerge, remoteMergePreview } from "../../src/machines/remote.js";
 import { writeProject } from "../../src/projects/store.js";
 import { createTask, getTask, setState } from "../../src/tasks/index.js";
 import { makeHome, rmTemp } from "../helpers.js";
@@ -15,6 +15,7 @@ const fake = (reply: unknown = {}): RemoteTransport & { calls: Call[] } => {
   return { calls, async call(to, op, args, o) { calls.push({ to, op, args, timeoutMs: o?.timeoutMs }); return { opId: "o", result: reply as never }; } };
 };
 
+const SHA = "a".repeat(40), SHA2 = "b".repeat(40);
 let base: string; let home: string;
 const card = (slug: string, path: string, extra = "") => writeProject(slug, `---
 slug: ${slug}
@@ -68,14 +69,17 @@ describe("machines:C4 beyin tarafı kapı çağrıları", () => {
     const p = pipeline();
     const f = dev({ parent: p, phase: "uygulama" });
     const t = fake({ log: "", diffStat: "", conflicts: [], head: "abc", merged: true });
+    recordGreenGate(f, { exit: 0, stdout: "", stderr: "", head: SHA });
     await remoteMergePreview(t, "windows", getTask(f));
     await remoteMerge(t, "windows", getTask(f), { message: "faz kapısı" });
+    expect(t.calls[1]!.args.expectHead).toBe(SHA); // aynı sha: akış değişmez, head işçiye karşılaştırma için gider
     expect(t.calls.map((c) => [c.op, c.args.from, c.args.into, c.args.message])).toEqual([
       ["merge-preview", `vlad/${f}`, `vlad/${p}`, undefined],
       ["merge", `vlad/${f}`, `vlad/${p}`, "faz kapısı"],
     ]);
     const solo = dev();
     const t2 = fake({ head: "abc", merged: true });
+    recordGreenGate(solo, { exit: 0, stdout: "", stderr: "", head: SHA });
     await remoteMerge(t2, "windows", getTask(solo));
     expect(t2.calls[0]!.args).toMatchObject({ from: `vlad/${solo}`, into: "main" });
   });
@@ -86,5 +90,18 @@ describe("machines:C4 beyin tarafı kapı çağrıları", () => {
     const t = fake();
     await expect(remoteMerge(t, "windows", getTask(id))).rejects.toThrow(/default_branch/);
     expect(t.calls).toHaveLength(0);
+  });
+
+  it("remoteMerge: yeşil gate kaydı yoksa ya da kırmızıysa istek gitmeden reddedilir; son yeşil kayıt kullanılır", async () => {
+    const id = dev();
+    const t = fake({ head: "abc", merged: true });
+    await expect(remoteMerge(t, "windows", getTask(id))).rejects.toThrow(/yeşil gate kaydı yok/);
+    recordGreenGate(id, { exit: 1, stdout: "", stderr: "", head: SHA }); // kırmızı kaydedilmez
+    await expect(remoteMerge(t, "windows", getTask(id))).rejects.toThrow(/yeşil gate kaydı yok/);
+    expect(t.calls).toHaveLength(0);
+    recordGreenGate(id, { exit: 0, stdout: "", stderr: "", head: SHA });
+    recordGreenGate(id, { exit: 0, stdout: "", stderr: "", head: SHA2 });
+    await remoteMerge(t, "windows", getTask(id));
+    expect(t.calls[0]!.args.expectHead).toBe(SHA2);
   });
 });
