@@ -144,6 +144,25 @@ describe("auditSetup", () => {
     expect(r.measures.sums).toEqual({ dosya: 2, yeni_test: 1 });
   });
 
+  it("splits measure sums by the ponytail experiment arm (tasks without the field are in neither)", () => {
+    const withArm = (arm: "on" | "off", measure: string) => {
+      const id = task({ at: "2026-10-28", closing: `### Yapılanlar\n${measure}\n` });
+      const t = getTask(id);
+      t.data.experiment = { ponytail: arm };
+      writeDoc(t.file, t.data, t.body);
+    };
+    withArm("on", "Ölçüm: dosya=3 yeni_test=2");
+    withArm("on", "Ölçüm: dosya=1 yeni_test=1");
+    withArm("off", "Ölçüm: dosya=5 yeni_test=4");
+    task({ at: "2026-10-28", closing: "### Yapılanlar\nÖlçüm: dosya=9\n" });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.measures.by_ponytail).toEqual({
+      on: { tasks: 2, tasks_with_measure: 2, sums: { dosya: 4, yeni_test: 3 } },
+      off: { tasks: 1, tasks_with_measure: 1, sums: { dosya: 5, yeni_test: 4 } },
+    });
+    expect(r.measures.sums.dosya).toBe(18); // totals still include every task
+  });
+
   it("splits cancelled tasks by whether a reason is recorded", () => {
     const a = task({ at: "2026-10-28", state: "cancelled", progress: ["- 2026-10-28T11:00:00+03:00 iptal: kullanıcı vazgeçti"] });
     const b = task({ at: "2026-10-28", state: "cancelled" });

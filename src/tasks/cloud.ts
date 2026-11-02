@@ -4,6 +4,8 @@ import { join, relative, resolve } from "node:path";
 import { getSection, getVladHome, kbPaths, kbRelativePath, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
+import { ponytailArm, withoutPonytail } from "./experiment.js";
+import type { PonytailArm } from "./experiment.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState, syncAutonomy, unmetDependencies } from "./store.js";
@@ -337,11 +339,14 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   let res: CloudLaunch;
   const warnings: string[] = [];
   let kb: CloudKb = "inline";
+  let arm: PonytailArm | undefined;
   const rawSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
   const vladSession = rawSession ? toSessionId(rawSession) : rawSession;
   try {
     kb = o.cloudKb ?? loadConfig().cloudKb ?? "inline";
-    const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
+    const role0 = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
+    arm = ponytailArm(id, role0, loadConfig());
+    const role = arm === "off" && role0 ? withoutPonytail(role0) : role0;
     assertPathSafe(task);
     const unmet = unmetDependencies(task);
     if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
@@ -408,6 +413,6 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
     saveTask(t);
     throw new Error(msg);
   }
-  setState(id, "running", { branch, worktree: null, error: null });
+  setState(id, "running", { branch, worktree: null, error: null, ...(arm ? { experiment: { ponytail: arm } } : {}) });
   return res;
 }

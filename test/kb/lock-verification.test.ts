@@ -86,7 +86,7 @@ describe("F-vlad-096 doğrulama: yük altında eşzamanlılık", { timeout: 300_
         ];
         if (f.code === 0) { findingIds.push(JSON.parse(f.out).id); rs.push(await vlad(["finding", "set", JSON.parse(f.out).id, "deferred"], "", env)); }
         if (d.code === 0) decisionIds.push(JSON.parse(d.out).id);
-        rs.push(await vlad(["task", "set", t.id, "cancelled"], "", env));
+        rs.push(await vlad(["task", "set", t.id, "cancelled", "--reason", "yük testi"], "", env));
         for (const r of rs) if (r.code !== 0) failures.push(r.err.trim());
       }
     };
@@ -189,7 +189,7 @@ describe("F-vlad-096 doğrulama: zaman aşımı ve okuma", { timeout: 120_000 },
       [["decision", "add", "--project", "alpha", "--title", "D", "--body-file", "-", "--json"], "k\n"],
       [["journal", "append", "2026-11-01", "--file", "-"], "## alpha\n- x\n"],
       [["project", "note", "alpha", "n", "--json"], ""],
-      [["task", "set", id, "cancelled", "--json"], ""],
+      [["task", "set", id, "cancelled", "--reason", "yük testi", "--json"], ""],
     ];
     for (const [a, input] of writes) {
       const aj = a.includes("--json") ? a : [...a, "--json"]; // hata JSON biçimi yalnız --json ile

@@ -82,6 +82,8 @@ export interface TaskData {
   launch_op?: string | null;
   /** `task release --force` ile işçiye sorulmadan bırakılan launch op'ları: işçide başlamış olabilirler, makine erişilebilir olunca iptal edilir (F-vlad-150). */
   released_ops?: { machine: string; op: string }[] | null;
+  /** ponytail A/B (config `experiments.ponytail: "ab"`): hangi kolda koşuldu; deney dışı görevde yok. */
+  experiment?: { ponytail: "on" | "off" } | null;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";
@@ -159,4 +161,6 @@ export interface VladConfig {
   machines?: MachineDef[];
   brain?: string;
   consoles?: ConsoleDef[];
+  /** Deneyler (varsayılan kapalı; VLAD açar). `ponytail: "ab"`: developer/game-developer görevlerinde ID'nin son hanesi tekse ponytail yüklenmez. */
+  experiments?: { ponytail?: "ab" };
 }

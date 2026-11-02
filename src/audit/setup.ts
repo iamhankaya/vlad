@@ -14,13 +14,15 @@ const STALE_DAYS = 30;
 const EXAMPLES = 5;
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
+export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: Record<string, number> }
 export interface Signal { tasks: number; count: number; examples: string[] }
 type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
 interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
 export interface SetupAudit {
   since: string;
   tasks: { total: number; ids: string[]; by_role: Record<string, number>; by_phase: Record<string, number>; by_model: Record<string, number> };
-  measures: { tasks_with_measure: number; sums: Record<string, number> };
+  /** `by_ponytail`: the same sums split by the task's `experiment.ponytail` arm (T20261102-16); tasks outside the experiment are in neither. */
+  measures: { tasks_with_measure: number; sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
   open_points: { total: number; by_severity: Record<string, number> };
   signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal };
   cancelled: { total: number; with_reason: number; without_reason_ids: string[] };
@@ -64,7 +66,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   const out: SetupAudit = {
     since,
     tasks: { total: tasks.length, ids: tasks.map((t) => t.data.id).sort(), by_role: {}, by_phase: {}, by_model: {} },
-    measures: { tasks_with_measure: 0, sums: {} },
+    measures: { tasks_with_measure: 0, sums: {}, by_ponytail: { on: { tasks: 0, tasks_with_measure: 0, sums: {} }, off: { tasks: 0, tasks_with_measure: 0, sums: {} } } },
     open_points: { total: 0, by_severity: {} },
     signals: {
       test_itirazi: { tasks: 0, count: 0, examples: [] }, degisiklik_istegi: { tasks: 0, count: 0, examples: [] },
@@ -90,9 +92,13 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     const closing = getSection(t.body, "## Kapanış raporu") ?? "";
     // line start only: template text ("Ölçüm satırı…") or a quoted example is not a measure
     const m = [...closing.matchAll(/^Ölçüm:(.*)$/gm)].pop();
+    const arm = t.data.experiment?.ponytail;
+    const armOut = arm ? out.measures.by_ponytail[arm] : undefined;
+    if (armOut) armOut.tasks++;
     if (m) {
       out.measures.tasks_with_measure++;
-      const add = (k: string, v: string) => { out.measures.sums[k] = (out.measures.sums[k] ?? 0) + Number(v); };
+      if (armOut) armOut.tasks_with_measure++;
+      const add = (k: string, v: string) => { for (const sums of [out.measures.sums, armOut?.sums]) if (sums) sums[k] = (sums[k] ?? 0) + Number(v); };
       for (const [, k, v] of m[1].matchAll(/([a-zçğıöşü_]+)=(\d+)/gi)) add(k, v);
       const lines = /satır=\+(\d+)\/-(\d+)/i.exec(m[1]); // worker format: satır=+<eklenen>/-<silinen>
       if (lines) { add("satir_eklenen", lines[1]); add("satir_silinen", lines[2]); }

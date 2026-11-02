@@ -218,7 +218,7 @@ describe.runIf(onLinux)("senaryo 6: pipeline fazı", { timeout: 30_000 }, () => 
   it("çatı görev kapalıysa faz başlatılamaz (yerel davranışla aynı)", () => {
     const parent = JSON.parse(vlad(home, ["task", "new", "--project", "alpha", "--title", "P", "--kind", "pipeline", "--json"]).out).id as string;
     const phase = newTask(home, ["--parent", parent, "--phase", "kabul"]);
-    expect(vlad(home, ["task", "set", parent, "cancelled", "--json"]).code).toBe(0);
+    expect(vlad(home, ["task", "set", parent, "cancelled", "--reason", "test", "--json"]).code).toBe(0);
     expect(launch(phase, CLOUD_ENV).code).toBe(1);
     expect(taskState(home, phase)).toBe("queued");
   });

@@ -23,6 +23,8 @@ import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { expireMode, modeLine } from "../mode/store.js";
 import { untrustWorktree } from "./trust.js";
+import { ponytailArm, withoutPonytail } from "./experiment.js";
+import type { PonytailArm } from "./experiment.js";
 import { ensureIntegrationGit, launchCore } from "./launch-core.js";
 import { nowMs } from "../machines/clock.js";
 import { capsOf, machineLoad, pickMachine } from "../machines/placement.js";
@@ -267,8 +269,11 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   let wt: string;
   let role: Role | undefined;
   let base: string | undefined;
+  let arm: PonytailArm | undefined;
   try {
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
+    arm = ponytailArm(id, role, cfg);
+    if (arm === "off") role = withoutPonytail(role!);
     repo = projectPath(task.data.project);
     wt = worktreePath(cfg, repo, id, process.platform as "win32" | "darwin" | "linux");
     // a pipeline phase branches from the pipeline's integration branch; the rollback in launchCore leaves it alone
@@ -279,6 +284,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     throw new Error(msg);
   }
   const model = effectiveModel(task.data, role);
+  const experiment = arm ? { ponytail: arm } : undefined;
   const autoCompact = cfg.workerAutoCompact;
   // yerel (brain) yerleşim de kapasiteyi kilit altında ayırır (placeTask'ın kontrolü kilitsizdi: eşzamanlı iki launch ikisi de açılırdı)
   // ve çatıyı pencere açılmadan önce sabitler: eşzamanlı uzak kardeş faz başka makineye kayamaz
@@ -326,7 +332,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
   try {
     return await withKbLock(() => {
-      const t = setState(id, "running", { branch, worktree: wt, error: null, ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : {}) });
+      const t = setState(id, "running", { branch, worktree: wt, error: null, ...(experiment ? { experiment } : {}), ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : {}) });
       if (patch.machine) pinPipeline(t.data.parent, patch.machine);
       return t;
     });
@@ -445,13 +451,15 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     return opId;
   });
 
+  // the adopt path (op-status 'done') commits before the role is built below, so the arm is derived here, not from that scope
+  const armNow = (): PonytailArm | undefined => { try { return ponytailArm(id, task.data.role ? roleFor(task.data.role, task.data.kind) : undefined, cfg); } catch { return undefined; } };
   /** Verify the reservation is still ours, then record the running task (kb lock). */
   const commit = (opId: string, r: RemoteLaunched): Promise<Task> => withKbLock(() => {
     const t = getTask(id);
     if (t.data.launch_op !== opId || t.data.state !== "queued") {
       throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); yazılmadı`);
     }
-    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null });
+    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null, ...(armNow() ? { experiment: { ponytail: armNow()! } } : {}) });
     if (r.integration && parent) recordIntegration(parent, task.data.project, r.integration.branch, r.integration.worktree);
     pinPipeline(parent, machine);
     return run;
@@ -472,7 +480,9 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   }
   if (parent && CLOSED.includes(getTask(parent).data.state)) throw new Error(`çatı görev ${parent} ${getTask(parent).data.state}; fazı başlatılamaz`);
   // built before the reservation: a missing role file must not leave a reservation behind
-  const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
+  const role0 = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
+  const arm = ponytailArm(id, role0, cfg);
+  const role = arm === "off" && role0 ? withoutPonytail(role0) : role0;
   const model = effectiveModel(task.data, role);
   const def = card.default_branch ?? undefined;
   const args = {

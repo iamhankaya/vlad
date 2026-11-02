@@ -628,6 +628,7 @@ def(audit, "setup", "Kurulum denetimi verisi (salt okuma): biten görevler, öl�
   out(o, r, [
     `aralık: ${r.since} → ${r.tasks.total} biten görev`,
     `ölçüm: ${r.measures.tasks_with_measure} görevde; ${Object.entries(r.measures.sums).map(([k, v]) => `${k}=${v}`).join(" ") || "-"}`,
+    ...(r.measures.by_ponytail.on.tasks + r.measures.by_ponytail.off.tasks ? [`ponytail A/B: ` + (['on', 'off'] as const).map((k) => `${k} ${r.measures.by_ponytail[k].tasks} görev (${r.measures.by_ponytail[k].tasks_with_measure} ölçümlü; ${Object.entries(r.measures.by_ponytail[k].sums).map(([n, v]) => `${n}=${v}`).join(' ') || '-'})`).join(' | ')] : []),
     `açık nokta: ${r.open_points.total} (${sev})`,
     `işaretler: test itirazı ${sg.test_itirazi.count}, değişiklik turu ${sg.degisiklik_istegi.count}, [KARAR] ${sg.karar.count}, izin reddi ${sg.izin_reddi.count}`,
     `skill: ${r.skills.inventory.length} envanterde, ${r.skills.unused.length} hiç yüklenmemiş (${r.skills.transcripts} oturum kaydı); rol skill oranı ${r.skills.coverage.rate === null ? "-" : `%${Math.round(r.skills.coverage.rate * 100)} (${r.skills.coverage.loaded}/${r.skills.coverage.expected}, kuraldan önceki ${r.skills.coverage.skipped_before_rule} atlandı)`}`,
