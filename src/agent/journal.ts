@@ -6,6 +6,22 @@ import { JOURNAL_RETENTION_DAYS, type AgentOp, type OpMeta, type OpRecord } from
 /** Günlükte saklanan sonuç üst sınırı (bayt); ötesi kırpılır (F-vlad-127). Canlı yanıt tam sonucu taşır, yalnız replay kırpılmış kaydı görür. */
 const MAX_RESULT_BYTES = 64 * 1024;
 
+/** Yan etkili işlemler: sonucu kırpılıp "bilinmiyor" bırakılırsa tekrar uygulanabilir; bunlar kırpma yerine küçük sabit özet saklar (F-vlad-152). */
+const SUMMARIZED_OPS: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "merge", "apply-write"]);
+const SUMMARY_STR_MAX = 256;
+/** Skaler alanlar (exit, branch, worktree…) korunur, uzun dizgiler kısaltılır, iç içe/büyük değerler düşer. */
+function summarize(result: unknown, bytes: number): Record<string, unknown> {
+  const out: Record<string, unknown> = { __journalSummary: true, bytes };
+  if (result && typeof result === "object") {
+    for (const [k, v] of Object.entries(result as Record<string, unknown>)) {
+      if (typeof v === "string") out[k] = v.length > SUMMARY_STR_MAX ? v.slice(0, SUMMARY_STR_MAX) + "…" : v;
+      else if (typeof v === "number" || typeof v === "boolean" || v === null) out[k] = v;
+      else if (k === "integration" && v && typeof v === "object") out[k] = summarize(v, 0); // launch'ın pipeline entegrasyon worktree'si commit'te gerekir
+    }
+  }
+  return out;
+}
+
 /** Günlük kaydı; `meta` yalnız uzlaştırmanın bıraktığı notlar (recovered/uncertain). */
 export interface JournalRecord extends OpRecord { meta?: OpMeta; /** yalnız uzlaştırması argüman isteyen işlemlerde, `started` süresince */ args?: unknown }
 
@@ -39,7 +55,7 @@ export class Journal {
     if (!prev) throw new Error(`günlükte yok: ${opId}`);
     const { args: _args, ...rest } = prev; // sonuçlanınca argüman günlükte tutulmaz
     const size = result === undefined ? 0 : Buffer.byteLength(JSON.stringify(result));
-    const kept = size > MAX_RESULT_BYTES ? { __journalTruncated: true, bytes: size } : result;
+    const kept = size <= MAX_RESULT_BYTES ? result : SUMMARIZED_OPS.has(prev.op) ? summarize(result, size) : { __journalTruncated: true, bytes: size };
     const rec: JournalRecord = { ...rest, state, ts: this.now(), ...(kept !== undefined ? { result: kept } : {}), ...(meta ? { meta } : {}) };
     this.put(rec);
     for (const w of this.waiters.get(opId)?.splice(0) ?? []) w(rec);

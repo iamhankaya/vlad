@@ -9,7 +9,7 @@ import { RemoteError } from "../../src/machines/index.js";
 import type { AgentOp, RemoteTransport } from "../../src/machines/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { createTask, getTask, saveTask, setState } from "../../src/tasks/index.js";
-import { launchTask, releaseTask } from "../../src/tasks/launch.js";
+import { launchTask, releaseTask, releaseWarning } from "../../src/tasks/launch.js";
 import { makeHome, rmTemp } from "../helpers.js";
 
 const git = (cwd: string, ...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd, stdio: "pipe", encoding: "utf8" });
@@ -120,6 +120,59 @@ describe("F-vlad-125/142: belirsiz uzak launch rezervasyonu serbest bırakılır
     await releaseTask(a, { cfg, transport: dead.t, force: true });
     expect(getTask(a).data).toMatchObject({ machine: null, launch_op: null });
     expect(getTask(pipe).data.machine ?? null).toBeNull();
+  });
+
+  describe("F-vlad-150: --force ile bırakılan op işçide başlamış olabilir → released_ops + makine dönünce iptal", () => {
+    async function forced() {
+      const { a } = await stuck();
+      const op = getTask(a).data.launch_op!;
+      await releaseTask(a, { cfg, transport: fakeTransport({}).t, force: true });
+      return { a, op };
+    }
+
+    it("--force bırakması op'u released_ops'ta saklar ve CLI uyarısı yetim riskini yazar; normal bırakma saklamaz", async () => {
+      const { a, op } = await forced();
+      const t = getTask(a);
+      expect(t.data.released_ops).toEqual([{ machine: "windows", op }]);
+      expect(releaseWarning(t)).toMatch(/yetim/);
+      const { a: b } = await stuck();
+      await releaseTask(b, { cfg, transport: fakeTransport({ "op-status": () => ({ state: "cancelled" }) }).t });
+      expect(getTask(b).data.released_ops ?? []).toEqual([]);
+      expect(releaseWarning(getTask(b))).toBeNull();
+    });
+
+    it("makine erişilebilir olunca sonraki launch, launch'tan önce op-status cancel:true gönderir ve kaydı temizler", async () => {
+      const { a, op } = await forced();
+      const f = fakeTransport({ ...ok, "op-status": () => ({ state: "cancelled" }), launch: () => launched });
+      await launchTask(a, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });
+      const cancel = f.calls.findIndex((c) => c.op === "op-status" && c.args.target === op && c.args.cancel === true);
+      const launch = f.calls.findIndex((c) => c.op === "launch");
+      expect(cancel).toBeGreaterThanOrEqual(0);
+      expect(cancel).toBeLessThan(launch);
+      expect(getTask(a).data.released_ops ?? []).toEqual([]);
+    });
+
+    it("released op iptali başarısız olursa (zaman aşımı/geçici hata) launch durur, kayıt kalır; sonraki denemede yeniden uzlaştırılır", async () => {
+      const { a, op } = await forced();
+      let fail = true;
+      const f = fakeTransport({ ...ok, "op-status": () => { if (fail) throw uncertain(); return { state: "cancelled" }; }, launch: () => launched });
+      await expect(launchTask(a, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow(/iptal edilemedi/);
+      expect(f.ops("launch")).toHaveLength(0);
+      expect(getTask(a).data.released_ops).toEqual([{ machine: "windows", op }]);
+      fail = false;
+      await launchTask(a, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });
+      expect(f.ops("launch")).toHaveLength(1);
+      expect(getTask(a).data.released_ops ?? []).toEqual([]);
+    });
+
+    it("işçide bırakılan launch gerçekten başlamışsa yeni launch yapılmaz, yetim worktree'yi söyleyen hata verilir", async () => {
+      const { a, op } = await forced();
+      const f = fakeTransport({ ...ok, "op-status": () => ({ state: "done", result: launched }), launch: () => launched });
+      await expect(launchTask(a, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow(/yetim[\s\S]*W:\\wt\\X/);
+      expect(f.ops("launch")).toHaveLength(0);
+      expect(getTask(a).data.released_ops ?? []).toEqual([]); // bildirildi; tekrar denemede takılmaz
+      expect(op).toBeTruthy();
+    });
   });
 
   it("beyin-yerel rezervasyon (machine = beyin): iptal protokolü çalışmaz, reddedilir, rezervasyon ve pin kalır", async () => {

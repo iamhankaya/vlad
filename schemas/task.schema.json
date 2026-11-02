@@ -28,6 +28,10 @@
     "model_reason": { "type": ["string", "null"] },
     "machine": { "type": ["string", "null"], "pattern": "^[a-z][a-z0-9-]*$" },
     "machine_reserved": { "type": ["string", "null"], "format": "date-time" },
-    "launch_op": { "type": ["string", "null"], "minLength": 1 }
+    "launch_op": { "type": ["string", "null"], "minLength": 1 },
+    "released_ops": {
+      "type": ["array", "null"],
+      "items": { "type": "object", "required": ["machine", "op"], "additionalProperties": false, "properties": { "machine": { "type": "string", "minLength": 1 }, "op": { "type": "string", "minLength": 1 } } }
+    }
   }
 }

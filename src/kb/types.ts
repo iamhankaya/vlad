@@ -80,6 +80,8 @@ export interface TaskData {
   machine?: string | null;
   machine_reserved?: string | null;
   launch_op?: string | null;
+  /** `task release --force` ile işçiye sorulmadan bırakılan launch op'ları: işçide başlamış olabilirler, makine erişilebilir olunca iptal edilir (F-vlad-150). */
+  released_ops?: { machine: string; op: string }[] | null;
 }
 
 export type FindingSeverity = "kritik" | "yüksek" | "orta" | "düşük" | "bilgi";

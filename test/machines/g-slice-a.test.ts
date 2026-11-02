@@ -7,11 +7,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Journal } from "../../src/agent/journal.js";
 import { installPlan } from "../../src/agent/install.js";
 import { mergeVerdict } from "../../src/agent/ops/merge-reconcile.js";
+import { setAgentEnv } from "../../src/agent/ops/env.js";
 import { OP_TABLE, type OpHandler } from "../../src/agent/ops/index.js";
+import { opStatus } from "../../src/agent/ops/op-status.js";
 import { AgentQueue } from "../../src/agent/queue.js";
 import { handleRequest, type ServerOpts } from "../../src/agent/server.js";
 import { signRequest } from "../../src/agent/sign.js";
-import { ensurePrivateDir, lockDownFile } from "../../src/agent/state.js";
+import { ensurePrivateDir, lockDownFile, writeLocal } from "../../src/agent/state.js";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { AgentOp, AgentRequest } from "../../src/machines/types.js";
 import { rmTemp } from "../helpers.js";
@@ -63,6 +65,59 @@ describe("F-vlad-127: günlük sonucu kırpılır", () => {
   });
 });
 
+describe("F-vlad-152: kırpılmış sonuç sahte başarı değil; mutasyon opları küçük özet saklar", () => {
+  const big = { exit: 0, stdout: "x".repeat(3 * 1024 * 1024), stderr: "" };
+  it("mutasyon op'u (apply-write) büyük sonucu kırpma yerine küçük sabit özet olarak saklar; replay ok döner", async () => {
+    const j = new Journal(join(tmp(), "j.jsonl"), () => Date.now());
+    const o = { ...serverOpts(j, { "apply-write": async () => big as never }), self: "mac", kind: "brain-agent" as const }; // apply-write: işçi → beyin
+    const rq = (opId: string) => signRequest(K.windows, { v: 1, from: "windows", to: "mac", opId, ts: Date.now(), op: "apply-write", args: w });
+    const w = { cmd: "task.log", id: "T20261102-01", text: "x" };
+    const live = await handleRequest(o, rq("aw-1"));
+    expect(live.code).toBe("ok");
+    const rec = j.get("aw-1")?.result as Record<string, unknown>;
+    expect(rec).toMatchObject({ __journalSummary: true, exit: 0 });
+    expect(JSON.stringify(rec).length).toBeLessThan(2048);
+    const replay = await handleRequest(o, rq("aw-1"));
+    expect(replay.code).toBe("ok");
+    expect((replay as { result?: unknown }).result).toMatchObject({ __journalSummary: true, exit: 0 });
+  });
+  it("mutasyon olmayan op kırpılırsa op-status state:done + truncated:true döner, işaret nesnesini sonuç diye vermez", async () => {
+    const j = new Journal(join(tmp(), "j.jsonl"), () => Date.now());
+    j.start("cl-1", "mac", "close", "h"); j.finish("cl-1", "done", big);
+    setAgentEnv({ self: "windows", kind: "worker-agent", cfg: cfg(), startedAt: Date.now(), build: "t", journal: j, now: () => Date.now() } as never);
+    try {
+      const r = await opStatus({ target: "cl-1" }, { from: "mac" });
+      expect(r).toMatchObject({ state: "done", truncated: true });
+      expect(r.result).toBeUndefined();
+    } finally { setAgentEnv(undefined); }
+  });
+  it("eski kırpılmış launch kaydının too_large mesajı 'yeni opId ile çalıştır' demez (mutasyon çift uygulanır)", async () => {
+    const f = join(tmp(), "j.jsonl");
+    writeFileSync(f, JSON.stringify({ opId: "ln-1", from: "mac", op: "launch", state: "done", ts: Date.now(), argsHash: "", result: { __journalTruncated: true, bytes: 9 } }) + "\n");
+    const r = await handleRequest(serverOpts(new Journal(f, () => Date.now()), {}), req({ op: "launch", opId: "ln-1", args: {} }));
+    expect(r.code).toBe("too_large");
+    expect(JSON.stringify(r)).not.toContain("yeni opId");
+  });
+});
+
+describe("F-vlad-155: açılışta okunamayan inflight girdi sonradan pending'e döner", () => {
+  it("EBUSY ile okunamayan inflight girdi drain öncesi yeniden denenip gönderilir (kuyruk takılmaz)", async () => {
+    const d = tmp();
+    const q1 = new AgentQueue(d, () => 1);
+    q1.enqueue({ cmd: "task.log", id: "T20261102-01", text: "a", opId: "op-a" }, "inflight"); // çökme kalıntısı
+    vi.mocked(fs.readFileSync).mockImplementation(((p: fs.PathOrFileDescriptor, ...r: unknown[]) => {
+      if (String(p).endsWith("-op-a.json")) throw ebusy();
+      return (real.readFileSync as (...a: unknown[]) => unknown)(p, ...r);
+    }) as never);
+    const q2 = new AgentQueue(d, () => 1); // açılışta okunamadı → pending'e çevrilemedi
+    vi.mocked(fs.readFileSync).mockImplementation(real.readFileSync); // sürücü/antivirüs kilidi kalktı
+    const sent: string[] = [];
+    const r = await q2.flush(async (it) => { sent.push(it.opId); });
+    expect(sent).toEqual(["op-a"]);
+    expect(r).toMatchObject({ sent: 1, remaining: 0 });
+  });
+});
+
 describe("F-vlad-128: Agent durum dizini 0700", () => {
   it("Journal ve AgentQueue dizinleri mode 0o700 ile oluşturulur", () => {
     const d = tmp();
@@ -79,14 +134,64 @@ describe("F-vlad-128: Agent durum dizini 0700", () => {
   });
 });
 
-describe("F-vlad-132: anahtar dosyası Windows'ta ACL ile özel", () => {
-  it("win32: icacls mirası keser ve yalnız geçerli kullanıcıya tam yetki verir", () => {
+describe("F-vlad-132/151: anahtar dosyası Windows'ta ACL ile özel", () => {
+  const SID = "S-1-5-21-1-2-3-1001";
+  const exec = (calls: { file: string; args: string[] }[]) => (file: string, args: string[]): string => {
+    calls.push({ file, args });
+    return file.endsWith("whoami.exe") ? `"PC\\me","${SID}"\r\n` : "";
+  };
+  it("win32: tam yollu icacls mirası keser ve yalnız geçerli kullanıcıya SID ile tam yetki verir", () => {
     const calls: { file: string; args: string[] }[] = [];
-    lockDownFile("C:\\v\\vlad.local.json", { platform: "win32", user: "PC\\me", exec: (file, args) => { calls.push({ file, args }); } });
-    expect(calls).toEqual([{ file: "icacls", args: ["C:\\v\\vlad.local.json", "/inheritance:r", "/grant:r", "PC\\me:F"] }]);
+    lockDownFile("C:\\v\\vlad.local.json", { platform: "win32", systemRoot: "C:\\Windows", exec: exec(calls) });
+    expect(calls.at(-1)).toEqual({ file: "C:\\Windows\\System32\\icacls.exe", args: ["C:\\v\\vlad.local.json", "/inheritance:r", "/grant:r", `*${SID}:F`] });
   });
-  it("win32'de icacls başarısızlığı yazmayı düşürmez", () => {
-    expect(() => lockDownFile("x", { platform: "win32", user: "u", exec: () => { throw new Error("yok"); } })).not.toThrow();
+  it("win32'de icacls başarısızlığı yazmayı düşürmez ama görünür uyarı verir (fail-open sessiz değil)", () => {
+    const warns: string[] = [];
+    expect(() => lockDownFile("x", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: (f) => { if (f.endsWith("icacls.exe")) throw new Error("yok"); return `"a","${SID}"`; } })).not.toThrow();
+    expect(warns.join("\n")).toMatch(/kısıtlanamadı[\s\S]*yok/);
+  });
+  it("SID whoami CSV'sinin 2. alanından ve tam eşleşmeyle alınır (ad alanındaki S-1- benzeri metin SID sayılmaz)", () => {
+    const calls: { file: string; args: string[] }[] = [];
+    const run = (file: string, args: string[]): string => { calls.push({ file, args }); return file.endsWith("whoami.exe") ? `"DOM S-1-5-99\\me","${SID}"\r\n` : ""; };
+    lockDownFile("f", { platform: "win32", systemRoot: "C:\\Windows", exec: run });
+    expect(calls.at(-1)!.args[3]).toBe(`*${SID}:F`);
+    const warns: string[] = [];
+    const bad = (file: string): string => (file.endsWith("whoami.exe") ? `"DOM S-1-5-99\\me","not-a-sid"` : "");
+    lockDownFile("f", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: bad });
+    expect(warns).toHaveLength(1); // 2. alan SID değil → ad alanına düşülmez
+  });
+  it("writeLocal: kilit/yazma hatasında geçici dosya silinir", () => {
+    const d = tmp();
+    process.env.VLAD_LOCAL_FILE = join(d, "vlad.local.json");
+    try { expect(() => writeLocal({ keys: {} }, { lock: () => { throw new Error("kilit"); } })).toThrow(/kilit/); } finally { delete process.env.VLAD_LOCAL_FILE; }
+    expect(real.readdirSync(d)).toEqual([]);
+  });
+  it("kullanıcı SID'i alınamazsa icacls çağrılmaz, uyarı verilir", () => {
+    const warns: string[] = [];
+    const calls: string[] = [];
+    lockDownFile("x", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: (f) => { calls.push(f); return "çöp"; } });
+    expect(calls.some((c) => c.endsWith("icacls.exe"))).toBe(false);
+    expect(warns).toHaveLength(1);
+  });
+  it("writeLocal: her yazım benzersiz geçici dosya kullanır (eşzamanlı keygen/setkey aynı .tmp'yi paylaşmaz) ve geçici dosya kalmaz", () => {
+    const d = tmp();
+    const f = join(d, "vlad.local.json");
+    process.env.VLAD_LOCAL_FILE = f;
+    const used: string[] = [];
+    try {
+      for (let i = 0; i < 2; i++) writeLocal({ keys: { a: String(i) } }, { lock: (p) => { used.push(p); } });
+    } finally { delete process.env.VLAD_LOCAL_FILE; }
+    expect(used[0]).not.toBe(used[1]);
+    expect(used).not.toContain(f + ".tmp");
+    expect(real.readdirSync(d)).toEqual(["vlad.local.json"]);
+  });
+  it("writeLocal: dosya içerik yazılmadan ÖNCE (boşken) kilitlenir", () => {
+    const f = join(tmp(), "vlad.local.json");
+    process.env.VLAD_LOCAL_FILE = f;
+    let atLock: string | null = null;
+    try { writeLocal({ keys: { a: "k" } }, { lock: (p) => { atLock = real.readFileSync(p, "utf8"); } }); } finally { delete process.env.VLAD_LOCAL_FILE; }
+    expect(atLock).toBe("");
+    expect(JSON.parse(real.readFileSync(f, "utf8")).keys.a).toBe("k");
   });
 });
 

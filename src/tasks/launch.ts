@@ -360,10 +360,12 @@ export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: 
   // "görülmemiş" sayıp çalışan bir launch'ın rezervasyonunu ve pin'ini silerdi
   if (o.cfg.brain && machine === o.cfg.brain) throw new Error(`rezervasyon beyin-yerel launch'a ait (${machine}); sürüyor olabilir, serbest bırakılamaz; ölüyse rezervasyon süresi dolunca kendiliğinden düşer`);
   let verdict: string | null = null;
+  let unreachable = false;
   try {
     if (!o.transport) throw new Error("uzak taşıma bağlı değil");
     verdict = (await o.transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result.state;
   } catch (e) {
+    unreachable = true;
     if (!o.force) throw new Error(`${machine} makinesine ulaşılamadı (${(e as Error).message}); makine kalıcı ölüyse --force ile bırak (launch açılmışsa orada yetim kalır)`);
   }
   if (verdict === "done") throw new Error(`işçide launch tamamlanmış (op ${op}); serbest bırakma yerine \`task launch ${id}\` ile sahiplen`);
@@ -372,10 +374,43 @@ export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: 
     const t = getTask(id);
     if (t.data.state !== "queued" || t.data.launch_op !== op) throw new Error(`rezervasyon bu arada değişti (${id}); tekrar dene`);
     Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
+    // işçi sorulmadan bırakıldı: op orada başlamış olabilir; makine dönünce launch öncesi iptal edilir (F-vlad-150)
+    if (unreachable) t.data.released_ops = [...(t.data.released_ops ?? []), { machine, op }];
     saveTask(t);
     releasePin(t.data.parent, machine, id);
     return t;
   });
+}
+
+/** `task release --force` sonrası CLI uyarısı: bırakılan op işçide başlamış olabilir (yetim pencere/worktree riski). */
+export function releaseWarning(t: Task): string | null {
+  const r = t.data.released_ops ?? [];
+  return r.length ? `uyarı: ${r.map((x) => `${x.machine} (op ${x.op})`).join(", ")} işçiye sorulmadan bırakıldı; launch orada başlamış olabilir (yetim pencere/worktree riski). Makine erişilebilir olunca sonraki \`task launch\` önce iptal işareti gönderir; başlamışsa yetim worktree'yi bildirir.` : null;
+}
+
+/** Bırakılan op'ları bu makinede iptal eder (op-status cancel). Ulaşılamayan kayıtta kalır; işçide gerçekten başlamış olan bildirilir (yeni launch çift başlatma olurdu). */
+async function cancelReleased(id: string, machine: string, transport: RemoteTransport): Promise<void> {
+  const mine = (getTask(id).data.released_ops ?? []).filter((x) => x.machine === machine);
+  const orphans: string[] = [];
+  const settled = new Set<string>();
+  const unresolved: string[] = [];
+  for (const { op } of mine) {
+    let st: OpStatus;
+    try { st = (await transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result; } catch (e) {
+      unresolved.push(`op ${op}: ${(e as Error).message}`); // belirsiz: bu launch'ı durdur, kayıt kalır, sonraki denemede yeniden uzlaştırılır
+      continue;
+    }
+    settled.add(op);
+    if (st.state === "done" || st.state === "started") orphans.push(`op ${op} ${st.state === "done" ? `tamamlanmış${st.result ? ` (worktree ${st.result.worktree})` : ""}` : "sürüyor"}`);
+  }
+  if (settled.size) await withKbLock(() => {
+    const t = getTask(id);
+    const rest = (t.data.released_ops ?? []).filter((x) => !(x.machine === machine && settled.has(x.op)));
+    t.data.released_ops = rest.length ? rest : null;
+    saveTask(t);
+  });
+  if (unresolved.length) throw new Error(`${machine}: bırakılan launch iptal edilemedi (${unresolved.join("; ")}); çift başlatmayı önlemek için launch durduruldu, makine yanıt verince tekrar dene`);
+  if (orphans.length) throw new Error(`${machine}: \`release --force\` ile bırakılan launch işçide başlamış (yetim pencere/worktree): ${orphans.join("; ")}; elle kapat/temizle, sonra tekrar launch et`);
 }
 
 class LostRace extends Error {}
@@ -422,6 +457,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     return run;
   });
 
+  await cancelReleased(id, machine, transport);
   const old = task.data.launch_op ?? null;
   if (old) {
     // an earlier attempt's outcome is unknown: ask the worker before launching again

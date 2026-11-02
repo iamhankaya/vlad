@@ -80,7 +80,12 @@ describe("machines:K — K13 Agent yaşamı", () => {
 
   it("keygen: yerel dosyaya 64 hex anahtar yazar ve basar", async () => {
     w = await makeWorld();
-    const r = await runVlad(w.brain, ["agent", "keygen", "desktop"]);
+    const hidden = await runVlad(w.brain, ["agent", "keygen", "desktop"]); // F-vlad-132: varsayılan anahtarı basmaz
+    expect(hidden.code, hidden.err).toBe(0);
+    const k1 = JSON.parse(readFileSync(w.brain.local, "utf8")).keys["desktop"];
+    expect(k1).toMatch(/^[0-9a-f]{64}$/);
+    expect(hidden.out).not.toContain(k1);
+    const r = await runVlad(w.brain, ["agent", "keygen", "desktop", "--show"]);
     expect(r.code, r.err).toBe(0);
     const keys = JSON.parse(readFileSync(w.brain.local, "utf8")).keys;
     expect(keys["desktop"]).toMatch(/^[0-9a-f]{64}$/);
