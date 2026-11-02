@@ -32,9 +32,12 @@ export function normalize(s: string): string {
   return out;
 }
 
-/** shortcut: suffix handling is "query word minus its last 3 letters also matches" for words of 7+ letters, no real stemmer; upgrade to a stemmer or FTS if recall proves too low. */
+const SUFFIXES = ["larin", "lerin", "lari", "leri", "lar", "ler", "dan", "den", "nin", "nun", "yi", "ni", "si"];
+
+/** shortcut: strips one suffix from a fixed common Turkish list (folded form), stem >= 4 letters, no real stemmer; upgrade to a stemmer or FTS if recall proves too low. */
 function variants(word: string): string[] {
-  return word.length >= 7 ? [word, word.slice(0, -3)] : [word];
+  const suffix = SUFFIXES.find((x) => word.length - x.length >= 4 && word.endsWith(x));
+  return suffix ? [word, word.slice(0, -suffix.length)] : [word];
 }
 
 const SNIPPET = 160;
