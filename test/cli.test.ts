@@ -402,6 +402,72 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(JSON.parse(cloud.err).error).toContain("--external");
       expect(JSON.parse(vlad(["task", "list", "--json"]).out).tasks[0].state).toBe("queued");
     });
+    describe.skipIf(process.platform !== "win32")("VLAD_DESKTOP_QUEUE", () => {
+      let q: string;
+      beforeEach(() => { q = mkdtempSync(join(tmpdir(), "vlad-cli-queue-")); });
+      const qenv = () => ({ ...env(), VLAD_DESKTOP_QUEUE: q });
+      it("launch writes the queue file atomically and reports method desktop-queue", () => {
+        const r = vlad(["task", "launch", id, "--json"], undefined, qenv());
+        expect(r.code, r.err).toBe(0);
+        const j = JSON.parse(r.out);
+        expect(j.method).toBe("desktop-queue");
+        expect(j.state).toBe("running");
+        expect(j.queued).toBe(join(q, `${id}.json`));
+        expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
+        expect(j.cwd).toBe(j.worktree);
+        expect(readdirSync(q)).toEqual([`${id}.json`]); // no leftover temp file
+        const body = JSON.parse(readFileSync(j.queued, "utf8"));
+        expect(body).toMatchObject({ v: 1, kind: "launch", taskId: id, script: j.script, cwd: j.worktree });
+        expect(typeof body.pid).toBe("number");
+        expect(Number.isNaN(Date.parse(body.createdAt))).toBe(false);
+      });
+      it("resume writes a kind=resume request", () => {
+        vlad(["task", "launch", id, "--external", "--json"], undefined, env());
+        const r = vlad(["task", "resume", id, "--json"], undefined, qenv());
+        expect(r.code, r.err).toBe(0);
+        const j = JSON.parse(r.out);
+        expect(j.method).toBe("desktop-queue");
+        expect(JSON.parse(readFileSync(join(q, `${id}.json`), "utf8"))).toMatchObject({ v: 1, kind: "resume", taskId: id, script: j.script });
+        expect(readFileSync(j.script, "utf8")).toContain("kaldığı yerden sürdürülüyor");
+      });
+      it("missing folder: warns and falls back to the usual launch / resume output", () => {
+        const e = { ...env(), VLAD_DESKTOP_QUEUE: join(q, "yok") };
+        const l = vlad(["task", "launch", id, "--json"], undefined, e);
+        expect(l.code, l.err).toBe(0);
+        expect(l.err).toContain("VLAD_DESKTOP_QUEUE");
+        const lj = JSON.parse(l.out);
+        expect(lj.method).toBe("noop"); // VLAD_LAUNCHER=noop test guard still applies to the fallback
+        expect(lj.queued).toBeUndefined();
+        const r = vlad(["task", "resume", id, "--json"], undefined, e);
+        expect(r.code, r.err).toBe(0);
+        expect(r.err).toContain("VLAD_DESKTOP_QUEUE");
+        expect(JSON.parse(r.out).method).toBeUndefined();
+        expect(readdirSync(q)).toEqual([]);
+      });
+      it("unwritable queue file: warns and falls back to the window path", () => {
+        mkdirSync(join(q, `${id}.json`)); // a directory where the file must go → rename fails
+        const l = vlad(["task", "launch", id, "--json"], undefined, qenv());
+        expect(l.code, l.err).toBe(0);
+        expect(l.err).toContain("kuyruk yazılamadı");
+        expect(JSON.parse(l.out).method).toBe("noop");
+      });
+      it("--external keeps the old behavior: no queue file", () => {
+        const l = vlad(["task", "launch", id, "--external", "--json"], undefined, qenv());
+        expect(JSON.parse(l.out).method).toBe("external");
+        const r = vlad(["task", "resume", id, "--external", "--json"], undefined, qenv());
+        expect(JSON.parse(r.out).command).toContain(`${id}.ps1`);
+        expect(readdirSync(q)).toEqual([]);
+      });
+      it("--dry-run and cloud mode are not affected", () => {
+        const d = vlad(["task", "launch", id, "--dry-run", "--json"], undefined, qenv());
+        expect(d.code, d.err).toBe(0);
+        expect(JSON.parse(d.out).queued).toBeUndefined();
+        writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt"), launcher: "cloud" }));
+        const c = vlad(["task", "launch", mkTask(), "--json"], undefined, qenv());
+        expect(JSON.parse(c.err).error).toContain("bulut"); // cloud path (card has no repo) never reaches the queue
+        expect(readdirSync(q)).toEqual([]);
+      });
+    });
     it("task close-window is refused under the noop launcher guard and changes nothing", () => {
       vlad(["task", "launch", id, "--external", "--json"], undefined, env());
       const r = vlad(["task", "close-window", id, "--json"]);
