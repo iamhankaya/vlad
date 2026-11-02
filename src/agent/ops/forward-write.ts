@@ -32,7 +32,7 @@ export async function forwardWrite(args: unknown): Promise<ForwardResult> {
   } catch (err) {
     if (err instanceof RemoteError && PERMANENT.has(err.code)) { q.remove(it.seq); throw err; }
     const reason = (err as Error).message;
-    q.setState(it.seq, "pending", reason); // geçici / auth / proto_mismatch / belirsiz: girdi kalır, sonra yeniden denenir
+    q.setState(it.seq, "pending", reason, it); // geçici / auth / proto_mismatch / belirsiz: girdi kalır, sonra yeniden denenir
     return { queued: true, seq: it.seq, opId, reason };
   }
 }

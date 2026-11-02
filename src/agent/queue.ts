@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ensurePrivateDir } from "./state.js";
 import { RemoteError, type QueueEntry, type WriteArgs } from "../machines/types.js";
 
 export const QUEUE_MAX_ENTRIES = 1000;
@@ -29,9 +30,9 @@ export class AgentQueue {
   private bytes = 0;
   private seqNo = 0;
   constructor(private dir: string, private now: () => number) {
-    mkdirSync(join(dir, "failed"), { recursive: true });
+    ensurePrivateDir(join(dir, "failed"));
     for (const d of [dir, join(dir, "failed")]) for (const f of readdirSync(d)) if (f.endsWith(".tmp")) rmSync(join(d, f), { force: true });
-    for (const f of readdirSync(dir)) if (f.endsWith(".json") && !this.read(join(dir, f))) renameSync(join(dir, f), join(dir, "failed", f)); // bozuk JSON → failed
+    for (const f of readdirSync(dir)) if (f.endsWith(".json") && this.read(join(dir, f)) === null) renameSync(join(dir, f), join(dir, "failed", f)); // bozuk JSON → failed (geçici okuma hatası: yerinde kalır)
     for (const f of this.files()) { const p = this.read(join(dir, f)); if (p?.state === "inflight") this.write(join(dir, f), { ...p, state: "pending" }); } // çökme kalıntısı: aynı opId beyinde idempotent
     for (const f of this.files()) { this.count++; this.bytes += statSync(join(dir, f)).size; }
     const seqFile = join(dir, ".seq");
@@ -43,9 +44,12 @@ export class AgentQueue {
     this.bytes -= statSync(file).size; this.count--; rmSync(file);
   }
 
-  private read(file: string): QueueItem | null {
+  /** null = girdi bozuk (ayrıştırılamaz/biçim yanlış); undefined = geçici okuma hatası (EBUSY/EPERM…): girdi sağlam olabilir, yerinde bırakılır (F-vlad-136). */
+  private read(file: string): QueueItem | null | undefined {
+    let text: string;
+    try { text = readFileSync(file, "utf8"); } catch (e) { return (e as NodeJS.ErrnoException).code === "ENOENT" ? null : undefined; }
     try {
-      const it = JSON.parse(readFileSync(file, "utf8")) as QueueItem;
+      const it = JSON.parse(text) as QueueItem;
       return typeof it.seq === "number" && typeof it.opId === "string" ? it : null;
     } catch { return null; }
   }
@@ -73,10 +77,12 @@ export class AgentQueue {
     this.count++; this.bytes += statSync(file).size;
     return it;
   }
-  setState(seq: number, state: "pending" | "inflight", reason?: string): void {
+  /** `known`: çağıranın elindeki girdi; dosya okunamıyorsa/bozuksa geçiş onunla yazılır (okuma hatası başarı sayılmaz). */
+  setState(seq: number, state: "pending" | "inflight", reason?: string, known?: QueueItem): void {
     const f = this.files().find((x) => parseInt(x, 10) === seq);
     if (!f) return;
-    const it = this.read(join(this.dir, f))!;
+    const it = known ?? this.read(join(this.dir, f));
+    if (!it) throw new Error(`kuyruk girdisi okunamadı (seq ${seq}); durum ${state} yapılamadı`);
     this.write(join(this.dir, f), { ...it, state, ...(reason ? { reason } : {}) });
   }
   remove(seq: number): boolean {
@@ -113,6 +119,7 @@ export class AgentQueue {
       const poisoned = new Map<string, number>(); // görev id → başarısız ilk seq
       for (const f of this.files()) {
         const it = this.read(join(this.dir, f));
+        if (it === undefined) break; // geçici okuma hatası: sırayı durdur, girdi kalır, sonraki turda denenir
         if (!it) { if (existsSync(join(this.dir, f))) renameSync(join(this.dir, f), join(this.dir, "failed", f)); continue; } // çalışırken yazılmış bozuk girdi (sayaçta yok)
         if (it.state === "inflight") break;
         const prev = poisoned.get(it.id);

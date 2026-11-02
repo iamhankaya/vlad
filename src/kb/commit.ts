@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isSeparateKb, kbPaths } from "./home.js";
+import { withKbLockSync } from "./lock.js";
 
 /** Lines a kb repo's .gitignore must carry (local-only state). */
 export const KB_GITIGNORE = ["inbox/", "logs/", "vlad-session.txt", ".vlad.lock*", ".obsidian/"];
@@ -49,6 +50,8 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
   const cwd = separate ? paths.kb : paths.home;
   const spec = separate ? "." : "kb";
   const r: KbCommitResult = { committed: false };
+  // add + commit run under the kb write lock: a multi-file write in flight is not committed half-way and two commits do not meet at index.lock (F-vlad-103); the push (network) stays outside
+  withKbLockSync(() => {
   if (separate) {
     // existing kb repos get new local-only entries (e.g. lock temp files) before `git add`
     const miss = missingIgnores(paths.kb);
@@ -69,6 +72,7 @@ export function commitKb(message: string, o: { push?: boolean } = {}): KbCommitR
     r.committed = true;
     r.sha = git(cwd, ["rev-parse", "--short", "HEAD"]).trim();
   }
+  });
   if (!o.push) return r;
   // a fresh session branch has no upstream: everything on it is unpushed, and the first push sets it
   let upstream = true;

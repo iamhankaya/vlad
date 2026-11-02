@@ -304,6 +304,24 @@ function buildCloudPrompt(
 }
 
 /**
+ * Asks the remote about a phase's integration branch (`git ls-remote`, can hang) BEFORE the kb lock is taken (F-vlad-110);
+ * pass the result to `prepareCloudLaunch` as `remoteBranch`. undefined → nothing to probe or probing failed; the in-lock path decides.
+ */
+export function probeIntegrationBranch(id: string, probe: (repo: string, branch: string) => RemoteBranchState = remoteBranchState): CloudLaunchOptions["remoteBranch"] {
+  try {
+    const task = getTask(id);
+    if (!task.data.parent) return undefined;
+    const repo = card(task.data.project).repo;
+    if (!repo) return undefined;
+    const branch = `vlad/${task.data.parent}`;
+    const state = probe(repo, branch);
+    return (r, b) => (r === repo && b === branch ? state : remoteBranchState(r, b));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Cloud mode of `vlad task launch`: no local worktree or terminal. Validates the task and its
  * project card, builds the `create_session` arguments and moves the task to `running`. Any
  * failure leaves the task `queued` with `error` set.

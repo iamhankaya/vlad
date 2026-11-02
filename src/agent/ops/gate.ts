@@ -18,6 +18,13 @@ const TASK_BRANCH = /^vlad\/T\d{8}-\d{2,}$/;
 const DEFAULT_BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
 const forbidden = (m: string) => new RemoteError("forbidden", `forbidden: ${m}`);
 const failed = (m: string) => new RemoteError("failed", `failed: ${m}`);
+const TASK_ID = /^T\d{8}-\d{2,}$/;
+/** git ref kuralları: ".." ve "//" yok, bileşen "." ile başlamaz/".lock" ile bitmez, sonda "/" ya da "." yok. */
+const validRef = (b: string): boolean => DEFAULT_BRANCH.test(b) && !b.includes("..") && !b.includes("//") && !/(^|\/)\./.test(b) && !/\.lock(\/|$)/.test(b) && !/[/.]$/.test(b);
+/** Görev dosyasındaki çatı kimliği (frontmatter) kullanılmadan önce doğrulanır. */
+export function validParent(p: unknown): void {
+  if (p !== null && p !== undefined && (typeof p !== "string" || !TASK_ID.test(p))) throw bad("görevin parent alanı geçersiz");
+}
 
 interface TaskFront { project: string; kind?: string; parent?: string | null; machine?: string | null }
 interface TaskRef { id: string; parent?: string | null; defaultBranch?: string }
@@ -25,7 +32,7 @@ interface TaskRef { id: string; parent?: string | null; defaultBranch?: string }
 /** Merge ref'leri: kaynak görevin kendi dalı; hedef çatı entegrasyon dalı, çatı yoksa kartın ana dalı. */
 export function checkMergeRefs(t: TaskRef, from: string, into: string): void {
   if (!TASK_BRANCH.test(from) || from !== `vlad/${t.id}`) throw bad("from görevin kendi dalı (vlad/<taskId>) olmalı");
-  const ok = t.parent ? into === `vlad/${t.parent}` : !!t.defaultBranch && DEFAULT_BRANCH.test(t.defaultBranch) && !t.defaultBranch.includes("..") && into === t.defaultBranch;
+  const ok = t.parent ? into === `vlad/${t.parent}` : !!t.defaultBranch && validRef(t.defaultBranch) && into === t.defaultBranch;
   if (!ok) throw bad(t.parent ? "into çatı dalı (vlad/<çatı>) olmalı" : "into kartın default_branch'i olmalı");
 }
 
@@ -42,6 +49,7 @@ function taskFront(ctx: WorkerCtx, id: string, project: string): TaskFront {
   if (!existsSync(f)) throw new RemoteError("not_found", `not_found: görev dosyası işçi kb'sinde yok: ${id}`);
   const t = readDoc<TaskFront>(f).data;
   if (t.project !== project) throw bad("project görevin projesiyle uyuşmuyor");
+  validParent(t.parent);
   // çatının machine alanı boş olabilir (kaydı işçide); faz/tek görevde makine eşleşmesi zorunlu
   if (t.kind === "pipeline" ? t.machine && t.machine !== ctx.self : t.machine !== ctx.self) throw forbidden(`görev bu makinede değil: ${t.machine ?? "machine yok"}`);
   return t;
@@ -89,6 +97,7 @@ export async function gateRun(args: unknown): Promise<GateRunResult> {
   if (!existsSync(cwd)) throw new RemoteError("not_found", `not_found: worktree yok: ${cwd}`);
   let gate: string | undefined;
   try { gate = readDoc<{ gate?: string }>(join(workerKbDir(ctx.def), "projects", `${project}.md`)).data.gate; } catch { /* kart yok → aşağıda */ }
+  if (gate !== undefined && gate !== null && typeof gate !== "string") throw failed(`projenin gate alanı metin olmalı: ${project}`);
   if (!gate?.trim()) throw failed(`projede gate tanımlı değil: ${project}`);
   return serialized(cwd, () => runGate(gate, cwd));
 }
@@ -106,12 +115,19 @@ function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
 function killTree(p: ReturnType<typeof spawn>): void {
   // Windows'ta p.kill() yalnız cmd.exe'yi öldürür; torunlar (npm test…) boruları tutar
   if (process.platform === "win32" && p.pid) spawn("taskkill", ["/PID", String(p.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => p.kill());
+  else if (p.pid) { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } } // detached: süreç grubu lideri; torunlar da gider
   else p.kill();
 }
 
-function runGate(cmd: string, cwd: string): Promise<GateRunResult> {
+export async function runGate(cmd: string, cwd: string, timeoutMs = GATE_TIMEOUT_MS): Promise<GateRunResult> {
+  const head = (await runGit(cwd, ["rev-parse", "HEAD"])).stdout.trim() || undefined; // yeşil gate hangi commit'e ait (F-vlad-139)
+  const r = await spawnGate(cmd, cwd, timeoutMs);
+  return head ? { ...r, head } : r;
+}
+function spawnGate(cmd: string, cwd: string, timeoutMs: number): Promise<GateRunResult> {
   return new Promise((resolve) => {
-    const p = spawn(cmd, { cwd, shell: true, windowsHide: true });
+    // stdin kapalı: girdi bekleyen gate asılı kalmaz; POSIX'te ayrı süreç grubu: zaman aşımında ağaç öldürülür
+    const p = spawn(cmd, { cwd, shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     let stdout = "", stderr = "";
     const dec = [new StringDecoder("utf8"), new StringDecoder("utf8")];
     p.stdout.on("data", (d: Buffer) => { stdout = (stdout + dec[0]!.write(d)).slice(-2 * OUT_CAP); }); // bellek sınırı
@@ -123,14 +139,14 @@ function runGate(cmd: string, cwd: string): Promise<GateRunResult> {
       resolve({ exit, stdout: capText(stdout, OUT_CAP), stderr: capText(stderr + extra, OUT_CAP) });
     };
     // sonucu 'close'u beklemeden ver: torun borulara tutunsa da op asılı kalmaz
-    const timer = setTimeout(() => { killTree(p); done(124, "\ngate zaman aşımına uğradı"); }, GATE_TIMEOUT_MS);
+    const timer = setTimeout(() => { killTree(p); done(124, "\ngate zaman aşımına uğradı"); }, timeoutMs);
     p.on("error", (e) => done(127, `\ngate başlatılamadı: ${e.message}`));
     p.on("close", (code) => done(code ?? 1));
   });
 }
 
-interface MergeCtx { repo: string; cwd: string; into: string; from: string }
-function mergeCtx(args: unknown, extra: string[]): MergeCtx & { a: Record<string, unknown> } {
+export interface MergeCtx { repo: string; cwd: string; into: string; from: string }
+export function mergeCtx(args: unknown, extra: string[]): MergeCtx & { a: Record<string, unknown> } {
   const a = argObject(args, ["taskId", "project", "repoName", "from", "into", ...extra]);
   const id = taskIdArg(a);
   const project = projectArg(a);

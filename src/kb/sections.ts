@@ -1,7 +1,7 @@
 /** Markdown section helpers. `heading` is the full heading line, e.g. "## Tanım". */
 
 /** True for lines inside a code fence (fence lines included). An unclosed fence is not trusted: nothing is marked, so a stray ``` cannot hide later headings (F-vlad-075). */
-function fencedLines(lines: string[]): boolean[] {
+export function fencedLines(lines: string[]): boolean[] {
   const marks = lines.map(() => false);
   let open: { ch: string; len: number } | null = null;
   let from = 0;

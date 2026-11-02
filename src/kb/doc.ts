@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "./atomic.js";
 import { parse, stringify } from "yaml";
@@ -20,6 +20,7 @@ export function serializeDoc(data: object, body: string): string {
 }
 
 export function readDoc<T>(file: string): { data: T; body: string } {
+  if (lstatSync(file).isSymbolicLink()) throw new Error(`symlink okunmaz: ${file}`); // writes refuse links already; reads must not leave the kb either (F-vlad-036)
   return parseDoc<T>(readFileSync(file, "utf8"));
 }
 

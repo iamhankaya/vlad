@@ -8,7 +8,8 @@ let chain: Promise<unknown> = Promise.resolve(); // tek mutex: eşzamanlı kb-sy
 /** Async (execFile): a slow fetch must not freeze the Agent's event loop, so pings keep answering. */
 const git = (cwd: string, ...a: string[]): Promise<string> => new Promise((resolve, reject) => {
   execFile("git", a, { cwd, encoding: "utf8", windowsHide: true, timeout: 60_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } }, (e, stdout, stderr) => {
-    if (e) reject(new RemoteError("failed", `failed: git ${a[0]}: ${(stderr || e.message).trim().split("\n")[0]}`));
+    // git'in stderr'i yol/URL taşıyabilir: beyne gitmez, işçinin kendi günlüğüne yazılır
+    if (e) { console.error(`kb-sync: git ${a[0]}: ${(stderr || e.message).trim().split("\n")[0]}`); reject(new RemoteError("failed", `failed: git ${a[0]} başarısız (ayrıntı işçi günlüğünde)`)); }
     else resolve(stdout.trim());
   });
 });
@@ -28,6 +29,8 @@ export async function kbSync(args: unknown): Promise<{ head: string }> {
     } catch {
       throw new RemoteError("failed", "failed: işçi kb klonu ayrışmış ya da upstream yok; ff-only birleştirilemedi");
     }
+    // yerel push edilmemiş commit'li klon "beklenen sha atası" denetimini geçse de beyinde olmayan içerik taşır (F-vlad-134)
+    if ((await git(kb, "rev-list", "--count", "@{u}..HEAD")) !== "0") throw new RemoteError("failed", "failed: işçi kb klonu upstream'in ilerisinde (push edilmemiş yerel commit var); elle düzelt");
     try { await git(kb, "merge-base", "--is-ancestor", expect, "HEAD"); } catch {
       throw new RemoteError("failed", `failed: beklenen kb sürümü (${expect.slice(0, 8)}) işçide yok; beyin kb'yi push etmemiş olabilir`);
     }

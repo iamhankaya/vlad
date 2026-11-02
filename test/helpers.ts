@@ -4,6 +4,12 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const made: string[] = [];
+
+/** Removes every dir makeHome/makeFixtureRoot created in this worker (best effort; F-vlad-105). */
+export function cleanupMadeDirs(): void {
+  for (const d of made.splice(0)) rmTemp(d);
+}
 
 /**
  * Creates a throwaway VLAD home (temp dir) with kb/* subfolders and a copy of
@@ -12,6 +18,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  */
 export function makeHome(): string {
   const home = mkdtempSync(join(tmpdir(), "vlad-test-"));
+  made.push(home);
   for (const d of ["projects", "tasks", "inbox", "inbox/processed", "logs", "journal"]) {
     mkdirSync(join(home, "kb", d), { recursive: true });
   }
@@ -23,7 +30,9 @@ export function makeHome(): string {
 
 /** Canonical (8.3-expanded) throwaway root; every destructive test step must stay inside it. */
 export function makeFixtureRoot(): string {
-  return realpathSync.native(mkdtempSync(join(tmpdir(), "vlad-t-")));
+  const root = realpathSync.native(mkdtempSync(join(tmpdir(), "vlad-t-")));
+  made.push(root);
+  return root;
 }
 
 /** Throws unless `p` (or its nearest existing ancestor) resolves inside `root`. */

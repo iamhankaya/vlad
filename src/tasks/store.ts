@@ -1,7 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
-  appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, readDoc, serializeDoc,
+  appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, parseDoc, readDoc, serializeDoc,
   setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
 import type { ProjectCard, TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
@@ -309,18 +309,26 @@ export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
  * (markStale, markSilentWorkers, summary, pipeline worktrees) and each pass re-parsed every file (F-vlad-094).
  * A write changes mtime/size, so a stale entry is never served; callers get clones because they mutate and save.
  */
-const parsedTasks = new Map<string, { stamp: string; data: TaskData; body: string }>();
+const parsedTasks = new Map<string, { stamp: string; data: TaskData; body: string; error?: Error }>();
+/** Entries held by the parse cache (test seam: listing prunes files that are gone). */
+export const parsedTaskCacheSize = (): number => parsedTasks.size;
 function readTaskFile(file: string): { data: TaskData; body: string } {
   const st = statSync(file, { bigint: true });
   // ino: atomic writes rename a new file in, so a rewrite within one mtime tick still changes the key
   const stamp = `${st.mtimeNs}:${st.size}:${st.ino}`;
   let hit = parsedTasks.get(file);
   if (hit?.stamp !== stamp) {
-    const { data, body } = readDoc<TaskData>(file);
-    validate("task", data);
-    hit = { stamp, data, body };
+    const text = readFileSync(file, "utf8"); // an I/O error (EBUSY during a rename) is transient: thrown, never cached
+    try {
+      const { data, body } = parseDoc<TaskData>(text);
+      validate("task", data);
+      hit = { stamp, data, body };
+    } catch (e) {
+      hit = { stamp, data: {} as TaskData, body: "", error: e as Error }; // a broken file is not re-parsed until it changes (F-vlad-101)
+    }
     parsedTasks.set(file, hit);
   }
+  if (hit.error) throw hit.error;
   return { data: structuredClone(hit.data), body: hit.body };
 }
 
@@ -329,7 +337,10 @@ export function listTasksWithWarnings(
 ): { tasks: Task[]; warnings: string[] } {
   const tasks: Task[] = [];
   const warnings: string[] = [];
-  for (const file of listMdFiles(kbPaths().tasks)) {
+  const files = listMdFiles(kbPaths().tasks);
+  const present = new Set(files);
+  for (const k of parsedTasks.keys()) if (!present.has(k)) parsedTasks.delete(k); // archived/deleted files must not pile up in a long-lived process
+  for (const file of files) {
     const name = basename(file);
     try {
       const { data, body } = readTaskFile(file);

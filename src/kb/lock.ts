@@ -76,6 +76,15 @@ function acquire(file: string, timeoutMs: number, staleMs: number): () => void {
   }
 }
 
+/** Sync twin of `withKbLock` for sync callers (git commit). Same lock file and re-entry rule. */
+export function withKbLockSync<T>(fn: () => T, o: { timeoutMs?: number; staleMs?: number } = {}): T {
+  const dir = kbPaths().kb;
+  if (depth > 0 || !existsSync(dir)) return fn();
+  const release = acquire(join(dir, ".vlad.lock"), o.timeoutMs ?? envMs("VLAD_LOCK_TIMEOUT_MS", TIMEOUT_MS), o.staleMs ?? envMs("VLAD_LOCK_STALE_MS", STALE_MS));
+  depth++;
+  try { return fn(); } finally { depth--; release(); }
+}
+
 /**
  * Runs `fn` while holding the cross-process kb write lock `<kbDir>/.vlad.lock` (F-vlad-096).
  * Re-entrant within the process. Without a kb directory it runs unlocked (the command fails on its own).

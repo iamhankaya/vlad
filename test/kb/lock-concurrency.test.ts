@@ -68,7 +68,7 @@ describe("kb yazma kilidi: eşzamanlı süreçler (F-vlad-096)", { timeout: 120_
     expect(task.match(/log-w\d+-i\d+/g)).toHaveLength(n);
   });
 
-  it("kilit tutulurken yazan komut zaman aşımında JSON hata + çıkış 1 verir; okuma komutları ve kb commit beklemez", async () => {
+  it("kilit tutulurken yazan komut zaman aşımında JSON hata + çıkış 1 verir; okuma komutları beklemez; kb commit kilidi bekler (F-vlad-103)", async () => {
     writeFileSync(join(home, "card.md"), CARD);
     await vlad(["project", "write", "alpha", "--file", join(home, "card.md")]);
     const id = JSON.parse((await vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", "-", "--json"], "## Tanım\nx\n")).out).id as string;
@@ -82,6 +82,6 @@ describe("kb yazma kilidi: eşzamanlı süreçler (F-vlad-096)", { timeout: 120_
     expect((await vlad(["status", "--no-mark", "--json"], "", env)).code).toBe(0);
     expect((await vlad(["status", "--json"], "", env)).code).toBe(0); // kilitliyken yazmadan okuma moduna düşer (SessionStart hook'u bloklanmaz)
     expect((await vlad(["project", "list", "--json"], "", env)).code).toBe(0);
-    expect((await vlad(["kb", "commit", "x"], "", env)).err).not.toMatch(/kilid/); // git yok/kb repo değil: başka hata olabilir, kilit hatası olmamalı
+    expect((await vlad(["kb", "commit", "x"], "", env)).err).toMatch(/kilid/); // add+commit kilit altında: yarım yazım commit'lenmez
   });
 });

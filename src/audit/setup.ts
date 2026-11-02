@@ -7,7 +7,7 @@ import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
 import { firstAdded, installedSkills, lastChanged, roleSkillSince, skillDirs } from "./rules.js";
-import { auditSkills } from "./skills.js";
+import { auditSkills, parseSince } from "./skills.js";
 
 const DAY = 86_400_000;
 const STALE_DAYS = 30;
@@ -56,7 +56,7 @@ const matches = (s: string, re: RegExp) => (s.match(re) ?? []).length;
 export function auditSetup(o: { since?: string; configDir?: string; now?: Date } = {}): SetupAudit {
   const now = o.now ?? new Date();
   const since = o.since ?? new Date(now.getTime() - 14 * DAY).toISOString().slice(0, 10);
-  const sinceMs = Date.parse(since);
+  const sinceMs = parseSince(since);
   if (Number.isNaN(sinceMs)) throw new Error(`geçersiz --since: ${o.since}`);
 
   const tasks = listTasks({ state: ["done", "cancelled"] }).filter((t) => Date.parse(t.data.updated) >= sinceMs);
