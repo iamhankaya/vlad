@@ -94,6 +94,15 @@ describe("auditSetup", () => {
     expect(r.signals.izin_reddi).toEqual({ tasks: 1, count: 1, examples: [b] });
   });
 
+  it("counts Codex rounds from the structural İlerleme line only (last line per task, template text ignored)", () => {
+    const a = task({ at: "2026-10-28", progress: ["- 2026-10-28T10:00:00+03:00 Codex turları: ara=1 son=1", "- 2026-10-28T12:00:00+03:00 Codex turları: ara=2 son=2"] });
+    const b = task({ at: "2026-10-29", progress: ["- 2026-10-29T10:00:00+03:00 Codex turları: ara=0 son=1"] });
+    // template/quoted text is not a measure
+    task({ at: "2026-10-29", progress: ["- 2026-10-29T10:00:00+03:00 not: `Codex turları: ara=<n> son=<n>` satırı yazılır", "- 2026-10-29T10:01:00+03:00 yorum Codex turları: ara=9 son=9"] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.signals.codex_turlari).toEqual({ tasks: 2, count: 5, ara: 2, son: 3, examples: [a, b] });
+  });
+
   it("inventories skills from the four sources and flags the ones never loaded", () => {
     skillDir(".claude/skills", "digest");
     skillDir("global/skills", "vlad-worker");

@@ -23,7 +23,15 @@ Ana branch'e merge/PR'dan önce çatının entegrasyon worktree'sinde (çok proj
 ```
 codex review -c model="gpt-6-astra" -c model_reasoning_effort="medium" -c 'windows.sandbox="unelevated"' --base <default_branch>
 ```
-(`default_branch` proje kartında; `codex review`'de `-m` yok, `-c model=` kullan.) Bulguları kapıda göster. **Kritik/yüksek bulgu varsa merge/PR önerme**, düzeltme fazı öner (en çok 1 değişiklik turu); orta/düşük/bilgi `vlad finding add` ile kaydedilip kapıda listelenir.
+(`default_branch` proje kartında; `codex review`'de `-m` yok, `-c model=` kullan.) Bulguları kapıda göster. **Kritik/yüksek (P1) bulgu varsa merge/PR önerme**, düzeltme fazı öner. **Tur sınırı:** son kapıda en çok **2 düzeltme turu** (her tur = P1 yüzünden açılan düzeltme fazı + yeniden `codex review`). 2. turdan sonra P1 hâlâ çıkıyorsa merge durur ve kullanıcıya sorulur: "ana branch'e al + kalanları bulgu olarak izle" ya da "bir tur daha". **Gece modunda** (`vlad mode status`) bu kararı VLAD verir (yüksekte bekleme, düzelt: bir tur daha ya da bulguyla izleyerek al) ve gerekçesini sabah raporuna yazar. Orta/düşük/bilgi (P2) `vlad finding add` ile kaydedilip kapıda listelenir, tur açmaz.
+
+## Mod `review` — ara kapı (faz merge'ünden önce)
+
+Güvenlik incelemesiyle aynı tetikleyici (`/status`): faz auth/yetki/oturum/silmeye dokunuyorsa, uzak yürütme (remote/agent/ssh benzeri) içeriyorsa ya da büyük bir uygulama dilimiyse faz merge'ünden önce yalnız o fazın diff'i için, fazın worktree'sinde, tabanı entegrasyon dalı yaparak:
+```
+codex review -c model="gpt-6-astra" -c model_reasoning_effort="medium" -c 'windows.sandbox="unelevated"' --base vlad/<çatı-id>
+```
+Kritik/yüksek (P1) bulgu faz içinde değişiklik turuyla çözülür (fazı sürdüren çalışan; faz merge edilmeden); P2 bulgu `vlad finding add` ile kaydedilir, tur açmaz. Her ara düzeltme turu **ara** sayacına eklenir; son kapıdaki turlar **son** sayacına. Sayıları VLAD tutar ve son kapıda `/status` ölçüm satırını yazar. Yedek yolu ve loglama yukarıdaki gibi.
 
 ## Mod `blind-compare` — kör A/B
 

@@ -15,6 +15,8 @@ const EXAMPLES = 5;
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
 export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: Record<string, number> }
+/** Codex rounds written by /status at the final gate (`Codex turları: ara=<n> son=<n>`); `count` = ara + son. */
+export interface CodexRounds extends Signal { ara: number; son: number }
 export interface Signal { tasks: number; count: number; examples: string[] }
 type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
 interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
@@ -24,7 +26,7 @@ export interface SetupAudit {
   /** `by_ponytail`: the same sums split by the task's `experiment.ponytail` arm (T20261102-16); tasks outside the experiment are in neither. */
   measures: { tasks_with_measure: number; sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
   open_points: { total: number; by_severity: Record<string, number> };
-  signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal };
+  signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal; codex_turlari: CodexRounds };
   cancelled: { total: number; with_reason: number; without_reason_ids: string[] };
   skills: {
     /**
@@ -71,6 +73,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     signals: {
       test_itirazi: { tasks: 0, count: 0, examples: [] }, degisiklik_istegi: { tasks: 0, count: 0, examples: [] },
       karar: { tasks: 0, count: 0, examples: [] }, izin_reddi: { tasks: 0, count: 0, examples: [] },
+      codex_turlari: { tasks: 0, count: 0, ara: 0, son: 0, examples: [] },
     },
     cancelled: { total: 0, with_reason: 0, without_reason_ids: [] },
     skills: { inventory: [], unused: [], transcripts: 0, coverage: { by_skill: [], skipped_before_rule: 0, expected: 0, loaded: 0, rate: null } },
@@ -116,6 +119,14 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     signal(out.signals.degisiklik_istegi, id, matches(getSection(t.body, "## Önceki raporlar") ?? "", /^### Önceki rapor #\d+/gm));
     signal(out.signals.karar, id, matches(progress, /^- \S+ \[KARAR\]/gm));
     signal(out.signals.izin_reddi, id, matches(progress, /[iİ]zin reddi|permission denied/gi));
+
+    // structural line only (`- <ts> Codex turları: ara=<n> son=<n>`); the last one wins, as the gate rewrites the total
+    const cx = [...progress.matchAll(/^- \S+ Codex turları: ara=(\d+) son=(\d+)\s*$/gm)].pop();
+    if (cx) {
+      const c = out.signals.codex_turlari;
+      c.tasks++; c.ara += Number(cx[1]); c.son += Number(cx[2]); c.count += Number(cx[1]) + Number(cx[2]);
+      if (c.examples.length < EXAMPLES) c.examples.push(id);
+    }
 
     if (t.data.state === "cancelled") {
       out.cancelled.total++;
