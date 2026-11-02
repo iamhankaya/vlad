@@ -73,6 +73,11 @@ export function isInside(root: string, p: string): boolean {
   } catch { return false; }
 }
 
+/** `wt` gerçek yol olarak tam `<root>/<id>`: bir bağlantı (junction/symlink) onu kardeş görevin klasörüne çeviremez (F-vlad-133). */
+export function isOwnWorktree(root: string, wt: string, id: string): boolean {
+  try { return realpathSync(wt) === join(realpathSync(root), id); } catch { return false; }
+}
+
 /** cli.ts'teki başlatıcı seçiminin işçi karşılığı (noop koruması dâhil). */
 export function workerLauncher(cfg: VladConfig): Launcher {
   const mode = resolveLaunchMode(cfg.launcher);

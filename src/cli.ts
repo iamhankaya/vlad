@@ -34,7 +34,7 @@ import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
 import {
-  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, remoteMachineOf, listTasksWithWarnings, modelInfo,
+  TRANSITIONS, TransitionError, answerTask, askTask, cleanupTask, closeTaskWindow, createTask, integrationWorktrees, launchTask, releaseTask, remoteMachineOf, listTasksWithWarnings, modelInfo,
   eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, statusSummary, unknownTaskRefs, unmetDependencies,
 } from "./tasks/index.js";
 import type { Task } from "./tasks/index.js";
@@ -320,6 +320,12 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   .option("--machine <ad>", "görevi kartın makinelerinden birine sabitle (yalnız config'te machines varken)")
   .option("--external", "terminal açma; betiği yaz, script/command/cwd döndür (gömülü kullanım)");
 
+def(task, "release <id>", "Belirsiz uzak launch rezervasyonunu (ve çatı makine pin'ini) bırakır; işçi launch'ı görmediyse iptal işareti yazılır", async (id: string, o: Opts) => {
+  const cfg = loadConfig();
+  const t = await releaseTask(id, { cfg, ...(cfg.machines ? { transport: brainTransport(cfg, selfName()) } : {}), ...(o.force ? { force: true } : {}) });
+  out(o, { id, state: t.data.state }, `${id} rezervasyonu bırakıldı (${t.data.state})`);
+}).option("--force", "işçiye ulaşılamıyorsa da bırak (kalıcı ölü makine; launch açılmışsa orada yetim kalır)");
+
 def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
   const parsed = parseEvents(readInput(((o.eventsFile ?? o.file) as string | undefined) ?? "-"));
   const r = ingestEvents(id, eventList(parsed), { head: o.remoteHead as string | undefined, warnings: pageWarnings(parsed) });
@@ -411,7 +417,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
 }).option("--external", "yerel çalışan için betik yaz (terminal açma); script/command/cwd döner");
 def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", async (id: string, o: Opts) => {
   const cfg0 = loadConfig();
-  const remote = remoteMachineOf(getTask(id), cfg0);
+  const remote = remoteMachineOf(getTask(id), cfg0, workerContext()?.self); // işçide kendi görevi yerel kapanır (F-vlad-149)
   const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id);
   out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
 });

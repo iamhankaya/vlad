@@ -127,7 +127,7 @@ export interface HeldByLimit { id: string; reasons: { machine: string; reason: H
 // Kapı işlemleri (brain → worker Agent; push YOK). Gövdeleri sonraki fazlar bağlar; şekil sözleşmedir.
 /** `gate-run`: kartın gate komutunu entegrasyon worktree'sinde koşar (yolu işçi kendi hesaplar). */
 export interface GateRunArgs { taskId: string; project: string; repoName: string; target: "integration" | "task" }
-export interface GateRunResult { exit: number; stdout: string; stderr: string }
+export interface GateRunResult { exit: number; stdout: string; stderr: string; /** commit the gate ran on (F-vlad-139) */ head?: string }
 /** `merge-preview`: log + diff --stat + merge-tree; yazmaz. */
 export interface MergePreviewArgs { taskId: string; project: string; repoName: string; from: string; into: string }
 export interface MergePreviewResult { log: string; diffStat: string; conflicts: string[] }
