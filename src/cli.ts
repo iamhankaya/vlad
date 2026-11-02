@@ -31,6 +31,7 @@ import { readLocal, selfName } from "./agent/state.js";
 import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
+import { staleSummaryText } from "./projects/status.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
 import { listRolesWithWarnings } from "./roles/store.js";
 import { scanRootsWithWarnings } from "./scan/scan.js";
@@ -556,6 +557,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
     const line =
       `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
       `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)` +
+      (s.staleSummaries.length ? `, ${s.staleSummaries.length} bayat/eksik proje özeti: ${staleSummaryText(s.staleSummaries)}` : "") +
       (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
       (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {

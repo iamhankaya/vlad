@@ -4,6 +4,7 @@ import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/st
 import { getSection, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
 import type { DecisionRecord, ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
+import { listProjects } from "./store.js";
 
 const SUMMARY = "## Durum özeti";
 const AS_OF = /^_Güncel: (.+)_$/;
@@ -62,6 +63,25 @@ export function setProjectSummary(slug: string, text: string, asOf: Date = new D
   const stamp = nowIso(asOf);
   writeDoc(file, data, setSection(body, SUMMARY, `_Güncel: ${stamp}_\n\n${clean}`));
   return stamp;
+}
+
+export interface StaleSummary { slug: string; state: "yok" | "bayat"; /** records newer than the summary (capped at 20, like `ProjectStatus.summary.newer`) */ newer: number }
+
+/** Active projects whose `## Durum özeti` is bayat or yok (paused/archived cards and unreadable ones are skipped). */
+export function staleSummaries(): StaleSummary[] {
+  const out: StaleSummary[] = [];
+  for (const p of listProjects()) {
+    if (p.status !== "active") continue;
+    try {
+      const { state, newer } = projectStatus(p.slug).summary;
+      if (state !== "güncel") out.push({ slug: p.slug, state, newer: newer.length });
+    } catch { /* an unreadable record must not take the startup summary down */ }
+  }
+  return out;
+}
+
+export function staleSummaryText(list: StaleSummary[]): string {
+  return list.map((x) => (x.state === "yok" ? `${x.slug} (özet yok)` : `${x.slug} (${x.newer >= 20 ? "20+" : x.newer} kayıt)`)).join(", ");
 }
 
 /** Counts, open records and valid decisions come from the records; only the narrative comes from the card. */
