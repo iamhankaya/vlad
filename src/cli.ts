@@ -22,7 +22,7 @@ import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
-import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
+import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
 import { INNER_LOCK, lockPolicyOf } from "./machines/lock-policy.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext } from "./agent/forward.js";
 import { agentKeygen, agentSetKey, agentStart, agentStatus } from "./agent/start.js";
@@ -457,7 +457,7 @@ async function gateRoute(id: string): Promise<{ machine: string; transport: Retu
   return { machine, transport };
 }
 def(task, "gate <id>", "Uzak makinede kartın gate komutunu koşar (--target integration: çatı worktree'si, task: görevin kendisi); gate kırmızıysa çıkış 1", async (id: string, o: Opts) => {
-  const target = (o.target ?? "integration") as string;
+  const target = (o.target ?? defaultGateTarget(getTask(id))) as string;
   if (target !== "integration" && target !== "task") throw new Error("--target integration | task olmalı");
   const { machine, transport } = await gateRoute(id);
   const r = await remoteGateRun(transport, machine, getTask(id), target);
@@ -466,7 +466,7 @@ def(task, "gate <id>", "Uzak makinede kartın gate komutunu koşar (--target int
 ${r.stderr}` : ""}
 [gate çıkış kodu ${r.exit}]`);
   if (r.exit !== 0) process.exitCode = 1;
-}).option("--target <hedef>", "integration (varsayılan) | task");
+}).option("--target <hedef>", "integration (çatı için varsayılan) | task (dev görevi için varsayılan)");
 def(task, "merge-preview <id>", "Uzak makinede merge önizlemesi: log, diff --stat, çakışmalar (yazmaz)", async (id: string, o: Opts) => {
   const { machine, transport } = await gateRoute(id);
   const r = await remoteMergePreview(transport, machine, getTask(id), { ...(o.into ? { into: o.into as string } : {}) });

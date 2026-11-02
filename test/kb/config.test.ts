@@ -34,6 +34,7 @@ describe("config", () => {
     expect(cfg).toEqual({
       roots: ["C:\\dev"], ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
       staleAfterHours: 6, launcher: "auto", kbDir: "../vlad-kb", workerAutoCompact: "300k", worktreeDir: "{repo}-wt",
+      experiments: { ponytail: "ab" },
       projects: { watchparty: { autonomy: "commit" }, "ashen-bastion": { autonomy: "pr" } },
     });
   });

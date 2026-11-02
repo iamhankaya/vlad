@@ -46,7 +46,7 @@ const WORKER_LOCAL = new Set([
   "project status", "project list", "finding list",
   "task list", "task idle", "task ready", "task close-window",
   "inbox list", "inbox count", "decision list", "journal get", "audit skills",
-  "kb get", "kb search", "kb check", "session name",
+  "kb get", "kb search", "kb check", "kb refs", "pending list", "session name",
   "agent start", "agent status", "agent keygen", "agent setkey", "agent install",
   "queue list", "queue flush", "queue drop", "machine list", "machine ping", "machine probe-window",
 ]);

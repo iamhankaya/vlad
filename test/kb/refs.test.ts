@@ -54,6 +54,23 @@ describe("refsOf", () => {
     expect(r.flags.map((f) => f.code)).toEqual(["fixed_but_open_in_report"]);
     expect(r.flags[0].evidence[0]).toContain("T20261102-01");
   });
+  it("compares full timestamps: same-day fix in the morning flags an afternoon report, not an earlier one", () => {
+    finding("F-vlad-103", "fixed", "2026-11-02T09:00:00");
+    task("T20261102-03", "2026-11-02T08:00:00", "## Kapanış raporu\n### Açık noktalar\n- F-vlad-103\n"); // before the fix: origin
+    expect(refsOf("F-vlad-103").flags).toEqual([]);
+    task("T20261102-04", "2026-11-02T15:00:00", "## Kapanış raporu\n### Açık noktalar\n- F-vlad-103 sürüyor\n");
+    const r = refsOf("F-vlad-103");
+    expect(r.flags.map((f) => f.code)).toEqual(["fixed_but_open_in_report"]);
+    expect(r.flags[0].evidence[0]).toContain("T20261102-04");
+    expect(r.mentions.map((m) => m.id)).toEqual(["T20261102-03", "T20261102-04"]);
+    expect(r.mentions[1].date).toBe("2026-11-02"); // display stays day-granular
+  });
+  it("orders same-day mentions by full timestamp, not by id", () => {
+    finding("F-vlad-104", "open", "2026-11-01T10:00:00");
+    task("T20261102-09", "2026-11-02T08:00:00", "## İlerleme\n- F-vlad-104\n");
+    task("T20261102-01", "2026-11-02T18:00:00", "## İlerleme\n- F-vlad-104\n");
+    expect(refsOf("F-vlad-104").mentions.map((m) => m.id)).toEqual(["T20261102-09", "T20261102-01"]);
+  });
   it("flags open finding named under Yapılanlar; clean record has no flags", () => {
     finding("F-vlad-101", "open", "2026-11-01T10:00:00");
     task("T20261102-01", "2026-11-02T12:00:00", "## Kapanış raporu\n### Yapılanlar\n- F-vlad-101 düzeltildi\n");
