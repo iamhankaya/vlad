@@ -136,23 +136,27 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
 
 /** Registers a command with --json and a uniform error path. */
 /** Records a command changed show up in the project card's derived blocks (open findings, Son aktivite) right away; a refresh failure never fails the command. */
-function projectOf(key: string, args: any[]): string | undefined {
+function projectsOf(key: string, args: any[]): (string | undefined)[] {
   const o = args[args.length - 2] as Opts;
+  const decisionFile = (id: unknown) => listDecisions({ all: true }).find((d) => d.id === String(id))?.file;
   switch (key) {
-    case "project write": return String(args[0]);
-    case "finding add": case "decision add": return String(o.project);
-    case "finding set": return getFinding(String(args[0])).data.project;
-    case "task set": return getTask(String(args[0])).data.project;
-    case "decision set": return listDecisions({ all: true }).find((d) => d.id === String(args[0]))?.file;
+    case "project write": return [String(args[0])];
+    case "finding add": return [String(o.project)];
+    case "decision add": return [String(o.project), o.supersedes ? decisionFile(o.supersedes) : undefined]; // the superseded decision may belong to another project
+    case "finding set": return [getFinding(String(args[0])).data.project];
+    case "task set": return [getTask(String(args[0])).data.project];
+    case "decision set": return [decisionFile(args[0]), o.supersededBy ? decisionFile(o.supersededBy) : undefined];
   }
+  return [];
 }
 const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
 async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
   await fn(...args);
   if (!REFRESH_KEYS.has(key)) return;
   try {
-    const slug = projectOf(key, args);
-    if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug);
+    for (const slug of new Set(projectsOf(key, args))) {
+      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug);
+    }
   } catch (e) { process.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
 }
 

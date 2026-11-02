@@ -46,3 +46,14 @@ describe("project refresh + automatic refresh", () => {
     expect(cardText()).toContain("- elle");
   });
 });
+
+describe("cross-project decisions", () => {
+  it("superseding a decision of another project refreshes that project's card too", () => {
+    expect(vlad(["project", "write", "beta", "--file", "-"], card.replace(/alpha/g, "beta")).code).toBe(0);
+    vlad(["decision", "add", "--project", "beta", "--title", "Eski beta kararı", "--body-file", "-"], "- **Karar:** k");
+    const betaCard = () => readFileSync(join(home, "kb", "projects", "beta.md"), "utf8");
+    expect(betaCard()).toContain("D-beta-001 Eski beta kararı");
+    vlad(["decision", "add", "--project", "alpha", "--title", "Yeni", "--body-file", "-", "--supersedes", "D-beta-001"], "- **Karar:** k");
+    expect(betaCard()).not.toContain("D-beta-001 Eski beta kararı");
+  });
+});

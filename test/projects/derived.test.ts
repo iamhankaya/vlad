@@ -35,6 +35,18 @@ describe("replaceDerivedBlock", () => {
     const c = replaceDerivedBlock("## B\nb\n", "x", "yeni", "## A");
     expect(c).toBe(`## B\nb\n\n## A\n${open}\nyeni\n${DERIVED_CLOSE}\n`);
   });
+  it("refuses an unclosed block instead of taking a later block's close", () => {
+    const text = `## A
+${open}
+eski
+
+## B
+${derivedOpen("y")}
+z
+${DERIVED_CLOSE}
+`;
+    expect(() => replaceDerivedBlock(text, "x", "yeni", "## A")).toThrow(/kapanmamış/);
+  });
   it("is idempotent", () => {
     const once = replaceDerivedBlock("## A\nön\n", "x", "yeni", "## A");
     expect(replaceDerivedBlock(once, "x", "yeni", "## A")).toBe(once);
@@ -91,13 +103,16 @@ describe("refreshProject", () => {
     expect(refreshProject("vlad")).toBe(false);
     expect(read()).toBe(first);
   });
-  it("works on a CRLF card and keeps projectStatus intact", () => {
-    writeFileSync(cardFile(), read().replace(/\n/g, "\r\n"));
+  it("a CRLF card keeps its frontmatter, EOLs and outside text byte for byte; projectStatus stays intact", () => {
+    const crlf = read().replace(/\n/g, "\r\n").replace("stack: [ts]", "stack: [ts]  # yorum");
+    writeFileSync(cardFile(), crlf);
     addFinding({ project: "vlad", severity: "yüksek", source: "T20261101-01", title: "CRLF bulgu" });
     refreshProject("vlad");
     const raw = read();
+    expect(raw.startsWith(crlf.slice(0, crlf.indexOf("## Özet")))).toBe(true);
     expect(raw).toContain("CRLF bulgu");
-    expect(raw).toContain("- elle yazılmış: kullanıcı kararı bekliyor");
+    expect(raw).toContain("- elle yazılmış: kullanıcı kararı bekliyor\r\n");
+    expect(raw.replace(/\r\n/g, "")).not.toContain("\n");
     expect(projectStatus("vlad").findings.open.map((f) => f.title)).toEqual(["CRLF bulgu"]);
   });
   it("refreshAllProjects refreshes every card and reports unreadable ones", () => {

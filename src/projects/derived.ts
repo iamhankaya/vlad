@@ -1,7 +1,7 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/store.js";
-import { kbPaths, listDecisions, readDoc, replaceDerivedBlock, setSection, validate, wrapDerived, writeDoc } from "../kb/index.js";
+import { kbPaths, listDecisions, readDoc, replaceDerivedBlock, setDerivedSection, validate, writeFileAtomic } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
 
@@ -35,17 +35,21 @@ function activityBlock(slug: string): string {
 
 /**
  * Regenerates the card's derived blocks: the open-findings block inside `## Açık konular` (hand-written text around it stays)
- * and `## Son aktivite`, which is derived entirely (hand-written lines are dropped: they went stale, records are the truth).
+ * and `## Son aktivite`, which is derived entirely (hand-written lines are dropped on the first refresh: they went stale, records are the truth).
  * Returns whether the card changed; an up-to-date card is not rewritten.
  */
 export function refreshProject(slug: string): boolean {
   const file = join(kbPaths().projects, `${slug}.md`);
-  const { data, body } = readDoc<ProjectCard>(file);
+  const { data } = readDoc<ProjectCard>(file); // validates and refuses symlinks
   validate("project", data);
-  let next = replaceDerivedBlock(body, "open-findings", openFindingsBlock(slug), OPEN_HEADING);
-  next = setSection(next, ACTIVITY_HEADING, wrapDerived("recent-activity", activityBlock(slug)));
-  if (next === body) return false;
-  writeDoc(file, data, next);
+  // raw text: frontmatter, EOL and everything outside the blocks stay byte for byte
+  const raw = readFileSync(file, "utf8");
+  const head = /^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(raw)?.[0] ?? "";
+  const rest = raw.slice(head.length);
+  let next = replaceDerivedBlock(rest, "open-findings", openFindingsBlock(slug), OPEN_HEADING);
+  next = setDerivedSection(next, "recent-activity", activityBlock(slug), ACTIVITY_HEADING);
+  if (next === rest) return false;
+  writeFileAtomic(file, head + next);
   return true;
 }
 
