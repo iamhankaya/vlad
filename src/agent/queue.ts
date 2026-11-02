@@ -29,16 +29,28 @@ export class AgentQueue {
   private count = 0;
   private bytes = 0;
   private seqNo = 0;
+  /** Açılışta geçici hatayla (EBUSY/EPERM) okunamayan dosyalar: inflight olabilirler, drain öncesi yeniden denenir (F-vlad-155). */
+  private unrecovered = new Set<string>();
   constructor(private dir: string, private now: () => number) {
     ensurePrivateDir(join(dir, "failed"));
     for (const d of [dir, join(dir, "failed")]) for (const f of readdirSync(d)) if (f.endsWith(".tmp")) rmSync(join(d, f), { force: true });
     for (const f of readdirSync(dir)) if (f.endsWith(".json") && this.read(join(dir, f)) === null) renameSync(join(dir, f), join(dir, "failed", f)); // bozuk JSON → failed (geçici okuma hatası: yerinde kalır)
-    for (const f of this.files()) { const p = this.read(join(dir, f)); if (p?.state === "inflight") this.write(join(dir, f), { ...p, state: "pending" }); } // çökme kalıntısı: aynı opId beyinde idempotent
+    for (const f of this.files()) this.unrecovered.add(f);
+    this.recover();
     for (const f of this.files()) { this.count++; this.bytes += statSync(join(dir, f)).size; }
     const seqFile = join(dir, ".seq");
     const saved = existsSync(seqFile) ? parseInt(readFileSync(seqFile, "utf8"), 10) || 0 : 0;
     const onDisk = [...this.files(), ...readdirSync(join(dir, "failed")).filter((f) => f.endsWith(".json"))].reduce((m, f) => Math.max(m, parseInt(f, 10) || 0), 0);
     this.seqNo = Math.max(saved, onDisk);
+  }
+  /** Çökme kalıntısı inflight girdileri pending'e çevirir (aynı opId beyinde idempotent); okunamayanlar sonraki denemeye kalır. */
+  private recover(): void {
+    for (const f of [...this.unrecovered]) {
+      const p = this.read(join(this.dir, f));
+      if (p === undefined) continue;
+      if (p?.state === "inflight") this.write(join(this.dir, f), { ...p, state: "pending" });
+      this.unrecovered.delete(f);
+    }
   }
   private unlink(file: string): void { // sayaçları tutarlı tutan tek silme noktası
     this.bytes -= statSync(file).size; this.count--; rmSync(file);
@@ -115,6 +127,7 @@ export class AgentQueue {
   }
   private async drain(send: (it: QueueItem) => Promise<unknown>): Promise<{ sent: number; failed: number; remaining: number }> {
     const r = { sent: 0, failed: 0, remaining: 0 };
+    this.recover();
     {
       const poisoned = new Map<string, number>(); // görev id → başarısız ilk seq
       for (const f of this.files()) {
