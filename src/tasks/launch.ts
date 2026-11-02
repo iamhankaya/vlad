@@ -516,10 +516,12 @@ export function statusSummary(
   undigested: number; openSevereFindings: number; mode: string | null;
 } {
   const mark = opts.mark !== false;
+  // a read-only/locked kb must not take the startup summary (SessionStart hook) down: marking is best effort (F-vlad-052)
+  const safe = (fn: () => Task[]): Task[] => { try { return fn(); } catch { return []; } };
   const newlyStalled = mark ? [
-    ...markStale(now, cfg.staleAfterHours),
-    ...markSilentWorkers(now, cfg, probe, platform),
-    ...applyRemoteStalls(opts.remotePlans ?? []),
+    ...safe(() => markStale(now, cfg.staleAfterHours)),
+    ...safe(() => markSilentWorkers(now, cfg, probe, platform)),
+    ...safe(() => applyRemoteStalls(opts.remotePlans ?? [])),
   ].map((t) => t.data.id) : [];
   const mode = modeLine(now);
   if (mark) try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared

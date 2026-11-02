@@ -88,9 +88,15 @@ export interface SkillAudit {
  * the skills it loaded with the ones it should have: vlad-worker, its role's skills, ci-triage after a push by an
  * `autonomy: pr` worker. The VLAD session itself is checked for the final-gate skills once a pipeline closed.
  */
+/** `--since` as ms: a bare date is the start of that LOCAL day (Date.parse would read it as UTC midnight and shift the window by the zone offset, F-vlad-090); NaN if unparsable. */
+export function parseSince(s: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : Date.parse(s);
+}
+
 export function auditSkills(o: { configDir?: string; since?: string; project?: string } = {}): SkillAudit {
   const configDir = o.configDir ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
-  const sinceMs = o.since ? Date.parse(o.since) : 0;
+  const sinceMs = o.since ? parseSince(o.since) : 0;
   if (o.since && Number.isNaN(sinceMs)) throw new Error(`geçersiz --since: ${o.since}`);
   const dirOf = (path: string) => join(configDir, "projects", claudeProjectDir(path));
   const all = listTasks().filter((t) => Date.parse(t.data.created) >= sinceMs && (!o.project || t.data.project === o.project));

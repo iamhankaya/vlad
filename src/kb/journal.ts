@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "./atomic.js";
 import { kbPaths } from "./home.js";
+import { fencedLines } from "./sections.js";
 
 /** Appends `text` to `file`, keeping exactly one blank line between existing content and the new block. */
 function appendBlock(file: string, text: string, initial = ""): void {
@@ -34,8 +35,10 @@ export function getJournal(date: string): { date: string; file: string; content:
   if (!existsSync(file)) throw new Error(`günlük yok: ${date}`);
   const content = readFileSync(file, "utf8").replace(/\r\n/g, "\n");
   const sections: JournalSection[] = [];
-  for (const line of content.split("\n")) {
-    const h = /^## (.+)$/.exec(line);
+  const lines = content.split("\n");
+  const fenced = fencedLines(lines); // a "## " line inside a code fence is text, not a heading (F-vlad-098)
+  for (const [i, line] of lines.entries()) {
+    const h = fenced[i] ? null : /^## (.+)$/.exec(line);
     if (h) sections.push({ project: h[1].trim(), content: "" });
     else if (sections.length) sections[sections.length - 1].content += line + "\n";
   }

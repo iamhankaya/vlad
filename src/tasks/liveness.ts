@@ -38,13 +38,31 @@ export function transcriptMtime(worktree: string, configDir: string = process.en
   }
 }
 
+/** The session id of the worktree's only Claude transcript; null when there is none or several (`--continue` would guess, F-vlad-097). */
+export function soleTranscriptSession(worktree: string, configDir: string = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude")): string | null {
+  try {
+    const files = readdirSync(join(configDir, "projects", claudeProjectDir(worktree))).filter((f) => f.endsWith(".jsonl"));
+    return files.length === 1 ? files[0].slice(0, -".jsonl".length) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Process listing command: PowerShell on Windows, `ps` elsewhere (F-vlad-111: macOS/Linux workers were never marked stalled). */
+const listCommand = (): [string, string[]] => process.platform === "win32"
+  ? ["powershell.exe", [
+    "-NoProfile", "-NonInteractive", "-Command",
+    "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine } | Where-Object { $_ }",
+  ]]
+  : ["ps", ["-eo", "args="]];
+
+/** One lower-cased command line per non-empty output line. */
+export const parseProcessList = (out: string): string[] => out.split(/\r?\n/).map((l) => l.trim().toLowerCase()).filter(Boolean);
+
 function commandLines(): string[] | null {
   try {
-    const out = execFileSync("powershell.exe", [
-      "-NoProfile", "-NonInteractive", "-Command",
-      "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine } | Where-Object { $_ }",
-    ], { encoding: "utf8", windowsHide: true, timeout: 20000, stdio: ["ignore", "pipe", "ignore"] });
-    return out.split(/\r?\n/).map((l) => l.toLowerCase());
+    const [cmd, args] = listCommand();
+    return parseProcessList(execFileSync(cmd, args, { encoding: "utf8", windowsHide: true, timeout: 20000, maxBuffer: 32 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"] }));
   } catch {
     return null;
   }
@@ -53,10 +71,8 @@ function commandLines(): string[] | null {
 /** Async process listing for the Agent (never blocks its event loop); null on failure or timeout. */
 export function commandLinesAsync(timeoutMs: number): Promise<string[] | null> {
   return new Promise((resolve) => {
-    execFile("powershell.exe", [
-      "-NoProfile", "-NonInteractive", "-Command",
-      "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine } | Where-Object { $_ }",
-    ], { encoding: "utf8", windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (err, out) => resolve(err ? null : out.split(/\r?\n/).map((l) => l.toLowerCase())));
+    const [cmd, args] = listCommand();
+    execFile(cmd, args, { encoding: "utf8", windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 }, (err, out) => resolve(err ? null : parseProcessList(out)));
   });
 }
 
@@ -90,12 +106,9 @@ export function decideSilent({ idleMs, alive, silentMs }: SilenceInput): boolean
  * A local worker that stopped without reporting leaves its task `running` until `staleAfterHours`.
  * Marks it `stalled` sooner: no sign of life (task file update or transcript write) for
  * `workerSilentMinutes` (4x that while a process mentions the task id), or, with no such process, for a short grace.
- * Cloud tasks, pipelines and tasks without a worktree are left alone; no-op outside Windows.
+ * Cloud tasks, pipelines and tasks without a worktree are left alone; `ps` stands in for PowerShell on macOS/Linux.
  */
-export function markSilentWorkers(
-  now: Date, cfg: VladConfig, probe?: LivenessProbe, platform: NodeJS.Platform = process.platform,
-): Task[] {
-  if (platform !== "win32") return [];
+export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessProbe, _platform?: NodeJS.Platform): Task[] {
   const silentMs = (cfg.workerSilentMinutes ?? DEFAULT_SILENT_MINUTES) * MIN;
   const out: Task[] = [];
   for (const t of listTasks({ state: ["running"] })) {

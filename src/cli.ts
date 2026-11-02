@@ -7,8 +7,10 @@ import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEV
 import { auditSetup } from "./audit/setup.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
-import { idleTasks, probeRemoteWorkers } from "./tasks/liveness.js";
+import { idleTasks, probeRemoteWorkers, soleTranscriptSession } from "./tasks/liveness.js";
+import { trustWorktree } from "./tasks/trust.js";
 import type { RemoteStallPlan } from "./tasks/liveness.js";
+import { probeIntegrationBranch } from "./tasks/cloud.js";
 import { listInboxWithWarnings, markDone } from "./inbox/inbox.js";
 import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
@@ -99,7 +101,7 @@ program
 
 /**
  * Commands that write the kb run under the cross-process kb lock (F-vlad-096): ID generation and the write
- * share one lock region. Read-only commands, `kb commit` (files are written atomically) and
+ * share one lock region. Read-only commands, `kb commit` (takes the lock itself around add+commit only, never during the push; F-vlad-103) and
  * `task close-window` (no kb write) stay lock-free. `task launch` locks only its kb write regions inside
  * `launchTask` (F-vlad-102), never the worktree/terminal wait. `status`/`mode status` write only as a side effect
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
@@ -288,7 +290,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   }
   if (mode === "cloud") {
     if (o.external) throw new Error("--external yerel çalışan içindir; bulut modunda kullanılamaz");
-    const r = await withKbLock(() => prepareCloudLaunch(id));
+    const remoteBranch = probeIntegrationBranch(id); // network outside the kb lock (F-vlad-110)
+    const r = await withKbLock(() => prepareCloudLaunch(id, { remoteBranch }));
     out(o, r, `${id} bulut çalışanı için hazır (running)\nrepo: ${r.repo}\nbranch: ${r.outcome_branch}\n` +
       `base: ${r.base_branch}\n${r.next.map((n) => `- ${n}`).join("\n")}` +
       r.warnings.map((w) => `\nuyarı: ${w}`).join(""));
@@ -382,16 +385,21 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   }
   const r = resumeLocalCheck(plan);
   // --- /machines:C1 ---
+  // the trust record may be gone (cleanup, a rewritten ~/.claude.json): without it the resumed worker stops at the trust screen (F-vlad-081)
+  const trustWarn = r.mode === "local" ? trustWorktree(r.worktree) : null;
+  if (trustWarn) process.stderr.write(`uyarı: ${trustWarn}\n`);
   if (o.external) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
     const model = modelInfo(t.data).effective_model;
     const autoCompact = loadConfig().workerAutoCompact;
+    const sid = t.data.session_id?.trim() || soleTranscriptSession(r.worktree);
     const ext = externalLaunch({
       taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
       ...(autoCompact ? { autoCompact } : {}),
-      resume: { sessionId: t.data.session_id?.trim() || undefined }, // keep the worker's context: a fresh `claude $p` would lose it
+      // keep the worker's context. No recorded session: only the worktree's single transcript is safe to resume; `--continue` could pick any session (F-vlad-097), so otherwise start fresh (the prompt carries the log tail)
+      ...(sid ? { resume: { sessionId: sid } } : {}),
     });
     if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);
     out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);

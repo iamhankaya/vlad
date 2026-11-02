@@ -78,9 +78,9 @@ describe("markSilentWorkers", () => {
     age(noWt.data.id, 300);
     expect(stalledIds(probe({ alive: () => false }))).toEqual([]);
   });
-  it("is a no-op outside Windows", () => {
-    runningLocal(300);
-    expect(markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), "linux")).toEqual([]);
+  it("marks outside Windows too (F-vlad-111)", () => {
+    const id = runningLocal(300);
+    expect(markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), "linux").map((t) => t.data.id)).toEqual([id]);
   });
   it("statusSummary reports the silent worker in newlyStalled", () => {
     const id = runningLocal(300);
