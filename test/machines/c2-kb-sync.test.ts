@@ -95,3 +95,19 @@ describe("machines:C2 kb-sync (işçi)", () => {
     expect(ticks).toBeGreaterThan(Math.floor(ms / 20 / 2)); // zamanlayıcı en az yarı hızda işledi
   });
 });
+
+describe("F-vlad-134: kb-sync sertleştirme", () => {
+  it("işçi klonu upstream'in ilerisindeyse (push edilmemiş yerel commit) reddedilir", async () => {
+    const sha = git(worker, "rev-parse", "HEAD");
+    writeFileSync(join(worker, "local.md"), "x");
+    git(worker, "add", "-A"); git(worker, "commit", "-q", "-m", "local");
+    await expect(kbSync({ expectSha: sha })).rejects.toMatchObject({ code: "failed", message: expect.stringMatching(/ilerisinde|ahead/i) });
+  });
+
+  it("git hatasının stderr'i (yol/URL) beyne dönmez", async () => {
+    git(worker, "remote", "set-url", "origin", join(base, "SECRET-gizli-yol.git"));
+    const err = await kbSync({ expectSha: "a".repeat(40) }).catch((e) => e as Error);
+    expect(err).toMatchObject({ code: "failed" });
+    expect((err as Error).message).not.toContain("SECRET");
+  });
+});
