@@ -1,6 +1,7 @@
 // Kabul fazı (T20261101-22): çoklu makine kabul testlerinin ortak dünyası. Tester sahipliği; harness.ts'e dokunmaz.
 // Yalnız geçici dizinler: iki home (beyin "mac" + işçi "windows"), bare origin + iki kb klonu, iki git repo. Gerçek kaynağa dokunmaz.
 // Tüm vlad çağrıları ASENKRON (alt süreç): test sürecindeki TCP vekilleri (startProxy) spawnSync sırasında donardı.
+import { isolatedEnv } from "../isolate-env.js";
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -13,7 +14,7 @@ export const git = (cwd: string, ...a: string[]): string =>
 /** Asenkron `vlad` çağrısı (yan etkisiz env: side.env + o.env). */
 export function runVlad(side: Side, argv: string[], o: { stdin?: string; env?: Record<string, string>; timeoutMs?: number } = {}): Promise<SpawnResult> {
   return new Promise((res) => {
-    const p = spawn(process.execPath, [CLI, ...argv], { env: { ...process.env, ...side.env, ...o.env }, stdio: ["pipe", "pipe", "pipe"] });
+    const p = spawn(process.execPath, [CLI, ...argv], { env: { ...isolatedEnv(), ...side.env, ...o.env }, stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
     p.stdout.on("data", (d) => (out += d));
     p.stderr.on("data", (d) => (err += d));
