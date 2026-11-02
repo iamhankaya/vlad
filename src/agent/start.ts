@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync, truncateSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
@@ -30,6 +30,15 @@ export async function probeLocal(): Promise<{ alive: boolean; host: string; port
   try { await client.call(self, "ping", {}); return { alive: true, host, port, machine: self }; } catch (e) {
     return { alive: e instanceof RemoteError && ["forbidden", "proto_mismatch", "clock_skew"].includes(e.code), host, port, machine: self };
   }
+}
+
+/** agent.log `max` baytı aşarsa `.1`e kopyalanıp kesilir (yeniden adlandırma değil: süreç dosyayı açık tutar). shortcut: tek yedek, çok eski günlük kaybolur. */
+export function rotateLog(file: string, max = 1_000_000): void {
+  try {
+    if (statSync(file).size <= max) return;
+    copyFileSync(file, `${file}.1`);
+    truncateSync(file, 0);
+  } catch { /* günlük yoksa ya da kilitliyse sessiz geç */ }
 }
 
 /** Adres başkasında mı? Journal/kuyruğa dokunmadan ÖNCE sorulur: canlı Agent'ın uçuştaki işlemlerini ikinci süreç bozmasın. */
@@ -69,6 +78,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const test = process.env.VLAD_AGENT_TEST === "1";
   const dir = agentDir();
   ensurePrivateDir(dir);
+  rotateLog(join(dir, "agent.log"));
   const journal = new Journal(join(dir, "journal.jsonl"), nowMs);
   const queue = kind === "worker-agent" ? new AgentQueue(join(dir, "queue"), nowMs) : undefined;
   const build = buildId();
