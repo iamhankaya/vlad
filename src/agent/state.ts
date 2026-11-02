@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { userInfo } from "node:os";
+
 import { lookup } from "node:dns/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getVladHome } from "../kb/home.js";
 import type { VladConfig } from "../kb/types.js";
@@ -23,11 +23,12 @@ export function readLocal(): LocalSettings {
     throw new Error(`yerel ayar okunamadı (${f}): ${(e as Error).message}`);
   }
 }
-export function writeLocal(s: LocalSettings): void {
+export function writeLocal(s: LocalSettings, o: { lock?: (f: string) => void } = {}): void {
   const f = localFile();
   mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
+  writeFileSync(f, "", { mode: 0o600 }); // önce boş dosya kilitlenir, anahtar kilitli dosyaya yazılır (F-vlad-151)
+  (o.lock ?? lockDownFile)(f);
   writeFileSync(f, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
-  lockDownFile(f);
 }
 
 /** Durum dizini yalnız sahibine açık: yeni dizinler 0700, var olanın modu da çekilir (Windows'ta chmod etkisiz, yok sayılır). */
@@ -36,13 +37,21 @@ export function ensurePrivateDir(dir: string): void {
   try { chmodSync(dir, 0o700); } catch { /* shortcut: chmod başarısız, dizin yine oluştu; Windows ACL'i dosya düzeyinde (lockDownFile) */ }
 }
 
-/** Anahtar dosyası yalnız sahibine açık: POSIX'te 0600, Windows'ta icacls ile miras kesilir ve yalnız geçerli kullanıcıya tam yetki verilir (en iyi çaba). */
-export function lockDownFile(f: string, o: { platform?: NodeJS.Platform; user?: string; exec?: (file: string, args: string[]) => void } = {}): void {
+/**
+ * Anahtar dosyası yalnız sahibine açık: POSIX'te 0600, Windows'ta icacls ile miras kesilir ve yalnız geçerli kullanıcıya (SID ile) tam yetki
+ * verilir. Araçlar PATH'ten değil `%SystemRoot%\System32`'den çağrılır. Kilitlenemezse yazma düşmez ama uyarı stderr'e basılır (F-vlad-151).
+ */
+export function lockDownFile(f: string, o: { platform?: NodeJS.Platform; systemRoot?: string; exec?: (file: string, args: string[]) => string | void; warn?: (m: string) => void } = {}): void {
   try {
     if ((o.platform ?? process.platform) !== "win32") { chmodSync(f, 0o600); return; }
-    const user = o.user ?? (process.env.USERDOMAIN && process.env.USERNAME ? `${process.env.USERDOMAIN}\\${process.env.USERNAME}` : userInfo().username);
-    (o.exec ?? ((file, args) => { execFileSync(file, args, { stdio: "ignore", windowsHide: true }); }))("icacls", [f, "/inheritance:r", "/grant:r", `${user}:F`]);
-  } catch { /* shortcut: ACL/chmod uygulanamadı, dosya yine yazıldı; kullanıcıya özel profil dizinine güvenilir */ }
+    const sys32 = win32.join(o.systemRoot ?? process.env.SystemRoot ?? "C:\\Windows", "System32");
+    const run = o.exec ?? ((file, args) => execFileSync(file, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true }));
+    const sid = /S-1-[\d-]+/.exec(String(run(win32.join(sys32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]) ?? ""))?.[0];
+    if (!sid) throw new Error("kullanıcı SID'i alınamadı");
+    run(win32.join(sys32, "icacls.exe"), [f, "/inheritance:r", "/grant:r", `*${sid}:F`]);
+  } catch (e) {
+    (o.warn ?? ((m) => process.stderr.write(m + "\n")))(`uyarı: ${f} erişim izni kısıtlanamadı (${(e as Error).message}); anahtar dosyası başka yerel kullanıcılara açık olabilir, ACL'i elle sıkılaştır`);
+  }
 }
 
 /** Bu makinenin kimliği: VLAD_MACHINE > vlad.local.json self. */

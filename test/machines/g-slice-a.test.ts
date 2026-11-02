@@ -11,7 +11,7 @@ import { OP_TABLE, type OpHandler } from "../../src/agent/ops/index.js";
 import { AgentQueue } from "../../src/agent/queue.js";
 import { handleRequest, type ServerOpts } from "../../src/agent/server.js";
 import { signRequest } from "../../src/agent/sign.js";
-import { ensurePrivateDir, lockDownFile } from "../../src/agent/state.js";
+import { ensurePrivateDir, lockDownFile, writeLocal } from "../../src/agent/state.js";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { AgentOp, AgentRequest } from "../../src/machines/types.js";
 import { rmTemp } from "../helpers.js";
@@ -79,14 +79,36 @@ describe("F-vlad-128: Agent durum dizini 0700", () => {
   });
 });
 
-describe("F-vlad-132: anahtar dosyası Windows'ta ACL ile özel", () => {
-  it("win32: icacls mirası keser ve yalnız geçerli kullanıcıya tam yetki verir", () => {
+describe("F-vlad-132/151: anahtar dosyası Windows'ta ACL ile özel", () => {
+  const SID = "S-1-5-21-1-2-3-1001";
+  const exec = (calls: { file: string; args: string[] }[]) => (file: string, args: string[]): string => {
+    calls.push({ file, args });
+    return file.endsWith("whoami.exe") ? `"PC\\me","${SID}"\r\n` : "";
+  };
+  it("win32: tam yollu icacls mirası keser ve yalnız geçerli kullanıcıya SID ile tam yetki verir", () => {
     const calls: { file: string; args: string[] }[] = [];
-    lockDownFile("C:\\v\\vlad.local.json", { platform: "win32", user: "PC\\me", exec: (file, args) => { calls.push({ file, args }); } });
-    expect(calls).toEqual([{ file: "icacls", args: ["C:\\v\\vlad.local.json", "/inheritance:r", "/grant:r", "PC\\me:F"] }]);
+    lockDownFile("C:\\v\\vlad.local.json", { platform: "win32", systemRoot: "C:\\Windows", exec: exec(calls) });
+    expect(calls.at(-1)).toEqual({ file: "C:\\Windows\\System32\\icacls.exe", args: ["C:\\v\\vlad.local.json", "/inheritance:r", "/grant:r", `*${SID}:F`] });
   });
-  it("win32'de icacls başarısızlığı yazmayı düşürmez", () => {
-    expect(() => lockDownFile("x", { platform: "win32", user: "u", exec: () => { throw new Error("yok"); } })).not.toThrow();
+  it("win32'de icacls başarısızlığı yazmayı düşürmez ama görünür uyarı verir (fail-open sessiz değil)", () => {
+    const warns: string[] = [];
+    expect(() => lockDownFile("x", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: (f) => { if (f.endsWith("icacls.exe")) throw new Error("yok"); return `"a","${SID}"`; } })).not.toThrow();
+    expect(warns.join("\n")).toMatch(/kısıtlanamadı[\s\S]*yok/);
+  });
+  it("kullanıcı SID'i alınamazsa icacls çağrılmaz, uyarı verilir", () => {
+    const warns: string[] = [];
+    const calls: string[] = [];
+    lockDownFile("x", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: (f) => { calls.push(f); return "çöp"; } });
+    expect(calls.some((c) => c.endsWith("icacls.exe"))).toBe(false);
+    expect(warns).toHaveLength(1);
+  });
+  it("writeLocal: dosya içerik yazılmadan ÖNCE (boşken) kilitlenir", () => {
+    const f = join(tmp(), "vlad.local.json");
+    process.env.VLAD_LOCAL_FILE = f;
+    let atLock: string | null = null;
+    try { writeLocal({ keys: { a: "k" } }, { lock: (p) => { atLock = real.readFileSync(p, "utf8"); } }); } finally { delete process.env.VLAD_LOCAL_FILE; }
+    expect(atLock).toBe("");
+    expect(JSON.parse(real.readFileSync(f, "utf8")).keys.a).toBe("k");
   });
 });
 
