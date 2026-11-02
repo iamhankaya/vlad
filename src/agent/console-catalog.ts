@@ -63,6 +63,10 @@ export const CONSOLE_CATALOG: readonly CatalogEntry[] = [
   { path: ["kb", "get"], kind: "read" },
   { path: ["kb", "search"], kind: "read" },
   { path: ["kb", "check"], kind: "read" },
+  { path: ["kb", "refs"], kind: "read" },
+  { path: ["digest", "pending", "list"], kind: "read" },
+  { path: ["digest", "pending", "add"], kind: "write" },
+  { path: ["digest", "pending", "done"], kind: "write" },
   { path: ["session", "register"], kind: "write" },
   { path: ["session", "name"], kind: "read" },
 ];

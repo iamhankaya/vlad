@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { AgentOp, RemoteTransport } from "../../src/machines/index.js";
-import { gateMachineOf, recordGreenGate, remoteGateRun, remoteMerge, remoteMergePreview } from "../../src/machines/remote.js";
+import { defaultGateTarget, gateMachineOf, recordGreenGate, remoteGateRun, remoteMerge, remoteMergePreview } from "../../src/machines/remote.js";
 import { writeProject } from "../../src/projects/store.js";
 import { createTask, getTask, logTask, setState } from "../../src/tasks/index.js";
 import { makeHome, rmTemp } from "../helpers.js";
@@ -122,5 +122,23 @@ describe("machines:C4 beyin tarafı kapı çağrıları", () => {
     recordGreenGate(p, { exit: 0, stdout: "", stderr: "", head: SHA }, "integration");
     await remoteMerge(t, "windows", getTask(p));
     expect(t.calls[0]!.args.expectHead).toBe(SHA);
+  });
+  it("bayraksız `task gate` hedefi: dev görev → task (merge reddetmez), çatı → integration", async () => {
+    const id = dev();
+    const p = pipeline();
+    expect(defaultGateTarget(getTask(id))).toBe("task");
+    expect(defaultGateTarget(getTask(p))).toBe("integration");
+    const t = fake({ head: "abc", merged: true });
+    recordGreenGate(id, { exit: 0, stdout: "", stderr: "", head: SHA }, defaultGateTarget(getTask(id)));
+    await remoteMerge(t, "windows", getTask(id)); // reddedilmez
+    expect(t.calls[0]!.args.expectHead).toBe(SHA);
+  });
+
+  it("yeşil gate kaydı yok hatası doğru hedefi söyler", async () => {
+    const id = dev();
+    const p = pipeline();
+    const t = fake({ head: "abc", merged: true });
+    await expect(remoteMerge(t, "windows", getTask(id))).rejects.toThrow(/--target task/);
+    await expect(remoteMerge(t, "windows", getTask(p))).rejects.toThrow(/--target integration/);
   });
 });

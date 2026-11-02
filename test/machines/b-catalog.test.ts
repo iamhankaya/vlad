@@ -12,6 +12,12 @@ describe("machines:B console catalog", () => {
     expect(validateConsoleArgv(["task", "log", "T20261101-24", "merhaba"]).entry).toMatchObject({ path: ["task", "log"], kind: "write" });
     expect(validateConsoleArgv(["kb", "maintain", "--dry-run"]).entry.kind).toBe("write");
   });
+  it("digest pending list/add/done and kb refs are catalogued with the right class", () => {
+    expect(validateConsoleArgv(["digest", "pending", "list", "--json"]).entry).toMatchObject({ path: ["digest", "pending", "list"], kind: "read" });
+    expect(validateConsoleArgv(["digest", "pending", "add", "--text", "x"]).entry).toMatchObject({ path: ["digest", "pending", "add"], kind: "write" });
+    expect(validateConsoleArgv(["digest", "pending", "done", "P-1"]).entry).toMatchObject({ path: ["digest", "pending", "done"], kind: "write" });
+    expect(validateConsoleArgv(["kb", "refs", "F-vlad-001", "--json"]).entry).toMatchObject({ path: ["kb", "refs"], kind: "read" });
+  });
   it("status is a read (no journal) even though it may mark stalled", () => {
     expect(validateConsoleArgv(["status", "--no-mark", "--json"]).entry.kind).toBe("read");
   });

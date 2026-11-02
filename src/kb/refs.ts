@@ -17,6 +17,8 @@ export interface RefMention {
   id: string;
   status: string | null;
   date: string | null;
+  /** full timestamp (ordering and fixed/open comparison); `date` is display only */
+  ts: string | null;
   /** nearest heading line above the mention (`### Açık noktalar`), "" when none */
   section: string;
   /** nearest `## ` heading line above the mention */
@@ -75,6 +77,12 @@ function* sources(): Generator<Source> {
   }
 }
 
+/** Epoch ms of a (possibly date-only, possibly offset) timestamp; unparseable/missing sorts first. */
+function tsMs(t: string | null): number {
+  const n = t ? Date.parse(t) : NaN;
+  return Number.isNaN(n) ? -Infinity : n;
+}
+
 function mentionsOf(id: string): RefMention[] {
   const re = tokenRe(id);
   const kb = kbPaths().kb;
@@ -98,13 +106,13 @@ function mentionsOf(id: string): RefMention[] {
       seen.add(key);
       const at = Math.max(0, l.search(re) - 40);
       out.push({
-        type: s.type, id: s.id, status: s.status, date: s.date && s.date.slice(0, 10), section: heading, h2,
+        type: s.type, id: s.id, status: s.status, date: s.date && s.date.slice(0, 10), ts: s.date, section: heading, h2,
         snippet: l.slice(at, at + SNIPPET).replace(/\s+/g, " ").trim(),
         path: s.path, relative: relative(kb, s.path).split("\\").join("/"),
       });
     });
   }
-  return out.sort((a, b) => String(a.date).localeCompare(String(b.date)) || a.id.localeCompare(b.id));
+  return out.sort((a, b) => tsMs(a.ts) - tsMs(b.ts) || a.id.localeCompare(b.id));
 }
 
 /** Local clones to try, in order: the card's `path`, then `<root>/<slug>` for each configured root. */
@@ -141,7 +149,7 @@ function flagsOf(rec: { type: string; status: string | null; updated: string | n
   const last = reports.length ? reports[reports.length - 1] : null; // mentions are in date order
   const where = (m: RefMention) => `${m.id} ${m.section} (${m.date ?? "-"})`;
   // a report older than the fix is the finding's origin, not a contradiction
-  if ((rec.status === "fixed" || rec.status === "wontfix") && last && OPEN_POINTS.test(last.section) && String(last.date) > String(rec.updated).slice(0, 10)) {
+  if ((rec.status === "fixed" || rec.status === "wontfix") && last && OPEN_POINTS.test(last.section) && tsMs(last.ts) > tsMs(rec.updated)) {
     flags.push({ code: "fixed_but_open_in_report", message: `bulgu ${rec.status} ama son rapor atfı Açık noktalar'da`, evidence: [where(last)] });
   }
   if (rec.status === "open" || rec.status === "deferred") {

@@ -137,16 +137,16 @@ export function recordGreenGate(id: string, r: GateRunResult, target: "integrati
   saveTask(t);
 }
 /** Merge edilen dal (vlad/<id>) için geçerli gate hedefi: çatıda entegrasyon worktree'si, diğerinde görevin kendisi. */
-const gateTargetOf = (task: Task): "integration" | "task" => (task.data.kind === "pipeline" ? "integration" : "task");
+export const defaultGateTarget = (task: Task): "integration" | "task" => (task.data.kind === "pipeline" ? "integration" : "task");
 /** Görevin son yeşil gate head'i (merge edilecek dalın hedefiyle eşleşen); yoksa null. */
 export function lastGreenGateHead(task: Task): string | null {
   const g = task.data.last_green_gate;
-  return g && g.target === gateTargetOf(task) ? g.head : null;
+  return g && g.target === defaultGateTarget(task) ? g.head : null;
 }
 export async function remoteMerge(transport: RemoteTransport, machine: string, task: Task, o: { into?: string; message?: string } = {}): Promise<MergeResult> {
   const refs = mergeRefs(task, o.into);
   const expectHead = lastGreenGateHead(task);
-  if (!expectHead) throw new Error(`${task.data.id} için yeşil gate kaydı yok; önce vlad task gate ${task.data.id} koş, sonra merge et`);
+  if (!expectHead) throw new Error(`${task.data.id} için yeşil gate kaydı yok; önce vlad task gate ${task.data.id} --target ${defaultGateTarget(task)} koş, sonra merge et`);
   return (await transport.call<MergeResult>(machine, "merge", { ...gateIds(task), ...refs, expectHead, ...(o.message ? { message: o.message } : {}) }, { timeoutMs: 330_000 })).result;
 }
 // --- /machines:C4 ---
