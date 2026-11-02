@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { lookup } from "node:dns/promises";
 import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,11 +27,13 @@ export function writeLocal(s: LocalSettings, o: { lock?: (f: string) => void } =
   const f = localFile();
   mkdirSync(dirname(f), { recursive: true, mode: 0o700 });
   // önce boş geçici dosya kilitlenir, anahtar kilitli dosyaya yazılır, sonra rename: okuyucu boş/yarım dosya görmez, çökme anahtarları silmez (F-vlad-151)
-  const tmp = f + ".tmp";
-  writeFileSync(tmp, "", { mode: 0o600 });
-  (o.lock ?? lockDownFile)(tmp);
-  writeFileSync(tmp, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
-  renameSync(tmp, f);
+  const tmp = `${f}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`; // eşzamanlı yazanlar aynı geçici dosyayı paylaşmaz
+  try {
+    writeFileSync(tmp, "", { mode: 0o600, flag: "wx" });
+    (o.lock ?? lockDownFile)(tmp);
+    writeFileSync(tmp, JSON.stringify(s, null, 2) + "\n", { mode: 0o600 });
+    renameSync(tmp, f);
+  } catch (e) { rmSync(tmp, { force: true }); throw e; }
 }
 
 /** Durum dizini yalnız sahibine açık: yeni dizinler 0700, var olanın modu da çekilir (Windows'ta chmod etkisiz, yok sayılır). */
@@ -48,7 +51,8 @@ export function lockDownFile(f: string, o: { platform?: NodeJS.Platform; systemR
     if ((o.platform ?? process.platform) !== "win32") { chmodSync(f, 0o600); return; }
     const sys32 = win32.join(o.systemRoot ?? process.env.SystemRoot ?? "C:\\Windows", "System32");
     const run = o.exec ?? ((file, args) => execFileSync(file, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true }));
-    const sid = /S-1-[\d-]+/.exec(String(run(win32.join(sys32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]) ?? ""))?.[0];
+    const csv = String(run(win32.join(sys32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]) ?? "").trim();
+    const sid = /^"(?:[^"]*)","(S-1-\d+(?:-\d+)+)"$/.exec(csv.split(/\r?\n/)[0] ?? "")?.[1]; // SID yalnız 2. alan ve tam eşleşme (ad alanına düşülmez)
     if (!sid) throw new Error("kullanıcı SID'i alınamadı");
     run(win32.join(sys32, "icacls.exe"), [f, "/inheritance:r", "/grant:r", `*${sid}:F`]);
   } catch (e) {

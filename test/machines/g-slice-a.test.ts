@@ -150,12 +150,40 @@ describe("F-vlad-132/151: anahtar dosyası Windows'ta ACL ile özel", () => {
     expect(() => lockDownFile("x", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: (f) => { if (f.endsWith("icacls.exe")) throw new Error("yok"); return `"a","${SID}"`; } })).not.toThrow();
     expect(warns.join("\n")).toMatch(/kısıtlanamadı[\s\S]*yok/);
   });
+  it("SID whoami CSV'sinin 2. alanından ve tam eşleşmeyle alınır (ad alanındaki S-1- benzeri metin SID sayılmaz)", () => {
+    const calls: { file: string; args: string[] }[] = [];
+    const run = (file: string, args: string[]): string => { calls.push({ file, args }); return file.endsWith("whoami.exe") ? `"DOM S-1-5-99\\me","${SID}"\r\n` : ""; };
+    lockDownFile("f", { platform: "win32", systemRoot: "C:\\Windows", exec: run });
+    expect(calls.at(-1)!.args[3]).toBe(`*${SID}:F`);
+    const warns: string[] = [];
+    const bad = (file: string): string => (file.endsWith("whoami.exe") ? `"DOM S-1-5-99\\me","not-a-sid"` : "");
+    lockDownFile("f", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: bad });
+    expect(warns).toHaveLength(1); // 2. alan SID değil → ad alanına düşülmez
+  });
+  it("writeLocal: kilit/yazma hatasında geçici dosya silinir", () => {
+    const d = tmp();
+    process.env.VLAD_LOCAL_FILE = join(d, "vlad.local.json");
+    try { expect(() => writeLocal({ keys: {} }, { lock: () => { throw new Error("kilit"); } })).toThrow(/kilit/); } finally { delete process.env.VLAD_LOCAL_FILE; }
+    expect(real.readdirSync(d)).toEqual([]);
+  });
   it("kullanıcı SID'i alınamazsa icacls çağrılmaz, uyarı verilir", () => {
     const warns: string[] = [];
     const calls: string[] = [];
     lockDownFile("x", { platform: "win32", systemRoot: "C:\\Windows", warn: (m) => warns.push(m), exec: (f) => { calls.push(f); return "çöp"; } });
     expect(calls.some((c) => c.endsWith("icacls.exe"))).toBe(false);
     expect(warns).toHaveLength(1);
+  });
+  it("writeLocal: her yazım benzersiz geçici dosya kullanır (eşzamanlı keygen/setkey aynı .tmp'yi paylaşmaz) ve geçici dosya kalmaz", () => {
+    const d = tmp();
+    const f = join(d, "vlad.local.json");
+    process.env.VLAD_LOCAL_FILE = f;
+    const used: string[] = [];
+    try {
+      for (let i = 0; i < 2; i++) writeLocal({ keys: { a: String(i) } }, { lock: (p) => { used.push(p); } });
+    } finally { delete process.env.VLAD_LOCAL_FILE; }
+    expect(used[0]).not.toBe(used[1]);
+    expect(used).not.toContain(f + ".tmp");
+    expect(real.readdirSync(d)).toEqual(["vlad.local.json"]);
   });
   it("writeLocal: dosya içerik yazılmadan ÖNCE (boşken) kilitlenir", () => {
     const f = join(tmp(), "vlad.local.json");

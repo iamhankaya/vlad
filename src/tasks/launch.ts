@@ -393,9 +393,13 @@ async function cancelReleased(id: string, machine: string, transport: RemoteTran
   const mine = (getTask(id).data.released_ops ?? []).filter((x) => x.machine === machine);
   const orphans: string[] = [];
   const settled = new Set<string>();
+  const unresolved: string[] = [];
   for (const { op } of mine) {
     let st: OpStatus;
-    try { st = (await transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result; } catch { continue; }
+    try { st = (await transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result; } catch (e) {
+      unresolved.push(`op ${op}: ${(e as Error).message}`); // belirsiz: bu launch'ı durdur, kayıt kalır, sonraki denemede yeniden uzlaştırılır
+      continue;
+    }
     settled.add(op);
     if (st.state === "done" || st.state === "started") orphans.push(`op ${op} ${st.state === "done" ? `tamamlanmış${st.result ? ` (worktree ${st.result.worktree})` : ""}` : "sürüyor"}`);
   }
@@ -405,6 +409,7 @@ async function cancelReleased(id: string, machine: string, transport: RemoteTran
     t.data.released_ops = rest.length ? rest : null;
     saveTask(t);
   });
+  if (unresolved.length) throw new Error(`${machine}: bırakılan launch iptal edilemedi (${unresolved.join("; ")}); çift başlatmayı önlemek için launch durduruldu, makine yanıt verince tekrar dene`);
   if (orphans.length) throw new Error(`${machine}: \`release --force\` ile bırakılan launch işçide başlamış (yetim pencere/worktree): ${orphans.join("; ")}; elle kapat/temizle, sonra tekrar launch et`);
 }
 

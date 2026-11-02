@@ -152,6 +152,19 @@ describe("F-vlad-125/142: belirsiz uzak launch rezervasyonu serbest bırakılır
       expect(getTask(a).data.released_ops ?? []).toEqual([]);
     });
 
+    it("released op iptali başarısız olursa (zaman aşımı/geçici hata) launch durur, kayıt kalır; sonraki denemede yeniden uzlaştırılır", async () => {
+      const { a, op } = await forced();
+      let fail = true;
+      const f = fakeTransport({ ...ok, "op-status": () => { if (fail) throw uncertain(); return { state: "cancelled" }; }, launch: () => launched });
+      await expect(launchTask(a, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } })).rejects.toThrow(/iptal edilemedi/);
+      expect(f.ops("launch")).toHaveLength(0);
+      expect(getTask(a).data.released_ops).toEqual([{ machine: "windows", op }]);
+      fail = false;
+      await launchTask(a, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });
+      expect(f.ops("launch")).toHaveLength(1);
+      expect(getTask(a).data.released_ops ?? []).toEqual([]);
+    });
+
     it("işçide bırakılan launch gerçekten başlamışsa yeni launch yapılmaz, yetim worktree'yi söyleyen hata verilir", async () => {
       const { a, op } = await forced();
       const f = fakeTransport({ ...ok, "op-status": () => ({ state: "done", result: launched }), launch: () => launched });
