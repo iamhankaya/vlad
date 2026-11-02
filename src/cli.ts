@@ -458,7 +458,7 @@ def(task, "gate <id>", "Uzak makinede kartın gate komutunu koşar (--target int
   if (target !== "integration" && target !== "task") throw new Error("--target integration | task olmalı");
   const { machine, transport } = await gateRoute(id);
   const r = await remoteGateRun(transport, machine, getTask(id), target);
-  await withKbLock(() => recordGreenGate(id, r));
+  await withKbLock(() => recordGreenGate(id, r, target));
   out(o, { id, machine, target, ...r }, `${r.stdout}${r.stderr ? `
 ${r.stderr}` : ""}
 [gate çıkış kodu ${r.exit}]`);

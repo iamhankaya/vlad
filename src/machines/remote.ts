@@ -6,7 +6,7 @@ import { commitKb, git } from "../kb/commit.js";
 import { isSeparateKb, kbPaths } from "../kb/home.js";
 import { readDoc } from "../kb/index.js";
 import type { ProjectCard, VladConfig } from "../kb/index.js";
-import { listTasks, effectiveModel, getTask, logTask, roleFor, saveTask } from "../tasks/store.js";
+import { listTasks, effectiveModel, getTask, roleFor, saveTask } from "../tasks/store.js";
 import type { Task } from "../tasks/store.js";
 import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
@@ -129,15 +129,19 @@ export async function remoteGateRun(transport: RemoteTransport, machine: string,
 export async function remoteMergePreview(transport: RemoteTransport, machine: string, task: Task, o: { into?: string } = {}): Promise<MergePreviewResult> {
   return (await transport.call<MergePreviewResult>(machine, "merge-preview", { ...gateIds(task), ...mergeRefs(task, o.into) })).result;
 }
-/** Yeşil gate'in head'ini görevin İlerleme'sine yazar (kilit çağıranda); merge öncesi karşılaştırma buradan okur (F-vlad-139). */
-export function recordGreenGate(id: string, r: GateRunResult): void {
-  if (r.exit === 0 && r.head) logTask(id, `gate yeşil: head=${r.head}`);
+/** Yeşil gate'i görevin frontmatter'ına yazar (kilit çağıranda). Çalışan bu alanı yazamaz; merge öncesi karşılaştırma buradan okur (F-vlad-139). */
+export function recordGreenGate(id: string, r: GateRunResult, target: "integration" | "task"): void {
+  if (r.exit !== 0 || !r.head) return;
+  const t = getTask(id);
+  t.data.last_green_gate = { head: r.head, target, at: new Date().toISOString() };
+  saveTask(t);
 }
-const GREEN_GATE = /gate yeşil: head=([0-9a-f]{40})\b/g;
-/** Görevin son yeşil gate head'i; kayıt yoksa null. */
+/** Merge edilen dal (vlad/<id>) için geçerli gate hedefi: çatıda entegrasyon worktree'si, diğerinde görevin kendisi. */
+const gateTargetOf = (task: Task): "integration" | "task" => (task.data.kind === "pipeline" ? "integration" : "task");
+/** Görevin son yeşil gate head'i (merge edilecek dalın hedefiyle eşleşen); yoksa null. */
 export function lastGreenGateHead(task: Task): string | null {
-  const all = [...task.body.matchAll(GREEN_GATE)];
-  return all.length ? all[all.length - 1]![1]! : null;
+  const g = task.data.last_green_gate;
+  return g && g.target === gateTargetOf(task) ? g.head : null;
 }
 export async function remoteMerge(transport: RemoteTransport, machine: string, task: Task, o: { into?: string; message?: string } = {}): Promise<MergeResult> {
   const refs = mergeRefs(task, o.into);

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import type { Reconciler, Verdict } from "../reconcile.js";
-import { mergeCtx } from "./gate.js";
+import { MERGE_EXTRA_ARGS, mergeCtx } from "./gate.js";
 
 /**
  * `started` kalmış merge'ün etkisi var mı? Dal hedefin atasıysa uygulanmıştır (sonuç: güncel head);
@@ -20,6 +20,6 @@ export function mergeVerdict(cwd: string, from: string, into: string): Verdict |
 }
 
 export const reconcileMerge: Reconciler = (rec) => {
-  const { cwd, from, into } = mergeCtx(rec.args, ["message"]);
+  const { cwd, from, into } = mergeCtx(rec.args, [...MERGE_EXTRA_ARGS]);
   return mergeVerdict(cwd, from, into);
 };

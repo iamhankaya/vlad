@@ -178,6 +178,9 @@ export async function mergePreview(args: unknown): Promise<MergePreviewResult> {
   return { log: capText(log, OUT_CAP), diffStat: capText(diffStat, OUT_CAP), conflicts: mt.code === 1 ? conflictsOf(mt.stdout) : [] };
 }
 
+/** merge op'unun izinli ek alanları; reconcile aynı listeyi kullanır (yoksa yeniden başlayan Agent expectHead'li kaydı bad_request ile uzlaştıramaz). */
+export const MERGE_EXTRA_ARGS = ["message", "expectHead"] as const;
+
 /** Dal ucu son yeşil gate head'inden farklıysa merge reddedilir (F-vlad-139). */
 export function checkExpectHead(from: string, tip: string, expectHead: string): void {
   if (tip !== expectHead) throw failed(`${from} ucu (${tip.slice(0, 7)}) son yeşil gate head'inden (${expectHead.slice(0, 7)}) farklı; gate'i yeniden koş: vlad task gate`);
@@ -185,7 +188,7 @@ export function checkExpectHead(from: string, tip: string, expectHead: string): 
 
 /** Aynı worktree'de merge ve gate sırayla çalışır. */
 export async function mergeOp(args: unknown): Promise<MergeResult> {
-  const mc = mergeCtx(args, ["message", "expectHead"]);
+  const mc = mergeCtx(args, [...MERGE_EXTRA_ARGS]);
   const eh = mc.a.expectHead;
   if (eh !== undefined && (typeof eh !== "string" || !/^[0-9a-f]{40}$/.test(eh))) throw bad("expectHead geçersiz");
   return serialized(mc.cwd, () => mergeOne(mc));
@@ -202,13 +205,18 @@ async function mergeOne({ cwd, into, from, a }: ReturnType<typeof mergeCtx>): Pr
     return { head: (await mustGit(cwd, ["rev-parse", "HEAD"])).trim(), merged: false }; // zaten içeride
   }
   // son yeşil gate'ten sonra dal ilerlediyse birleştirme: gate yeniden koşulmalı (F-vlad-139)
-  if (typeof a.expectHead === "string") checkExpectHead(from, (await mustGit(cwd, ["rev-parse", `refs/heads/${from}`])).trim(), a.expectHead);
+  let mergeRef = `refs/heads/${from}`;
+  if (typeof a.expectHead === "string") {
+    const tip = (await mustGit(cwd, ["rev-parse", mergeRef])).trim();
+    checkExpectHead(from, tip, a.expectHead);
+    mergeRef = tip; // doğrulanan sha ile birleştir: karşılaştırma ile merge arasında dal kayamaz
+  }
   // önceden yarım merge ya da kirli izlenen dosya varsa dokunma: abort başkasının işini silmesin
   if ((await runGit(cwd, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])).stdout.trim()) throw failed(`${cwd} içinde yarım kalmış bir merge var; elle çöz`);
   const dirty = (await runGit(cwd, ["status", "--porcelain", "-uno"])).stdout.trim();
   if (dirty) throw failed(`${cwd} kirli (izlenen dosyalarda değişiklik); merge yapılmadı:
 ${dirty.slice(0, 500)}`);
-  const m = await runGit(cwd, ["merge", "--no-ff", "-m", message, `refs/heads/${from}`], 300_000);
+  const m = await runGit(cwd, ["merge", "--no-ff", "-m", message, mergeRef], 300_000);
   if (m.code !== 0) {
     await runGit(cwd, ["merge", "--abort"]);
     throw new RemoteError("conflict", `conflict: merge başarısız, geri alındı: ${(m.stdout + m.stderr).trim().slice(-2000)}`);

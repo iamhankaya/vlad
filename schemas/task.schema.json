@@ -30,6 +30,7 @@
     "machine_reserved": { "type": ["string", "null"], "format": "date-time" },
     "launch_op": { "type": ["string", "null"], "minLength": 1 },
     "experiment": { "type": ["object", "null"], "required": ["ponytail"], "additionalProperties": false, "properties": { "ponytail": { "enum": ["on", "off"] } } },
+    "last_green_gate": { "type": ["object", "null"], "required": ["head", "target", "at"], "additionalProperties": false, "properties": { "head": { "type": "string", "pattern": "^[0-9a-f]{40}$" }, "target": { "enum": ["task", "integration"] }, "at": { "type": "string" } } },
     "released_ops": {
       "type": ["array", "null"],
       "items": { "type": "object", "required": ["machine", "op"], "additionalProperties": false, "properties": { "machine": { "type": "string", "minLength": 1 }, "op": { "type": "string", "minLength": 1 } } }
