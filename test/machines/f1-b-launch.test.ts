@@ -74,3 +74,12 @@ describe("F-vlad-133: cleanup, worktree'nin kendi görev klasörü olduğunu do�
     expect(existsSync(sibling)).toBe(true);
   });
 });
+
+describe("F-vlad-144: aynı görev için eşzamanlı iki launch (farklı opId) → biri sahip, diğeri conflict", () => {
+  it("ikinci launch pencere açmaz", async () => {
+    const [a, b] = await Promise.allSettled([launchOp(L, { from: "mac", opId: "op-a" }, { launcher }), launchOp(L, { from: "mac", opId: "op-b" }, { launcher })]);
+    expect([a.status, b.status].sort()).toEqual(["fulfilled", "rejected"]);
+    expect(reqs).toHaveLength(1);
+    expect((a.status === "rejected" ? a : (b as PromiseRejectedResult)).reason).toMatchObject({ code: "conflict" });
+  });
+});

@@ -333,7 +333,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   } catch (e) {
     // F-vlad-109: the task was cancelled/failed/done while the launcher ran: nothing may keep running for it
     const now = (() => { try { return getTask(id).data.state; } catch { return null; } })();
-    if (now && now !== "queued" && now !== "running") {
+    if (now === "cancelled" || now === "failed" || now === "done") { // yalnız terminal: blocked/stalled canlı görevin worktree'ine dokunulmaz
       const problems: string[] = [];
       try { (o.closeWorker ?? closeWorkerWindow)(id); } catch (x) { problems.push(`pencere kapatılamadı: ${(x as Error).message}`); }
       try { removeTaskWorktree(repo, wt, id); } catch (x) { problems.push(`worktree kaldırılamadı: ${(x as Error).message}`); }
