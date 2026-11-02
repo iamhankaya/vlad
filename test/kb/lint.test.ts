@@ -54,6 +54,14 @@ describe("closed_finding_listed_open", () => {
     writeCard("vlad", FRESH + "Plan onaylandı. F-vlad-165 hâlâ açık; T20261101-07 şu an çalışıyor.\n");
     expect(codes(lintKb({ now: NOW }))).toEqual(["closed_finding_listed_open", "finished_task_listed_active"]);
   });
+  it("sees through dash-separated list items, negations and Turkish capitals", () => {
+    finding("F-vlad-166", "fixed");
+    task("T20261101-05", "done");
+    writeCard("vlad", FRESH + "- T20261101-05 — Başlık — onay bekliyor\n- F-vlad-166 — ERTELENDİ, hâlâ AÇIK\n");
+    expect(codes(lintKb({ now: NOW }))).toEqual(["finished_task_listed_active", "closed_finding_listed_open"]);
+    writeCard("vlad", FRESH + "F-vlad-166 artık açık değil. Bekleyen iş yok (F-vlad-166).\nT20261101-05 sürüyor değil, bitti.\n");
+    expect(codes(lintKb({ now: NOW }))).toEqual([]);
+  });
   it("does not flag historical narrative or open findings", () => {
     finding("F-vlad-162", "fixed");
     finding("F-vlad-163", "open");
@@ -124,6 +132,14 @@ describe("expired_decision_valid", () => {
     expect(codes(lintKb({ now: NOW }))).toEqual(["expired_decision_valid"]);
     expect(codes(lintKb({ now: new Date("2026-11-02T20:00:00+03:00") }))).toEqual([]);
   });
+  it("reports the deadline in the author's local time; impossible dates are ignored", () => {
+    addDecision({ project: "vlad", title: "Yetki 2026-11-02 08:00'e kadar", body: "- **Karar:** x" }, new Date(2026, 10, 1));
+    addDecision({ project: "vlad", title: "Bozuk 2026-02-31 25:99'a kadar", body: "- **Karar:** y" }, new Date(2026, 10, 1));
+    const r = lintKb({ now: NOW });
+    expect(r.flags.map((f) => f.id)).toEqual(["D-vlad-001"]);
+    expect(r.flags[0].message).toContain("2026-11-02 08:00");
+    expect(r.flags[0].message).not.toContain("UTC");
+  });
   it("does not flag future deadlines or inactive decisions", () => {
     addDecision({ project: "vlad", title: "Gelecek 2026-11-10 08:00'e kadar", body: "- **Karar:** x" }, new Date(2026, 10, 1));
     addDecision({ project: "vlad", title: "Eski 2026-10-01'e kadar", body: "- **Karar:** y" }, new Date(2026, 9, 1));
@@ -151,6 +167,11 @@ describe("memory_stale_task", () => {
     task("T20261102-60", "running");
     task("T20261102-62", "done");
     mem("a.md", "yalnız T20261102-60 çatısı için.\n\nT20261102-62 örnek referans olarak anıldı.\n");
+    expect(codes(lintKb({ now: NOW }))).toEqual([]);
+  });
+  it("does not flag a finished-task note that is itself past tense", () => {
+    task("T20261102-60", "done");
+    mem("past.md", "T20261102-60 tamamlandı, plan onaylandı ve merge edildi.\n");
     expect(codes(lintKb({ now: NOW }))).toEqual([]);
   });
   it("is skipped when memoryDirs is unset; a missing dir is skipped with a warning", () => {

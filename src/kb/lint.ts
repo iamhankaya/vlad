@@ -49,7 +49,7 @@ const ACTIVE_CTX = words("sürüyor", "devam ediyor", "çalışıyor", "bekliyor
 const CLOSED_CTX = words("kapan\\p{L}*", "kapat\\p{L}*", "düzel\\p{L}*", "düzelt\\p{L}*", "çözül\\p{L}*", "giderildi", "tamamlan\\p{L}*", "bitti", "bitmiş", "merge edil\\p{L}*", "iptal\\p{L}*", "fixed", "resolved", "closed", "done", "wontfix", "cancelled", "geçersiz\\p{L}*");
 /** Permission/plan wording tied to a task in a memory note. */
 const AUTHORITY_CTX = words("yalnız", "sadece", "only", "çatı\\p{L}*", "bitince", "bitene kadar", "tamamlanınca", "tamamlanana kadar", "yetki\\p{L}*", "izin\\p{L}*", "onay\\p{L}*", "plan\\p{L}*", "sormadan", "istenecek", "sorulacak");
-const VALID_LIST_CTX = words("geçerli kararlar?", "geçerli olan kararlar", "valid decisions");
+const VALID_LIST_CTX = words("geçerli karar\\p{L}*", "geçerli olan kararlar", "valid decisions");
 const INACTIVE_WORDS = words("geçersiz\\p{L}*", "yerine geçti", "yerine-geçti", "iptal\\p{L}*", "kaldırıl\\p{L}*", "superseded", "invalid", "geçerli karar değil", "geçerli değil");
 const DATE_LED = /^\s*(?:[-*]\s*)?(?:\*\*)?_?\d{4}-\d{2}-\d{2}/;
 const ID_G = /(?<![A-Za-z0-9-])(T\d{8}-\d{2,}|F-[a-z0-9-]+-\d+|D-[a-z0-9-]+-\d+)(?![A-Za-z0-9])/g;
@@ -84,9 +84,14 @@ function* textLines(lines: string[]): Generator<TextLine> {
   }
 }
 
-/** The sentence/clause of `line` holding offset `at` (boundaries: ". ", "; ", " — "). */
+/** Drops negated phrases ("açık değil", "bekleyen iş yok", "kalmadı") so their keyword does not count; Turkish-lowercased for matching. */
+function positive(sentence: string): string {
+  return sentence.toLocaleLowerCase("tr").replace(/(?<![\p{L}])(?:\p{L}+\s+)?\p{L}+\s+(?:değil|yok|kalmadı)(?![\p{L}])/gu, " ");
+}
+
+/** The sentence/clause of `line` holding offset `at` (boundaries: ". ", "; ", "! ", "? "; dashes are list punctuation, not boundaries). */
 function sentenceAt(line: string, at: number): string {
-  const cut = /(?<=[.;!?])\s+|\s[—–]\s/g;
+  const cut = /(?<=[.;!?])\s+/g;
   let start = 0;
   for (const m of line.matchAll(cut)) {
     const end = m.index ?? 0;
@@ -107,7 +112,7 @@ function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, pus
     const st = states.get(id);
     if (!st || id === ctx.own || seen.has(id)) continue;
     seen.add(id);
-    const text = sentenceAt(tl.text, m.index ?? 0); // keywords count only in the sentence that holds the id
+    const text = positive(sentenceAt(tl.text, m.index ?? 0)); // keywords count only in the sentence that holds the id
     const closed = CLOSED_CTX.test(text);
     const status = st.status ?? "";
     if (st.type === "finding" && (status === "fixed" || status === "wontfix")) {
@@ -116,7 +121,7 @@ function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, pus
       }
     } else if (st.type === "task" && (status === "done" || status === "cancelled")) {
       if (ctx.kind === "memory") {
-        if (AUTHORITY_CTX.test(text)) push({ code: "memory_stale_task", line: tl.n, id, actual_state: status, message: `hafıza notu ${status} göreve (${id}) bağlı yetki/plan içeriyor`, suggestion: "notu sil ya da güncelle (görev bittiği için artık geçerli olmayabilir)" });
+        if (!closed && AUTHORITY_CTX.test(text)) push({ code: "memory_stale_task", line: tl.n, id, actual_state: status, message: `hafıza notu ${status} göreve (${id}) bağlı yetki/plan içeriyor`, suggestion: "notu sil ya da güncelle (görev bittiği için artık geçerli olmayabilir)" });
       } else if (inOpenSection || (!narrative && !closed && ACTIVE_CTX.test(text))) {
         push({ code: "finished_task_listed_active", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "sürüyor/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "done" ? "tamamlandı" : "iptal edildi"}" diye geçmişe çevir` });
       }
@@ -138,13 +143,19 @@ function latestExpiry(lines: string[], from: number, to: number): { at: Date; li
       re.lastIndex = 0;
       for (const m of lines[i].matchAll(re)) {
         const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-        const at = m[4] === undefined ? new Date(y, mo - 1, d, 23, 59, 59, 999) : new Date(y, mo - 1, d, Number(m[4]), Number(m[5]));
-        if (!Number.isNaN(at.getTime()) && (!best || at > best.at)) best = { at, line: i + 1 };
+        const [h, mi] = m[4] === undefined ? [23, 59] : [Number(m[4]), Number(m[5])];
+        const at = new Date(y, mo - 1, d, h, mi, m[4] === undefined ? 59 : 0, m[4] === undefined ? 999 : 0);
+        // Date rolls 02-31 / 25:99 over into a valid date: only an exact round trip is a real date
+        if (at.getFullYear() !== y || at.getMonth() !== mo - 1 || at.getDate() !== d || at.getHours() !== h || at.getMinutes() !== mi) continue;
+        if (!best || at > best.at) best = { at, line: i + 1 };
       }
     }
   }
   return best;
 }
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const localStamp = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
 function memoryFiles(dirs: string[], home: string, warnings: string[]): string[] {
   const out: string[] = [];
@@ -217,7 +228,7 @@ export function lintKb(o: LintOptions = {}): LintResult {
       if (exp && exp.at < now) {
         push({
           code: "expired_decision_valid", line: exp.line, id, actual_state: "geçerli",
-          message: `${id} geçerli ama süresi dolmuş (${exp.at.toISOString().slice(0, 16).replace("T", " ")} UTC'ye kadar)`,
+          message: `${id} geçerli ama süresi dolmuş (${localStamp(exp.at)}'e kadar)`,
           suggestion: `vlad decision set ${id} geçersiz (süre dolduysa) ya da kararı yeni süreyle yenile`,
         });
       }
