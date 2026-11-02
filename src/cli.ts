@@ -16,6 +16,7 @@ import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
+import { formatLint, lintExitCode, lintKb } from "./kb/lint.js";
 import { formatRefs, refsOf } from "./kb/refs.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
@@ -762,6 +763,12 @@ def(kb, "refs <id>", "ID'ye (T…, F-…, D-…) atıf yapan kayıtları bölüm
   const r = refsOf(id);
   out(o, r, formatRefs(r));
 });
+def(kb, "lint", "Salt okuma çelişki denetimi: kart/karar/hafıza metinlerindeki T…/F-…/D-… atıflarını gerçek kayıtla karşılaştırır (işaret varsa 0, --strict'te 1)", (o: Opts) => {
+  const r = lintKb({ project: o.project as string | undefined });
+  out(o, r, formatLint(r));
+  process.exitCode = lintExitCode(r, !!o.strict);
+}).option("--project <slug>", "yalnız bu proje")
+  .option("--strict", "işaret varsa 1 ile çık");
 def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a dokunan commit'leri listeler", (o: Opts) => {
   const r = checkKb({ ack: o.ack as string | undefined });
   const lines = r.foreign.length
