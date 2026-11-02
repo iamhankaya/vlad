@@ -269,6 +269,19 @@ describe("auditSetup", () => {
       expect(row("superpowers:test-driven-development")).toMatchObject({ since_unknown: false });
     });
 
+    it("does not expect ponytail from a task that ran on the experiment's off arm", () => {
+      roleFile(["superpowers:test-driven-development", "ponytail"]);
+      const on = task({ at: "2026-10-31", role: "developer" });
+      const off = task({ at: "2026-10-31", role: "developer" });
+      const t = getTask(off); t.data.experiment = { ponytail: "off" }; writeDoc(t.file, t.data, t.body);
+      loadSkill(on, "superpowers:test-driven-development"); loadSkill(on, "ponytail");
+      loadSkill(off, "superpowers:test-driven-development");
+      const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+      const row = (skill: string) => r.skills.coverage.by_skill.find((c) => c.skill === skill);
+      expect(row("ponytail")).toMatchObject({ expected_tasks: 1, loaded_tasks: 1, rate: 1 });
+      expect(row("superpowers:test-driven-development")).toMatchObject({ expected_tasks: 2 });
+    });
+
     it("reports when each role file and CLAUDE.md last changed", () => {
       const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
       expect(r.rules.roles.developer).toBe("2026-10-30T10:00:00+03:00");

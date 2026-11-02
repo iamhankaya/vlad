@@ -284,7 +284,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     throw new Error(msg);
   }
   const model = effectiveModel(task.data, role);
-  const experiment = arm ? { ponytail: arm } : undefined;
+  const experiment = arm ? { ponytail: arm } : task.data.experiment ? null : undefined; // null: clears a stale arm from an earlier launch
   const autoCompact = cfg.workerAutoCompact;
   // yerel (brain) yerleşim de kapasiteyi kilit altında ayırır (placeTask'ın kontrolü kilitsizdi: eşzamanlı iki launch ikisi de açılırdı)
   // ve çatıyı pencere açılmadan önce sabitler: eşzamanlı uzak kardeş faz başka makineye kayamaz
@@ -332,7 +332,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
   try {
     return await withKbLock(() => {
-      const t = setState(id, "running", { branch, worktree: wt, error: null, ...(experiment ? { experiment } : {}), ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : {}) });
+      const t = setState(id, "running", { branch, worktree: wt, error: null, ...(experiment !== undefined ? { experiment } : {}), ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : {}) });
       if (patch.machine) pinPipeline(t.data.parent, patch.machine);
       return t;
     });
@@ -459,7 +459,9 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     if (t.data.launch_op !== opId || t.data.state !== "queued") {
       throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); yazılmadı`);
     }
-    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null, ...(armNow() ? { experiment: { ponytail: armNow()! } } : {}) });
+    const arm = armNow();
+    const experimentNow = arm ? { ponytail: arm } : t.data.experiment ? null : undefined;
+    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null, ...(experimentNow !== undefined ? { experiment: experimentNow } : {}) });
     if (r.integration && parent) recordIntegration(parent, task.data.project, r.integration.branch, r.integration.worktree);
     pinPipeline(parent, machine);
     return run;

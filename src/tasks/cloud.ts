@@ -413,6 +413,6 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
     saveTask(t);
     throw new Error(msg);
   }
-  setState(id, "running", { branch, worktree: null, error: null, ...(arm ? { experiment: { ponytail: arm } } : {}) });
+  setState(id, "running", { branch, worktree: null, error: null, ...(arm ? { experiment: { ponytail: arm } } : task.data.experiment ? { experiment: null } : {}) });
   return res;
 }

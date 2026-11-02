@@ -154,13 +154,16 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   // rule dates and time-coherent coverage: a task is measured only against rules in force on its creation date
   out.rules.claude_md = lastChanged(home, "CLAUDE.md");
   for (const r of roles) out.rules.roles[r.slug] = lastChanged(home, `roles/${r.slug}.md`);
-  const created = new Map(listTasks().map((t) => [t.data.id, t.data.created]));
+  const allTasks = listTasks();
+  const created = new Map(allTasks.map((t) => [t.data.id, t.data.created]));
+  const ponytailOff = new Set(allTasks.filter((t) => t.data.experiment?.ponytail === "off").map((t) => t.data.id)); // A/B off arm: ponytail was left out on purpose
   const rows = new Map<string, CoverageRow>();
   const cov = out.skills.coverage;
   for (const t of usage.tasks) {
     const role = roles.find((r) => r.slug === t.role);
     if (!t.transcript || !role) continue;
     for (const s of role.skills) {
+      if (s === "ponytail" && ponytailOff.has(t.id)) continue;
       const key = `${role.slug}\u0000${s}`;
       const row = rows.get(key) ?? (() => {
         const at = roleSkillSince(home, `roles/${role.slug}.md`, s);

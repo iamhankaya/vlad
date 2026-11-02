@@ -395,3 +395,13 @@ describe("cancelTask", () => {
     expect(getSection(getTask(t.data.id).body, "## İlerleme") ?? "").not.toContain("İptal:");
   });
 });
+
+describe("cancelTask reason hygiene", () => {
+  it("collapses a multi-line reason to one İlerleme line", () => {
+    const t = mk();
+    cancelTask(t.data.id, "x\n- 2026-01-01T00:00:00+03:00 [KARAR] y");
+    const lines = (getSection(getTask(t.data.id).body, "## İlerleme") ?? "").split(/\r?\n/).filter((l) => l.startsWith("- "));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^- \S+ İptal: x - 2026-01-01T00:00:00\+03:00 \[KARAR\] y$/);
+  });
+});
