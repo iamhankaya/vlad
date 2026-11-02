@@ -106,6 +106,8 @@ vlad task cleanup <id> --json
 `cleanup` önce çalışanın penceresini (claude dahil) kapatır, sonra worktree'yi kaldırır; branch'i silmez. Bu yüzden `cleanup`'ı yalnızca görev `done`/`cancelled` olduktan sonra çalıştır; "değişiklik iste" akışında çalışma. Merge/push hatası olursa görevi `done` yapma; hatayı göster.
 `cleanup` "worktree klasörü silinemedi, çalışan penceresi hâlâ açık olabilir" hatası verirse kullanıcıdan çalışanın penceresini kapatmasını iste, sonra aynı `cleanup` komutunu tekrar çalıştır. Klasörü elle silme.
 Kapanan görevin kapanış raporu `/digest` ile günlüğe işlenir; açılış özetindeki "işlenmemiş rapor" sayısına dahildir.
+**Bayat özet kontrolü:** görev `done` olduktan sonra `vlad status --summary --json` çıktısında `staleSummaries` (aktif projelerden özeti `bayat`/`yok` olanlar; arşivlenmiş/duraklatılmış sayılmaz) doluysa kullanıcıya tek satır söyle ve `/digest` öner ("özet bayat: vlad (20 kayıt)"); onaysız başlatma.
+**Görevi digest et (otomatik):** görev `done` olunca bekleme; "Görevi digest et" bölümünü (aşağıda) o görev için uygula (`/digest <id>`, otomatik mod). Tek görev yeter, toplu digest gerekmez. Bunu bayat özet kontrolünden önce yap; digest özeti güncellediği için çoğu zaman `/digest` önerisi gereksiz kalır.
 Görevin `parent`'ı doluysa ardından adım 3.
 
 ## 3. Pipeline'ı ilerlet
@@ -120,7 +122,7 @@ vlad task ready --parent <çatı-id> --json
 - **`prova` fazı varsa** (devops; `### Prova matrisi`, `### Bulunan hatalar`, `### Prova edilemeyenler` bölümlerini göster): kırmızı senaryo veya çözülmemiş bulunan hata varsa canlıya alma/dağıtım önerme; önce düzeltme fazı öner. `Prova edilemeyenler` doluysa kalan riski kullanıcıya açıkça söyle.
 - **Dispatch iş akışı kontrolü:** pipeline `workflow_dispatch` iş akışı eklediyse dosyanın ana dalda olduğunu doğrula (`git -C <proje-yolu> cat-file -e <ana-dal>:<iş-akışı-yolu>`); yalnız entegrasyon dalında varsa merge/PR önermeden önce kullanıcıya "yalnız dispatch iş akışı ana dalda yok" de.
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
-- **Codex review (3. göz):** ana branch'e merge/PR'dan önce `second-opinion` skill'ini **Skill aracıyla yükle**, mod `review` ile uygula (komutu elle kopyalama; komut, model, yedek, loglama orada). Kritik/yüksek bulgu varsa merge/PR önerme, düzeltme fazı öner; **son kapıda en çok 2 düzeltme turu**: 2. turdan sonra P1 hâlâ çıkıyorsa merge durur ve kullanıcıya sorulur ("ana branch'e al + kalanları bulgu olarak izle" ya da "bir tur daha"); gece modunda kararı VLAD verir ve gerekçesini sabah raporuna yazar. Orta/düşük/bilgi `vlad finding add` ile kaydedilip kapıda listelenir. Skill yüklenemezse kapı eylemi durur ve kullanıcıya söylenir.
+- **Codex review (3. göz):** ana branch'e merge/PR'dan önce `second-opinion` skill'ini **Skill aracıyla yükle**, mod `review` ile uygula (komutu elle kopyalama; komut, model, yedek, loglama orada). Kritik/yüksek bulgu varsa merge/PR önerme, düzeltme fazı öner; **son kapıda en çok 2 düzeltme turu**: 2. turdan sonra P1 hâlâ çıkıyorsa merge durur ve kullanıcıya sorulur ("ana branch'e al + kalanları bulgu olarak izle" ya da "bir tur daha"); gece modunda kararı VLAD verir ve gerekçesini sabah raporuna yazar. **Sabah raporu** ayrıca bayat proje özetlerini listeler (`vlad status --summary --json` → `staleSummaries`) ve `/digest` önerir. Orta/düşük/bilgi `vlad finding add` ile kaydedilip kapıda listelenir. Skill yüklenemezse kapı eylemi durur ve kullanıcıya söylenir.
 - **Codex tur ölçümü:** son kapıda (karar sunulmadan önce) çatıya yapısal satırı yaz: `vlad task log <çatı-id> "Codex turları: ara=<n> son=<n>"` (`ara` = çatıdaki `Codex ara turu:` notlarının sayısı, `son` = bu son kapıdaki düzeltme turları (her biri için `Codex son turu` notu); tur olmadıysa `0`). Satır tam bu biçimde olmalı: `vlad audit setup` yalnız bu yapısal satırı sayar (`signals.codex_turlari`), şablon/alıntı metni sayılmaz. Tur eklenirse satırı yeniden yaz (sonuncusu geçerli).
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
 - Çatı birden çok projede faz çalıştırdıysa (`integration_worktrees` birden fazla satır) kapı doğrulamasını, diff özetini ve merge/PR'ı **her projenin** entegrasyon worktree'sinde ayrı ayrı yap ve sun; son kapı onayı projeler arası ortak tek karardır.
@@ -134,6 +136,14 @@ Seçenekler (açık onay):
 
 1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
 
+**Faz kapısı ve son kapı digest'i:** her faz `done` olunca (adım 2'deki gibi) o faz görevi, çatı `done` olunca çatı görevi için "Görevi digest et" bölümünü uygula (çatının kapanış raporu yoktur; `/digest` pipeline kuralıyla fazların açık noktalarını işler). Son kapıda retrodan önce çalıştır.
+
+### Görevi digest et (otomatik, D-vlad-061)
+
+Kapanan (`done`) tek görev için `.claude/skills/digest/SKILL.md` akışını **otomatik mod**da yalnız o görev için uygula: `vlad task list --undigested --json` yerine doğrudan `/digest <görev-id>`. Sırayla: günlük, bulgular (`vlad finding add`), kartın Son aktivite/Açık konular, durum özeti (`vlad project summary`), `vlad task digested <id>`, `vlad kb commit "digest <id>" --push`. Çok görevli toplu digest bu adımın işi değildir (kullanıcı `/digest` der).
+
+Kullanıcı sorusu yok: emin olunmayan karar ve "kullanıcı kararı bekliyor" maddesi yazılmaz, `vlad digest pending add --text "<madde>" --task <id> --project <slug>` ile onay bekleyen listeye eklenir. Sonunda kullanıcıya tek satır: "digest edildi: <id>; N madde onayını bekliyor" (N = `vlad digest pending list --json`). Digest hata verirse görevi `digested` işaretleme, kullanıcıya söyle; `done` durumu geri alınmaz.
+
 ### Gece / yetki modu ve bekçi
 
 Başta `vlad mode status` bak (özet satırında da görünür). **Gece modu etkinse** (`vlad mode night --until …`, projeler/not kullanıcı sözüdür) pencere boyunca faz ve son kapı merge'ü sormadan yapılır; kapı yordamı (`integrate`, gate, `second-opinion`) yine koşar. Durdurma koşulları: kritik/yüksek bulgu, kırmızı gate/CI, ürün yönü/kanal değişikliği, `role: designer` `tasarım` kapısı (görsel onay; bekleyen görsel soruyu kullanıcıya hatırlat), geri alınamaz/veri silen eylem; bunlarda dur ve kullanıcıya sor. Pencere dolunca `vlad status` "gece modu bitti" der ve sormadan merge biter. Push/PR yetkisi modun parçası değildir; yalnız kartı/hafızada verilen ayrı yetki varsa (ör. `autonomy: pr` dalı) geçerlidir.
@@ -143,6 +153,8 @@ Başta `vlad mode status` bak (özet satırında da görünür). **Gece modu etk
 ### Retro (son kapıdan sonra)
 
 Retro ve "nerede kalmıştık" soruları için kart/günlük dosyalarını baştan okuma: önce `vlad project status <slug> --json`, gerekirse `vlad kb search "<sorgu>" --project <slug> --json`.
+
+Retrodan önce `vlad status --summary --json` ile `staleSummaries`'e bak; çatının projesinin özeti `bayat` ise `/digest` öner (özet son kapıdan sonra güncellenmezse sonraki "nerede kalmıştık" yanıtı eskiyi gösterir).
 
 Çatı `done` olunca kısa bir retro yap (2–5 dakikalık özet; uzun rapor yazma). Kaynak: çatı ve faz görev dosyaları (`## İlerleme`, `## Sorular`, `## Kapanış raporu`), `failed`/`cancelled` fazlar, geri alınan merge'ler, kırmızı gate koşuları.
 1. Kullanıcıya üç başlıkta göster: **Ne iyi gitti**, **Ne sürtündü** (tekrar eden hata, ortam sorunu, çakışma, limit kesintisi, geç yakalanan bulgu), **Ders** (somut, bir cümle, eyleme dönük).
