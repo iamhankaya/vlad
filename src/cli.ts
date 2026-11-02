@@ -16,6 +16,7 @@ import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
+import { formatRefs, refsOf } from "./kb/refs.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
@@ -732,6 +733,10 @@ def(kb, "search <sorgu>", "Sınırlı kb araması (görev bölümü, bulgu, kara
   .option("--project <slug>", "yalnız bu proje")
   .option("--type <tür>", "task | finding | decision | journal")
   .option("--limit <n>", "en çok bu kadar sonuç", "8");
+def(kb, "refs <id>", "ID'ye (T…, F-…, D-…) atıf yapan kayıtları bölüm/durum/tarihle, ilgili commit'leri ve çelişki işaretlerini listeler", (id: string, o: Opts) => {
+  const r = refsOf(id);
+  out(o, r, formatRefs(r));
+});
 def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a dokunan commit'leri listeler", (o: Opts) => {
   const r = checkKb({ ack: o.ack as string | undefined });
   const lines = r.foreign.length
