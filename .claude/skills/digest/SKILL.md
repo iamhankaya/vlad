@@ -94,7 +94,7 @@ Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamam�
 ```
 vlad project write <slug> --file <geçici.md> --json
 ```
-`project write`, `finding add|set`, `task set` ve `decision add|set` ilgili kartın türetilen bloklarını kendiliğinden tazeler; yine de adımların sonunda `vlad project refresh <slug>` (ya da `--all`) çalıştır — blokları kayıtlardan yeniden üretir, blok dışı metne dokunmaz.
+`project write`, `finding add|set` ve `task set <id> done` ilgili kartın türetilen bloğunu kendiliğinden tazeler (`decision add|set` tazelemez); yine de adımların sonunda `vlad project refresh <slug>` (ya da `--all`) çalıştır — blokları kayıtlardan yeniden üretir, blok dışı metne dokunmaz.
 **Doğrula:** yazdıktan sonra kartı yeniden oku (`vlad project list --json` ya da kart dosyası) ve türetilen blokların (`open-findings`, `recent-activity`) kayıtlarla uyuştuğunu, elle yazılan Açık konular anlatısının ve `## Çalışma notları`'nın değişmediğini kontrol et (2026-10-25'te Son aktivite/Açık konular yarım uygulandı).
 
 ## 4b. Bulgular
@@ -124,6 +124,7 @@ Karar yazmadan önce projenin geçerli kararlarına bak (`vlad decision list --p
 - Yeni karar eskisinin yerine geçiyorsa `--supersedes <eski-id>` ekle (eski otomatik `yerine-geçti` olur, iki yönlü bağlanır).
 - Eski karar yerine bir şey gelmeden geçersiz kaldıysa: `vlad decision set <id> geçersiz --json`; yanlışlıkla işaretlenmişse `vlad decision set <id> geçerli`.
 - `add` yeni `D-<proje>-NNN` ID'sini döner; günlükte ve özette bu ID ile an.
+- Süreli karar (gece yetkisi, "…'e kadar" izni, geçici istisna): `--until <YYYY-MM-DD | YYYY-MM-DDTHH:MM>` ekle. Süre geçince `vlad status`, `project status` ve `kb lint` kararı "süresi dolmuş geçerli karar" diye işaretler; metne tarih gömmek yerine bunu kullan.
 Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?" diye sor.
 
 ### 5b. Proje durum özeti
@@ -133,6 +134,16 @@ Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıkta
 vlad project summary <slug> --file <geçici.md> --json
 ```
 Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Bu adımı işlemediğin projede özeti güncelleme (bayat kalması doğrudur). Eski kayıtlar için gerekirse önce `vlad kb search`.
+
+### 5c. kb çelişki denetimi (lint)
+
+Kartlar, özetler, kararlar ve hafıza yazıldıktan sonra tüm kb için bir kez `vlad kb lint --json` çalıştır (büyük kb'de ~75 sn; arka plan agent'ına verilebilir; sonucu `kb/logs/kb-lint.json` önbelleğine yazar ve `vlad status --summary` satırındaki "N kb çelişkisi" buradan gelir). Her işareti (`flags[]`: `code`, `file:line`, `id`, `suggestion`) CLI ile düzelt:
+- `closed_finding_listed_open` / `finished_task_listed_active`: kart `## Açık konular`/sürüyor satırı elle yazılmış → `vlad project refresh <slug>`; blok dışı metinde satırı geçmişe çeviren düzeltmeyi `vlad project write` ile yap.
+- `inactive_decision_listed_valid`: özet/kart listesinden kaldır (`vlad project summary`); geçerli liste `vlad decision list`.
+- `expired_decision_valid`: süre gerçekten dolduysa `vlad decision set <id> geçersiz`; sürüyorsa kararı yeni `--until` ile yenile (`decision add --supersedes <id>`).
+- `summary_stale`: adım 5b.
+- `memory_stale_task` (hafıza dosyası, kb dışı): VLAD'a "hafızayı güncelle/sil" adımıdır, CLI yok; ilgili hafıza notunu düzeltir ya da silersin ve kullanıcıya söylersin.
+Emin olmadığın işareti düzeltme: `vlad digest pending add --text "<kb lint: kod id dosya:satır — ne yapılmalı>" --project <slug>` ile onay bekleyen listeye ekle. Düzeltmelerden sonra `vlad kb lint` yeniden çalıştırıp işaret sayısının düştüğünü doğrula.
 
 ## 6. Raporları kapat
 

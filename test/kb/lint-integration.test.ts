@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -128,5 +128,42 @@ describe("memory dir default", () => {
   it("derives Claude Code's per-checkout memory dir from VLAD_HOME", () => {
     expect(defaultMemoryDir("C:\\dev\\vlad")).toBe(join(homedir(), ".claude", "projects", resolve("C:\\dev\\vlad").replace(/[^A-Za-z0-9]/g, "-"), "memory"));
     if (process.platform === "win32") expect(defaultMemoryDir("C:\\dev\\vlad")).toMatch(/projects[\\/]C--dev-vlad[\\/]memory$/);
+  });
+});
+
+describe("lint false negatives (F-vlad-176/177/178)", () => {
+  const task = (id: string, state: string) =>
+    writeFileSync(kb("tasks", `${id}.md`), `---\nid: ${id}\nproject: vlad\ntitle: t\nkind: dev\nstate: ${state}\nautonomy: commit\ncreated: "2026-10-01T10:00:00+03:00"\nupdated: "2026-11-01T10:00:00+03:00"\n---\n\n## Tanım\nx\n`);
+  const codes = () => lintKb({ now: NOW }).flags.map((f) => `${f.code}:${f.id}:${f.line}`);
+  const lineOf = (needle: string) => readFileSync(kb("projects", "vlad.md"), "utf8").split(/\r?\n/).findIndex((l) => l.startsWith(needle)) + 1;
+  beforeEach(() => mkdirSync(kb("tasks"), { recursive: true }));
+
+  it("F-vlad-176: a blank line after '## Geçerli kararlar' keeps the list context until the next heading", () => {
+    addDecision({ project: "vlad", title: "A", body: "- **Karar:** x" }, new Date(2026, 10, 1));
+    addDecision({ project: "vlad", title: "B", body: "- **Karar:** y" }, new Date(2026, 10, 1));
+    const body = join(home, "b.md");
+    writeFileSync(body, "- **Karar:** z\n");
+    // D-vlad-001 becomes geçersiz (no replacement), still listed as valid in the card
+    run(["decision", "set", "D-vlad-001", "geçersiz"]);
+    writeCard(FRESH + "\n## Geçerli kararlar\n\n- D-vlad-001 eski karar\n\nDüz paragraf.\n\n- D-vlad-002 başka\n\n## Notlar\n\n- D-vlad-001 artık yok\n");
+    expect(codes()).toEqual(["inactive_decision_listed_valid:D-vlad-001:" + lineOf("- D-vlad-001 eski")]);
+  });
+
+  it("F-vlad-177: conditional forms ('tamamlanınca', 'kapanana kadar') do not close the record; finished forms do", () => {
+    task("T20261101-07", "done");
+    writeCard(FRESH + "T20261101-07 tamamlanınca devam edilecek, hâlâ çalışıyor.\n");
+    expect(codes().map((c) => c.split(":")[0])).toEqual(["finished_task_listed_active"]);
+    writeCard(FRESH + "T20261101-07 kapanana kadar çalışıyor.\n");
+    expect(codes().map((c) => c.split(":")[0])).toEqual(["finished_task_listed_active"]);
+    writeCard(FRESH + "T20261101-07 tamamlandı, çalışıyor değil.\n");
+    expect(codes()).toEqual([]);
+  });
+
+  it("F-vlad-178: the same id in two sentences is judged per sentence, flagged once per line", () => {
+    task("T20261101-08", "done");
+    writeCard(FRESH + "T20261101-08 tamamlandı. T20261101-08 hâlâ çalışıyor.\n");
+    expect(codes()).toEqual(["finished_task_listed_active:T20261101-08:" + lineOf("T20261101-08 tamamlandı")]);
+    writeCard(FRESH + "T20261101-08 çalışıyor; T20261101-08 sürüyor.\n");
+    expect(codes()).toHaveLength(1);
   });
 });
