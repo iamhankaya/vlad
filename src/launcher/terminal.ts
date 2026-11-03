@@ -16,10 +16,12 @@ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 // Windows PowerShell 5.1 (and pwsh < 7.3) pass a native argument without escaping embedded double quotes, so the
 // argument ended at the first `"` (T20261103-26). Apply the CommandLineToArgvW rules by hand there: backslashes before
 // a quote are doubled and the quote escaped, trailing backslashes are doubled (the argument is quoted for its spaces).
-// pwsh >= 7.3 escapes by itself, so doing it again would corrupt the prompt.
 const PS51_ARG_ESCAPE =
-  "if ($PSVersionTable.PSVersion -lt [version]'7.3') { " +
-  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); $p = [regex]::Replace($p, '(\\\\+)$', '$1$1') }";
+  // Legacy pins the argument mode (pwsh >= 7.3 would otherwise escape on its own, or not at all for .cmd shims / a profile setting)
+  "$PSNativeCommandArgumentPassing = 'Legacy'; " +
+  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); $p = [regex]::Replace($p, '(\\\\+)\\z', '$1$1')";
+// CreateProcess limit is 32767 chars for the whole command line; leave room for the executable and flags.
+const MAX_ARG = 30000;
 
 export function buildScript(req: LaunchRequest): string {
   // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
@@ -29,6 +31,8 @@ export function buildScript(req: LaunchRequest): string {
   lines.push(`$host.UI.RawUI.WindowTitle = ${q(req.title)}`);
   // Base64, not a here-string: no prompt text (quotes, `'@` at line start, `$`, backticks) can end or alter the literal.
   const prompt = Buffer.from(req.prompt.replace(/\r\n?/g, "\n"), "utf8").toString("base64");
+  const escaped = req.prompt.replace(/(\\*)"/g, "$1$1\\\"");
+  if (escaped.length > MAX_ARG) throw new Error(`prompt çok uzun (${escaped.length} > ${MAX_ARG} karakter): Windows komut satırı sınırı`);
   lines.push(`$p = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${prompt}'))`, PS51_ARG_ESCAPE);
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);

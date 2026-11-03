@@ -55,6 +55,14 @@ describe.skipIf(!win)("prompt reaches claude byte for byte (real powershell.exe)
   it("launch script", () => {
     expect(run(buildScript(req()), "launch").map(norm)).toEqual([norm(NASTY)]);
   });
+  it("prompt ending in a backslash (with spaces, and before a newline)", () => {
+    for (const p of ["yol C:\\dev\\", "yol C:\\dev\\\n", "x \\\\"]) {
+      expect(run(buildScript(req({ prompt: p })), "bs").map(norm)).toEqual([norm(p)]);
+    }
+  });
+  it("rejects a prompt over the command-line limit instead of launching a broken worker", () => {
+    expect(() => buildScript(req({ prompt: 'a "'.repeat(20000) }))).toThrow(/çok uzun/);
+  });
   it("resume script (session id and model flags before the prompt)", () => {
     const argv = run(buildScript(req({ model: "sonnet", resume: { sessionId: "s-1" } })), "resume");
     expect(argv.slice(0, 4)).toEqual(["--model", "sonnet", "--resume", "s-1"]);
