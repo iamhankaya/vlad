@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { addFinding, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
@@ -20,7 +20,7 @@ import { formatLint, lintExitCode, lintKb } from "./kb/lint.js";
 import { formatRefs, refsOf } from "./kb/refs.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
-import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
@@ -441,7 +441,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   // the trust record may be gone (cleanup, a rewritten ~/.claude.json): without it the resumed worker stops at the trust screen (F-vlad-081)
   const trustWarn = r.mode === "local" ? trustWorktree(r.worktree) : null;
   if (trustWarn) process.stderr.write(`uyarı: ${trustWarn}\n`);
-  const rq = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
+  const rq: { dir: string | null; warning?: string } = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
   if ("warning" in rq && rq.warning) process.stderr.write(`uyarı: ${rq.warning}\n`);
   if (o.external || rq.dir) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
@@ -449,6 +449,13 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     const model = modelInfo(t.data).effective_model;
     const autoCompact = loadConfig().workerAutoCompact;
     const sid = t.data.session_id?.trim() || soleTranscriptSession(r.worktree);
+    if (rq.dir) {
+      try { secureDir(join(tmpdir(), "vlad")); } catch (e) {
+        process.stderr.write(`uyarı: betik klasörü korunamadı (${(e as Error).message}); kuyruk yazılamadı, devam bilgisi yazdırılıyor
+`);
+        rq.dir = null;
+      }
+    }
     const ext = externalLaunch({
       taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
