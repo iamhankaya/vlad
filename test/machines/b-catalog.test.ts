@@ -55,6 +55,10 @@ describe("machines:B console catalog", () => {
   it("injection-looking text is plain data (no shell is ever involved)", () => {
     for (const t of ["; rm -rf /", "$(whoami)", "`id`", "--", "a\nb", "ǂ‐‐file", "x && y"]) expect(() => validateConsoleArgv(["task", "ask", "T1", t])).not.toThrow();
   });
+  it("kb lint (read) and project refresh (write) are in the catalog (F-vlad-183)", () => {
+    expect(validateConsoleArgv(["kb", "lint", "--json"]).entry.kind).toBe("read");
+    expect(validateConsoleArgv(["project", "refresh", "alpha"]).entry.kind).toBe("write");
+  });
   it("catalog has unique paths and no excluded group", () => {
     const keys = CONSOLE_CATALOG.map((e) => e.path.join(" "));
     expect(new Set(keys).size).toBe(keys.length);

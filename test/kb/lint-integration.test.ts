@@ -89,6 +89,9 @@ describe("decision add --until", () => {
     expect(parseUntil("2026-02-31")).toBeNull();
     expect(parseUntil("2026-11-02T25:00")).toBeNull();
     expect(parseUntil("yarın")).toBeNull();
+    expect(parseUntil("2026-11-02T08:00+25:00")).toBeNull(); // impossible UTC offset (F-vlad-185)
+    expect(parseUntil("2026-11-02T08:00+03:60")).toBeNull();
+    expect(parseUntil("2026-11-02T08:00-12:00")).not.toBeNull();
   });
 
   it("stores the deadline; lint and project status flag it once it has passed", () => {

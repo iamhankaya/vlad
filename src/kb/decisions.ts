@@ -108,6 +108,7 @@ export function parseUntil(value: string): Date | null {
   if (m[4] === undefined) return new Date(y, mo - 1, d, 23, 59, 59, 999);
   const [h, mi, sec] = [Number(m[4]), Number(m[5]), Number(m[6] ?? 0)];
   if (h > 23 || mi > 59 || sec > 59) return null;
+  if (m[7] && m[7] !== "Z" && (Number(m[7].slice(1, 3)) > 14 || Number(m[7].slice(4)) > 59)) return null; // impossible UTC offset
   if (m[7]) return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${String(sec).padStart(2, "0")}${m[7]}`);
   return new Date(y, mo - 1, d, h, mi, sec);
 }

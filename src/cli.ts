@@ -33,7 +33,7 @@ import { readLocal, selfName } from "./agent/state.js";
 import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
-import { refreshAllProjects, refreshProject } from "./projects/derived.js";
+import { activityListsId, refreshAllProjects, refreshProject } from "./projects/derived.js";
 import { staleSummaryText } from "./projects/status.js";
 import { addPending, donePending, listPending } from "./digest/pending.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -139,25 +139,33 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
 /** Registers a command with --json and a uniform error path. */
 /** Records a command changed show up in the project card's derived blocks (open findings, Son aktivite) right away; a refresh failure never fails the command. */
 /** Projects whose derived block `which` a command may have changed; each hook refreshes only that block (a task scan costs ~1.7 s on 600+ tasks). */
-function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; only: "findings" | "activity" } | null {
+function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; only: "findings" | "activity"; fast?: boolean } | null {
   const o = args[args.length - 2] as Opts;
   switch (key) {
     case "project write": return { slugs: [String(args[0])], only: "findings" }; // the card was replaced: the findings block is cheap, activity waits for `project refresh`
     case "finding add": return { slugs: [String(o.project)], only: "findings" };
     case "finding set": return { slugs: [getFinding(String(args[0])).data.project], only: "findings" };
+    // an added decision only pushes entries out of the list: no task scan (fast). One that leaves the valid list (`set`, or the superseded one) matters only when the block shows it, and then needs the scan.
+    case "decision add": return { slugs: [String(o.project)], only: "activity", fast: !o.supersedes };
+    case "decision set": {
+      const id = String(args[0]), p = decisionProject(id);
+      if (p && args[1] !== "geçerli" && !activityListsId(p, id)) return null;
+      return { slugs: [p], only: "activity" };
+    }
     case "task set": return String(args[1]) === "done" ? { slugs: [getTask(String(args[0])).data.project], only: "activity" } : null;
   }
   return null;
 }
-// decisions are not hooked: Son aktivite needs the done-task scan (+~0.5 s on 600+ tasks); `project refresh` / /digest pick them up
-const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set"]);
+/** `D-<proje>-NNN` → proje slug'ı (kimlik değilse undefined). */
+const decisionProject = (id: unknown): string | undefined => /^D-([a-z0-9][a-z0-9-]*)-\d{3,}$/.exec(String(id ?? ""))?.[1];
+const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
 async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
   await fn(...args);
   if (!REFRESH_KEYS.has(key)) return;
   try {
     const t = targetsOf(key, args);
     for (const slug of new Set(t?.slugs)) {
-      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug, { create: false, only: t!.only });
+      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug, { create: false, only: t!.only, fast: t!.fast });
     }
   } catch (e) { process.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
 }
