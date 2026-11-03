@@ -45,10 +45,14 @@ const words = (...w: string[]) => new RegExp(`${L}(?:${w.join("|")})${R}`, "iu")
 /** The record is still open/pending (present tense; "açıktı" etc. is narrative and does not match). */
 const OPEN_CTX = words("açık", "bekliyor", "bekleyen", "yapılacak", "ertelen\\p{L}*", "open", "pending", "todo", "outstanding");
 /** A task is still going. */
-const ACTIVE_CTX = words("sürüyor", "devam ediyor", "çalışıyor", "bekliyor", "onay bekliyor", "yürütülüyor", "aktif", "running", "in progress");
+const ACTIVE_CTX = words("sürüyor", "sürmekte", "bitmedi", "tamamlanmadı", "devam ediyor", "çalışıyor", "bekliyor", "onay bekliyor", "yürütülüyor", "aktif", "running", "in progress");
 /** Wording that says the record is closed/over: the line is a statement about the past or the end state. */
 // explicit finished forms only: "tamamlanınca", "kapanana kadar", "düzelirse" are conditions on a record that is still going (F-vlad-177)
-const CLOSED_CTX = words("kapandı", "kapanmış", "kapanmıştı", "kapatıldı", "kapatılmış", "kapalı", "düzeldi", "düzelmiş", "düzeltildi", "düzeltilmiş", "çözüldü", "çözülmüş", "giderildi", "giderilmiş", "tamamlandı", "tamamlanmış", "tamamlanmıştı", "bitti", "bitmiş", "merge edildi", "merge edilmiş", "iptal","fixed", "resolved", "closed", "done", "wontfix", "cancelled", "geçersiz\\p{L}*");
+const CLOSED_CTX = words("kapandı", "kapanmış", "kapanmıştı", "kapatıldı", "kapatılmış", "kapalı", "düzeldi", "düzelmiş", "düzeltildi", "düzeltilmiş", "çözüldü", "çözülmüş", "giderildi", "giderilmiş", "tamamlandı", "tamamlanmış", "tamamlanmıştı", "bitti", "bitmiş", "merge edildi", "merge edilmiş", "iptal", "sona erdi", "sona ermiş", "fixed", "resolved", "closed", "done", "wontfix", "cancelled", "geçersiz\\p{L}*");
+/** A finding sentence that reports the fix ("düzeltmeleri … fixed"), or only the remainder of a partly closed finding ("F-… kalanı: …"): the record is not listed as open. */
+const FIXED_NOTE_CTX = words("düzeltme\\p{L}*", "kalan\\p{L}*");
+/** The item waits on the user / is an unfinished chore, so a task id in it is a reference, not a claim that the task runs. */
+const USER_PENDING_CTX = words("kullanıcıda", "kararı bekliyor", "silinemedi", "silinemiyor", "yapılmadı");
 /** Permission/plan wording tied to a task in a memory note. */
 const AUTHORITY_CTX = words("yalnız", "sadece", "only", "çatı\\p{L}*", "bitince", "bitene kadar", "tamamlanınca", "tamamlanana kadar", "yetki\\p{L}*", "izin\\p{L}*", "onay\\p{L}*", "plan\\p{L}*", "sormadan", "istenecek", "sorulacak");
 const VALID_LIST_CTX = words("geçerli karar\\p{L}*", "geçerli olan kararlar", "valid decisions");
@@ -95,6 +99,13 @@ function positive(sentence: string): string {
   return sentence.toLocaleLowerCase("tr").replace(/(?<![\p{L}])(?:\p{L}+\s+)?\p{L}+\s+(?:değil|yok|kalmadı)(?![\p{L}])/gu, " ");
 }
 
+/** True when offset `at` of `line` lies inside a (...) group. */
+function inParens(line: string, at: number): boolean {
+  let depth = 0;
+  for (let i = 0; i < at; i++) { if (line[i] === "(") depth++; else if (line[i] === ")" && depth > 0) depth--; }
+  return depth > 0;
+}
+
 /** The sentence/clause of `line` holding offset `at` (boundaries: ". ", "; ", "! ", "? "; dashes are list punctuation, not boundaries). */
 function sentenceAt(line: string, at: number): string {
   const cut = /(?<=[.;!?])\s+/g;
@@ -111,7 +122,8 @@ interface Ctx { file: string; project: string | null; kind: "card" | "decision" 
 
 function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, push: (f: Omit<LintFlag, "file" | "project">) => void): void {
   const inOpenSection = /^Açık konular\b/i.test(tl.h2);
-  const narrative = /^Son aktivite\b/i.test(tl.h2) && DATE_LED.test(tl.text);
+  // dated history: "Son aktivite" lines and the "Son doğrulanmış sonuç" account in Durum özeti (what was true then)
+  const narrative = (/^Son aktivite\b/i.test(tl.h2) && DATE_LED.test(tl.text)) || (/^Durum özeti\b/i.test(tl.h2) && /^\s*\*\*Son doğrulanmış sonuç\b/i.test(tl.text));
   const seen = new Set<string>(); // an id is judged once per sentence: another sentence on the line may say something else about it (F-vlad-178)
   const pushed = new Set<string>();
   const emit: typeof push = (f) => { const k = `${f.code}\u0000${f.id}`; if (!pushed.has(k)) { pushed.add(k); push(f); } }; // ...but one flag per code and id and line
@@ -126,14 +138,17 @@ function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, pus
     const closed = CLOSED_CTX.test(text);
     const status = st.status ?? "";
     if (st.type === "finding" && (status === "fixed" || status === "wontfix")) {
-      if (inOpenSection || (!narrative && !closed && OPEN_CTX.test(text))) {
+      // decision files are dated, immutable records (what was open that day); a sentence that reports the fix is history, not a listing
+      if (ctx.kind === "decision" || narrative || closed || FIXED_NOTE_CTX.test(text)) continue;
+      if (inOpenSection || OPEN_CTX.test(text)) {
         emit({ code: "closed_finding_listed_open", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "açık/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} kapandı" diye geçmişe çevir (özet: /digest)` });
       }
     } else if (st.type === "task" && (status === "done" || status === "cancelled")) {
       if (ctx.kind === "memory") {
         if (!closed && AUTHORITY_CTX.test(text)) emit({ code: "memory_stale_task", line: tl.n, id, actual_state: status, message: `hafıza notu ${status} göreve (${id}) bağlı yetki/plan içeriyor`, suggestion: "notu sil ya da güncelle (görev bittiği için artık geçerli olmayabilir)" });
-      } else if (inOpenSection || (!narrative && !closed && ACTIVE_CTX.test(text))) {
-        emit({ code: "finished_task_listed_active", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "sürüyor/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "done" ? "tamamlandı" : "iptal edildi"}" diye geçmişe çevir` });
+      } else if (!narrative && !closed && ACTIVE_CTX.test(text) && !inParens(tl.text, m.index ?? 0) && !USER_PENDING_CTX.test(text)) {
+        // the id itself must be named as running work: a "(T…)" source reference or a user-pending / unfinished-chore item is not (T20261103-14 FP table)
+        emit({ code: "finished_task_listed_active", line: tl.n, id, actual_state: status, message: `${id} ${status} ama sürüyor/bekliyor bağlamında geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "done" ? "tamamlandı" : "iptal edildi"}" diye geçmişe çevir` });
       }
     } else if (st.type === "decision" && (status === "geçersiz" || status === "yerine-geçti")) {
       if (tl.listing && !INACTIVE_WORDS.test(text)) {

@@ -38,7 +38,10 @@ export function replaceDerivedBlock(text: string, name: string, content: string,
   return [...lines.slice(0, last + 1), gap, ...block, ...lines.slice(last + 1)].join("\n");
 }
 
-/** Like `replaceDerivedBlock`, but a section without such a block is emptied first: the section is derived entirely (one-time migration of hand-written lines). */
+/**
+ * Like `replaceDerivedBlock`, but a missing block is put at the TOP of its section (one-time migration): hand-written lines stay below it byte for byte
+ * (nothing outside a block is ever dropped). Once the block exists later calls only replace its content.
+ */
 export function setDerivedSection(text: string, name: string, content: string, heading: string): string {
   if (text.includes(derivedOpen(name))) return replaceDerivedBlock(text, name, content, heading);
   const lines = text.split("\n");
@@ -46,11 +49,11 @@ export function setDerivedSection(text: string, name: string, content: string, h
   const fenced = fencedLines(plain);
   const start = plain.findIndex((l, k) => !fenced[k] && l.trimEnd() === heading);
   if (start < 0) return replaceDerivedBlock(text, name, content, heading);
-  let end = lines.length;
-  for (let k = start + 1; k < lines.length; k++) if (!fenced[k] && /^## /.test(plain[k])) { end = k; break; }
   const cr = eolOf(text) === "\r\n" ? "\r" : "";
   const block = [derivedOpen(name), ...content.split("\n"), DERIVED_CLOSE].map((l) => l + cr);
-  return [...lines.slice(0, start + 1), ...block, ...(end < lines.length ? [cr] : []), ...lines.slice(end)].join("\n");
+  const nextLine = plain[start + 1];
+  const gap = nextLine !== undefined && nextLine.trim() && !/^## /.test(nextLine) ? [cr] : []; // blank line between the block and the hand-written lines below
+  return [...lines.slice(0, start + 1), ...block, ...gap, ...lines.slice(start + 1)].join("\n");
 }
 
 /** True when the section heading (outside code fences) exists in `text`. */

@@ -35,8 +35,8 @@ function activityBlock(slug: string): string {
 
 /**
  * Regenerates the card's derived blocks: the open-findings block inside `## Açık konular` (hand-written text around it stays)
- * and `## Son aktivite`, which is derived entirely (hand-written lines are dropped on the first refresh: they went stale, records are the truth).
- * `create: false` (automatic hooks) never adds a missing section; `only` limits the work to one block (a `finding set` need not scan the tasks). Returns whether the card changed; an up-to-date card is not rewritten.
+ * and the `## Son aktivite` block. Text outside the blocks is never touched: an explicit refresh migrates a card without the Son aktivite block by putting the block at the top of the section, hand-written lines stay below it.
+ * `create: false` (automatic hooks) only refreshes blocks that already exist (open findings: also fills a missing block in an existing section; Son aktivite: needs the block) and never adds a section; `only` limits the work to one block (a `finding set` need not scan the tasks). Returns whether the card changed; an up-to-date card is not rewritten.
  */
 export function refreshProject(slug: string, opts: { create?: boolean; only?: "findings" | "activity" } = {}): boolean {
   const file = join(kbPaths().projects, `${slug}.md`);
@@ -47,7 +47,9 @@ export function refreshProject(slug: string, opts: { create?: boolean; only?: "f
   const head = /^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(raw)?.[0] ?? "";
   const rest = raw.slice(head.length);
   // automatic refresh (create: false) only fills blocks/sections the card already has, and then reads no records for the others
-  const wants = (name: string, heading: string) => (!opts.only || (opts.only === "findings") === (name === "open-findings")) && (opts.create !== false || rest.includes(derivedOpen(name)) || hasSection(rest, heading));
+  const wants = (name: string, heading: string) =>
+    (!opts.only || (opts.only === "findings") === (name === "open-findings")) &&
+    (opts.create !== false || rest.includes(derivedOpen(name)) || (name === "open-findings" && hasSection(rest, heading)));
   let next = rest;
   if (wants("open-findings", OPEN_HEADING)) next = replaceDerivedBlock(next, "open-findings", openFindingsBlock(slug), OPEN_HEADING);
   if (wants("recent-activity", ACTIVITY_HEADING)) next = setDerivedSection(next, "recent-activity", activityBlock(slug), ACTIVITY_HEADING);

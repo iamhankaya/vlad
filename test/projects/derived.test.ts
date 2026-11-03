@@ -75,18 +75,39 @@ describe("refreshProject", () => {
     expect(read()).not.toContain("Düzelecek");
     expect(read()).toContain("- elle yazılmış");
   });
-  it("Son aktivite is fully derived: done tasks and decisions, newest first, max 10, hand lines removed", () => {
+  it("Son aktivite block: done tasks and decisions, newest first, max 10; hand lines stay below the block", () => {
     const base = Date.now();
     for (let i = 0; i < 11; i++) done(`İş ${i}`, new Date(base + i * 1000));
     addDecision({ project: "vlad", title: "Bir karar", body: "- **Karar:** k" });
     refreshProject("vlad");
     const raw = read();
-    expect(raw).not.toContain("eski elle satır");
-    const sec = raw.slice(raw.indexOf("## Son aktivite"), raw.indexOf("## Çalışma notları"));
+    expect(raw).toContain("- eski elle satır");
+    const blk = raw.slice(raw.indexOf(derivedOpen("recent-activity")), raw.indexOf(DERIVED_CLOSE, raw.indexOf(derivedOpen("recent-activity"))));
+    expect(raw.indexOf("- eski elle satır")).toBeGreaterThan(raw.indexOf(blk) + blk.length); // block on top, hand line below
+    const sec = blk;
     expect(sec.match(/^- /gm)).toHaveLength(10);
     expect(sec).toContain("D-vlad-001");
     expect(sec).toContain("Bir karar");
     expect(sec).not.toContain("İş 0");
+  });
+  it("first refresh keeps hand-written Son aktivite lines byte for byte; hook leaves a block-less card alone; idempotent (CRLF too)", () => {
+    const outside = (t: string) => t.replace(/<!-- vlad:derived [\s\S]*?<!-- \/vlad:derived -->\r?\n?/g, "").replace(/\r\n/g, "\n").replace(/\n\n+/g, "\n"); // blank lines are layout: the block brings its own gap
+    for (const eol of ["\n", "\r\n"]) {
+      const tail = "## Özet\nx\n\n## Açık konular\n- elle\n\n## Son aktivite\n- 2026-11-01 elle bir\n- 2026-11-02 elle iki (master abc1234)\n\n## Çalışma notları\n- ders\n".replace(/\n/g, eol);
+      const raw = card("vlad", tail);
+      writeFileSync(cardFile(), raw);
+      done("Biten", new Date());
+      expect(refreshProject("vlad", { create: false, only: "activity" })).toBe(false); // hook: no block, nothing written
+      expect(read()).toBe(raw);
+      expect(refreshProject("vlad")).toBe(true);
+      const first = read();
+      expect(first).toContain("- 2026-11-01 elle bir" + eol + "- 2026-11-02 elle iki (master abc1234)" + eol);
+      expect(first).toContain(derivedOpen("recent-activity"));
+      expect(outside(first)).toBe(outside(raw));
+      if (eol === "\r\n") expect(first.slice(first.indexOf("## Özet")).replace(/\r\n/g, "")).not.toContain("\n"); // body is pure CRLF (the helper's frontmatter is LF)
+      expect(refreshProject("vlad")).toBe(false);
+      expect(read()).toBe(first);
+    }
   });
   it("a task that becomes done enters Son aktivite", () => {
     refreshProject("vlad");
