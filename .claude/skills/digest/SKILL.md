@@ -84,7 +84,7 @@ Bulunursa madde açılmaz (bulgu varsa doğrudan `fixed`/`wontfix`: `vlad findin
 ## 4. Proje kartları
 
 Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamamını** güncellenmiş hâliyle geçici dosyaya yaz:
-- `## Son aktivite`: **elle yazma.** Tamamen koddan üretilir (`<!-- vlad:derived recent-activity -->` bloğu: son ~10 done görev + geçerli karar); elle satır eklersen bir sonraki tazelemede silinir. Bloğu olduğu gibi bırak.
+- `## Son aktivite`: **elle yazma.** Tamamen koddan üretilir (`<!-- vlad:derived recent-activity -->` bloğu: son ~10 done görev + geçerli karar); bloğu yalnız açık `vlad project refresh` ekler (ilk eklemede mevcut elle satırlar bloğun altında aynen kalır; hiçbir tazeleme blok dışı metni silmez, kancalar blok yoksa kartı değiştirmez). Bloğa elle yazma; bloğu olduğu gibi bırak, eski elle satırları gerekirse `vlad project write` ile sen temizle.
 - `## Açık konular`: **bulgu listesini elle yazma.** Açık+ertelenen bulgular `<!-- vlad:derived open-findings -->` bloğunda koddan üretilir (önem sırası, `F-…` ID'leri); bloğa dokunma. Yalnız blok dışındaki elle anlatıyı güncelle (kullanıcı kararı bekleyenler, makine/ortam notları): yeni açılanı ekle, kapananı çıkar.
 - `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` ve retro yazar). Kartı yeniden yazarken bölümü aynen koru.
 - `## Durum özeti`'ne **dokunma** (yalnızca `vlad project summary` yazar, adım 5b). Kartı yeniden yazarken bölümü aynen koru.

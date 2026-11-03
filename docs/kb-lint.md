@@ -11,7 +11,14 @@ vlad kb lint [--project <slug>] [--strict] [--json]
 - Çıkış kodu: işaret varsa **0** (bilgi); hata (ör. bilinmeyen proje) **1**; `--strict` ile işaret varsa **1**.
 - `memoryDirs` (vlad.config.json, isteğe bağlı): `["C:\Users\<ad>\.claude\projects\<proje>\memory"]`; mutlak ya da VLAD_HOME'a göreli. Yoksa hafıza taranmaz; okunamayan klasör `warnings`'e yazılıp atlanır.
 - Taranmayanlar: kod çitleri (```), `src/kb/derived.ts` işaretleri (`<!-- vlad:derived NAME -->` … `<!-- /vlad:derived -->`) arasındaki türetilmiş bloklar.
-- Bağlam yalnız ID'nin bulunduğu **cümlede** aranır (`. ; ! ?` sınırı); "açık değil", "bekleyen iş yok", "kalmadı" olumsuzlamaları sayılmaz. `## Son aktivite` altındaki tarihle başlayan satırlar tarihsel anlatıdır, işaretlenmez. `## Açık konular` altında kapalı bir kaydı anmak her zaman işarettir.
+- Bağlam yalnız ID'nin bulunduğu **cümlede** aranır (`. ; ! ?` sınırı); "açık değil", "bekleyen iş yok", "kalmadı" olumsuzlamaları sayılmaz. Tarihsel anlatı işaretlenmez: `## Son aktivite` altındaki tarihle başlayan satırlar ve `## Durum özeti`'nin "**Son doğrulanmış sonuç (tarih):**" paragrafı.
+
+Yanlış pozitif kuralları (T20261103-25; T20261103-14 doğrulamasında 35 işaretin 21'i yanlıştı → gerçek kb kopyasında 13 işaret, hepsi doğru pozitif):
+
+- **`finished_task_listed_active`**: `## Açık konular`'da ID'nin geçmesi tek başına işaret değildir. İşaret için ID'nin kendisi sürüyor/bekliyor/running/devam/bitmedi gibi süren iş sözcüğüyle (aynı cümlede) anılmalı; parantez içi `(T…)` atıflar ve "kullanıcıda / kararı bekliyor / silinemedi / yapılmadı" cümleleri atlanır.
+- **`closed_finding_listed_open`**: `decisions/*.md` gövdeleri (tarihli, değişmez kayıt) taranmaz; cümlede düzeltme belirteci (`düzeltme…`, kapandı, fixed, giderildi, çözüldü …) ya da kısmi kapanış (`kalanı`/`kalan…`) varsa işaretlenmez. `## Açık konular`'da belirtecsiz anmak ve açık/bekliyor/ertelendi bağlamı yine işarettir.
+- **`memory_stale_task`**: notun cümlesi "sona erdi / bitti / geçersiz / tamamlandı …" diyorsa atlanır.
+- `summary_stale` ve açık-bulgu satırları değişmedi. Regresyon fixture'ları: `test/kb/lint-fp-regression.test.ts` (gerçek kb satırlarından).
 
 ## Kodlar
 
