@@ -6,7 +6,7 @@ import { makeHome } from "../helpers.js";
 
 const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
-const card = `---\nslug: alpha\nname: Alpha\npath: C:\dev\alpha\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n\n## Açık konular\n- elle\n`;
+const card = `---\nslug: alpha\nname: Alpha\npath: C:\dev\alpha\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n\n## Açık konular\n- elle\n\n## Son aktivite\n- eski\n`;
 function vlad(args: string[], input?: string) {
   const r = spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home } });
   return { code: r.status, out: r.stdout, err: r.stderr };
@@ -29,7 +29,7 @@ describe("project refresh + automatic refresh", () => {
     expect(cardText()).not.toContain("bozuk2");
     expect(vlad(["project", "refresh"]).code).toBe(1);
   });
-  it("finding add/set update the open-findings block; task set done updates Son aktivite; decision add too", () => {
+  it("finding add/set update the open-findings block; task set done updates Son aktivite; decisions only on explicit refresh", () => {
     const body = join(home, "b.md");
     writeFileSync(body, "## Tanım\nx\n");
     const tid = JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "Bitecek", "--kind", "dev", "--body-file", body, "--json"]).out).id as string;
@@ -40,20 +40,13 @@ describe("project refresh + automatic refresh", () => {
     for (const s of ["running", "awaiting_approval", "done"]) expect(vlad(["task", "set", tid, s]).code).toBe(0);
     expect(cardText()).toContain(`${tid} Bitecek`);
     vlad(["decision", "add", "--project", "alpha", "--title", "Yeni karar", "--body-file", "-"], "- **Karar:** k");
+    expect(cardText()).not.toContain("D-alpha-001"); // not hooked (cost); an explicit refresh picks it up
+    vlad(["project", "refresh", "alpha"]);
     expect(cardText()).toContain("D-alpha-001 Yeni karar");
     vlad(["decision", "set", "D-alpha-001", "geçersiz"]);
+    vlad(["project", "refresh", "alpha"]);
     expect(cardText()).not.toContain("D-alpha-001 Yeni karar");
     expect(cardText()).toContain("- elle");
   });
 });
 
-describe("cross-project decisions", () => {
-  it("superseding a decision of another project refreshes that project's card too", () => {
-    expect(vlad(["project", "write", "beta", "--file", "-"], card.replace(/alpha/g, "beta")).code).toBe(0);
-    vlad(["decision", "add", "--project", "beta", "--title", "Eski beta kararı", "--body-file", "-"], "- **Karar:** k");
-    const betaCard = () => readFileSync(join(home, "kb", "projects", "beta.md"), "utf8");
-    expect(betaCard()).toContain("D-beta-001 Eski beta kararı");
-    vlad(["decision", "add", "--project", "alpha", "--title", "Yeni", "--body-file", "-", "--supersedes", "D-beta-001"], "- **Karar:** k");
-    expect(betaCard()).not.toContain("D-beta-001 Eski beta kararı");
-  });
-});

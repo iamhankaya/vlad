@@ -136,26 +136,26 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
 
 /** Registers a command with --json and a uniform error path. */
 /** Records a command changed show up in the project card's derived blocks (open findings, Son aktivite) right away; a refresh failure never fails the command. */
-function projectsOf(key: string, args: any[]): (string | undefined)[] {
+/** Projects whose derived block `which` a command may have changed; each hook refreshes only that block (a task scan costs ~1.7 s on 600+ tasks). */
+function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; only: "findings" | "activity" } | null {
   const o = args[args.length - 2] as Opts;
-  const decisionFile = (id: unknown) => listDecisions({ all: true }).find((d) => d.id === String(id))?.file;
   switch (key) {
-    case "project write": return [String(args[0])];
-    case "finding add": return [String(o.project)];
-    case "decision add": return [String(o.project), o.supersedes ? decisionFile(o.supersedes) : undefined]; // the superseded decision may belong to another project
-    case "finding set": return [getFinding(String(args[0])).data.project];
-    case "task set": return [getTask(String(args[0])).data.project];
-    case "decision set": return [decisionFile(args[0]), o.supersededBy ? decisionFile(o.supersededBy) : undefined];
+    case "project write": return { slugs: [String(args[0])], only: "findings" }; // the card was replaced: the findings block is cheap, activity waits for `project refresh`
+    case "finding add": return { slugs: [String(o.project)], only: "findings" };
+    case "finding set": return { slugs: [getFinding(String(args[0])).data.project], only: "findings" };
+    case "task set": return String(args[1]) === "done" ? { slugs: [getTask(String(args[0])).data.project], only: "activity" } : null;
   }
-  return [];
+  return null;
 }
-const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
+// decisions are not hooked: Son aktivite needs the done-task scan (+~0.5 s on 600+ tasks); `project refresh` / /digest pick them up
+const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set"]);
 async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
   await fn(...args);
   if (!REFRESH_KEYS.has(key)) return;
   try {
-    for (const slug of new Set(projectsOf(key, args))) {
-      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug);
+    const t = targetsOf(key, args);
+    for (const slug of new Set(t?.slugs)) {
+      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug, { create: false, only: t!.only });
     }
   } catch (e) { process.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
 }

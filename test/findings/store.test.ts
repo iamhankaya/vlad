@@ -44,6 +44,15 @@ describe("findings store", () => {
     expect(() => add({ source: "görev" })).toThrow(/source_task/);
     expect(() => add({ title: "  " })).toThrow();
   });
+  it("project filter keeps prefix-sharing slugs apart and does not read other projects' files", () => {
+    add({ project: "man" });
+    add({ project: "man-ga" });
+    writeFileSync(join(kbPaths().findings, "F-other-001.md"), "bozuk");
+    const r = listFindingsWithWarnings({ project: "man" });
+    expect(r.findings.map((x) => x.data.id)).toEqual(["F-man-001"]);
+    expect(r.warnings).toEqual([]);
+    expect(listFindingsWithWarnings({ project: "man-ga" }).findings.map((x) => x.data.id)).toEqual(["F-man-ga-001"]);
+  });
   it("lists in id order and filters by project, state and severity", () => {
     add({ severity: "kritik" });
     add({ severity: "düşük", state: "deferred" });

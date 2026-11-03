@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/store.js";
-import { kbPaths, listDecisions, readDoc, replaceDerivedBlock, setDerivedSection, validate, writeFileAtomic } from "../kb/index.js";
+import { kbPaths, listDecisions, readDoc, derivedOpen, hasSection, replaceDerivedBlock, setDerivedSection, validate, writeFileAtomic } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
 
@@ -36,9 +36,9 @@ function activityBlock(slug: string): string {
 /**
  * Regenerates the card's derived blocks: the open-findings block inside `## Açık konular` (hand-written text around it stays)
  * and `## Son aktivite`, which is derived entirely (hand-written lines are dropped on the first refresh: they went stale, records are the truth).
- * Returns whether the card changed; an up-to-date card is not rewritten.
+ * `create: false` (automatic hooks) never adds a missing section; `only` limits the work to one block (a `finding set` need not scan the tasks). Returns whether the card changed; an up-to-date card is not rewritten.
  */
-export function refreshProject(slug: string): boolean {
+export function refreshProject(slug: string, opts: { create?: boolean; only?: "findings" | "activity" } = {}): boolean {
   const file = join(kbPaths().projects, `${slug}.md`);
   const { data } = readDoc<ProjectCard>(file); // validates and refuses symlinks
   validate("project", data);
@@ -46,8 +46,11 @@ export function refreshProject(slug: string): boolean {
   const raw = readFileSync(file, "utf8");
   const head = /^\uFEFF?---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/.exec(raw)?.[0] ?? "";
   const rest = raw.slice(head.length);
-  let next = replaceDerivedBlock(rest, "open-findings", openFindingsBlock(slug), OPEN_HEADING);
-  next = setDerivedSection(next, "recent-activity", activityBlock(slug), ACTIVITY_HEADING);
+  // automatic refresh (create: false) only fills blocks/sections the card already has, and then reads no records for the others
+  const wants = (name: string, heading: string) => (!opts.only || (opts.only === "findings") === (name === "open-findings")) && (opts.create !== false || rest.includes(derivedOpen(name)) || hasSection(rest, heading));
+  let next = rest;
+  if (wants("open-findings", OPEN_HEADING)) next = replaceDerivedBlock(next, "open-findings", openFindingsBlock(slug), OPEN_HEADING);
+  if (wants("recent-activity", ACTIVITY_HEADING)) next = setDerivedSection(next, "recent-activity", activityBlock(slug), ACTIVITY_HEADING);
   if (next === rest) return false;
   writeFileAtomic(file, head + next);
   return true;

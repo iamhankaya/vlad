@@ -115,6 +115,15 @@ describe("refreshProject", () => {
     expect(raw.replace(/\r\n/g, "")).not.toContain("\n");
     expect(projectStatus("vlad").findings.open.map((f) => f.title)).toEqual(["CRLF bulgu"]);
   });
+  it("automatic refresh (create: false) leaves a card without the sections untouched; explicit refresh adds them", () => {
+    const plain = card("vlad", "## Özet\nx\n");
+    writeFileSync(cardFile(), plain);
+    addFinding({ project: "vlad", severity: "yüksek", source: "T20261101-01", title: "B" });
+    expect(refreshProject("vlad", { create: false })).toBe(false);
+    expect(read()).toBe(plain);
+    expect(refreshProject("vlad")).toBe(true);
+    expect(read()).toContain("## Son aktivite");
+  });
   it("refreshAllProjects refreshes every card and reports unreadable ones", () => {
     writeProject("beta", card("beta"));
     writeFileSync(join(home, "kb", "projects", "bozuk.md"), "bozuk");

@@ -52,3 +52,10 @@ export function setDerivedSection(text: string, name: string, content: string, h
   const block = [derivedOpen(name), ...content.split("\n"), DERIVED_CLOSE].map((l) => l + cr);
   return [...lines.slice(0, start + 1), ...block, ...(end < lines.length ? [cr] : []), ...lines.slice(end)].join("\n");
 }
+
+/** True when the section heading (outside code fences) exists in `text`. */
+export function hasSection(text: string, heading: string): boolean {
+  const plain = text.split("\n").map((l) => l.replace(/\r$/, ""));
+  const fenced = fencedLines(plain);
+  return plain.some((l, k) => !fenced[k] && l.trimEnd() === heading);
+}
