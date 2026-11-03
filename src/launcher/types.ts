@@ -16,6 +16,8 @@ export interface LaunchResult {
   script?: string;
   command?: string;
   cwd?: string;
+  /** Desktop-queue mode only: the queue file written for vlad-desktop. */
+  queued?: string;
 }
 export interface Launcher {
   launch(req: LaunchRequest): Promise<LaunchResult>;

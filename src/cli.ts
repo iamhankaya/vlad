@@ -20,7 +20,7 @@ import { formatLint, lintExitCode, lintKb } from "./kb/lint.js";
 import { formatRefs, refsOf } from "./kb/refs.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
-import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
@@ -340,13 +340,17 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   }
   let last: LaunchResult | undefined;
   // --external (vlad-desktop): only writes the script; the caller opens it, so no terminal and no noop guard
-  const real = o.external
+  // VLAD_DESKTOP_QUEUE (vlad-desktop main tab): same preparation as --external plus a queue file the app picks up; explicit --external keeps the old behavior
+  const q = o.external || o.dryRun ? { dir: null as string | null } : desktopQueueDir();
+  if ("warning" in q && q.warning) process.stderr.write(`uyarı: ${q.warning}\n`);
+  const normal: Launcher = mode === "noop"
+    ? new NoopLauncher()
+    : mode === "tmux" || mode === "terminal"
+      ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
+      : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+  const real: Launcher = o.external
     ? new TerminalLauncher({ mode: "auto", external: true })
-    : mode === "noop"
-      ? new NoopLauncher()
-      : mode === "tmux" || mode === "terminal"
-        ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
-        : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+    : q.dir ? queueLauncher(q.dir, "launch", normal) : normal;
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
   if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
@@ -354,8 +358,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   // --- /machines:C1 ---
   out(
     o,
-    { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}) },
-    `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}`,
+    { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}), ...(last?.queued ? { queued: last.queued, script: last.script, cwd: last.cwd } : {}) },
+    `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}${last?.queued ? `\nkuyruk: ${last.queued}` : ""}`,
   );
 }).option("--dry-run", "terminal açmadan komutu göster")
   .option("--machine <ad>", "görevi kartın makinelerinden birine sabitle (yalnız config'te machines varken)")
@@ -437,7 +441,9 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   // the trust record may be gone (cleanup, a rewritten ~/.claude.json): without it the resumed worker stops at the trust screen (F-vlad-081)
   const trustWarn = r.mode === "local" ? trustWorktree(r.worktree) : null;
   if (trustWarn) process.stderr.write(`uyarı: ${trustWarn}\n`);
-  if (o.external) {
+  const rq = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
+  if ("warning" in rq && rq.warning) process.stderr.write(`uyarı: ${rq.warning}\n`);
+  if (o.external || rq.dir) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
     const model = modelInfo(t.data).effective_model;
@@ -451,8 +457,17 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
       ...(sid ? { resume: { sessionId: sid } } : {}),
     });
     if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);
-    out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);
-    return;
+    if (o.external || !rq.dir) {
+      out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);
+      return;
+    }
+    try {
+      const queued = enqueueDesktop(rq.dir, { kind: "resume", taskId: id, script: ext.script!, cwd: ext.cwd! });
+      out(o, { ...r, method: "desktop-queue", queued, script: ext.script, cwd: ext.cwd }, `${id} vlad-desktop kuyruğuna yazıldı: ${queued}`);
+      return;
+    } catch (e) {
+      process.stderr.write(`uyarı: kuyruk yazılamadı (${(e as Error).message}); devam bilgisi yazdırılıyor\n`); // falls through to the plain resume output
+    }
   }
   out(o, r, r.mode === "local"
     ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
