@@ -59,3 +59,14 @@ export function hasSection(text: string, heading: string): boolean {
   const fenced = fencedLines(plain);
   return plain.some((l, k) => !fenced[k] && l.trimEnd() === heading);
 }
+
+/** True for lines inside a derived block (marker lines included), so `kb lint` does not read generated text as a human claim. An unclosed block is not trusted: nothing is marked. */
+export function derivedLines(lines: string[]): boolean[] {
+  const marks = lines.map(() => false);
+  let from = -1;
+  lines.forEach((l, i) => {
+    const t = l.trim();
+    if (from < 0) { if (t.startsWith(OPEN_PREFIX) && t.endsWith("-->")) from = i; } else if (t === DERIVED_CLOSE) { marks.fill(true, from, i + 1); from = -1; }
+  });
+  return marks;
+}
