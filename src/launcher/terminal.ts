@@ -13,19 +13,23 @@ const q = (s: string) => `'${s.replace(SQ, (m) => m + m)}'`;
 const AUTOCOMPACT = /^\d+(\.\d+)?[kKmM]?$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
+// Windows PowerShell 5.1 (and pwsh < 7.3) pass a native argument without escaping embedded double quotes, so the
+// argument ended at the first `"` (T20261103-26). Apply the CommandLineToArgvW rules by hand there: backslashes before
+// a quote are doubled and the quote escaped, trailing backslashes are doubled (the argument is quoted for its spaces).
+// pwsh >= 7.3 escapes by itself, so doing it again would corrupt the prompt.
+const PS51_ARG_ESCAPE =
+  "if ($PSVersionTable.PSVersion -lt [version]'7.3') { " +
+  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); $p = [regex]::Replace($p, '(\\\\+)$', '$1$1') }";
+
 export function buildScript(req: LaunchRequest): string {
   // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
   const lines: string[] = ["Remove-Item Env:VLAD_DESKTOP_QUEUE -ErrorAction SilentlyContinue"];
   for (const [k, v] of Object.entries(req.env)) lines.push(`$env:${k} = ${q(v)}`);
   lines.push(`Set-Location -LiteralPath ${q(req.cwd)}`);
   lines.push(`$host.UI.RawUI.WindowTitle = ${q(req.title)}`);
-  // Here-string terminator must sit at column 0, so protect prompt lines that start with '@.
-  const prompt = req.prompt
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((l) => (/^['‘’‚‛]@/.test(l) ? " " + l : l))
-    .join("\n");
-  lines.push("$p = @'", prompt, "'@");
+  // Base64, not a here-string: no prompt text (quotes, `'@` at line start, `$`, backticks) can end or alter the literal.
+  const prompt = Buffer.from(req.prompt.replace(/\r\n?/g, "\n"), "utf8").toString("base64");
+  lines.push(`$p = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${prompt}'))`, PS51_ARG_ESCAPE);
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);
   const flags = [

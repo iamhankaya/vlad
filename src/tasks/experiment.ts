@@ -26,3 +26,11 @@ export const stripPonytailParagraph = (body: string): string => body.split("\n")
  * and cloud (inline) prompts embed this instead of pointing the worker at the role file, so no ponytail text or vendored path reaches it.
  */
 export const ponytailOffRoleBody = (roleFile: string): string => stripPonytailParagraph(readDoc<unknown>(roleFile).body.trim());
+
+/**
+ * ponytail A/B validity (T20261103-26): launch/resume prompts were cut at the first `"` before this fix (Windows PowerShell
+ * 5.1 native-argument quoting), so the off arm never got its skill list and standard blocks. Arm tasks created before this
+ * instant are left out of `audit setup`'s `by_ponytail` split. If the experiment is reopened, nothing to change; if the
+ * fix is reverted, move this forward.
+ */
+export const PONYTAIL_AB_VALID_FROM = "2026-11-03T12:00:00+03:00";

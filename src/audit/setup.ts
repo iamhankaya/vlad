@@ -6,6 +6,7 @@ import { listFindingsWithWarnings, UNRESOLVED } from "../findings/store.js";
 import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
+import { PONYTAIL_AB_VALID_FROM } from "../tasks/experiment.js";
 import { firstAdded, installedSkills, lastChanged, roleSkillSince, skillDirs } from "./rules.js";
 import { auditSkills, parseSince } from "./skills.js";
 
@@ -23,7 +24,7 @@ interface CoverageRow { role: string; skill: string; since: string | null; since
 export interface SetupAudit {
   since: string;
   tasks: { total: number; ids: string[]; by_role: Record<string, number>; by_phase: Record<string, number>; by_model: Record<string, number> };
-  /** `by_ponytail`: the same sums split by the task's `experiment.ponytail` arm (T20261102-16); tasks outside the experiment are in neither. */
+  /** `by_ponytail`: the same sums split by the task's `experiment.ponytail` arm (T20261102-16); tasks outside the experiment, or started before PONYTAIL_AB_VALID_FROM, are in neither. */
   measures: { tasks_with_measure: number; sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
   open_points: { total: number; by_severity: Record<string, number> };
   signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal; codex_turlari: CodexRounds };
@@ -95,7 +96,8 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     const closing = getSection(t.body, "## Kapanış raporu") ?? "";
     // line start only: template text ("Ölçüm satırı…") or a quoted example is not a measure
     const m = [...closing.matchAll(/^Ölçüm:(.*)$/gm)].pop();
-    const arm = t.data.experiment?.ponytail;
+    // arm tasks started with a truncated prompt are not comparable (see PONYTAIL_AB_VALID_FROM)
+    const arm = Date.parse(t.data.created) >= Date.parse(PONYTAIL_AB_VALID_FROM) ? t.data.experiment?.ponytail : undefined;
     const armOut = arm ? out.measures.by_ponytail[arm] : undefined;
     if (armOut) armOut.tasks++;
     if (m) {
