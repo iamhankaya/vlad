@@ -54,11 +54,26 @@ export function enqueueDesktop(dir: string, req: Omit<DesktopQueueRequest, "v" |
 export function secureDir(dir: string): void {
   mkdirSync(dir, { recursive: true });
   // absolute System32 paths: PATH may put Git's coreutils whoami first
-  const sys32 = join(process.env.SystemRoot ?? "C:\Windows", "System32");
+  const sys32 = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+  const icacls = (args: string[]): string => execFileSync(join(sys32, "icacls.exe"), args, { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
   const who = execFileSync(join(sys32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"], { encoding: "utf8", windowsHide: true });
-  const sid = /"(S-1-[\d-]+)"\s*$/.exec(who.trim())?.[1];
-  if (!sid) throw new Error("kullanıcı SID'i okunamadı");
-  execFileSync(join(sys32, "icacls.exe"), [dir, "/inheritance:r", "/grant:r", `*${sid}:(OI)(CI)F`, "*S-1-5-18:(OI)(CI)F"], { stdio: "ignore", windowsHide: true });
+  const m = /^"([^"]+)","(S-1-[\d-]+)"\s*$/.exec(who.trim());
+  if (!m) throw new Error("kullanıcı SID'i okunamadı");
+  const [, name, sid] = m;
+  // allow-list, not an additive grant: /reset drops every explicit ACE (a pre-existing Everyone/other-user entry would survive /grant:r), /inheritance:r drops inherited ones
+  icacls([dir, "/reset", "/T", "/C"]);
+  icacls([dir, "/inheritance:r"]);
+  icacls([dir, "/grant:r", `*${sid}:(OI)(CI)F`, "*S-1-5-18:(OI)(CI)F"]);
+  // verify: only the current user and SYSTEM may remain, none inherited
+  const allowed = new Set([name.toLowerCase(), "nt authority\\system"]);
+  // icacls prints `<path> <principal>:(flags)` for the first ACE and `<spaces><principal>:(flags)` for the rest
+  const principals = icacls([dir]).split(/\r?\n/).filter((l) => /:\(/.test(l)).map((l) => {
+    const head = l.slice(0, l.indexOf(":(")).trim();
+    const who = head.startsWith(dir) ? head.slice(dir.length).trim() : head;
+    return { line: l, who: who.toLowerCase() };
+  });
+  const extra = principals.filter((p) => !allowed.has(p.who) || /\(I\)/.test(p.line));
+  if (principals.length === 0 || extra.length) throw new Error(`ACL doğrulaması başarısız: ${extra.map((p) => p.line.trim()).join("; ") || "ACE yok"}`);
 }
 
 /**
