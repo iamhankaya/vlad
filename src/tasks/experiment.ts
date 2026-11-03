@@ -1,3 +1,4 @@
+import { readDoc } from "../kb/index.js";
 import type { VladConfig } from "../kb/index.js";
 
 export type PonytailArm = "on" | "off";
@@ -19,3 +20,9 @@ export const PONYTAIL_OFF_NOTE = "ponytail KAPALI (A/B deney kolu): rol dosyası
 
 /** Role body without the ponytail rule bullet (cloud prompts embed the body, so the off arm never sees it). */
 export const stripPonytailParagraph = (body: string): string => body.split("\n").filter((l) => !l.includes("**ponytail (deneme):**")).join("\n");
+
+/**
+ * The single filter for the off arm (F-vlad-161): the role file's body without the ponytail bullet. Local, `--external`, remote
+ * and cloud (inline) prompts embed this instead of pointing the worker at the role file, so no ponytail text or vendored path reaches it.
+ */
+export const ponytailOffRoleBody = (roleFile: string): string => stripPonytailParagraph(readDoc<unknown>(roleFile).body.trim());

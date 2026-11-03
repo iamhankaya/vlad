@@ -10,7 +10,7 @@ vlad kb lint [--project <slug>] [--strict] [--json]
 
 - Çıkış kodu: işaret varsa **0** (bilgi); hata (ör. bilinmeyen proje) **1**; `--strict` ile işaret varsa **1**.
 - `memoryDirs` (vlad.config.json, isteğe bağlı): `["C:\Users\<ad>\.claude\projects\<proje>\memory"]`; mutlak ya da VLAD_HOME'a göreli. Yoksa hafıza taranmaz; okunamayan klasör `warnings`'e yazılıp atlanır.
-- Taranmayanlar: kod çitleri (```), `src/kb/derived.ts` işaretleri (`DERIVED_BLOCK_START`/`END`) arasındaki türetilmiş bloklar.
+- Taranmayanlar: kod çitleri (```), `src/kb/derived.ts` işaretleri (`<!-- vlad:derived NAME -->` … `<!-- /vlad:derived -->`) arasındaki türetilmiş bloklar.
 - Bağlam yalnız ID'nin bulunduğu **cümlede** aranır (`. ; ! ?` sınırı); "açık değil", "bekleyen iş yok", "kalmadı" olumsuzlamaları sayılmaz. `## Son aktivite` altındaki tarihle başlayan satırlar tarihsel anlatıdır, işaretlenmez. `## Açık konular` altında kapalı bir kaydı anmak her zaman işarettir.
 
 ## Kodlar

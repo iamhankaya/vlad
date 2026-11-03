@@ -26,7 +26,7 @@ import { countPending } from "../digest/pending.js";
 import type { StaleSummary } from "../projects/status.js";
 import { expireMode, modeLine } from "../mode/store.js";
 import { untrustWorktree } from "./trust.js";
-import { PONYTAIL_OFF_NOTE, ponytailArm, withoutPonytail } from "./experiment.js";
+import { ponytailArm, ponytailOffRoleBody, withoutPonytail } from "./experiment.js";
 import type { PonytailArm } from "./experiment.js";
 import { ensureIntegrationGit, launchCore } from "./launch-core.js";
 import { nowMs } from "../machines/clock.js";
@@ -78,16 +78,20 @@ function promptCore(taskFile: string, autonomy: string, role?: { title: string; 
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
   if (!role) return base;
-  const withRole =
-    `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${portable ? `{{ROLE_FILE:${slugOf(role.file)}}}` : role.file}\` dosyasını oku ` +
-    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
+  // off arm: the filtered role body travels inline (the worker never reads the role file, so the ponytail bullet cannot reach it)
+  const withRole = role.ponytailOff
+    ? `${base} Rolün: ${role.title}. Oradaki sorumluluk, yetki ve çıktı kurallarına uy; rol tanımı:
+
+${ponytailOffRoleBody(role.file)}
+`
+    : `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${portable ? `{{ROLE_FILE:${slugOf(role.file)}}}` : role.file}\` dosyasını oku ` +
+      `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
   const { load, vendored } = splitSkills(role.skills ?? [], role.file);
   const parts = [withRole];
   if (load.length) {
     parts.push(`İşe başlamadan şu skill'leri yükle: ${load.map((s) => `\`${s}\``).join(", ")}. Yüklenemeyen olursa kapanış raporunda belirt.`);
   }
   for (const v of vendored) parts.push(`\`${v.name}\` skill'i yüklü değildir; \`${portable ? `{{VENDOR_SKILL:${v.name}}}` : v.file}\` dosyasını oku ve uygula.`);
-  if (role.ponytailOff) parts.push(PONYTAIL_OFF_NOTE);
   return parts.join(" ");
 }
 

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
-import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
+import { addFinding, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
 import { auditSetup } from "./audit/setup.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
@@ -20,7 +20,7 @@ import { formatLint, lintExitCode, lintKb } from "./kb/lint.js";
 import { formatRefs, refsOf } from "./kb/refs.js";
 import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
-import { NoopLauncher, PosixLauncher, TerminalLauncher, externalLaunch, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
@@ -32,6 +32,7 @@ import { readLocal, selfName } from "./agent/state.js";
 import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
+import { refreshAllProjects, refreshProject } from "./projects/derived.js";
 import { staleSummaryText } from "./projects/status.js";
 import { addPending, donePending, listPending } from "./digest/pending.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -111,7 +112,7 @@ program
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
  */
 const KB_WRITES = new Set([
-  "project write", "project set", "project note", "project summary",
+  "project write", "project set", "project note", "project summary", "project refresh",
   "finding add", "finding set",
   "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
   "mode night", "mode watch", "mode off", "mode status",
@@ -135,6 +136,31 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
 // --- /machines:C3 ---
 
 /** Registers a command with --json and a uniform error path. */
+/** Records a command changed show up in the project card's derived blocks (open findings, Son aktivite) right away; a refresh failure never fails the command. */
+/** Projects whose derived block `which` a command may have changed; each hook refreshes only that block (a task scan costs ~1.7 s on 600+ tasks). */
+function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; only: "findings" | "activity" } | null {
+  const o = args[args.length - 2] as Opts;
+  switch (key) {
+    case "project write": return { slugs: [String(args[0])], only: "findings" }; // the card was replaced: the findings block is cheap, activity waits for `project refresh`
+    case "finding add": return { slugs: [String(o.project)], only: "findings" };
+    case "finding set": return { slugs: [getFinding(String(args[0])).data.project], only: "findings" };
+    case "task set": return String(args[1]) === "done" ? { slugs: [getTask(String(args[0])).data.project], only: "activity" } : null;
+  }
+  return null;
+}
+// decisions are not hooked: Son aktivite needs the done-task scan (+~0.5 s on 600+ tasks); `project refresh` / /digest pick them up
+const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set"]);
+async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
+  await fn(...args);
+  if (!REFRESH_KEYS.has(key)) return;
+  try {
+    const t = targetsOf(key, args);
+    for (const slug of new Set(t?.slugs)) {
+      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug, { create: false, only: t!.only });
+    }
+  } catch (e) { process.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
+}
+
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
   const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
   const key = `${parent.name()} ${spec.split(" ")[0]}`;
@@ -151,7 +177,7 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
           await fn(...args);
         }
       } else if (await before(key, args)) return;
-      else await (lockPolicy(key) === "outer" ? withKbLock(() => fn(...args)) : fn(...args));
+      else await (lockPolicy(key) === "outer" ? withKbLock(() => runAndRefresh(key, args, fn)) : fn(...args));
     } catch (e) {
       fail(e);
     }
@@ -203,6 +229,17 @@ def(project, "summary <slug>", "Kartın `## Durum özeti` bölümünü yazar (/d
   const stamp = setProjectSummary(slug, readInput(o.file as string));
   out(o, { slug, as_of: stamp }, `özet yazıldı: ${slug} (${stamp})`);
 }).requiredOption("--file <md>", "özet metni (- = stdin); en çok ~1000 token");
+def(project, "refresh [slug]", "Kartın koddan üretilen bloklarını (açık bulgular, Son aktivite) yeniden üretir; blok dışı metne dokunmaz", (slug: string | undefined, o: Opts) => {
+  if (o.all) {
+    const r = refreshAllProjects();
+    out(o, r, [`tazelendi: ${r.refreshed.join(", ") || "(değişen yok)"}`, ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+    return;
+  }
+  if (!slug) throw new Error("proje slug'ı ya da --all gerekli");
+  if (!/^[a-z0-9-]+$/.test(slug) || !existsSync(join(kbPaths().projects, `${slug}.md`))) throw new Error(`proje kartı bulunamadı: ${slug}`);
+  const changed = refreshProject(slug);
+  out(o, { slug, changed }, changed ? `tazelendi: ${slug}` : `güncel: ${slug}`);
+}).option("--all", "tüm kartlar");
 def(project, "list", "Kartları listeler", (o: Opts) => {
   const { projects, warnings } = listProjectsWithWarnings();
   out(
@@ -303,13 +340,17 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   }
   let last: LaunchResult | undefined;
   // --external (vlad-desktop): only writes the script; the caller opens it, so no terminal and no noop guard
-  const real = o.external
+  // VLAD_DESKTOP_QUEUE (vlad-desktop main tab): same preparation as --external plus a queue file the app picks up; explicit --external keeps the old behavior
+  const q = o.external || o.dryRun ? { dir: null as string | null } : desktopQueueDir();
+  if ("warning" in q && q.warning) process.stderr.write(`uyarı: ${q.warning}\n`);
+  const normal: Launcher = mode === "noop"
+    ? new NoopLauncher()
+    : mode === "tmux" || mode === "terminal"
+      ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
+      : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+  const real: Launcher = o.external
     ? new TerminalLauncher({ mode: "auto", external: true })
-    : mode === "noop"
-      ? new NoopLauncher()
-      : mode === "tmux" || mode === "terminal"
-        ? new PosixLauncher({ mode, dryRun: !!o.dryRun })
-        : new TerminalLauncher({ mode: mode === "wt" || mode === "powershell" ? mode : "auto", dryRun: !!o.dryRun });
+    : q.dir ? queueLauncher(q.dir, "launch", normal) : normal;
   const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
   // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
   if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
@@ -317,8 +358,8 @@ def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı ç
   // --- /machines:C1 ---
   out(
     o,
-    { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}) },
-    `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}`,
+    { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}), ...(last?.queued ? { queued: last.queued, script: last.script, cwd: last.cwd } : {}) },
+    `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}${last?.queued ? `\nkuyruk: ${last.queued}` : ""}`,
   );
 }).option("--dry-run", "terminal açmadan komutu göster")
   .option("--machine <ad>", "görevi kartın makinelerinden birine sabitle (yalnız config'te machines varken)")
@@ -400,7 +441,9 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   // the trust record may be gone (cleanup, a rewritten ~/.claude.json): without it the resumed worker stops at the trust screen (F-vlad-081)
   const trustWarn = r.mode === "local" ? trustWorktree(r.worktree) : null;
   if (trustWarn) process.stderr.write(`uyarı: ${trustWarn}\n`);
-  if (o.external) {
+  const rq = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
+  if ("warning" in rq && rq.warning) process.stderr.write(`uyarı: ${rq.warning}\n`);
+  if (o.external || rq.dir) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
     const model = modelInfo(t.data).effective_model;
@@ -414,8 +457,17 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
       ...(sid ? { resume: { sessionId: sid } } : {}),
     });
     if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);
-    out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);
-    return;
+    if (o.external || !rq.dir) {
+      out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);
+      return;
+    }
+    try {
+      const queued = enqueueDesktop(rq.dir, { kind: "resume", taskId: id, script: ext.script!, cwd: ext.cwd! });
+      out(o, { ...r, method: "desktop-queue", queued, script: ext.script, cwd: ext.cwd }, `${id} vlad-desktop kuyruğuna yazıldı: ${queued}`);
+      return;
+    } catch (e) {
+      process.stderr.write(`uyarı: kuyruk yazılamadı (${(e as Error).message}); devam bilgisi yazdırılıyor\n`); // falls through to the plain resume output
+    }
   }
   out(o, r, r.mode === "local"
     ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`

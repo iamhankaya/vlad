@@ -9,7 +9,8 @@ import { makeFixtureRoot, makeHome } from "../helpers.js";
 import { NO_CLOUD_ENV, root, vlad as run } from "./cloud-helpers.js";
 
 let home: string;
-beforeEach(() => { home = makeHome(); });
+// F-vlad-173: default config roots (C:\dev) would resolve the card-less project to the real C:\dev\vlad repo; isolate roots to an empty temp dir
+beforeEach(() => { home = makeHome(); writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ roots: [makeFixtureRoot()] })); });
 
 const vlad = (args: string[], input?: string) => run(home, args, { input, env: NO_CLOUD_ENV });
 const json = <T = any>(args: string[], input?: string): T => {

@@ -1,3 +1,4 @@
+import { isolatedEnv } from "../isolate-env.js";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +13,7 @@ export function build(): void {}
 
 /** Runs the built CLI. `env` entries set to undefined are removed from the child environment. */
 export function vlad(home: string, args: string[], o: { input?: string; env?: Record<string, string | undefined> } = {}) {
-  const env: Record<string, string | undefined> = { ...process.env, VLAD_HOME: home, ...o.env };
+  const env: Record<string, string | undefined> = { ...isolatedEnv(), VLAD_HOME: home, ...o.env };
   for (const k of Object.keys(env)) if (env[k] === undefined) delete env[k];
   const r = spawnSync("node", [cli, ...args], { encoding: "utf8", input: o.input, env: env as NodeJS.ProcessEnv });
   return { code: r.status, out: r.stdout, err: r.stderr };

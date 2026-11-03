@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDecision, setDecisionStatus } from "../../src/kb/decisions.js";
-import { DERIVED_BLOCK_END, DERIVED_BLOCK_START } from "../../src/kb/derived.js";
+import { DERIVED_CLOSE, derivedOpen } from "../../src/kb/derived.js";
 import { formatLint, lintExitCode, lintKb } from "../../src/kb/lint.js";
 import { makeHome } from "../helpers.js";
 
@@ -70,7 +70,7 @@ describe("closed_finding_listed_open", () => {
   });
   it("ignores fenced code and the derived block", () => {
     finding("F-vlad-164", "fixed");
-    writeCard("vlad", `## Açık konular\n${DERIVED_BLOCK_START}\n- F-vlad-164 açık\n${DERIVED_BLOCK_END}\n\n## Çalışma notları\n\`\`\`\nF-vlad-164 açık\n\`\`\`\n\n${FRESH}x\n`);
+    writeCard("vlad", `## Açık konular\n${derivedOpen("open-findings")}\n- F-vlad-164 açık\n${DERIVED_CLOSE}\n\n## Çalışma notları\n\`\`\`\nF-vlad-164 açık\n\`\`\`\n\n${FRESH}x\n`);
     expect(codes(lintKb({ now: NOW }))).toEqual([]);
   });
   it("matches whole ids only (F-vlad-16 is not inside F-vlad-160)", () => {
