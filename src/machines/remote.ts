@@ -6,7 +6,7 @@ import { commitKb, git } from "../kb/commit.js";
 import { isSeparateKb, kbPaths } from "../kb/home.js";
 import { readDoc } from "../kb/index.js";
 import type { ProjectCard, VladConfig } from "../kb/index.js";
-import { listTasks, effectiveModel, getTask, roleFor, saveTask } from "../tasks/store.js";
+import { listTasks, effectiveModel, getTask, roleFor, saveTask, saveTaskQuiet } from "../tasks/store.js";
 import type { Task } from "../tasks/store.js";
 import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
@@ -101,7 +101,7 @@ export async function remoteCleanup(transport: RemoteTransport, machine: string,
 export function markCleaned(id: string): void {
   const t = getTask(id);
   t.data.worktree = null;
-  saveTask(t);
+  saveTaskQuiet(t);
 }
 
 // --- machines:C4 --- kapı işlemleri: uzak makinedeki görev/çatı için gate, merge önizleme ve merge (push YOK)

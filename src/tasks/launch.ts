@@ -16,7 +16,7 @@ import type { Role } from "../roles/store.js";
 import { applyRemoteStalls, markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe, RemoteStallPlan } from "./liveness.js";
 import {
-  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, setState, syncAutonomy, unmetDependencies,
+  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, saveTaskQuiet, setState, syncAutonomy, unmetDependencies,
 } from "./store.js";
 import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
@@ -571,7 +571,7 @@ export function cleanupTask(
   const trustWarning = untrustWorktree(wt);
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
   t.data.worktree = null;
-  saveTask(t);
+  saveTaskQuiet(t);
 }
 
 /**

@@ -146,7 +146,8 @@ function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; o
     case "finding add": return { slugs: [String(o.project)], only: "findings" };
     case "finding set": return { slugs: [getFinding(String(args[0])).data.project], only: "findings" };
     // an added decision only pushes entries out of the list: no task scan (fast). One that leaves the valid list (`set`, or the superseded one) matters only when the block shows it, and then needs the scan.
-    case "decision add": return { slugs: [String(o.project)], only: "activity", fast: !o.supersedes };
+    // the superseded decision may belong to another project: that card's block still lists it (F-vlad-190)
+    case "decision add": return { slugs: [String(o.project), decisionProject(o.supersedes)], only: "activity", fast: !o.supersedes };
     case "decision set": {
       const id = String(args[0]), p = decisionProject(id);
       if (p && args[1] !== "geçerli" && !activityListsId(p, id)) return null;
