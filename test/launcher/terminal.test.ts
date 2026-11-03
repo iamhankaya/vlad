@@ -45,11 +45,12 @@ describe("buildScript", () => {
       expect(() => buildScript(req({ autoCompact: v })), JSON.stringify(v)).toThrow(/geçersiz autoCompact/);
     }
   });
-  it("protects lines starting with '@", () => {
-    const s = buildScript(req({ prompt: "a\n'@ evil\nb" }));
-    const lines = s.split("\n");
-    expect(lines.filter((l) => l.startsWith("'@"))).toHaveLength(1);
-    expect(s).toContain("\n '@ evil\n");
+  it("embeds the prompt as base64 so no prompt text can end the literal", () => {
+    const prompt = "a\n'@ evil\n’@ x\n\"q\" $p `t` %T% ç";
+    const s = buildScript(req({ prompt: prompt.replace(/\n/g, "\r\n") }));
+    expect(s).not.toContain("evil");
+    const b64 = /FromBase64String\('([^']*)'\)/.exec(s)![1];
+    expect(Buffer.from(b64, "base64").toString("utf8")).toBe(prompt);
   });
 });
 
@@ -136,9 +137,8 @@ describe("quoting fixes", () => {
     const c = buildCommand(req(), "powershell", p);
     expect(toCommandLine(c.file, c.args)).toBe(`powershell.exe -NoExit -ExecutionPolicy Bypass -File "${p}"`);
   });
-  it("doubles typographic single quotes and guards them before @", () => {
-    expect(buildScript(req({ env: { K: "a\u2019b" } }))).toContain("$env:K = 'a\u2019\u2019b'");
-    expect(buildScript(req({ prompt: "x\n\u2019@ y" }))).toContain("\n \u2019@ y\n");
+  it("doubles typographic single quotes in env values", () => {
+    expect(buildScript(req({ env: { K: "a’b" } }))).toContain("$env:K = 'a’’b'");
   });
   it("escapes ; in wt title", () => {
     expect(buildCommand(req({ title: "a;b" }), "wt", "s").args[4]).toBe("a\\;b");

@@ -167,7 +167,7 @@ describe("auditSetup", () => {
 
   it("splits measure sums by the ponytail experiment arm (tasks without the field are in neither)", () => {
     const withArm = (arm: "on" | "off", measure: string) => {
-      const id = task({ at: "2026-10-28", closing: `### Yapılanlar\n${measure}\n` });
+      const id = task({ at: "2026-11-04", closing: `### Yapılanlar\n${measure}\n` });
       const t = getTask(id);
       t.data.experiment = { ponytail: arm };
       writeDoc(t.file, t.data, t.body);
@@ -175,13 +175,28 @@ describe("auditSetup", () => {
     withArm("on", "Ölçüm: dosya=3 yeni_test=2");
     withArm("on", "Ölçüm: dosya=1 yeni_test=1");
     withArm("off", "Ölçüm: dosya=5 yeni_test=4");
-    task({ at: "2026-10-28", closing: "### Yapılanlar\nÖlçüm: dosya=9\n" });
+    task({ at: "2026-11-04", closing: "### Yapılanlar\nÖlçüm: dosya=9\n" });
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
     expect(r.measures.by_ponytail).toEqual({
       on: { tasks: 2, tasks_with_measure: 2, sums: { dosya: 4, yeni_test: 3 } },
       off: { tasks: 1, tasks_with_measure: 1, sums: { dosya: 5, yeni_test: 4 } },
     });
     expect(r.measures.sums.dosya).toBe(18); // totals still include every task
+  });
+
+  it("leaves tasks started before the prompt-truncation fix out of the ponytail A/B split (T20261103-26)", () => {
+    const arm = (at: string, a: "on" | "off") => {
+      const id = task({ at, closing: "### Yapılanlar\nÖlçüm: dosya=2\n" });
+      const t = getTask(id); t.data.experiment = { ponytail: a }; writeDoc(t.file, t.data, t.body);
+    };
+    arm("2026-11-02", "off"); arm("2026-11-02", "on"); // truncated prompts: not comparable
+    arm("2026-11-04", "off");
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.measures.by_ponytail).toEqual({
+      on: { tasks: 0, tasks_with_measure: 0, sums: {} },
+      off: { tasks: 1, tasks_with_measure: 1, sums: { dosya: 2 } },
+    });
+    expect(r.measures.sums.dosya).toBe(6); // totals still count them
   });
 
   it("splits cancelled tasks by whether a reason is recorded", () => {

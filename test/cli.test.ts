@@ -44,6 +44,10 @@ x
   expect(vlad(["project", "write", "alpha", "--file", f, "--json"]).code).toBe(0);
 }
 
+// the launch script carries the prompt as base64 (T20261103-26)
+const scriptPrompt = (file: string): string =>
+  Buffer.from(/FromBase64String\('([^']*)'\)/.exec(readFileSync(file, "utf8"))![1], "base64").toString("utf8");
+
 describe("vlad cli", { timeout: 30_000 }, () => {
   it("has a shebang", () => {
     expect(readFileSync(cli, "utf8").startsWith("#!/usr/bin/env node")).toBe(true);
@@ -362,7 +366,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(r.code, r.err).toBe(0);
       const j = JSON.parse(r.out);
       expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
-      expect(readFileSync(j.script, "utf8")).toContain("kaldığı yerden sürdürülüyor");
+      expect(scriptPrompt(j.script)).toContain("kaldığı yerden sürdürülüyor");
       expect(j.command).toContain(`${id}.ps1`);
       expect(j.cwd).toBe(j.worktree);
     });
@@ -439,7 +443,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         const j = JSON.parse(r.out);
         expect(j.method).toBe("desktop-queue");
         expect(JSON.parse(readFileSync(join(q, `${id}.json`), "utf8"))).toMatchObject({ v: 2, kind: "resume", taskId: id, script: j.script });
-        expect(readFileSync(j.script, "utf8")).toContain("kaldığı yerden sürdürülüyor");
+        expect(scriptPrompt(j.script)).toContain("kaldığı yerden sürdürülüyor");
       });
       it("missing folder: warns and falls back to the usual launch / resume output", () => {
         const e = { ...env(), VLAD_DESKTOP_QUEUE: join(q, "yok") };

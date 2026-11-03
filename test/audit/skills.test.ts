@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
 import { auditSkills, claudeProjectDir, scanTranscript } from "../../src/audit/skills.js";
-import { createTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, setState } from "../../src/tasks/index.js";
+import { writeDoc } from "../../src/kb/index.js";
 import { makeHome } from "../helpers.js";
 
 const w = (...parts: string[]) => parts.join(String.fromCharCode(92)); // Windows path without escape noise
@@ -73,6 +74,19 @@ describe("auditSkills", () => {
     expect(by[c]).toMatchObject({ transcript: false, missing: [] });
     expect(r.summary).toMatchObject({ tasks: 3, audited: 2, expected: 7, loaded: 5 });
     expect(r.summary.rate).toBeCloseTo(5 / 7);
+  });
+
+  it("does not expect ponytail from a task on the experiment's off arm (same rule as audit setup)", () => {
+    role("developer", ["superpowers:test-driven-development", "ponytail"]);
+    const off = task(w("C:", "w", "off"), { role: "developer" });
+    const t = getTask(off); t.data.experiment = { ponytail: "off" }; writeDoc(t.file, t.data, t.body);
+    const on = task(w("C:", "w", "on"), { role: "developer" });
+    const t2 = getTask(on); t2.data.experiment = { ponytail: "on" }; writeDoc(t2.file, t2.data, t2.body);
+    for (const wt of ["off", "on"]) transcript(w("C:", "w", wt), [skill("vlad-worker"), skill("superpowers:test-driven-development")]);
+    const by = Object.fromEntries(auditSkills({ configDir: cfgDir }).tasks.map((x) => [x.id, x]));
+    expect(by[off].expected.sort()).toEqual(["test-driven-development", "vlad-worker"]);
+    expect(by[off].missing).toEqual([]);
+    expect(by[on].missing).toEqual(["ponytail"]);
   });
 
   it("project card skills are expected too", () => {
