@@ -14,7 +14,8 @@ const AUTOCOMPACT = /^\d+(\.\d+)?[kKmM]?$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
 export function buildScript(req: LaunchRequest): string {
-  const lines: string[] = [];
+  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
+  const lines: string[] = ["Remove-Item Env:VLAD_DESKTOP_QUEUE -ErrorAction SilentlyContinue"];
   for (const [k, v] of Object.entries(req.env)) lines.push(`$env:${k} = ${q(v)}`);
   lines.push(`Set-Location -LiteralPath ${q(req.cwd)}`);
   lines.push(`$host.UI.RawUI.WindowTitle = ${q(req.title)}`);
