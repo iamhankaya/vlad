@@ -1,5 +1,6 @@
 import { isolatedEnv } from "./isolate-env.js";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -405,7 +406,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     describe.skipIf(process.platform !== "win32")("VLAD_DESKTOP_QUEUE", () => {
       let q: string;
       beforeEach(() => { q = mkdtempSync(join(tmpdir(), "vlad-cli-queue-")); });
-      const qenv = () => ({ ...env(), VLAD_DESKTOP_QUEUE: q });
+      const qenv = () => ({ ...env(), VLAD_DESKTOP_QUEUE: q, VLAD_TASK_ID: "" }); // empty = unset for the queue gate (a worker shell has it set)
       it("launch writes the queue file atomically and reports method desktop-queue", () => {
         const r = vlad(["task", "launch", id, "--json"], undefined, qenv());
         expect(r.code, r.err).toBe(0);
@@ -417,9 +418,19 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         expect(j.cwd).toBe(j.worktree);
         expect(readdirSync(q)).toEqual([`${id}.json`]); // no leftover temp file
         const body = JSON.parse(readFileSync(j.queued, "utf8"));
-        expect(body).toMatchObject({ v: 1, kind: "launch", taskId: id, script: j.script, cwd: j.worktree });
+        expect(body).toMatchObject({ v: 2, kind: "launch", taskId: id, script: j.script, cwd: j.worktree });
+        expect(body.scriptSha256).toMatch(/^[0-9a-f]{64}$/);
+        expect(body.scriptSha256).toBe(createHash("sha256").update(readFileSync(j.script)).digest("hex"));
+        expect(readFileSync(j.script, "utf8")).toContain("Remove-Item Env:VLAD_DESKTOP_QUEUE");
+        expect(execFileSync("icacls.exe", [join(tmp, "vlad")], { encoding: "utf8" })).not.toMatch(/BUILTIN\Users|Everyone/);
         expect(typeof body.pid).toBe("number");
         expect(Number.isNaN(Date.parse(body.createdAt))).toBe(false);
+      });
+      it("VLAD_TASK_ID set: no queue file, usual launch path", () => {
+        const r = vlad(["task", "launch", id, "--json"], undefined, { ...qenv(), VLAD_TASK_ID: "T20260101-01" });
+        expect(r.code, r.err).toBe(0);
+        expect(JSON.parse(r.out).queued).toBeUndefined();
+        expect(readdirSync(q)).toEqual([]);
       });
       it("resume writes a kind=resume request", () => {
         vlad(["task", "launch", id, "--external", "--json"], undefined, env());
@@ -427,7 +438,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         expect(r.code, r.err).toBe(0);
         const j = JSON.parse(r.out);
         expect(j.method).toBe("desktop-queue");
-        expect(JSON.parse(readFileSync(join(q, `${id}.json`), "utf8"))).toMatchObject({ v: 1, kind: "resume", taskId: id, script: j.script });
+        expect(JSON.parse(readFileSync(join(q, `${id}.json`), "utf8"))).toMatchObject({ v: 2, kind: "resume", taskId: id, script: j.script });
         expect(readFileSync(j.script, "utf8")).toContain("kaldığı yerden sürdürülüyor");
       });
       it("missing folder: warns and falls back to the usual launch / resume output", () => {

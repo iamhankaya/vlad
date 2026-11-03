@@ -1,6 +1,7 @@
 // K4 — `machines` tanımlı değilken (bugünkü tek makineli kurulum) CLI çıktıları TABAN (9211aab, çoklu makine öncesi) ile aynı.
 // Golden: test/fixtures/machines-golden/k4.json, taban commit'te şu betikle üretildi (VLAD_GOLDEN_UPDATE=1 + VLAD_GOLDEN_CLI=<taban dist/cli.js>).
 // Adım 12 (status --summary) bilinçli olarak güncellendi (T20261103-02, F-vlad-174): T20261102-57 `staleSummaries` + D-vlad-061 `pendingDigest` alanları ve özet satırı eklendi; machines ile ilgisiz.
+// Adım 12 yine bilinçli güncellendi (T20261103-13): `kbLint: {count, byCode, at}` alanı eklendi (önbellek yokken boş); kb lint entegrasyonu, machines ile ilgisiz.
 // Zaman/ID/yol alanları normalize edilir (takvim tarihi sabitlenemez); geri kalan bayt bayt eşittir. Help metni kapsam dışı (yeni gruplar help'i değiştirir).
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";

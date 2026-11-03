@@ -44,3 +44,9 @@ vlad kb lint [--project <slug>] [--strict] [--json]
 ```
 
 İşaretler proje, dosya, satır sırasıyla gelir; insan okunur çıktı projeye göre gruplanır.
+
+## Entegrasyon (T20261103-13)
+
+- **Önbellek ve `status --summary`:** `vlad kb lint` (`--project` olmadan) bitince özetini `kb/logs/kb-lint.json`'a yazar (`{count, byCode, at}`; `logs/` kb reposunda gitignored; yazılamazsa sessizce atlanır). `vlad status --summary` bu dosyayı **okur**, lint çalıştırmaz (tüm kb ~75 sn, hook bütçesi 1–2 sn): satıra `N kb çelişkisi` eklenir, 24 saatten eskiyse `(lint N gün önce)`; JSON'da `kbLint: {count, byCode, at}` (önbellek yoksa `{count: 0, byCode: {}, at: null}`). `summary_stale` sayıya girmez; bayat özet zaten ayrı bildirilir (`staleSummaries`). Önbelleği yenileyen: `/digest` §5c ve gece modu sabah raporu (`/status`).
+- **Süreli karar:** `vlad decision add --until <YYYY-MM-DD | YYYY-MM-DDTHH:MM[:SS][±hh:mm]>` kararın başlığının altına `- **Süre:** <değer>` satırı yazar (yalnız tarih: o günün sonuna kadar yerel saat; geçersiz tarih hata verir). Süre geçince `expired_decision_valid` (`--until` varsa metindeki "…'e kadar" tarihinden önceliklidir), `vlad project status` (`decisions.expired`, son kararlarda `expired: true`) ve `vlad decision list` ("doldu") işaretler. Karar otomatik geçersiz olmaz: yenile (`decision add --supersedes`) ya da `decision set <id> geçersiz`.
+- **Hafıza dizini:** config `memoryDirs` yoksa varsayılan `~/.claude/projects/<VLAD_HOME'da harf/rakam dışı her karakter → ->/memory` (Windows'ta `%USERPROFILE%\.claude\projects\C--dev-vlad\memory`). Dizin yoksa (bulut, başka makine) uyarı bile vermeden atlanır; okunamayan dizin uyarı verir.

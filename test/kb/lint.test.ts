@@ -174,7 +174,7 @@ describe("memory_stale_task", () => {
     mem("past.md", "T20261102-60 tamamlandı, plan onaylandı ve merge edildi.\n");
     expect(codes(lintKb({ now: NOW }))).toEqual([]);
   });
-  it("is skipped when memoryDirs is unset; a missing dir is skipped with a warning", () => {
+  it("is skipped when memoryDirs is unset (default dir absent); a missing dir is skipped silently", () => {
     task("T20261102-60", "done");
     mkdirSync(join(home, "mem"), { recursive: true });
     writeFileSync(join(home, "mem", "a.md"), "yalnız T20261102-60 çatısı için.\n");
@@ -182,7 +182,8 @@ describe("memory_stale_task", () => {
     writeCfg({ memoryDirs: [join(home, "yok")] });
     const r = lintKb({ now: NOW });
     expect(r.flags).toEqual([]);
-    expect(r.warnings.join(" ")).toContain("yok");
+    expect(r.warnings).toEqual([]);
+    expect(r.scanned.memory).toBe(0);
   });
 });
 

@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { projectStatus } from "../projects/status.js";
 import { listProjects } from "../projects/store.js";
 import { loadConfig } from "./config.js";
-import { DECISION_HEADING, listDecisions } from "./decisions.js";
+import { DECISION_HEADING, listDecisions, parseUntil } from "./decisions.js";
 import { derivedLines } from "./derived.js";
 import { getVladHome, kbPaths } from "./home.js";
 import { recordStates } from "./refs.js";
@@ -46,7 +47,8 @@ const OPEN_CTX = words("açık", "bekliyor", "bekleyen", "yapılacak", "ertelen\
 /** A task is still going. */
 const ACTIVE_CTX = words("sürüyor", "devam ediyor", "çalışıyor", "bekliyor", "onay bekliyor", "yürütülüyor", "aktif", "running", "in progress");
 /** Wording that says the record is closed/over: the line is a statement about the past or the end state. */
-const CLOSED_CTX = words("kapan\\p{L}*", "kapat\\p{L}*", "düzel\\p{L}*", "düzelt\\p{L}*", "çözül\\p{L}*", "giderildi", "tamamlan\\p{L}*", "bitti", "bitmiş", "merge edil\\p{L}*", "iptal\\p{L}*", "fixed", "resolved", "closed", "done", "wontfix", "cancelled", "geçersiz\\p{L}*");
+// explicit finished forms only: "tamamlanınca", "kapanana kadar", "düzelirse" are conditions on a record that is still going (F-vlad-177)
+const CLOSED_CTX = words("kapandı", "kapanmış", "kapanmıştı", "kapatıldı", "kapatılmış", "kapalı", "düzeldi", "düzelmiş", "düzeltildi", "düzeltilmiş", "çözüldü", "çözülmüş", "giderildi", "giderilmiş", "tamamlandı", "tamamlanmış", "tamamlanmıştı", "bitti", "bitmiş", "merge edildi", "merge edilmiş", "iptal","fixed", "resolved", "closed", "done", "wontfix", "cancelled", "geçersiz\\p{L}*");
 /** Permission/plan wording tied to a task in a memory note. */
 const AUTHORITY_CTX = words("yalnız", "sadece", "only", "çatı\\p{L}*", "bitince", "bitene kadar", "tamamlanınca", "tamamlanana kadar", "yetki\\p{L}*", "izin\\p{L}*", "onay\\p{L}*", "plan\\p{L}*", "sormadan", "istenecek", "sorulacak");
 const VALID_LIST_CTX = words("geçerli karar\\p{L}*", "geçerli olan kararlar", "valid decisions");
@@ -67,20 +69,24 @@ function* textLines(lines: string[]): Generator<TextLine> {
   const fenced = fencedLines(lines);
   const derived = derivedLines(lines);
   let h2 = "";
-  let listing = false;
+  let listing = false; // inline "Geçerli kararlar:" line: ends at the first blank line or prose line
+  let section = 0; // level of a "Geçerli kararlar" heading: its whole section, blank lines included, lists valid decisions (F-vlad-176)
   for (let i = 0; i < lines.length; i++) {
     if (fenced[i] || derived[i]) continue;
     const t = lines[i];
-    if (/^#{1,6} /.test(t)) {
-      if (/^## /.test(t)) h2 = t.replace(/^## /, "").trim();
-      listing = VALID_LIST_CTX.test(t);
+    const hd = /^(#{1,6}) /.exec(t);
+    if (hd) {
+      if (hd[1].length === 2) h2 = t.replace(/^## /, "").trim();
+      listing = false;
+      if (section && hd[1].length <= section) section = 0; // a heading of the same or a higher level closes the section
+      if (!section && VALID_LIST_CTX.test(t)) section = hd[1].length;
       continue;
     }
     if (!t.trim()) { listing = false; continue; }
     const bullet = /^\s*(?:[-*]|\d+[.)])\s/.test(t);
     if (VALID_LIST_CTX.test(t)) listing = true;
     else if (!bullet) listing = false;
-    yield { n: i + 1, text: t, h2, listing };
+    yield { n: i + 1, text: t, h2, listing: listing || section > 0 };
   }
 }
 
@@ -106,28 +112,32 @@ interface Ctx { file: string; project: string | null; kind: "card" | "decision" 
 function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, push: (f: Omit<LintFlag, "file" | "project">) => void): void {
   const inOpenSection = /^Açık konular\b/i.test(tl.h2);
   const narrative = /^Son aktivite\b/i.test(tl.h2) && DATE_LED.test(tl.text);
-  const seen = new Set<string>();
+  const seen = new Set<string>(); // an id is judged once per sentence: another sentence on the line may say something else about it (F-vlad-178)
+  const pushed = new Set<string>();
+  const emit: typeof push = (f) => { const k = `${f.code}\u0000${f.id}`; if (!pushed.has(k)) { pushed.add(k); push(f); } }; // ...but one flag per code and id and line
   for (const m of tl.text.matchAll(ID_G)) {
     const id = m[1];
     const st = states.get(id);
-    if (!st || id === ctx.own || seen.has(id)) continue;
-    seen.add(id);
-    const text = positive(sentenceAt(tl.text, m.index ?? 0)); // keywords count only in the sentence that holds the id
+    if (!st || id === ctx.own) continue;
+    const sentence = sentenceAt(tl.text, m.index ?? 0);
+    if (seen.has(`${id}\u0000${sentence}`)) continue;
+    seen.add(`${id}\u0000${sentence}`);
+    const text = positive(sentence); // keywords count only in the sentence that holds the id
     const closed = CLOSED_CTX.test(text);
     const status = st.status ?? "";
     if (st.type === "finding" && (status === "fixed" || status === "wontfix")) {
       if (inOpenSection || (!narrative && !closed && OPEN_CTX.test(text))) {
-        push({ code: "closed_finding_listed_open", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "açık/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} kapandı" diye geçmişe çevir (özet: /digest)` });
+        emit({ code: "closed_finding_listed_open", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "açık/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} kapandı" diye geçmişe çevir (özet: /digest)` });
       }
     } else if (st.type === "task" && (status === "done" || status === "cancelled")) {
       if (ctx.kind === "memory") {
-        if (!closed && AUTHORITY_CTX.test(text)) push({ code: "memory_stale_task", line: tl.n, id, actual_state: status, message: `hafıza notu ${status} göreve (${id}) bağlı yetki/plan içeriyor`, suggestion: "notu sil ya da güncelle (görev bittiği için artık geçerli olmayabilir)" });
+        if (!closed && AUTHORITY_CTX.test(text)) emit({ code: "memory_stale_task", line: tl.n, id, actual_state: status, message: `hafıza notu ${status} göreve (${id}) bağlı yetki/plan içeriyor`, suggestion: "notu sil ya da güncelle (görev bittiği için artık geçerli olmayabilir)" });
       } else if (inOpenSection || (!narrative && !closed && ACTIVE_CTX.test(text))) {
-        push({ code: "finished_task_listed_active", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "sürüyor/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "done" ? "tamamlandı" : "iptal edildi"}" diye geçmişe çevir` });
+        emit({ code: "finished_task_listed_active", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "sürüyor/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "done" ? "tamamlandı" : "iptal edildi"}" diye geçmişe çevir` });
       }
     } else if (st.type === "decision" && (status === "geçersiz" || status === "yerine-geçti")) {
       if (tl.listing && !INACTIVE_WORDS.test(text)) {
-        push({ code: "inactive_decision_listed_valid", line: tl.n, id, actual_state: status, message: `${id} ${status} ama geçerli kararlar listesinde`, suggestion: "listeden çıkar (geçerli liste: vlad decision list --project <slug>)" });
+        emit({ code: "inactive_decision_listed_valid", line: tl.n, id, actual_state: status, message: `${id} ${status} ama geçerli kararlar listesinde`, suggestion: "listeden çıkar (geçerli liste: vlad decision list --project <slug>)" });
       }
     }
   }
@@ -157,10 +167,16 @@ function latestExpiry(lines: string[], from: number, to: number): { at: Date; li
 const pad = (n: number) => String(n).padStart(2, "0");
 const localStamp = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+/** Claude Code's auto-memory directory for this VLAD checkout (`<home>/.claude/projects/<VLAD_HOME with : \ / → ->/memory`), the `memoryDirs` default. */
+export function defaultMemoryDir(vladHome: string = getVladHome()): string {
+  return join(homedir(), ".claude", "projects", resolve(vladHome).replace(/[^A-Za-z0-9]/g, "-"), "memory");
+}
+
 function memoryFiles(dirs: string[], home: string, warnings: string[]): string[] {
   const out: string[] = [];
   for (const d of dirs) {
     const dir = isAbsolute(d) ? d : resolve(home, d);
+    if (!existsSync(dir)) continue; // no memory directory here (cloud, other machine): nothing to scan, not a warning
     try {
       if (!statSync(dir).isDirectory()) throw new Error("klasör değil");
       for (const n of readdirSync(dir).sort()) if (n.endsWith(".md")) out.push(join(dir, n));
@@ -224,7 +240,11 @@ export function lintKb(o: LintOptions = {}): LintResult {
     heads.forEach((h, k) => {
       const id = ownAt(h);
       if (!id || decisionStatus.get(id) !== "geçerli") return;
-      const exp = latestExpiry(lines, h, k + 1 < heads.length ? heads[k + 1] : lines.length);
+      const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
+      const metaAt = lines.findIndex((l, i) => i > h && i < end && /^- \*\*Süre:\*\* /.test(l));
+      const until = metaAt >= 0 ? parseUntil(lines[metaAt].replace(/^- \*\*Süre:\*\* /, "")) : null;
+      // an explicit `--until` is authoritative; otherwise a "…'e kadar" date in the text counts
+      const exp = until ? { at: until, line: metaAt + 1 } : latestExpiry(lines, h, end);
       if (exp && exp.at < now) {
         push({
           code: "expired_decision_valid", line: exp.line, id, actual_state: "geçerli",
@@ -236,7 +256,7 @@ export function lintKb(o: LintOptions = {}): LintResult {
   }
 
   let memDirs: string[] = [];
-  try { memDirs = loadConfig().memoryDirs ?? []; } catch (e) { warnings.push(`config okunamadı, hafıza taranmadı: ${(e as Error).message}`); }
+  try { memDirs = loadConfig().memoryDirs ?? [defaultMemoryDir()]; } catch (e) { warnings.push(`config okunamadı, hafıza taranmadı: ${(e as Error).message}`); }
   for (const file of memoryFiles(memDirs, getVladHome(), warnings)) {
     scanned.memory++;
     const ctx: Ctx = { file, project: null, kind: "memory" };

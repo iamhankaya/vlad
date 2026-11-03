@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { addFinding, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
@@ -17,10 +17,11 @@ import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
 import { formatLint, lintExitCode, lintKb } from "./kb/lint.js";
+import { lintAgeNote, writeLintCache } from "./kb/lint-cache.js";
 import { formatRefs, refsOf } from "./kb/refs.js";
-import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, isDecisionExpired, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
-import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
+import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
 import { exitCodeFor, remoteErrorDetails } from "./machines/exit.js";
 import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "./machines/remote.js";
@@ -221,7 +222,8 @@ def(project, "status <slug>", "Proje durum özeti: kayıtlardan üretilen sayıl
     `açık bulgu: ${Object.entries(s.findings.counts).map(([k, v]) => `${k}=${v}`).join(" ") || "yok"}`,
     ...s.findings.open.map((f) => `  ${f.id}  ${f.severity}  ${f.state}  ${f.title}`),
     `geçerli karar: ${s.decisions.total}${s.decisions.total > s.decisions.recent.length ? ` (son ${s.decisions.recent.length}; tümü: vlad decision list --project ${s.slug})` : ""}`,
-    ...s.decisions.recent.map((d) => `  ${d.id}  ${d.date}  ${d.title}`),
+    ...s.decisions.recent.map((d) => `  ${d.id}  ${d.date}  ${d.title}${d.expired ? `  (süresi doldu: ${d.until})` : ""}`),
+    ...(s.decisions.expired.length ? [`süresi dolmuş geçerli karar: ${s.decisions.expired.join(", ")} (yenile ya da vlad decision set <id> geçersiz)`] : []),
   ];
   out(o, s, lines.join("\n"));
 });
@@ -441,7 +443,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   // the trust record may be gone (cleanup, a rewritten ~/.claude.json): without it the resumed worker stops at the trust screen (F-vlad-081)
   const trustWarn = r.mode === "local" ? trustWorktree(r.worktree) : null;
   if (trustWarn) process.stderr.write(`uyarı: ${trustWarn}\n`);
-  const rq = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
+  const rq: { dir: string | null; warning?: string } = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
   if ("warning" in rq && rq.warning) process.stderr.write(`uyarı: ${rq.warning}\n`);
   if (o.external || rq.dir) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
@@ -449,6 +451,13 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     const model = modelInfo(t.data).effective_model;
     const autoCompact = loadConfig().workerAutoCompact;
     const sid = t.data.session_id?.trim() || soleTranscriptSession(r.worktree);
+    if (rq.dir) {
+      try { secureDir(join(tmpdir(), "vlad")); } catch (e) {
+        process.stderr.write(`uyarı: betik klasörü korunamadı (${(e as Error).message}); kuyruk yazılamadı, devam bilgisi yazdırılıyor
+`);
+        rq.dir = null;
+      }
+    }
     const ext = externalLaunch({
       taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
@@ -615,6 +624,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
       (s.staleSummaries.length ? `, ${s.staleSummaries.length} bayat/eksik proje özeti: ${staleSummaryText(s.staleSummaries)}` : "") +
       (s.pendingDigest ? `, ${s.pendingDigest} onay bekleyen digest maddesi` : "") +
       (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
+      (s.kbLint.count ? `, ${s.kbLint.count} kb çelişkisi${lintAgeNote(s.kbLint)}` : "") +
       (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
@@ -742,6 +752,7 @@ def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID's
     body: readInput(o.bodyFile as string),
     source: o.source as string | undefined,
     supersedes: o.supersedes as string | undefined,
+    until: o.until as string | undefined,
   });
   out(o, { ok: true, id }, `karar eklendi: ${id}`);
 })
@@ -749,10 +760,11 @@ def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID's
   .requiredOption("--title <başlık>", "başlık")
   .requiredOption("--body-file <md>", "gövde (- = stdin)")
   .option("--source <kaynak>", "session/görev kaynağı")
-  .option("--supersedes <id>", "bu kararın yerine geçtiği karar (o yerine-geçti olur)");
+  .option("--supersedes <id>", "bu kararın yerine geçtiği karar (o yerine-geçti olur)")
+  .option("--until <tarih>", "kararın son tarihi (YYYY-MM-DD ya da YYYY-MM-DDTHH:MM); geçince status/kb lint süresi dolmuş geçerli karar olarak işaretler");
 def(decision, "list", "Kararları kısa listeler (varsayılan yalnız geçerli)", (o: Opts) => {
   const decisions = listDecisions({ project: o.project as string | undefined, all: !!o.all }).map(({ path: _p, ...d }) => d); // paths are for `kb search`; they only bloat a list
-  out(o, { decisions }, decisions.map((d) => `${d.id}  ${d.date}  ${d.status}  ${d.title}${d.superseded_by ? `  -> ${d.superseded_by}` : ""}`).join("\n"));
+  out(o, { decisions }, decisions.map((d) => `${d.id}  ${d.date}  ${d.status}  ${d.title}${d.superseded_by ? `  -> ${d.superseded_by}` : ""}${d.until ? `  (süre: ${d.until}${isDecisionExpired(d) ? ", doldu" : ""})` : ""}`).join("\n"));
 })
   .option("--project <slug>", "yalnız bu proje (genel kararlar: genel)")
   .option("--all", "geçersiz ve yerine geçilmiş kararlar da");
@@ -817,6 +829,7 @@ def(kb, "refs <id>", "ID'ye (T…, F-…, D-…) atıf yapan kayıtları bölüm
 });
 def(kb, "lint", "Salt okuma çelişki denetimi: kart/karar/hafıza metinlerindeki T…/F-…/D-… atıflarını gerçek kayıtla karşılaştırır (işaret varsa 0, --strict'te 1)", (o: Opts) => {
   const r = lintKb({ project: o.project as string | undefined });
+  if (!o.project) writeLintCache(r); // a whole-kb run feeds `status --summary` (kbLint)
   out(o, r, formatLint(r));
   process.exitCode = lintExitCode(r, !!o.strict);
 }).option("--project <slug>", "yalnız bu proje")
