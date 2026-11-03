@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/store.js";
-import { kbPaths, listDecisions, readDoc, derivedOpen, hasSection, replaceDerivedBlock, setDerivedSection, validate, writeFileAtomic } from "../kb/index.js";
+import { kbPaths, listDecisions, readDoc, derivedBlockLines, hasDerivedBlock, hasSection, replaceDerivedBlock, setDerivedSection, validate, writeFileAtomic } from "../kb/index.js";
 import type { ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
 
@@ -21,10 +21,21 @@ function openFindingsBlock(slug: string): string {
 }
 
 /** Latest done tasks and valid decisions. shortcut: decisions carry a date only (sorted as end of that day); `task digested` re-stamps a task's `updated`, which moves its date. */
-function activityBlock(slug: string): string {
+/**
+ * `previous` (fast path, only valid when a decision was ADDED): the task lines come from the block that is already there instead of a scan of every task file.
+ * Exact because an addition can only push entries out of the top list, never bring one in; a task line keeps its order within its day (and a decision sorts above any task of the same day).
+ */
+function activityBlock(slug: string, previous?: string[]): string {
   const events: { key: string; id: string; line: string }[] = [];
-  for (const t of listTasksWithWarnings({ project: slug, state: ["done"] }).tasks) {
-    events.push({ key: t.data.updated, id: t.data.id, line: `- ${t.data.updated.slice(0, 10)} ${t.data.id} ${clip(t.data.title)}` });
+  if (previous) {
+    previous.forEach((line, i) => {
+      const m = /^- (\d{4}-\d{2}-\d{2}) (T\d{8}-\d+) /.exec(line);
+      if (m) events.push({ key: `${m[1]}T00:00:00.${String(9999 - i).padStart(4, "0")}`, id: m[2], line });
+    });
+  } else {
+    for (const t of listTasksWithWarnings({ project: slug, state: ["done"] }).tasks) {
+      events.push({ key: t.data.updated, id: t.data.id, line: `- ${t.data.updated.slice(0, 10)} ${t.data.id} ${clip(t.data.title)}` });
+    }
   }
   for (const d of listDecisions({ project: slug })) {
     events.push({ key: `${d.date}T23:59:59`, id: d.id, line: `- ${d.date} ${d.id} ${clip(d.title)} (karar)` });
@@ -38,7 +49,7 @@ function activityBlock(slug: string): string {
  * and the `## Son aktivite` block. Text outside the blocks is never touched: an explicit refresh migrates a card without the Son aktivite block by putting the block at the top of the section, hand-written lines stay below it.
  * `create: false` (automatic hooks) only refreshes blocks that already exist (open findings: also fills a missing block in an existing section; Son aktivite: needs the block) and never adds a section; `only` limits the work to one block (a `finding set` need not scan the tasks). Returns whether the card changed; an up-to-date card is not rewritten.
  */
-export function refreshProject(slug: string, opts: { create?: boolean; only?: "findings" | "activity" } = {}): boolean {
+export function refreshProject(slug: string, opts: { create?: boolean; only?: "findings" | "activity"; fast?: boolean } = {}): boolean {
   const file = join(kbPaths().projects, `${slug}.md`);
   const { data } = readDoc<ProjectCard>(file); // validates and refuses symlinks
   validate("project", data);
@@ -49,13 +60,19 @@ export function refreshProject(slug: string, opts: { create?: boolean; only?: "f
   // automatic refresh (create: false) only fills blocks/sections the card already has, and then reads no records for the others
   const wants = (name: string, heading: string) =>
     (!opts.only || (opts.only === "findings") === (name === "open-findings")) &&
-    (opts.create !== false || rest.includes(derivedOpen(name)) || (name === "open-findings" && hasSection(rest, heading)));
+    (opts.create !== false || hasDerivedBlock(rest, name) || (name === "open-findings" && hasSection(rest, heading)));
   let next = rest;
   if (wants("open-findings", OPEN_HEADING)) next = replaceDerivedBlock(next, "open-findings", openFindingsBlock(slug), OPEN_HEADING);
-  if (wants("recent-activity", ACTIVITY_HEADING)) next = setDerivedSection(next, "recent-activity", activityBlock(slug), ACTIVITY_HEADING);
+  if (wants("recent-activity", ACTIVITY_HEADING)) next = setDerivedSection(next, "recent-activity", activityBlock(slug, opts.fast ? derivedBlockLines(rest, "recent-activity") : undefined), ACTIVITY_HEADING);
   if (next === rest) return false;
   writeFileAtomic(file, head + next);
   return true;
+}
+
+/** True when the card's Son aktivite block lists `id` (a decision that leaves the valid list must then bring older entries back: full scan). */
+export function activityListsId(slug: string, id: string): boolean {
+  const file = join(kbPaths().projects, `${slug}.md`);
+  try { return derivedBlockLines(readFileSync(file, "utf8"), "recent-activity").some((l) => l.includes(` ${id} `)); } catch { return false; }
 }
 
 /** Refreshes every card; an unreadable card is reported, not fatal. */

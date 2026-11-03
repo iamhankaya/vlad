@@ -282,8 +282,8 @@ export function getTask(id: string): Task {
   return { data, body, file };
 }
 
-export function saveTask(task: Task): void {
-  task.data.updated = nowIso();
+export function saveTask(task: Task, now: Date = new Date()): void {
+  task.data.updated = nowIso(now);
   validate("task", task.data);
   writeDoc(task.file, task.data, task.body);
   parsedTasks.delete(task.file); // same-tick rewrite: the stamp alone could not tell
@@ -485,7 +485,7 @@ export function markDigested(ids: string[], now: Date = new Date()): Task[] {
   if (bad.length) throw new Error(`görev done değil: ${bad.join(", ")}`);
   for (const t of tasks) {
     t.data.digested = nowIso(now);
-    saveTask(t);
+    saveTask(t, now); // same instant as `digested`: freshness skips that task (status.ts)
   }
   return tasks;
 }

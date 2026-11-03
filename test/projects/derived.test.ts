@@ -1,9 +1,9 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addFinding, setFindingState } from "../../src/findings/store.js";
 import { addDecision } from "../../src/kb/decisions.js";
-import { DERIVED_CLOSE, derivedOpen, replaceDerivedBlock } from "../../src/kb/derived.js";
+import { DERIVED_CLOSE, derivedOpen, hasDerivedBlock, replaceDerivedBlock } from "../../src/kb/derived.js";
 import { refreshAllProjects, refreshProject } from "../../src/projects/derived.js";
 import { projectStatus } from "../../src/projects/status.js";
 import { writeProject } from "../../src/projects/store.js";
@@ -21,6 +21,49 @@ const done = (title: string, at: Date) => {
   return t.data.id;
 };
 beforeEach(() => { home = makeHome(); writeProject("vlad", card("vlad")); });
+
+describe("derived block lookup ignores code fences (F-vlad-184)", () => {
+  const open = derivedOpen("x");
+  it("a marker example inside a fence is not the block; the real block below is replaced", () => {
+    const text = `## A
+\`\`\`
+${open}
+ornek
+${DERIVED_CLOSE}
+\`\`\`
+${open}
+eski
+${DERIVED_CLOSE}
+`;
+    expect(replaceDerivedBlock(text, "x", "yeni", "## A")).toBe(`## A
+\`\`\`
+${open}
+ornek
+${DERIVED_CLOSE}
+\`\`\`
+${open}
+yeni
+${DERIVED_CLOSE}
+`);
+  });
+  it("only a fenced example: a real block is appended, the example stays", () => {
+    const text = `## A
+\`\`\`
+${open}
+ornek
+${DERIVED_CLOSE}
+\`\`\`
+`;
+    const r = replaceDerivedBlock(text, "x", "yeni", "## A");
+    expect(r).toBe(`${text}
+${open}
+yeni
+${DERIVED_CLOSE}
+`);
+    expect(hasDerivedBlock(text, "x")).toBe(false);
+    expect(hasDerivedBlock(r, "x")).toBe(true);
+  });
+});
 
 describe("replaceDerivedBlock", () => {
   const open = derivedOpen("x");
@@ -89,6 +132,28 @@ describe("refreshProject", () => {
     expect(sec).toContain("D-vlad-001");
     expect(sec).toContain("Bir karar");
     expect(sec).not.toContain("İş 0");
+  });
+  it("fast path after decision add equals a full refresh", () => {
+    const base = Date.now();
+    for (let i = 0; i < 12; i++) done(`İş ${i}`, new Date(base + i * 1000));
+    addDecision({ project: "vlad", title: "Bir", body: "- **Karar:** k" });
+    refreshProject("vlad");
+    addDecision({ project: "vlad", title: "İki", body: "- **Karar:** k" });
+    refreshProject("vlad", { create: false, only: "activity", fast: true });
+    const fast = read();
+    expect(fast).toContain("D-vlad-002 İki");
+    refreshProject("vlad"); // full scan
+    expect(read()).toBe(fast);
+  });
+  it("fast path does not scan the tasks (a task deleted from disk stays in the block)", () => {
+    const base = Date.now();
+    const ids = Array.from({ length: 3 }, (_, i) => done(`İş ${i}`, new Date(base + i * 1000)));
+    refreshProject("vlad");
+    unlinkSync(join(home, "kb", "tasks", `${ids[2]}.md`));
+    addDecision({ project: "vlad", title: "Yeni", body: "- **Karar:** k" });
+    refreshProject("vlad", { create: false, only: "activity", fast: true });
+    expect(read()).toContain(ids[2]);
+    expect(read()).toContain("D-vlad-001 Yeni");
   });
   it("first refresh keeps hand-written Son aktivite lines byte for byte; hook leaves a block-less card alone; idempotent (CRLF too)", () => {
     const outside = (t: string) => t.replace(/<!-- vlad:derived [\s\S]*?<!-- \/vlad:derived -->\r?\n?/g, "").replace(/\r\n/g, "\n").replace(/\n\n+/g, "\n"); // blank lines are layout: the block brings its own gap

@@ -50,6 +50,14 @@ describe("projectStatus", () => {
     markDigested([t.data.id]);
     expect(projectStatus("vlad").summary.state).toBe("güncel");
   });
+  it("digested stamp equals updated even when the clock differs (no second-boundary race)", () => {
+    const t = createTask({ project: "vlad", title: "İş", kind: "dev", body: "" }, T0);
+    setState(t.data.id, "running"); setState(t.data.id, "awaiting_approval"); setState(t.data.id, "done");
+    setProjectSummary("vlad", "x", new Date());
+    const [d] = markDigested([t.data.id], new Date(Date.now() + 5000));
+    expect(d.data.digested).toBe(d.data.updated);
+    expect(projectStatus("vlad").summary.state).toBe("güncel");
+  });
   it("setProjectSummary keeps frontmatter and other sections, replaces on rerun, rejects headings and oversize", () => {
     setProjectSummary("vlad", "bir", T0);
     setProjectSummary("vlad", "iki", T1);

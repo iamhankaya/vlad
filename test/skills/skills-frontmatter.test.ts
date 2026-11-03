@@ -106,3 +106,12 @@ describe("skills/ references and de-duplication", () => {
     for (const x of ["gh run watch", "--log-failed", "ikinci kez", "entegrasyon", "100755"]) expect(c, x).toContain(x);
   });
 });
+
+describe("kb lint cache refresh (F-vlad-182)", () => {
+  it("/digest §5c and the /status morning report both run `vlad kb lint` (the cache `status --summary` reads)", () => {
+    expect(read(".claude/skills/digest/SKILL.md")).toMatch(/### 5c[\s\S]*vlad kb lint --json/);
+    const status = read(".claude/skills/status/SKILL.md");
+    const night = status.slice(status.indexOf("### Gece / yetki modu"), status.indexOf("### Retro"));
+    expect(night, "morning report step in the night-mode section").toMatch(/Sabah raporu[\s\S]*vlad kb lint --json/);
+  });
+});

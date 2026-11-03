@@ -29,7 +29,7 @@ describe("project refresh + automatic refresh", () => {
     expect(cardText()).not.toContain("bozuk2");
     expect(vlad(["project", "refresh"]).code).toBe(1);
   });
-  it("finding add/set update the open-findings block; task set done updates Son aktivite; decisions only on explicit refresh", () => {
+  it("finding add/set update the open-findings block; task set done updates Son aktivite; decision add/set refresh only that project's Son aktivite", () => {
     const body = join(home, "b.md");
     writeFileSync(body, "## Tanım\nx\n");
     const tid = JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "Bitecek", "--kind", "dev", "--body-file", body, "--json"]).out).id as string;
@@ -43,11 +43,8 @@ describe("project refresh + automatic refresh", () => {
     for (const s of ["running", "awaiting_approval", "done"]) expect(vlad(["task", "set", tid, s]).code).toBe(0);
     expect(cardText()).toContain(`${tid} Bitecek`);
     vlad(["decision", "add", "--project", "alpha", "--title", "Yeni karar", "--body-file", "-"], "- **Karar:** k");
-    expect(cardText()).not.toContain("D-alpha-001"); // not hooked (cost); an explicit refresh picks it up
-    vlad(["project", "refresh", "alpha"]);
-    expect(cardText()).toContain("D-alpha-001 Yeni karar");
+    expect(cardText()).toContain("D-alpha-001 Yeni karar"); // hooked: only this project's activity block
     vlad(["decision", "set", "D-alpha-001", "geçersiz"]);
-    vlad(["project", "refresh", "alpha"]);
     expect(cardText()).not.toContain("D-alpha-001 Yeni karar");
     expect(cardText()).toContain("- elle");
   });
