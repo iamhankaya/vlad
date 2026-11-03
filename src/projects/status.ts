@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/store.js";
-import { getSection, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
+import { getSection, isDecisionExpired, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
 import type { DecisionRecord, ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
 import { listProjects } from "./store.js";
@@ -42,7 +42,9 @@ export interface ProjectStatus {
   decisions: {
     total: number;
     /** newest LIST_MAX valid decisions (the full list: `vlad decision list --project`) */
-    recent: Pick<DecisionRecord, "id" | "date" | "title">[];
+    recent: (Pick<DecisionRecord, "id" | "date" | "title"> & { until?: string; /** `--until` has passed: still geçerli on paper, review it */ expired?: true })[];
+    /** ids of valid decisions whose `--until` has passed (all of them, not just the recent ones) */
+    expired: string[];
   };
 }
 
@@ -128,7 +130,8 @@ export function projectStatus(slug: string): ProjectStatus {
     },
     decisions: {
       total: decisions.length,
-      recent: [...decisions].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, LIST_MAX).map(({ id, date, title }) => ({ id, date, title })),
+      recent: [...decisions].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, LIST_MAX).map((d) => ({ id: d.id, date: d.date, title: d.title, ...(d.until ? { until: d.until } : {}), ...(isDecisionExpired(d) ? { expired: true as const } : {}) })),
+      expired: decisions.filter((d) => isDecisionExpired(d)).map((d) => d.id),
     },
   };
 }

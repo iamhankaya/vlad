@@ -1,9 +1,10 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { projectStatus } from "../projects/status.js";
 import { listProjects } from "../projects/store.js";
 import { loadConfig } from "./config.js";
-import { DECISION_HEADING, listDecisions } from "./decisions.js";
+import { DECISION_HEADING, listDecisions, parseUntil } from "./decisions.js";
 import { derivedLines } from "./derived.js";
 import { getVladHome, kbPaths } from "./home.js";
 import { recordStates } from "./refs.js";
@@ -157,10 +158,16 @@ function latestExpiry(lines: string[], from: number, to: number): { at: Date; li
 const pad = (n: number) => String(n).padStart(2, "0");
 const localStamp = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 
+/** Claude Code's auto-memory directory for this VLAD checkout (`<home>/.claude/projects/<VLAD_HOME with : \ / → ->/memory`), the `memoryDirs` default. */
+export function defaultMemoryDir(vladHome: string = getVladHome()): string {
+  return join(homedir(), ".claude", "projects", resolve(vladHome).replace(/[^A-Za-z0-9]/g, "-"), "memory");
+}
+
 function memoryFiles(dirs: string[], home: string, warnings: string[]): string[] {
   const out: string[] = [];
   for (const d of dirs) {
     const dir = isAbsolute(d) ? d : resolve(home, d);
+    if (!existsSync(dir)) continue; // no memory directory here (cloud, other machine): nothing to scan, not a warning
     try {
       if (!statSync(dir).isDirectory()) throw new Error("klasör değil");
       for (const n of readdirSync(dir).sort()) if (n.endsWith(".md")) out.push(join(dir, n));
@@ -224,7 +231,11 @@ export function lintKb(o: LintOptions = {}): LintResult {
     heads.forEach((h, k) => {
       const id = ownAt(h);
       if (!id || decisionStatus.get(id) !== "geçerli") return;
-      const exp = latestExpiry(lines, h, k + 1 < heads.length ? heads[k + 1] : lines.length);
+      const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
+      const metaAt = lines.findIndex((l, i) => i > h && i < end && /^- \*\*Süre:\*\* /.test(l));
+      const until = metaAt >= 0 ? parseUntil(lines[metaAt].replace(/^- \*\*Süre:\*\* /, "")) : null;
+      // an explicit `--until` is authoritative; otherwise a "…'e kadar" date in the text counts
+      const exp = until ? { at: until, line: metaAt + 1 } : latestExpiry(lines, h, end);
       if (exp && exp.at < now) {
         push({
           code: "expired_decision_valid", line: exp.line, id, actual_state: "geçerli",
@@ -236,7 +247,7 @@ export function lintKb(o: LintOptions = {}): LintResult {
   }
 
   let memDirs: string[] = [];
-  try { memDirs = loadConfig().memoryDirs ?? []; } catch (e) { warnings.push(`config okunamadı, hafıza taranmadı: ${(e as Error).message}`); }
+  try { memDirs = loadConfig().memoryDirs ?? [defaultMemoryDir()]; } catch (e) { warnings.push(`config okunamadı, hafıza taranmadı: ${(e as Error).message}`); }
   for (const file of memoryFiles(memDirs, getVladHome(), warnings)) {
     scanned.memory++;
     const ctx: Ctx = { file, project: null, kind: "memory" };

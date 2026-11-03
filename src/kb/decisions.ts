@@ -10,8 +10,8 @@ export type DecisionStatus = (typeof DECISION_STATUSES)[number];
 
 export const DECISION_HEADING = /^### (\d{4}-\d{2}-\d{2}) — (.+?) — (.*)$/;
 const ID = /^D-([a-z0-9][a-z0-9-]*)-(\d{3,})$/;
-const META = /^- \*\*(ID|Durum|Geçersiz kılan|Geçersiz kıldığı):\*\* (.+?)\s*$/;
-const KEYS = { id: "ID", status: "Durum", superseded_by: "Geçersiz kılan", supersedes: "Geçersiz kıldığı" } as const;
+const META = /^- \*\*(ID|Durum|Süre|Geçersiz kılan|Geçersiz kıldığı):\*\* (.+?)\s*$/;
+const KEYS = { id: "ID", status: "Durum", until: "Süre", superseded_by: "Geçersiz kılan", supersedes: "Geçersiz kıldığı" } as const;
 type MetaKey = keyof typeof KEYS;
 
 export interface DecisionRecord {
@@ -23,6 +23,8 @@ export interface DecisionRecord {
   status: DecisionStatus;
   superseded_by?: string;
   supersedes?: string;
+  /** `--until` deadline as written (`YYYY-MM-DD` or `YYYY-MM-DDTHH:MM[:SS][offset]`); absent for open-ended decisions */
+  until?: string;
   source?: string;
   /** first line of the `**Karar:**` bullet, at most 200 chars */
   summary: string;
@@ -94,19 +96,44 @@ function setMeta(lines: string[], block: Block, key: MetaKey, value: string | un
   }
 }
 
+const UNTIL = /^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?(Z|[+-]\d{2}:\d{2})?)?$/;
+
+/** Moment a `--until` value ends: a bare date runs to the end of that local day; null when it is not a real date. */
+export function parseUntil(value: string): Date | null {
+  const m = UNTIL.exec(value.trim());
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const check = new Date(y, mo - 1, d);
+  if (check.getFullYear() !== y || check.getMonth() !== mo - 1 || check.getDate() !== d) return null;
+  if (m[4] === undefined) return new Date(y, mo - 1, d, 23, 59, 59, 999);
+  const [h, mi, sec] = [Number(m[4]), Number(m[5]), Number(m[6] ?? 0)];
+  if (h > 23 || mi > 59 || sec > 59) return null;
+  if (m[7]) return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${String(sec).padStart(2, "0")}${m[7]}`);
+  return new Date(y, mo - 1, d, h, mi, sec);
+}
+
+/** A valid decision whose `--until` has passed (statuses other than geçerli are already over). */
+export function isDecisionExpired(r: Pick<DecisionRecord, "status" | "until">, now: Date = new Date()): boolean {
+  if (r.status !== "geçerli" || !r.until) return false;
+  const at = parseUntil(r.until);
+  return !!at && at < now;
+}
+
 /** Spec 5.4: appends a `### <date> — <project> — <title>` block with ID and status to kb/decisions/<project>.md; returns the new `D-<proje>-NNN`. */
 export function addDecision(
-  o: { project: string; title: string; body: string; source?: string; supersedes?: string },
+  o: { project: string; title: string; body: string; source?: string; supersedes?: string; until?: string },
   now: Date = new Date(),
 ): string {
   const file = decisionFileFor(o.project);
   const path = decisionPath(file);
+  const until = o.until?.trim();
+  if (until && !parseUntil(until)) throw new Error(`geçersiz --until: ${o.until} (YYYY-MM-DD ya da YYYY-MM-DDTHH:MM)`);
   if (o.supersedes) locate(o.supersedes); // fail before writing anything
   if (existsSync(path) && blocks(readLines(path)).some((b) => !b.meta.id)) migrateDecisions({ only: file }); // new ids must come after the old blocks
   const cur = existsSync(path) ? readLines(path) : [];
   const id = newId(file, maxNumber(blocks(cur)) + 1);
   const head = `### ${nowIso(now).slice(0, 10)} — ${o.project} — ${o.title}`;
-  const meta = [`- **ID:** ${id}`, `- **Durum:** geçerli`, ...(o.supersedes ? [`- **Geçersiz kıldığı:** ${o.supersedes}`] : [])];
+  const meta = [`- **ID:** ${id}`, `- **Durum:** geçerli`, ...(until ? [`- **Süre:** ${until}`] : []), ...(o.supersedes ? [`- **Geçersiz kıldığı:** ${o.supersedes}`] : [])];
   const source = o.source ? [`- **Kaynak:** ${o.source}`] : [];
   const block = [head, ...meta, ...o.body.replace(/\r\n/g, "\n").trim().split("\n"), ...source].join("\n");
   const base = (cur.length ? cur.join("\n") : decisionTitle(file)).replace(/\s+$/, "");
@@ -132,6 +159,7 @@ export function scanDecisions(project?: string): { rec: DecisionRecord; text: st
           id: b.meta.id ?? "", file, date: b.date, title: b.title, status,
           ...(b.meta.superseded_by ? { superseded_by: b.meta.superseded_by } : {}),
           ...(b.meta.supersedes ? { supersedes: b.meta.supersedes } : {}),
+          ...(b.meta.until ? { until: b.meta.until } : {}),
           ...(source ? { source } : {}),
           summary: (pick("Karar") ?? "").slice(0, 200), path,
         },
