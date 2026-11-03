@@ -37,6 +37,9 @@ describe("project refresh + automatic refresh", () => {
     expect(cardText()).toContain("Açık bulgu başlığı");
     vlad(["finding", "set", fid, "fixed", "--by", tid]);
     expect(cardText()).not.toContain("Açık bulgu başlığı");
+    expect(cardText()).not.toContain("recent-activity"); // hooks never add the Son aktivite block
+    expect(vlad(["project", "refresh", "alpha"]).code).toBe(0); // only an explicit refresh does; "- eski" stays under the block
+    expect(cardText()).toContain("<!-- /vlad:derived -->\n\n- eski\n");
     for (const s of ["running", "awaiting_approval", "done"]) expect(vlad(["task", "set", tid, s]).code).toBe(0);
     expect(cardText()).toContain(`${tid} Bitecek`);
     vlad(["decision", "add", "--project", "alpha", "--title", "Yeni karar", "--body-file", "-"], "- **Karar:** k");
