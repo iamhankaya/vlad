@@ -560,6 +560,20 @@ describe("cleanupTask", () => {
     expect(git(repo, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
   });
 
+  it("cleanup is an administrative write: `updated` stays, so a written summary is not made bayat (F-vlad-191)", async () => {
+    process.env.VLAD_CLAUDE_JSON = join(mkdtempSync(join(tmpdir(), "vlad-cj-")), "claude.json");
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    setState(t.data.id, "awaiting_approval");
+    setState(t.data.id, "done");
+    const old = getTask(t.data.id);
+    saveTask(old, new Date(Date.now() - 3 * 3600_000)); // done 3 h ago
+    const before = getTask(t.data.id).data.updated;
+    cleanupTask(t.data.id, { closeWorker: () => {} });
+    expect(getTask(t.data.id).data.worktree).toBeNull();
+    expect(getTask(t.data.id).data.updated).toBe(before);
+  });
+
   async function doneTask(): Promise<{ id: string; wt: string }> {
     const t = mk();
     await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });

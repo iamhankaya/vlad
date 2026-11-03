@@ -290,6 +290,14 @@ export function saveTask(task: Task, now: Date = new Date()): void {
 }
 
 /**
+ * Administrative write (cleanup emptying `worktree`): keeps `updated`. It is not new work, so it must not make a written
+ * summary bayat (F-vlad-191); `kb maintain` ages from the real last change, which is what it should.
+ */
+export function saveTaskQuiet(task: Task): void {
+  saveTask(task, new Date(task.data.updated));
+}
+
+/**
  * The task's `autonomy` froze at creation; config is the authority. Rewrites a stale frontmatter value
  * and returns the previous one (null when unchanged).
  */

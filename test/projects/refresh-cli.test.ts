@@ -48,5 +48,18 @@ describe("project refresh + automatic refresh", () => {
     expect(cardText()).not.toContain("D-alpha-001 Yeni karar");
     expect(cardText()).toContain("- elle");
   });
+  it("a decision that supersedes another project's decision refreshes both cards (F-vlad-190)", () => {
+    expect(vlad(["project", "write", "beta", "--file", "-"], card.replace(/alpha/g, "beta").replace("Alpha", "Beta")).code).toBe(0);
+    vlad(["decision", "add", "--project", "alpha", "--title", "Eski karar", "--body-file", "-"], "- **Karar:** k");
+    expect(vlad(["project", "refresh", "alpha"]).code).toBe(0); // adds the Son aktivite block
+    expect(cardText()).toContain("D-alpha-001 Eski karar");
+    expect(vlad(["decision", "add", "--project", "beta", "--title", "Yeni", "--supersedes", "D-alpha-001", "--body-file", "-"], "- **Karar:** k").code).toBe(0);
+    expect(cardText()).not.toContain("D-alpha-001 Eski karar");
+    // `decision set ... --superseded-by` is the same path
+    vlad(["decision", "add", "--project", "alpha", "--title", "Ikinci", "--body-file", "-"], "- **Karar:** k");
+    expect(cardText()).toContain("D-alpha-002 Ikinci");
+    expect(vlad(["decision", "set", "D-alpha-002", "yerine-geçti", "--superseded-by", "D-beta-001"]).code).toBe(0);
+    expect(cardText()).not.toContain("D-alpha-002 Ikinci");
+  });
 });
 
