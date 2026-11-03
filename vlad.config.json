@@ -7,7 +7,6 @@
   "launcher": "auto",
   "kbDir": "../vlad-kb",
   "worktreeDir": "{repo}-wt",
-  "experiments": { "ponytail": "ab" },
   "projects": {
     "watchparty": { "autonomy": "commit" },
     "ashen-bastion": { "autonomy": "pr" }
