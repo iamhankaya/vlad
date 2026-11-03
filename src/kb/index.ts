@@ -15,3 +15,4 @@ export * from "./archive.js";
 export * from "./maintain.js";
 export * from "./get.js";
 export * from "./refs.js";
+export * from "./derived.js";

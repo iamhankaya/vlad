@@ -87,6 +87,8 @@ export function listFindingsWithWarnings(
   const warnings: string[] = [];
   for (const file of listMdFiles(kbPaths().findings)) {
     const name = basename(file);
+    // file names are `F-<project>-<n>.md`: other projects' files are skipped unread (a project card refresh must not parse every finding)
+    if (f.project && !(name.startsWith(`F-${f.project}-`) && /^\d+\.md$/.test(name.slice(f.project.length + 3)))) continue;
     try {
       const { data, body } = readDoc<FindingData>(file);
       validate("finding", data);

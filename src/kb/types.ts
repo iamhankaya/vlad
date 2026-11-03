@@ -158,6 +158,8 @@ export interface VladConfig {
   cloudKb?: CloudKb;
   /** `claude --autocompact` for workers (e.g. "300k"); absent or "" → no flag. Range 100000–1000000 tokens. */
   workerAutoCompact?: string;
+  /** Claude memory folders `vlad kb lint` also scans for stale notes (absolute or relative to VLAD_HOME); absent → skipped. */
+  memoryDirs?: string[];
   projects: Record<string, { autonomy?: Autonomy }>;
   /** Çoklu makine (T20261101-19); hepsi isteğe bağlı: yoksa bugünkü davranış. `brain` machines içinde olmalı. */
   machines?: MachineDef[];

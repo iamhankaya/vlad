@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
-import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
+import { addFinding, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
 import { auditSetup } from "./audit/setup.js";
 import { auditSkills } from "./audit/skills.js";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "./mode/store.js";
@@ -16,8 +16,10 @@ import { installGlobal } from "./install.js";
 import { checkKb, kbCheckExitCode } from "./kb/check.js";
 import { commitKb } from "./kb/commit.js";
 import { readInput } from "./kb/input.js";
+import { formatLint, lintExitCode, lintKb } from "./kb/lint.js";
+import { lintAgeNote, writeLintCache } from "./kb/lint-cache.js";
 import { formatRefs, refsOf } from "./kb/refs.js";
-import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
+import { addDecision, appendJournal, getJournal, getVladHome, kbPaths, getKbRecord, listDecisions, isDecisionExpired, loadConfig, maintainKb, migrateDecisions, searchKb, setDecisionStatus, withKbLock, KbLockTimeout, DECISION_STATUSES, ValidationError, writeFileAtomic } from "./kb/index.js";
 import type { TaskKind, TaskState, VladConfig } from "./kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, queueLauncher, resolveLaunchMode } from "./launcher/index.js";
 import { swallowEpipe } from "./stdout.js";
@@ -31,6 +33,7 @@ import { readLocal, selfName } from "./agent/state.js";
 import { AgentClient } from "./agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "./launcher/index.js";
 import { projectStatus, setProjectSummary } from "./projects/status.js";
+import { refreshAllProjects, refreshProject } from "./projects/derived.js";
 import { staleSummaryText } from "./projects/status.js";
 import { addPending, donePending, listPending } from "./digest/pending.js";
 import { addProjectNote, listProjectsWithWarnings, setProjectField, writeProject } from "./projects/store.js";
@@ -110,7 +113,7 @@ program
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
  */
 const KB_WRITES = new Set([
-  "project write", "project set", "project note", "project summary",
+  "project write", "project set", "project note", "project summary", "project refresh",
   "finding add", "finding set",
   "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
   "mode night", "mode watch", "mode off", "mode status",
@@ -134,6 +137,31 @@ async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
 // --- /machines:C3 ---
 
 /** Registers a command with --json and a uniform error path. */
+/** Records a command changed show up in the project card's derived blocks (open findings, Son aktivite) right away; a refresh failure never fails the command. */
+/** Projects whose derived block `which` a command may have changed; each hook refreshes only that block (a task scan costs ~1.7 s on 600+ tasks). */
+function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; only: "findings" | "activity" } | null {
+  const o = args[args.length - 2] as Opts;
+  switch (key) {
+    case "project write": return { slugs: [String(args[0])], only: "findings" }; // the card was replaced: the findings block is cheap, activity waits for `project refresh`
+    case "finding add": return { slugs: [String(o.project)], only: "findings" };
+    case "finding set": return { slugs: [getFinding(String(args[0])).data.project], only: "findings" };
+    case "task set": return String(args[1]) === "done" ? { slugs: [getTask(String(args[0])).data.project], only: "activity" } : null;
+  }
+  return null;
+}
+// decisions are not hooked: Son aktivite needs the done-task scan (+~0.5 s on 600+ tasks); `project refresh` / /digest pick them up
+const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set"]);
+async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
+  await fn(...args);
+  if (!REFRESH_KEYS.has(key)) return;
+  try {
+    const t = targetsOf(key, args);
+    for (const slug of new Set(t?.slugs)) {
+      if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug, { create: false, only: t!.only });
+    }
+  } catch (e) { process.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
+}
+
 function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
   const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
   const key = `${parent.name()} ${spec.split(" ")[0]}`;
@@ -150,7 +178,7 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
           await fn(...args);
         }
       } else if (await before(key, args)) return;
-      else await (lockPolicy(key) === "outer" ? withKbLock(() => fn(...args)) : fn(...args));
+      else await (lockPolicy(key) === "outer" ? withKbLock(() => runAndRefresh(key, args, fn)) : fn(...args));
     } catch (e) {
       fail(e);
     }
@@ -194,7 +222,8 @@ def(project, "status <slug>", "Proje durum özeti: kayıtlardan üretilen sayıl
     `açık bulgu: ${Object.entries(s.findings.counts).map(([k, v]) => `${k}=${v}`).join(" ") || "yok"}`,
     ...s.findings.open.map((f) => `  ${f.id}  ${f.severity}  ${f.state}  ${f.title}`),
     `geçerli karar: ${s.decisions.total}${s.decisions.total > s.decisions.recent.length ? ` (son ${s.decisions.recent.length}; tümü: vlad decision list --project ${s.slug})` : ""}`,
-    ...s.decisions.recent.map((d) => `  ${d.id}  ${d.date}  ${d.title}`),
+    ...s.decisions.recent.map((d) => `  ${d.id}  ${d.date}  ${d.title}${d.expired ? `  (süresi doldu: ${d.until})` : ""}`),
+    ...(s.decisions.expired.length ? [`süresi dolmuş geçerli karar: ${s.decisions.expired.join(", ")} (yenile ya da vlad decision set <id> geçersiz)`] : []),
   ];
   out(o, s, lines.join("\n"));
 });
@@ -202,6 +231,17 @@ def(project, "summary <slug>", "Kartın `## Durum özeti` bölümünü yazar (/d
   const stamp = setProjectSummary(slug, readInput(o.file as string));
   out(o, { slug, as_of: stamp }, `özet yazıldı: ${slug} (${stamp})`);
 }).requiredOption("--file <md>", "özet metni (- = stdin); en çok ~1000 token");
+def(project, "refresh [slug]", "Kartın koddan üretilen bloklarını (açık bulgular, Son aktivite) yeniden üretir; blok dışı metne dokunmaz", (slug: string | undefined, o: Opts) => {
+  if (o.all) {
+    const r = refreshAllProjects();
+    out(o, r, [`tazelendi: ${r.refreshed.join(", ") || "(değişen yok)"}`, ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+    return;
+  }
+  if (!slug) throw new Error("proje slug'ı ya da --all gerekli");
+  if (!/^[a-z0-9-]+$/.test(slug) || !existsSync(join(kbPaths().projects, `${slug}.md`))) throw new Error(`proje kartı bulunamadı: ${slug}`);
+  const changed = refreshProject(slug);
+  out(o, { slug, changed }, changed ? `tazelendi: ${slug}` : `güncel: ${slug}`);
+}).option("--all", "tüm kartlar");
 def(project, "list", "Kartları listeler", (o: Opts) => {
   const { projects, warnings } = listProjectsWithWarnings();
   out(
@@ -584,6 +624,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
       (s.staleSummaries.length ? `, ${s.staleSummaries.length} bayat/eksik proje özeti: ${staleSummaryText(s.staleSummaries)}` : "") +
       (s.pendingDigest ? `, ${s.pendingDigest} onay bekleyen digest maddesi` : "") +
       (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
+      (s.kbLint.count ? `, ${s.kbLint.count} kb çelişkisi${lintAgeNote(s.kbLint)}` : "") +
       (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
@@ -711,6 +752,7 @@ def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID's
     body: readInput(o.bodyFile as string),
     source: o.source as string | undefined,
     supersedes: o.supersedes as string | undefined,
+    until: o.until as string | undefined,
   });
   out(o, { ok: true, id }, `karar eklendi: ${id}`);
 })
@@ -718,10 +760,11 @@ def(decision, "add", "kb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID's
   .requiredOption("--title <başlık>", "başlık")
   .requiredOption("--body-file <md>", "gövde (- = stdin)")
   .option("--source <kaynak>", "session/görev kaynağı")
-  .option("--supersedes <id>", "bu kararın yerine geçtiği karar (o yerine-geçti olur)");
+  .option("--supersedes <id>", "bu kararın yerine geçtiği karar (o yerine-geçti olur)")
+  .option("--until <tarih>", "kararın son tarihi (YYYY-MM-DD ya da YYYY-MM-DDTHH:MM); geçince status/kb lint süresi dolmuş geçerli karar olarak işaretler");
 def(decision, "list", "Kararları kısa listeler (varsayılan yalnız geçerli)", (o: Opts) => {
   const decisions = listDecisions({ project: o.project as string | undefined, all: !!o.all }).map(({ path: _p, ...d }) => d); // paths are for `kb search`; they only bloat a list
-  out(o, { decisions }, decisions.map((d) => `${d.id}  ${d.date}  ${d.status}  ${d.title}${d.superseded_by ? `  -> ${d.superseded_by}` : ""}`).join("\n"));
+  out(o, { decisions }, decisions.map((d) => `${d.id}  ${d.date}  ${d.status}  ${d.title}${d.superseded_by ? `  -> ${d.superseded_by}` : ""}${d.until ? `  (süre: ${d.until}${isDecisionExpired(d) ? ", doldu" : ""})` : ""}`).join("\n"));
 })
   .option("--project <slug>", "yalnız bu proje (genel kararlar: genel)")
   .option("--all", "geçersiz ve yerine geçilmiş kararlar da");
@@ -784,6 +827,13 @@ def(kb, "refs <id>", "ID'ye (T…, F-…, D-…) atıf yapan kayıtları bölüm
   const r = refsOf(id);
   out(o, r, formatRefs(r));
 });
+def(kb, "lint", "Salt okuma çelişki denetimi: kart/karar/hafıza metinlerindeki T…/F-…/D-… atıflarını gerçek kayıtla karşılaştırır (işaret varsa 0, --strict'te 1)", (o: Opts) => {
+  const r = lintKb({ project: o.project as string | undefined });
+  if (!o.project) writeLintCache(r); // a whole-kb run feeds `status --summary` (kbLint)
+  out(o, r, formatLint(r));
+  process.exitCode = lintExitCode(r, !!o.strict);
+}).option("--project <slug>", "yalnız bu proje")
+  .option("--strict", "işaret varsa 1 ile çık");
 def(kb, "check", "kb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a dokunan commit'leri listeler", (o: Opts) => {
   const r = checkKb({ ack: o.ack as string | undefined });
   const lines = r.foreign.length

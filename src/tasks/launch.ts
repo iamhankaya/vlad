@@ -22,6 +22,8 @@ import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { staleSummaries } from "../projects/status.js";
+import { readLintCache } from "../kb/lint-cache.js";
+import type { LintSummary } from "../kb/lint-cache.js";
 import { countPending } from "../digest/pending.js";
 import type { StaleSummary } from "../projects/status.js";
 import { expireMode, modeLine } from "../mode/store.js";
@@ -613,7 +615,7 @@ export function statusSummary(
   opts: { mark?: boolean; /** machines C3: remote probe results, applied here under the kb lock */ remotePlans?: RemoteStallPlan[] } = {},
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
-  undigested: number; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number;
+  undigested: number; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number; kbLint: LintSummary;
 } {
   const mark = opts.mark !== false;
   // a read-only/locked kb must not take the startup summary (SessionStart hook) down: marking is best effort (F-vlad-052)
@@ -639,5 +641,6 @@ export function statusSummary(
     mode,
     pendingDigest: (() => { try { return countPending(); } catch { return 0; } })(),
     staleSummaries: (() => { try { return staleSummaries(); } catch { return []; } })(),
+    kbLint: readLintCache(), // last full `kb lint` run; the startup hook never lints (~75 s on a large kb)
   };
 }

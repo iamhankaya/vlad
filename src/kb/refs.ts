@@ -48,20 +48,20 @@ const SNIPPET = 160;
 const OPEN_POINTS = /^#{3,}\s+Açık noktalar\b/;
 const DONE_LIST = /^#{3,}\s+Yapılanlar\b/;
 
-interface Source { type: RefType; id: string; status: string | null; date: string | null; text: string; path: string }
+interface Source { type: RefType; id: string; status: string | null; date: string | null; text: string; path: string; project?: string | null }
 
 function* sources(): Generator<Source> {
   const p = kbPaths();
   for (const path of listMdFiles(p.tasks)) {
     try {
-      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string }>(readFileSync(path, "utf8"));
-      yield { type: "task", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path };
+      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readFileSync(path, "utf8"));
+      yield { type: "task", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path, project: data.project };
     } catch { /* unreadable files are reported by `task list` */ }
   }
   for (const path of listMdFiles(p.findings)) {
     try {
-      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string }>(readFileSync(path, "utf8"));
-      yield { type: "finding", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path };
+      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readFileSync(path, "utf8"));
+      yield { type: "finding", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path, project: data.project };
     } catch { /* see above */ }
   }
   let n = 0;
@@ -75,6 +75,19 @@ function* sources(): Generator<Source> {
       yield { type: "project", id: data.slug ?? basename(path, ".md"), status: null, date: data.last_activity ?? null, text: body, path };
     } catch { /* see above */ }
   }
+}
+
+export interface RecordState { type: "task" | "finding" | "decision"; status: string | null; project: string | null }
+
+/** State of every task, finding and (id'd) decision, archive included, keyed by id. */
+export function recordStates(): Map<string, RecordState> {
+  const out = new Map<string, RecordState>();
+  for (const s of sources()) {
+    if (s.type === "journal" || s.type === "project") break; // sources() yields tasks, findings, decisions first; the rest is not needed (and slow to read)
+    if (s.type === "task" || s.type === "finding") out.set(s.id, { type: s.type, status: s.status, project: s.project ?? null });
+    else if (s.type === "decision" && s.id.startsWith("D-")) out.set(s.id, { type: "decision", status: s.status, project: s.id.replace(/^D-(.+)-\d+$/, "$1") });
+  }
+  return out;
 }
 
 /** Epoch ms of a (possibly date-only, possibly offset) timestamp; unparseable/missing sorts first. */
