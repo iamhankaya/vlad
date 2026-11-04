@@ -1,5 +1,11 @@
 {
-  "roots": ["C:\\dev"],
+  "roots": ["/Users/metehankaya/dev"],
+  "brain": "mac",
+  "machines": [
+    { "name": "mac", "os": "darwin", "agent": { "host": "192.168.1.33", "port": 7437 } },
+    { "name": "windows", "os": "win32", "agent": { "host": "192.168.1.34", "port": 7437 },
+      "roots": ["C:\\dev"], "worktreeDir": "C:\\dev\\{repo}-wt", "kbDir": "C:\\dev\\vlad-kb" }
+  ],
   "ignore": ["*-wt", "node_modules", "vlad"],
   "defaultAutonomy": "commit",
   "staleAfterHours": 6,
