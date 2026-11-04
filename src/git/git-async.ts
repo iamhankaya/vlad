@@ -40,7 +40,14 @@ export async function worktreeBranchAsync(dir: string): Promise<string | null> {
 export async function addWorktreeAsync(repo: string, dir: string, branch: string, base?: string): Promise<void> {
   if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
   if (await branchExistsAsync(repo, branch)) throw new Error(`zaten var: ${branch}`);
-  await mustGitAsync(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
+  const start = await runGitAsync(repo, ["rev-parse", base ?? "HEAD"]);
+  try {
+    await mustGitAsync(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
+  } catch (e) {
+    // F-vlad-198: same rollback as the sync twin
+    if (start && (await runGitAsync(repo, ["rev-parse", `refs/heads/${branch}`])) === start) await runGitAsync(repo, ["branch", "-D", branch]);
+    throw e;
+  }
 }
 
 export async function attachWorktreeAsync(repo: string, dir: string, branch: string): Promise<void> {

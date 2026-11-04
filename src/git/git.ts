@@ -98,7 +98,14 @@ export function worktreeBranch(dir: string): string | null {
 export function addWorktree(repo: string, dir: string, branch: string, base?: string): void {
   if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
   if (branchExists(repo, branch)) throw new Error(`zaten var: ${branch}`);
-  mustGit(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
+  const start = runGit(repo, ["rev-parse", base ?? "HEAD"]);
+  try {
+    mustGit(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
+  } catch (e) {
+    // F-vlad-198: git may leave the branch it just created; drop it only while it still sits at the start commit
+    if (start && runGit(repo, ["rev-parse", `refs/heads/${branch}`]) === start) runGit(repo, ["branch", "-D", branch]);
+    throw e;
+  }
 }
 
 /** Worktree at `dir` for an existing branch. */
