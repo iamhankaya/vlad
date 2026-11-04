@@ -40,12 +40,13 @@ export async function worktreeBranchAsync(dir: string): Promise<string | null> {
 export async function addWorktreeAsync(repo: string, dir: string, branch: string, base?: string): Promise<void> {
   if (existsSync(dir)) throw new Error(`zaten var: ${dir}`);
   if (await branchExistsAsync(repo, branch)) throw new Error(`zaten var: ${branch}`);
-  const start = await runGitAsync(repo, ["rev-parse", base ?? "HEAD"]);
+  const start = await runGitAsync(repo, ["rev-parse", `${base ?? "HEAD"}^{commit}`]);
   try {
     await mustGitAsync(repo, ["worktree", "add", "-b", branch, dir, ...(base ? [base] : [])]);
   } catch (e) {
     // F-vlad-198: same rollback as the sync twin
-    if (start && (await runGitAsync(repo, ["rev-parse", `refs/heads/${branch}`])) === start) await runGitAsync(repo, ["branch", "-D", branch]);
+    // "already exists": another launch created it meanwhile; not ours to delete
+    if (!/already exists/.test((e as Error).message) && start && (await runGitAsync(repo, ["rev-parse", `refs/heads/${branch}`])) === start) await runGitAsync(repo, ["branch", "-D", branch]);
     throw e;
   }
 }

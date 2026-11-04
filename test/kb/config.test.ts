@@ -85,6 +85,9 @@ describe("config", () => {
       const m = { name: "w", os: "win32", agent: { host: "h", port: 7437 }, worktreeDir: "C:\\dev\\{repo}-wt" };
       expect(() => load({ brain: "b", machines: [{ name: "b", os: "darwin", agent: { port: 7437 } }, m] })).toThrow(/w.*worktreeDir/);
     });
+    it("ikinci {repo} de yolu ikiler: reddedilir", () => {
+      expect(() => load({ worktreeDir: "{repo}-wt/{repo}" })).toThrow(/worktreeDir/);
+    });
     it("{repo} ile başlayan ve {repo}'suz mutlak yol geçer", () => {
       expect(load({ worktreeDir: "{repo}-wt" }).worktreeDir).toBe("{repo}-wt");
       expect(load({ worktreeDir: "D:\\wt" }).worktreeDir).toBe("D:\\wt");

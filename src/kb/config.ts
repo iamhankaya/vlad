@@ -47,7 +47,7 @@ export function loadConfig(home: string = getVladHome()): VladConfig {
 
 /** `{repo}` the repo's full path is substituted: anything before it doubles the path (F-vlad-197: `C:\dev\{repo}-wt`). */
 function checkWorktreeDir(dir: string, label: string): void {
-  if (dir.indexOf("{repo}") > 0) throw new Error(`config: ${label} içinde {repo} tam repo yoludur; önüne yol koyma (yol ikilenir), "{repo}-wt" ya da {repo}'suz mutlak yol kullan: ${dir}`);
+  if (dir.indexOf("{repo}") > 0 || dir.split("{repo}").length > 2) throw new Error(`config: ${label} içinde {repo} tam repo yoludur; önüne yol koyma (yol ikilenir), "{repo}-wt" ya da {repo}'suz mutlak yol kullan: ${dir}`);
 }
 
 /** machines çapraz doğrulaması (şemanın ifade edemediği kurallar); `machines` yoksa hiçbir şey denetlenmez. */
