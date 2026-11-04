@@ -102,19 +102,23 @@ export function decideSilent({ idleMs, alive, silentMs }: SilenceInput): boolean
   return alive === false || idleMs >= (alive ? LIVE_FACTOR * silentMs : silentMs);
 }
 
+/** Drive-letter or UNC path (a Windows worktree); anything else is POSIX-style. */
+const isWindowsPath = (p: string): boolean => /^([A-Za-z]:[\\/]|\\\\)/.test(p);
+
 /**
  * A local worker that stopped without reporting leaves its task `running` until `staleAfterHours`.
  * Marks it `stalled` sooner: no sign of life (task file update or transcript write) for
  * `workerSilentMinutes` (4x that while a process mentions the task id), or, with no such process, for a short grace.
  * Cloud tasks, pipelines and tasks without a worktree are left alone; `ps` stands in for PowerShell on macOS/Linux.
  */
-export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessProbe, _platform?: NodeJS.Platform): Task[] {
+export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessProbe, platform: NodeJS.Platform = process.platform): Task[] {
   const silentMs = (cfg.workerSilentMinutes ?? DEFAULT_SILENT_MINUTES) * MIN;
   const out: Task[] = [];
   for (const t of listTasks({ state: ["running"] })) {
     const wt = t.data.worktree;
     if (t.data.kind === "pipeline" || !wt || String(t.data.session_id ?? "").startsWith("session_")) continue;
     if (cfg.machines && t.data.machine && t.data.machine !== cfg.brain) continue; // worker machine: its worktree/transcripts are not here (remote probe: C3)
+    if (isWindowsPath(wt) !== (platform === "win32")) continue; // F-vlad-195: another OS's worktree: liveness unknown here, never "silent"
     const updated = Date.parse(t.data.updated);
     if (Number.isNaN(updated)) continue;
     probe ??= defaultProbe();
