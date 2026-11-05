@@ -76,7 +76,7 @@ export class ClipSync implements ClipSyncLike {
   constructor(private d: ClipDeps) {
     this.t0 = d.now();
     this.counter = this.t0;
-    this.lastWinner = [this.t0, d.rank, this.counter];
+    this.lastWinner = [0, 0, 0]; // başlangıç sıralaması en küçük: açılıştaki pano taban sayacıyla (lastSeq) ayrılır, ilk gerçek uzak olay kabul edilir
     // Taban çizgisi kuruluş anında alınır (sonradan gelen değişiklik olaydır). Karşı makine yoksa yardımcıyı boşuna başlatma.
     let p: Promise<number>;
     try { p = d.peer === null ? Promise.reject(new Error("peer yok")) : d.backend.changeCount(); } catch (e) { p = Promise.reject(e); }
@@ -107,11 +107,17 @@ export class ClipSync implements ClipSyncLike {
       }
       // Yoklamanın henüz görmediği yerel kopya varsa önce yerel olay olarak işlenir (anahtar alır, gönderime kuyruğa girer); yerel anahtar
       // uzaktan büyük/eşitse uzak "stale" olur. Yerel kopya sessizce ezilmez.
-      await this.detect();
-      if (compareKeys(m.key, this.lastWinner) <= 0) return "stale";
-      // Okuma anındaki sürüm (seq) yazmanın koşuludur: okuma ile yazma arasında kullanıcı kopyalarsa yazma reddedilir (local_changed),
-      // yerel değer ezilmez ve sonraki yoklama onu gönderir.
-      const snap = await d.backend.read();
+      // write'a yalnız İŞLENMİŞ sıra numarası (lastSeq) verilir: detect ile read arasında kullanıcı kopyalarsa snap.seq lastSeq'ten farklı
+      // olur; yeniden detect edip yeni yerel olayı işleriz (en çok 3 tur), kararsızsa "local_changed".
+      let snap: Awaited<ReturnType<ClipboardBackend["read"]>> | null = null;
+      for (let i = 0; i < 3; i++) {
+        await this.detect();
+        if (compareKeys(m.key, this.lastWinner) <= 0) return "stale";
+        const s = await d.backend.read();
+        if (this.lastSeq === null || s.seq === this.lastSeq) { snap = s; break; }
+      }
+      if (!snap) return "local_changed";
+      // Okuma ile yazma arasında kullanıcı kopyalarsa yazma reddedilir (local_changed), yerel değer ezilmez ve sonraki yoklama onu gönderir.
       const w = await d.backend.write({ kind: m.kind, bytes: m.bytes }, snap.seq);
       if (!w.written) return "local_changed";
       const after = (d.settleMs ?? 0) > 0
@@ -160,11 +166,11 @@ export class ClipSync implements ClipSyncLike {
     if (!d.isEnabled() || d.peer === null) { this.lastSeq = seq; this.pending = null; return; } // kapalıyken yalnız sayaç ilerler: içerik okunmaz
     if (seq === this.lastSeq) return;
     let eventTs = d.now();
-    if (eventTs <= this.t0) {
+    if (eventTs === this.t0) {
       // Kuruluşla aynı ms: gerçek saat çözünürlüğü olabilir, kısa bekleyip yeniden bak. Hâlâ ilerlemediyse (donmuş saat) içerik taban çizgisidir.
       await new Promise<void>((r) => setTimeout(r, 3));
       eventTs = d.now();
-      if (eventTs <= this.t0) { this.lastSeq = seq; return; }
+      if (eventTs === this.t0) { this.lastSeq = seq; return; }
     }
     const r = await d.backend.read();
     this.lastSeq = r.seq;

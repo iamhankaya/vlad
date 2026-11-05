@@ -193,6 +193,28 @@ describe("aktarim:B ClipSync.applyRemote", () => {
   });
 });
 
+describe("aktarim:B tur 2: yarış, saat, başlangıç sırası", () => {
+  it("detect ile read arasında kopyalayan kullanıcı ezilmez: write'a yalnız işlenmiş seq verilir", async () => {
+    const r = rig(); await r.sync.tick(); adv(r);
+    const orig = r.cb.changeCount.bind(r.cb); let armed = true;
+    r.cb.changeCount = async () => { const v = await orig(); if (armed) { armed = false; r.cb.setLocal(text("yarış")); } return v; };
+    adv(r);
+    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [r.clock.t - 1, 1, 1], from: "x" })).toBe("stale");
+    expect(r.cb.writes).toEqual([]);
+    adv(r, 20); await r.sync.tick();
+    expect(r.pushed.map((p) => Buffer.from(p.data, "base64").toString())).toEqual(["yarış"]);
+  });
+  it("saat kuruluş zamanının gerisine düşse de taban sonrası değişiklik yutulmaz", async () => {
+    const r = rig(); await r.sync.tick();
+    r.clock.t = T0 - 5000; r.cb.setLocal(text("geri saat")); await r.sync.tick();
+    expect(r.pushed.map((p) => Buffer.from(p.data, "base64").toString())).toEqual(["geri saat"]);
+  });
+  it("başlangıç sıralaması açılış zamanı değildir: kuruluştan eski anahtarlı ilk gerçek uzak olay kabul edilir", async () => {
+    const r = rig();
+    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [T0 - 100, 1, 1], from: "x" })).toBe("applied");
+  });
+});
+
 describe("aktarim:B yerleşme penceresi", () => {
   it("pencerede farklı içerik gelirse (üçüncü taraf/kullanıcı) yankı sayılmaz, yerel olay olarak gönderilir", async () => {
     const r = rig({ settleMs: 150 }); await r.sync.tick();
