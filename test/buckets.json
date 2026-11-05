@@ -1,6 +1,7 @@
 {
   "unit": [
     "test/aktarim/v-prod-wiring.test.ts",
+    "test/arch/**/*.test.ts",
     "test/audit/derived.test.ts",
     "test/audit/skills.test.ts",
     "test/cloud/prepare.test.ts",
@@ -75,6 +76,7 @@
     "test/aktarim/c-menu.test.ts",
     "test/audit/setup.test.ts",
     "test/cli.test.ts",
+    "test/cli/**/*.test.ts",
     "test/cloud/cli.test.ts",
     "test/cloud/ingest.test.ts",
     "test/cloud/readonly.test.ts",
@@ -99,6 +101,7 @@
     "test/launcher/posix.test.ts",
     "test/launcher/prompt-bytes.test.ts",
     "test/launcher/terminal.test.ts",
+    "test/mac/**/*.test.ts",
     "test/machines/a-cli.test.ts",
     "test/machines/b-install.test.ts",
     "test/machines/c1-core.test.ts",
