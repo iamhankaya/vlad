@@ -1,19 +1,107 @@
 {
   "_doc": "Seçici koşum haritası (scripts/test-scope.mjs). Sıra: all → ignore → rules → test dosyası (yola göre) → eşlenmeyen = TÜM kovalar. Kart gate'i ve son kapı seçici değil, tam suite'tir.",
   "all": [
-    "package.json", "package-lock.json", "tsconfig.json", "vitest.config.ts",
-    "test/buckets.json", "test/scope.json", "test/global-setup.ts", "test/setup-cleanup.ts", "test/isolate-env.ts", "test/helpers.ts",
-    "test/support/**", "test/machines/harness.ts", "test/fixtures/**",
-    "src/cli.ts", "src/cli/**", "src/commands/**", "src/kb/types.ts", "src/layers.json", "src/layers.baseline.json",
-    "schemas/**", "roles/**", "global/skills/**"
+    "package.json",
+    "package-lock.json",
+    "tsconfig.json",
+    "vitest.config.ts",
+    "test/buckets.json",
+    "test/scope.json",
+    "test/global-setup.ts",
+    "test/setup-cleanup.ts",
+    "test/isolate-env.ts",
+    "test/helpers.ts",
+    "test/support/**",
+    "test/machines/harness.ts",
+    "test/fixtures/**",
+    "src/cli.ts",
+    "src/cli/**",
+    "src/commands/**",
+    "src/kb/types.ts",
+    "src/layers.json",
+    "src/layers.baseline.json",
+    "schemas/**",
+    "roles/**",
+    "global/skills/**",
+    "CLAUDE.md",
+    "README.md",
+    "docs/**",
+    ".claude/**"
   ],
-  "ignore": ["**/*.md", "docs/**", "vendor/**", ".claude/**"],
+  "ignore": [
+    "vendor/**",
+    "**/*.md"
+  ],
   "rules": [
-    { "match": ["src/agent/**", "src/machines/**", "src/transfer/**", "src/clip/**"], "buckets": ["process", "agent", "platform"] },
-    { "match": ["src/kb/**", "src/tasks/**"], "buckets": ["process", "agent", "platform"] },
-    { "match": ["src/launcher/**", "src/platform/**", "src/git/**", "src/install.ts"], "buckets": ["process", "platform"] },
-    { "match": ["src/projects/**", "src/digest/**", "src/menu/**", "src/audit/**", "src/findings/**", "src/hooks/**", "src/inbox/**", "src/mode/**", "src/roles/**", "src/scan/**", "src/stdout.ts"], "buckets": ["process"] },
-    { "match": ["scripts/mac/**"], "buckets": ["process"] },
-    { "match": ["scripts/**"], "buckets": ["process"] }
+    {
+      "match": [
+        "src/agent/**",
+        "src/machines/**",
+        "src/transfer/**",
+        "src/clip/**"
+      ],
+      "buckets": [
+        "process",
+        "agent",
+        "platform"
+      ]
+    },
+    {
+      "match": [
+        "src/kb/**",
+        "src/tasks/**"
+      ],
+      "buckets": [
+        "process",
+        "agent",
+        "platform"
+      ]
+    },
+    {
+      "match": [
+        "src/launcher/**",
+        "src/platform/**",
+        "src/git/**",
+        "src/install.ts"
+      ],
+      "buckets": [
+        "process",
+        "platform"
+      ]
+    },
+    {
+      "match": [
+        "src/projects/**",
+        "src/digest/**",
+        "src/menu/**",
+        "src/audit/**",
+        "src/findings/**",
+        "src/hooks/**",
+        "src/inbox/**",
+        "src/mode/**",
+        "src/roles/**",
+        "src/scan/**",
+        "src/stdout.ts"
+      ],
+      "buckets": [
+        "process"
+      ]
+    },
+    {
+      "match": [
+        "scripts/mac/**"
+      ],
+      "buckets": [
+        "process"
+      ]
+    },
+    {
+      "match": [
+        "scripts/**"
+      ],
+      "buckets": [
+        "process"
+      ]
+    }
   ]
 }

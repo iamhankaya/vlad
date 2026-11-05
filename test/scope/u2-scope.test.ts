@@ -34,6 +34,8 @@ describe("u2 scope: file → bucket selection", () => {
     "package.json", "vitest.config.ts", "test/global-setup.ts", "test/isolate-env.ts", "test/support/helper.ts",
     "test/machines/harness.ts", "test/fixtures/kb-mini/vlad.config.json", "src/cli/program.ts", "src/commands/manifest.ts",
     "src/kb/types.ts", "schemas/task.schema.json", "roles/developer.md", "global/skills/ci-triage/SKILL.md", "test/buckets.json", "test/scope.json",
+    // unit tests read these with readFileSync (no import edge, so --changed cannot see them)
+    "CLAUDE.md", "README.md", "docs/superpowers/spec.md", ".claude/skills/x/SKILL.md",
   ])("shared infrastructure %s selects every bucket", (f) => {
     const r = sel(f);
     expect(r.all).toBe(true);
@@ -45,12 +47,12 @@ describe("u2 scope: file → bucket selection", () => {
     expect(r.all).toBe(true);
     expect(r.unmapped).toEqual(["tools/whatever.bin"]);
   });
-  it("docs-only change selects nothing beyond unit --changed (never zero silently)", () => {
-    const r = sel("docs/notes.md", "README.md");
+  it("a note with no test reading it selects nothing beyond unit --changed (never zero silently)", () => {
+    const r = sel("vendor/skills/x/NOTES.md", "notes/todo.md");
     expect(r.buckets).toEqual([]);
     expect(r.files).toEqual([]);
     expect(r.unit).toBe("changed");
-    expect(r.ignored).toEqual(["docs/notes.md", "README.md"]);
+    expect(r.ignored).toEqual(["vendor/skills/x/NOTES.md", "notes/todo.md"]);
     expect(r.all).toBe(false);
   });
   it("a changed test file runs by path instead of its whole bucket", () => {

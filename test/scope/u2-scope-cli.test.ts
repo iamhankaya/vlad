@@ -10,9 +10,9 @@ const node = (script: string, args: string[], cwd = root) => runSpawn(process.ex
 
 describe("u2 scope CLI", () => {
   it("--files … --json prints the selection", () => {
-    const r = node("test-scope.mjs", ["--files", "src/launcher/posix.ts,README.md", "--json"]);
+    const r = node("test-scope.mjs", ["--files", "src/launcher/posix.ts,notes/todo.md", "--json"]);
     expect(r.status, r.stderr).toBe(0);
-    expect(JSON.parse(r.stdout)).toMatchObject({ buckets: ["process", "platform"], unit: "changed", ignored: ["README.md"], all: false });
+    expect(JSON.parse(r.stdout)).toMatchObject({ buckets: ["process", "platform"], unit: "changed", ignored: ["notes/todo.md"], all: false });
   });
   it("an unmapped path is reported on stderr and selects everything", () => {
     const r = node("test-scope.mjs", ["--files", "tools/x.bin"]);
@@ -32,5 +32,13 @@ describe("u2 scope CLI", () => {
     const r = node("test-run.mjs", ["--project", "nope"]);
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/bilinmeyen kova: nope/);
+  });
+});
+
+describe("u2 test-run: unclaimed test files", () => {
+  it("a test file no bucket claims is an error, not a silent pass", () => {
+    const r = node("test-run.mjs", ["--project", "unit", "--", "test/nowhere/orphan.test.ts"]);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/hiçbir kovada olmayan test dosyası: test\/nowhere\/orphan\.test\.ts/);
   });
 });

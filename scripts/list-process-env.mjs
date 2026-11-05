@@ -3,6 +3,7 @@
 // Allowed instead: isolatedEnv() from test/isolate-env.ts (drops user VLAD_*, case-insensitive) or test/support/spawn-vlad.ts. Same scan the ban test uses.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const root = join(import.meta.dirname, "..");
 const PATTERN = /\.\.\.\s*process\.env\b|\benv\s*:\s*process\.env\b/;
@@ -14,4 +15,4 @@ export function findProcessEnvSpreads(base = root) {
     readFileSync(f, "utf8").split("\n").flatMap((text, i) => (PATTERN.test(text) ? [{ file: relative(base, f).split("\\").join("/"), line: i + 1, text: text.trim() }] : [])));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) process.stdout.write(JSON.stringify(findProcessEnvSpreads(), null, 2) + "\n");
+if (import.meta.url === pathToFileURL(process.argv[1]).href) process.stdout.write(JSON.stringify(findProcessEnvSpreads(), null, 2) + "\n");

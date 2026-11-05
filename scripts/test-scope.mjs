@@ -36,9 +36,10 @@ else {
 if (argv.includes("--run")) {
   const run = (args) => spawnSync(process.execPath, [resolve(root, "scripts/test-run.mjs"), ...args], { cwd: root, stdio: "inherit" }).status ?? 1;
   let code = 0;
-  // one tsc per step is cheap (incremental no-op when nothing changed), steps stay independent
-  code ||= run(["--project", "unit", ...(sel.unit === "all" ? [] : ["--changed", since])]);
-  if (sel.buckets.length) code ||= run(["--project", sel.buckets.join(",")]);
-  if (sel.files.length) code ||= run(["--project", "process,agent,platform", "--", ...sel.files]);
+  // every step runs even when an earlier one failed (one red unit test must not hide a red process bucket); a non-zero code is kept
+  const step = (args) => { code = run(args) || code; };
+  step(["--project", "unit", ...(sel.unit === "all" ? [] : ["--changed", since])]);
+  if (sel.buckets.length) step(["--project", sel.buckets.join(",")]);
+  if (sel.files.length) step(["--project", "process,agent,platform", "--", ...sel.files]);
   process.exit(code);
 }
