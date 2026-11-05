@@ -7,6 +7,7 @@ import {
   addWorktree, attachWorktree, branchExists, changedFiles, currentBranch, headSha, isRepo,
   recentCommits, removeWorktree, reparsePoints, ReparseCleanupError, runGit, unlinkReparsePoints, worktreePath,
 } from "../../src/git/git.js";
+import { addWorktreeAsync } from "../../src/git/git-async.js";
 import type { VladConfig } from "../../src/kb/index.js";
 import { assertInside, makeFixtureRoot, makeJunction } from "../helpers.js";
 
@@ -22,6 +23,31 @@ function makeRepo(): string {
   git(dir, "add", "."); git(dir, "commit", "-m", "second");
   return dir;
 }
+
+describe("F-vlad-198: failed `worktree add -b` leaves no branch behind", () => {
+  /** a worktree path whose parent is a file: git creates the branch, then fails to create the directory */
+  const badDir = () => {
+    const f = join(mkdtempSync(join(tmpdir(), "vlad-wt-")), "file");
+    writeFileSync(f, "x");
+    return join(f, "sub");
+  };
+  it("sync: the branch this call created is removed", () => {
+    const repo = makeRepo();
+    expect(() => addWorktree(repo, badDir(), "vlad/new")).toThrow(/worktree başarısız/);
+    expect(branchExists(repo, "vlad/new")).toBe(false);
+  });
+  it("async: the branch this call created is removed", async () => {
+    const repo = makeRepo();
+    await expect(addWorktreeAsync(repo, badDir(), "vlad/new")).rejects.toThrow(/worktree başarısız/);
+    expect(branchExists(repo, "vlad/new")).toBe(false);
+  });
+  it("a branch that already exists (with commits) is never touched", () => {
+    const repo = makeRepo();
+    git(repo, "branch", "vlad/old", "HEAD~1");
+    expect(() => addWorktree(repo, badDir(), "vlad/old")).toThrow(/zaten var/);
+    expect(branchExists(repo, "vlad/old")).toBe(true);
+  });
+});
 
 describe("worktree from a base", () => {
   it("addWorktree with base branches from that commit; attachWorktree reuses a branch", () => {

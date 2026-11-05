@@ -634,6 +634,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
       (s.pendingDigest ? `, ${s.pendingDigest} onay bekleyen digest maddesi` : "") +
       (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
       (s.kbLint.count ? `, ${s.kbLint.count} kb çelişkisi${lintAgeNote(s.kbLint)}` : "") +
+      (s.kbDirty ? `; UYARI: ${s.kbDirty.message}` : "") +
       (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
@@ -648,6 +649,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
   }
   const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];
   if (s.mode) lines.push(`mod: ${s.mode}`);
+  if (s.kbDirty) lines.push(`UYARI: ${s.kbDirty.message}`);
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
   out(o, { ...s, active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));

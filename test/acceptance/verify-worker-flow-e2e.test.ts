@@ -109,9 +109,9 @@ describe("sahte süreç listesiyle stalled tespiti (kb üzerinde)", () => {
   const now = new Date("2026-10-26T12:00:00+03:00");
   const MIN = 60_000;
   const probe = (o: Partial<LivenessProbe>): LivenessProbe => ({ alive: () => true, transcriptMtime: () => null, ...o });
-  const localRunning = (ageMin: number) => {
+  const localRunning = (ageMin: number, wtDir = "C:\\x\\wt\\") => {
     const t = getTask(newTask(home));
-    setState(t.data.id, "running", { worktree: "C:\\x\\wt\\" + t.data.id });
+    setState(t.data.id, "running", { worktree: wtDir + t.data.id });
     const cur = getTask(t.data.id);
     writeDoc(cur.file, { ...cur.data, updated: nowIso(new Date(now.getTime() - ageMin * MIN)) }, cur.body);
     return t.data.id;
@@ -133,7 +133,7 @@ describe("sahte süreç listesiyle stalled tespiti (kb üzerinde)", () => {
   });
 
   it("Windows dışında da ölü işçiyi stalled yapar (F-vlad-111)", () => {
-    const id = localRunning(500);
+    const id = localRunning(500, "/home/x/wt/"); // F-vlad-195: a C: worktree is another OS's on linux
     expect(markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), "linux").map((t) => t.data.id)).toEqual([id]);
   });
 });
