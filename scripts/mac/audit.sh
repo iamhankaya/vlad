@@ -78,7 +78,9 @@ else row main-session eksik "tmux 'vlad' oturumu yok (scripts/mac/setup.sh)"; fi
 if have pmset; then
   sl="$(pmset -g 2>/dev/null | awk '$1=="sleep"{print $2; exit}' || true)"
   if [ "$sl" = "0" ]; then row sleep ok "pmset sleep 0"; else row sleep eksik "pmset sleep=${sl:-?} (sudo pmset -a sleep 0)"; fi
-else row sleep uyarı "pmset yok (macOS değil mi?)"; fi
+  ar="$(pmset -g 2>/dev/null | awk '$1=="autorestart"{print $2; exit}' || true)"
+  if [ "$ar" = "1" ]; then row autorestart ok "elektrik gidince kendiliğinden açılır"; else row autorestart uyarı "autorestart=${ar:-?} (sudo pmset -a autorestart 1)"; fi
+else row sleep uyarı "pmset yok (macOS değil mi?)"; row autorestart uyarı "pmset yok"; fi
 
 # --- elle doğrulanır ---
 row remote-control manuel "Claude Code Remote Control açık mı: ana oturumda /remote-control; betikle denetlenemez"

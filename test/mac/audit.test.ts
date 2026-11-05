@@ -13,7 +13,7 @@ function fullMac(s: Sandbox) {
   stub(s, "tmux", 'case "$1" in has-session) exit 0;; esac');
   stub(s, "gh"); stub(s, "vlad");
   stub(s, "launchctl", 'echo "123 0 com.vlad.agent"; echo "- 0 com.vlad.main"');
-  stub(s, "pmset", 'echo " sleep                0"; echo " womp                 1"');
+  stub(s, "pmset", 'echo " sleep                0"; echo " womp                 1"; echo " autorestart          1"');
   stub(s, "lsof", 'echo "node 1 u IPv4 TCP *:7437 (LISTEN)"');
   stub(s, "id", 'case "$1" in -Gn) echo "staff";; esac');
   mkdirSync(join(s.home, "ci", "actions-runner"), { recursive: true }); writeFileSync(join(s.home, "ci", "actions-runner", ".runner"), "{}");
@@ -33,10 +33,15 @@ describe("mac/audit.sh", () => {
     expect(r.status).toBe(0);
     const rows = JSON.parse(r.stdout) as Array<{ madde: string; durum: string; kanit: string }>;
     const by = Object.fromEntries(rows.map((x) => [x.madde, x]));
-    for (const m of ["claude", "node", "git", "tmux", "gh", "vlad-cli", "vlad-repo", "vlad-kb", "agent-keys", "agent-launchd", "agent-port", "main-session", "sleep", "remote-control", "ci-user", "ci-runner"]) expect(by[m], m).toBeDefined();
+    for (const m of ["claude", "node", "git", "tmux", "gh", "vlad-cli", "vlad-repo", "vlad-kb", "agent-keys", "agent-launchd", "agent-port", "main-session", "sleep", "autorestart", "remote-control", "ci-user", "ci-runner"]) expect(by[m], m).toBeDefined();
     expect(rows.filter((x) => x.durum === "eksik")).toEqual([]);
     expect(by["remote-control"].durum).toBe("manuel");
     expect(by["agent-keys"].kanit).toContain("mac");
+  });
+  it("autorestart kapalıysa uyarı verir (eksik değil)", () => {
+    const s = sandbox(); fullMac(s); stub(s, "pmset", 'echo " sleep 0"; echo " autorestart 0"');
+    const rows = JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string }>;
+    expect(rows.find((x) => x.madde === "autorestart")?.durum).toBe("uyarı");
   });
   it("anahtar değerlerini hiçbir çıktıya yazmaz", () => {
     const s = sandbox(); fullMac(s);
