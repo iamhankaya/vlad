@@ -59,6 +59,16 @@ describe("aktarim:A2 dayanıklılık", () => {
     const r = await sendPaths(w, { to: "windows", paths: [file], chunkBytes: 1000, sleep: async () => {} });
     expect(r.items).toHaveLength(1); expect(counts["xfer-begin"]).toBe(2); expect(ids(log).size).toBe(1);
   });
+  it("not_found sonrası begin 'committed' dönerse parça göndermeden sonucu verir", async () => {
+    const { p, file } = await setup();
+    const { w, counts } = wrap(p.mac.transport, (op, a, n, real) => {
+      if (op === "xfer-chunk" && n === 2) return Promise.reject(new RemoteError("not_found", "not_found: x"));
+      if (op === "xfer-begin" && n === 2) return real().then((r: any) => ({ ...r, result: { id: a.id, chunkBytes: 1000, state: "committed", items: [{ name: "x.bin", kind: "file", size: 2500, path: "/x" }] } }));
+      return undefined;
+    });
+    const r = await sendPaths(w, { to: "windows", paths: [file], chunkBytes: 1000, sleep: async () => {} });
+    expect(r.items.map((i) => i.name)).toEqual(["x.bin"]); expect(counts["xfer-chunk"]).toBe(2); expect(counts["xfer-commit"]).toBeUndefined();
+  });
   it("not_found ikinci kez gelirse sonsuz döngü yok: hata fırlar", async () => {
     const { p, file } = await setup();
     const { w, counts } = wrap(p.mac.transport, (op) => (op === "xfer-chunk" ? Promise.reject(new RemoteError("not_found", "not_found: aktarım bulunamadı")) : undefined));

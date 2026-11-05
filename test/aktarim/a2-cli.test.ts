@@ -121,6 +121,11 @@ describe("aktarim:A2 vlad send CLI", () => {
     const boom: Notifier = { notify: async () => { throw new Error("toast patladı"); } };
     await runSendCommand([f], { notify: true }, io({ t: fake().t, notifier: boom }).io);
   });
+  it("uncertain hatasında bildirim 'gönderilemedi' DEMEZ (belirsiz)", async () => {
+    const src = tmp(); const f = makeFile(src, "a", 1, 1); const r = rec();
+    await runSendCommand([f], { notify: true }, io({ t: fake({ "xfer-commit": () => { throw new RemoteError("timeout", "timeout: x"); } }).t, notifier: r.n }).io).catch(() => {});
+    expect(r.calls[0]!.body).toMatch(/belirsiz/); expect(r.calls[0]!.body).not.toMatch(/gönderilemedi/);
+  });
   it("--notify yok → bildirim yok", async () => {
     const src = tmp(); const f = makeFile(src, "a", 1, 1); const r = rec();
     await runSendCommand([f], {}, io({ t: fake().t, notifier: r.n }).io);

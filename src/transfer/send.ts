@@ -1,6 +1,7 @@
 import { randomBytes, createHash } from "node:crypto";
+import { constants } from "node:fs";
 import { open, lstat, readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { RemoteError, type RemoteTransport } from "../machines/types.js";
 import { uniqueName } from "./paths.js";
 import {
@@ -77,7 +78,11 @@ async function transfer(t: RemoteTransport, j: Job): Promise<XferCommitResult> {
         break;
       } catch (e) {
         // alıcı aktarımı unuttu (yeniden başlama/boşta süpürme): AYNI id ile begin tekrarı, en çok bir kez
-        if (round === 0 && e instanceof RemoteError && e.code === "not_found") { b = await begin(); continue; }
+        if (round === 0 && e instanceof RemoteError && e.code === "not_found") {
+          b = await begin();
+          if (b.state === "committed" && b.items) return { items: b.items };
+          continue;
+        }
         throw e;
       }
     }
@@ -96,11 +101,12 @@ async function transfer(t: RemoteTransport, j: Job): Promise<XferCommitResult> {
 }
 
 /** Dosyayı `size` bayta kadar okur; tür/boyut/mtime gönderim boyunca değişirse hata (lstat sonrası açılan tanıtıcı fstat ile yeniden doğrulanır). */
-async function feedFile(abs: string, size: number, chunkBytes: number, emit: (offset: number, data: Buffer) => Promise<void>): Promise<string> {
-  const fh = await open(abs, "r");
+async function feedFile(abs: string, size: number, mtimeMs: number, chunkBytes: number, emit: (offset: number, data: Buffer) => Promise<void>): Promise<string> {
+  // O_NOFOLLOW: lstat→open arasında bağa çevrilen yol izlenmez; O_NONBLOCK: fifo'ya çevrilirse açılışta bloklanmaz (Windows'ta sabitler yok → 0)
+  const fh = await open(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
   try {
     const st = await fh.stat();
-    if (!st.isFile() || st.size !== size) throw changed();
+    if (!st.isFile() || st.size !== size || st.mtimeMs !== mtimeMs) throw changed();
     const h = createHash("sha256");
     for (let off = 0; off < size;) {
       const buf = Buffer.alloc(Math.min(chunkBytes, size - off));
@@ -120,7 +126,7 @@ async function feedFile(abs: string, size: number, chunkBytes: number, emit: (of
   } finally { await fh.close(); }
 }
 
-interface Planned extends XferEntry { abs: string }
+interface Planned extends XferEntry { abs: string; mtimeMs: number }
 
 async function plan(paths: string[]): Promise<{ entries: Planned[]; skipped: SendResult["skipped"] }> {
   const entries: Planned[] = [], skipped: SendResult["skipped"] = [];
@@ -128,16 +134,18 @@ async function plan(paths: string[]): Promise<{ entries: Planned[]; skipped: Sen
   const walk = async (abs: string, rel: string): Promise<number> => {
     const st = await lstat(abs);
     if (st.isSymbolicLink()) { skipped.push({ path: abs, reason: "symlink" }); return 0; }
-    if (st.isFile()) { entries.push({ path: rel, kind: "file", size: st.size, abs }); return 1; }
+    if (st.isFile()) { entries.push({ path: rel, kind: "file", size: st.size, abs, mtimeMs: st.mtimeMs }); return 1; }
     if (!st.isDirectory()) { skipped.push({ path: abs, reason: "special" }); return 0; }
     let n = 0;
     for (const name of (await readdir(abs)).sort()) n += await walk(join(abs, name), `${rel}/${name}`);
-    if (n === 0) { entries.push({ path: rel, kind: "dir", size: 0, abs }); n = 1; } // içinde gönderilecek bir şey yoksa boş dizin olarak
+    if (n === 0) { entries.push({ path: rel, kind: "dir", size: 0, abs, mtimeMs: 0 }); n = 1; } // içinde gönderilecek bir şey yoksa boş dizin olarak
     return n;
   };
-  for (const p of paths) {
+  for (const given of paths) {
+    const p = resolve(given); // ".", ".." ve göreli yollar gerçek adıyla gider
+    if (!basename(p)) throw fail(`kök dizin gönderilemez: ${given}`);
     let st;
-    try { st = await lstat(p); } catch { throw fail(`yol yok: ${p}`); }
+    try { st = await lstat(p); } catch { throw fail(`yol yok: ${given}`); }
     if (st.isSymbolicLink() || (!st.isFile() && !st.isDirectory())) { skipped.push({ path: p, reason: st.isSymbolicLink() ? "symlink" : "special" }); continue; }
     const name = await uniqueName(basename(p), async (c) => used.has(c.toLowerCase()), st.isDirectory() ? "dir" : "file");
     used.add(name.toLowerCase());
@@ -160,7 +168,7 @@ export async function sendPaths(t: RemoteTransport, o: SendOptions): Promise<Sen
   const r = await transfer(t, {
     to: o.to, id: (o.newId ?? (() => randomBytes(16).toString("hex")))(), purpose: "file", sleep, onProgress: o.onProgress, totalBytes, chunkBytes: o.chunkBytes,
     entries: entries.map(({ path, kind, size }) => ({ path, kind, size })),
-    feed: async (i, cb, emit) => (entries[i]!.kind === "dir" ? null : feedFile(entries[i]!.abs, entries[i]!.size, cb, emit)),
+    feed: async (i, cb, emit) => (entries[i]!.kind === "dir" ? null : feedFile(entries[i]!.abs, entries[i]!.size, entries[i]!.mtimeMs, cb, emit)),
   });
   return { to: o.to, items: r.items, ...(r.failed ? { failed: r.failed } : {}), skipped, totalBytes };
 }

@@ -54,7 +54,8 @@ export async function runSendCommand(paths: string[], o: SendCommandOpts, io: Se
     });
   } catch (e) {
     if (showProgress) writeErr("\n");
-    await tell(`${to}'a gönderilemedi`, `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
+    if (e instanceof RemoteError && e.code === "uncertain") await tell(`${to}: teslim belirsiz`, `sonuç belirsiz, ${to} makinesinde İndirilenler'e bak`);
+    else await tell(`${to}'a gönderilemedi`, `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
     throw e;
   }
   if (showProgress) writeErr("\n");

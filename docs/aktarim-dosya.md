@@ -85,7 +85,9 @@ olmayan yol ağa çıkmadan çıkış 1 verir. `src/transfer/send.ts` (`sendPath
   `{error,details}` olarak stderr'e. TTY'de (ve `--json` yokken) ilerleme stderr'e yazılır. `--notify`: gönderen tarafta başarıda ve hatada
   yerel bildirim (bildirim hatası yutulur).
 
-Bilinen sınır: `concurrency: 2` şimdilik yok sayılır (alıcı aynı dosyada offset sırası ister).
+Gönderici `open` için `O_NOFOLLOW|O_NONBLOCK` kullanır (Windows'ta yok) ve planlama anındaki mtime'ı açılışta karşılaştırır. Göreli yollar (`.`, `..`) mutlaklaştırılır; kök dizin reddedilir.
+
+Bilinen sınırlar: gönderici alıcının ad kurallarını (`:`/`\`, Windows ayrılmış adları, iç düzeyde harf duyarsız çakışma) önceden denetlemez; tek kötü ad alıcıda tüm manifest'i `bad_request` ile düşürür. `concurrency: 2` şimdilik yok sayılır (alıcı aynı dosyada offset sırası ister).
 
 ## Bilinen sınırlar
 

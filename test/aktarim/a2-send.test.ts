@@ -76,6 +76,24 @@ describe("aktarim:A2 sendPaths", () => {
     await expect(sendPaths(w, { to: "windows", paths: [join(tmp(), "yok.txt")] })).rejects.toThrow(/yok\.txt/);
     expect(calls).toEqual([]);
   });
+  it("'.' ile verilen klasör gerçek adıyla gider; kök dizin açık hatayla reddedilir", async () => {
+    const p = await pair(); const src = tmp();
+    makeFile(src, "proje/a.txt", 5, 1);
+    const cwd = process.cwd();
+    try { process.chdir(join(src, "proje")); await sendPaths(p.mac.transport, { to: "windows", paths: ["."] }); } finally { process.chdir(cwd); }
+    expect(names(p.windows.downloads)).toEqual(["proje"]);
+    await expect(sendPaths(p.mac.transport, { to: "windows", paths: ["/"] })).rejects.toThrow(/kök dizin/);
+  });
+  it("lstat'tan sonra aynı boyutta değişen içerik (mtime) açılışta yakalanır", async () => {
+    const p = await pair(); const src = tmp();
+    const f = makeFile(src, "x.bin", 10, 1);
+    const st = require("node:fs").statSync(f);
+    const { w } = spy(p.mac.transport);
+    // plan→açılış arasında değiştir: ping çağrısı planın hemen ardından gelir
+    const hook: RemoteTransport = { call: (to, op, args, o) => { if (op === "ping") { writeFileSync(f, Buffer.alloc(10, 7)); require("node:fs").utimesSync(f, new Date(st.atimeMs), new Date(st.mtimeMs + 5000)); } return w.call(to, op, args, o); } };
+    const e = await sendPaths(hook, { to: "windows", paths: [f] }).then(() => null, (x) => x);
+    expect(e.message).toMatch(/dosya gönderim sırasında değişti/);
+  });
   it("ilerleme: sentBytes artar ve toplamda biter", async () => {
     const p = await pair(); const src = tmp();
     const f = makeFile(src, "x.bin", 2500, 1);
