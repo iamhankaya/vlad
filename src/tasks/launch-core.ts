@@ -23,12 +23,12 @@ export interface GitApi {
   branchExists(repo: string, branch: string): Maybe<boolean>;
   remoteBranchExists(repo: string, branch: string): Maybe<boolean>;
   isWorktree(repo: string, dir: string): Maybe<boolean>;
-  runGit(cwd: string, args: string[]): Maybe<string | null>;
+  runGit(cwd: string, args: string[], timeoutMs?: number): Maybe<string | null>;
 }
-export const SYNC_GIT: GitApi = { addWorktree, attachWorktree, worktreeBranch, removeWorktree, branchExists, remoteBranchExists, isWorktree, runGit: (c, a) => runGit(c, a) };
+export const SYNC_GIT: GitApi = { addWorktree, attachWorktree, worktreeBranch, removeWorktree, branchExists, remoteBranchExists, isWorktree, runGit: (c, a, t) => runGit(c, a, t) };
 export const ASYNC_GIT: GitApi = {
   addWorktree: addWorktreeAsync, attachWorktree: attachWorktreeAsync, worktreeBranch: worktreeBranchAsync, removeWorktree: removeWorktreeAsync,
-  branchExists: branchExistsAsync, remoteBranchExists: remoteBranchExistsAsync, isWorktree: isWorktreeAsync, runGit: (c, a) => runGitAsync(c, a),
+  branchExists: branchExistsAsync, remoteBranchExists: remoteBranchExistsAsync, isWorktree: isWorktreeAsync, runGit: (c, a, t) => runGitAsync(c, a, t),
 };
 
 /**
@@ -47,6 +47,23 @@ export interface LaunchCoreReq extends Omit<LaunchRequest, "cwd"> {
   branchOf?: (worktree: string) => string | null;
 }
 export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string; reused?: boolean };
+
+/**
+ * F-vlad-244: commits only `branch` has (not reachable from `base`); null = no proof (missing ref, git error, `base` is the branch
+ * itself) ⇒ the caller keeps the branch. `refs/heads/` pins the name so a same-named tag cannot answer for it.
+ */
+export function unmergedCommits(repo: string, branch: string, base: string): number | null {
+  const args = countArgs(branch, base);
+  return parseCount(args && runGit(repo, args, 30_000));
+}
+/** `unmergedCommits` over a `GitApi` (a worker Agent's async git). */
+export async function unmergedCommitsWith(g: GitApi, repo: string, branch: string, base: string): Promise<number | null> {
+  const args = countArgs(branch, base);
+  return parseCount(args && (await g.runGit(repo, args, 30_000)));
+}
+const countArgs = (branch: string, base: string): string[] | null =>
+  base === branch || base === `refs/heads/${branch}` ? null : ["rev-list", "--count", `refs/heads/${branch}`, "--not", base, "--"];
+const parseCount = (out: string | null): number | null => (out !== null && /^\d+$/.test(out) ? Number(out) : null);
 
 /** The worktree path that has `branch` checked out, from `git worktree list --porcelain` output; null when none. */
 function checkedOutAt(porcelain: string | null, branch: string): string | null {
@@ -79,6 +96,10 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
   // F-vlad-248: a late retry may sit behind the base (integration moved on); the worker's commits stay, the brain is told
   if (reused && base && (await g.branchExists(repo, base)) && (await g.runGit(repo, ["merge-base", "--is-ancestor", base, branch])) === null) {
     console.error(`uyarı: ${branch}, ${base} dalının geride kalmış (yeniden bağlandı); işçi ${base} dalını kendi dalına almalı`);
+  }
+  // F-vlad-248: uncommitted files in a re-adopted worktree are the earlier worker's unfinished work; keep them, tell the brain
+  if (reused && existsSync(wt) && (await g.runGit(wt, ["status", "--porcelain"]))) {
+    console.error(`uyarı: ${wt} kirli (işlenmemiş değişiklik var; önceki işçinin yarım işi olabilir, silinmedi)`);
   }
   if (!reused) await g.addWorktree(repo, wt, branch, base);
   // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate

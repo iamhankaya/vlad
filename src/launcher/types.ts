@@ -6,7 +6,7 @@ export interface LaunchRequest {
   title: string; // pencere/sekme başlığı
   model?: string; // claude --model; yoksa varsayılan model
   autoCompact?: string; // claude --autocompact (ör. "300k"); yoksa bayrak eklenmez
-  resume?: { sessionId?: string }; // önceki oturumu sürdür: claude --resume <id>, id yoksa --continue
+  resume?: { sessionId?: string }; // önceki oturumu sürdür: claude --resume <id>; id yoksa hata (--continue yok, F-247)
 }
 export interface LaunchResult {
   ok: boolean;

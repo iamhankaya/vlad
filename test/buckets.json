@@ -134,6 +134,7 @@
     "test/small/u4-F246-accept.test.ts",
     "test/small/u4-F247-accept.test.ts",
     "test/small/u4-F248-accept.test.ts",
+    "test/small/u4c-unmerged-guard.test.ts",
     "test/support/**/*.test.ts",
     "test/tasks/experiment.test.ts",
     "test/tasks/launch.test.ts",

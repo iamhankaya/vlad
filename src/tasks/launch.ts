@@ -32,7 +32,7 @@ import { expireMode, modeLine } from "../mode/store.js";
 import { untrustWorktree } from "./trust.js";
 import { ponytailArm, ponytailOffRoleBody, withoutPonytail } from "./experiment.js";
 import type { PonytailArm } from "./experiment.js";
-import { ensureIntegrationGit, launchCore } from "./launch-core.js";
+import { ensureIntegrationGit, launchCore, unmergedCommits } from "./launch-core.js";
 import { nowMs } from "../machines/clock.js";
 import { capsOf, machineLoad, pickMachine } from "../machines/placement.js";
 import { machinesOf } from "../machines/registry.js";
@@ -617,8 +617,14 @@ export function cleanupTask(
       /* a window that could not be closed is reported by the removal below */
     }
     removeTaskWorktree(projectPath(t.data.project), wt, id);
-    // F-vlad-231: a cancelled task's branch without own commits would block a relaunch; `-d` keeps any branch with unmerged work
-    if (t.data.state === "cancelled") runGit(projectPath(t.data.project), ["branch", "-d", `vlad/${id}`]);
+    // F-vlad-231/244: a cancelled task's branch without own commits would block a relaunch. Proof is "no commits beyond the base it was
+    // cut from" (the integration branch for a phase), not `-d`'s HEAD comparison; no proof (null) keeps the branch.
+    if (t.data.state === "cancelled") {
+      const repo = projectPath(t.data.project), branch = `vlad/${id}`;
+      const parentBranch = t.data.parent ? `vlad/${t.data.parent}` : null;
+      const base = parentBranch && runGit(repo, ["rev-parse", "--verify", "-q", `refs/heads/${parentBranch}`]) ? parentBranch : "HEAD";
+      if (unmergedCommits(repo, branch, base) === 0) runGit(repo, ["branch", "-D", branch]);
+    }
   }
   const trustWarning = untrustWorktree(wt);
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
