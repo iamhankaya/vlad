@@ -236,7 +236,8 @@ describe("geriye uyumluluk: gerçek kb salt-okuma (kopya üzerinde)", { timeout:
     cpSync(join(root, "roles"), join(h, "roles"), { recursive: true });
     if (existsSync(join(root, "vlad.config.json"))) {
       // the copy holds its own kb/, so the committed external kbDir must not apply
-      const { kbDir: _kbDir, ...cfg } = JSON.parse(readFileSync(join(root, "vlad.config.json"), "utf8"));
+      // F-vlad-220: machines/brain off too, so `status` never probes a remote Agent (the test must not depend on the network)
+      const { kbDir: _kbDir, machines: _machines, brain: _brain, ...cfg } = JSON.parse(readFileSync(join(root, "vlad.config.json"), "utf8"));
       writeFileSync(join(h, "vlad.config.json"), JSON.stringify(cfg));
     }
     return h;
