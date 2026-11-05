@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { trustWorktree, withFileLock } from "../../src/tasks/trust.js";
@@ -52,9 +52,42 @@ describe("withFileLock owner.json", () => {
     expect(ownerOf().nonce).toBe("n1");
   });
 
-  it("PID reuse: a reused pid that looks alive keeps the lock (accepted limit: wait, not break)", () => {
-    seed({ pid: 4242, nonce: "n1", startedAt: 0 }, 120_000);
-    expect(withFileLock(file, 60, () => "ok", { isAlive: () => true })).toEqual({ locked: false });
+  it("F-vlad-255: a live pid is only trusted up to the startedAt cap (2 min): older lock is broken (pid reuse)", () => {
+    seed({ pid: 4242, nonce: "n1", startedAt: Date.now() - 130_000 }, 130_000);
+    expect(withFileLock(file, 100, () => "ok", { isAlive: () => true })).toBe("ok");
+    seed({ pid: 4242, nonce: "n1", startedAt: Date.now() - 100_000 }, 100_000);
+    expect(withFileLock(file, 60, () => "ok", { isAlive: () => true })).toEqual({ locked: false }); // under the cap
+  });
+
+  it("F-vlad-255: owner.json carries the hostname", () => {
+    let seen: ReturnType<typeof ownerOf> & { hostname?: string } | undefined;
+    withFileLock(file, 100, () => { seen = ownerOf(); });
+    expect(seen!.hostname).toBe(hostname());
+  });
+
+  it("F-vlad-255: owner from another host: pid liveness is meaningless, only the age rule applies", () => {
+    seed({ pid: DEAD, nonce: "n1", startedAt: Date.now(), hostname: "other-host" });
+    expect(withFileLock(file, 60, () => "ok", { isAlive: alive([]) })).toEqual({ locked: false }); // dead locally, fresh: kept
+    rmSync(lock, { recursive: true, force: true });
+    seed({ pid: DEAD, nonce: "n1", startedAt: Date.now() - 130_000, hostname: "other-host" });
+    expect(withFileLock(file, 100, () => "ok", { isAlive: alive([]) })).toBe("ok"); // old: broken
+  });
+
+  it("F-vlad-254: release never removes an ownerless lock a new holder just created (no owner.json yet)", () => {
+    withFileLock(file, 100, () => { // our lock was broken and a new holder did mkdir but has not written owner.json
+      rmSync(lock, { recursive: true, force: true });
+      mkdirSync(lock);
+    });
+    expect(existsSync(lock)).toBe(true);
+  });
+
+  it("F-vlad-254: ownerless lock judged stale, but the moved-away dir is fresh now (replaced meanwhile): given back", () => {
+    seed(null, 0); // fresh in reality
+    let calls = 0;
+    const now = (): number => (calls++ === 0 ? Date.now() + 20_000 : Date.now()); // 1st: judged stale; re-check: fresh
+    expect(withFileLock(file, 60, () => "ok", { now })).toEqual({ locked: false });
+    expect(existsSync(lock)).toBe(true);
+    expect(readdirSync(dir)).toEqual([`${file.split("/").pop()}.vlad-lock`]); // no .stale-* leftover
   });
 
   it("missing owner.json, fresh dir (between mkdir and write): waits, does not break", () => {
@@ -123,5 +156,19 @@ describe("withFileLock owner.json", () => {
   it("trustWorktree still works end to end and leaves no lock", () => {
     expect(trustWorktree("C:\\dev\\a-wt\\T1", file)).toBeNull();
     expect(readdirSync(dir)).toEqual(["claude.json"]);
+  });
+
+  describe("F-vlad-255: editOnce tmp file mode", () => {
+    const mode = (): number => statSync(file).mode & 0o777;
+    const withUmask0 = (fn: () => void): void => { const u = process.umask(0); try { fn(); } finally { process.umask(u); } };
+    it("keeps the original mode of an existing file (0600 stays 0600 even under umask 0)", () => {
+      writeFileSync(file, "{}"); chmodSync(file, 0o600);
+      withUmask0(() => expect(trustWorktree("/x/a", file)).toBeNull());
+      expect(mode()).toBe(0o600);
+    });
+    it("a new file is created 0600", () => {
+      withUmask0(() => expect(trustWorktree("/x/a", file)).toBeNull());
+      expect(mode()).toBe(0o600);
+    });
   });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 
 /** `~/.claude.json`; VLAD_CLAUDE_JSON overrides it (tests must never touch the real file). */
@@ -18,12 +18,14 @@ export interface TrustOpts {
 }
 
 const STALE_LOCK_MS = 15_000;
+/** a lock held longer than this is broken even if its pid looks alive (pid reuse / foreign host, F-vlad-255) */
+const LIVE_LOCK_MAX_MS = 120_000;
 const sleepMs = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 const pidAlive = (pid: number): boolean => {
   try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
 };
 
-type Owner = { pid: number; nonce: string; startedAt: number };
+type Owner = { pid: number; nonce: string; startedAt: number; hostname?: string };
 const readOwner = (dir: string): Owner | null => {
   try {
     const o = JSON.parse(readFileSync(join(dir, "owner.json"), "utf8")) as Owner;
@@ -33,10 +35,11 @@ const readOwner = (dir: string): Owner | null => {
 
 /**
  * Cross-process lock next to the file (mkdir is atomic; the holder is recorded in `<lock>/owner.json`, F-vlad-245).
- * A lock is only broken when its owner pid is dead, or (no readable owner.json) the directory is older than
- * STALE_LOCK_MS; a live pid is never broken (pid reuse can only make us wait). Breaking renames the directory away first
+ * A lock is only broken when its owner pid is dead (same host), the owner started more than LIVE_LOCK_MAX_MS ago
+ * (live pid or another host: pid liveness proves nothing), or (no readable owner.json) the directory is older than
+ * STALE_LOCK_MS. Breaking renames the directory away first
  * (atomic: of two breakers one wins) and gives it back if it turns out to be a different, live lock. Release deletes the
- * lock only while owner.json still carries our nonce.
+ * lock only while owner.json still carries our nonce (an ownerless lock is never ours to remove).
  */
 export function withFileLock<T>(file: string, waitMs: number, fn: () => T, o: TrustOpts = {}): T | { locked: false } {
   const lock = `${file}.vlad-lock`;
@@ -48,7 +51,7 @@ export function withFileLock<T>(file: string, waitMs: number, fn: () => T, o: Tr
     try {
       mkdirSync(lock);
       const tmp = join(lock, `owner.json.${nonce}.tmp`);
-      writeFileSync(tmp, JSON.stringify({ pid: process.pid, nonce, startedAt: now() } satisfies Owner));
+      writeFileSync(tmp, JSON.stringify({ pid: process.pid, nonce, startedAt: now(), hostname: hostname() } satisfies Owner));
       renameSync(tmp, join(lock, "owner.json"));
       break;
     } catch (e) {
@@ -59,19 +62,25 @@ export function withFileLock<T>(file: string, waitMs: number, fn: () => T, o: Tr
     }
   }
   try { return fn(); } finally {
-    try { const cur = readOwner(lock); if (!cur || cur.nonce === nonce) rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { if (readOwner(lock)?.nonce === nonce) rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ }
   }
 }
+
+const isLocalOwner = (o: Owner): boolean => o.hostname === undefined || o.hostname === hostname();
 
 /** true when a stale lock was moved away (retry mkdir now); false when the lock stays (live owner, fresh, or lost the race). */
 function breakIfStale(lock: string, nonce: string, isAlive: (pid: number) => boolean, now: () => number): boolean {
   const seen = readOwner(lock);
   try {
-    const stale = seen ? !isAlive(seen.pid) : now() - statSync(lock).mtimeMs > STALE_LOCK_MS;
+    const stale = seen
+      ? (isLocalOwner(seen) && !isAlive(seen.pid)) || now() - seen.startedAt > LIVE_LOCK_MAX_MS
+      : now() - statSync(lock).mtimeMs > STALE_LOCK_MS;
     if (!stale) return false;
     const away = `${lock}.stale-${nonce}`;
     renameSync(lock, away);
-    if (readOwner(away)?.nonce !== seen?.nonce) { // replaced between our check and the rename: not the lock we judged
+    const awayOwner = readOwner(away);
+    // replaced between our check and the rename: not the lock we judged (an ownerless one must still be old)
+    if (awayOwner?.nonce !== seen?.nonce || (!seen && now() - statSync(away).mtimeMs <= STALE_LOCK_MS)) {
       try { renameSync(away, lock); } catch { /* someone re-created it already; the lock we moved is lost, but it was only ever waited on */ }
       return false;
     }
@@ -115,7 +124,11 @@ function editOnce(file: string, change: (j: Json) => boolean): string | null {
   if (!change(j)) return null;
   const tmp = `${file}.vlad-${process.pid}.tmp`;
   try {
-    writeFileSync(tmp, JSON.stringify(j, null, 2));
+    // the tmp file replaces ~/.claude.json: keep its mode (at least 0600), never the umask default
+    const mode = (existsSync(file) ? statSync(file).mode & 0o777 : 0) | 0o600;
+    rmSync(tmp, { force: true });
+    writeFileSync(tmp, JSON.stringify(j, null, 2), { flag: "wx", mode });
+    chmodSync(tmp, mode);
     renameSync(tmp, file);
     try { // read back: does the change still stand (change() returns false when it already does)?
       const again = JSON.parse(readFileSync(file, "utf8")) as Json;
