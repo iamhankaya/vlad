@@ -775,10 +775,42 @@ describe("launchTask: failed → queued → yeniden launch (F-vlad-239)", () => 
     setState(id, "failed");
     setState(id, "queued");
     const l = fakeLauncher();
-    const r = await launchTask(id, { launcher: l, cfg });
+    const r = await launchTask(id, { launcher: l, cfg, closeWorker: () => {} });
     expect(r.data.state).toBe("running");
     expect(r.data.worktree).toBe(wt);
     expect(l.reqs).toHaveLength(1);
     expect(existsSync(join(wt, "w.txt"))).toBe(true);
+  });
+
+  it("önceki pencere kapatılamazsa yeniden launch reddedilir, launcher çağrılmaz, worktree durur", async () => {
+    const id = mk().data.id;
+    await launchTask(id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(id).data.worktree!;
+    setState(id, "failed"); setState(id, "queued");
+    const l = fakeLauncher();
+    await expect(launchTask(id, { launcher: l, cfg, closeWorker: () => { throw new Error("kilitli"); } })).rejects.toThrow(/önceki pencere kapatılamadı/);
+    expect(l.reqs).toHaveLength(0);
+    expect(existsSync(wt)).toBe(true);
+  });
+
+  it("yeniden launch önce eski pencereyi kapatır; ilk launch'ta kapatma çağrısı yok", async () => {
+    const id = mk().data.id;
+    const closed: string[] = [];
+    await launchTask(id, { launcher: fakeLauncher(), cfg, closeWorker: (x) => { closed.push(x); } });
+    expect(closed).toEqual([]);
+    setState(id, "failed"); setState(id, "queued");
+    await launchTask(id, { launcher: fakeLauncher(), cfg, closeWorker: (x) => { closed.push(x); } });
+    expect(closed).toEqual([id]);
+  });
+
+  it("launch sırasında görev iptal edilirse yeniden kullanılan worktree silinmez (önceki iş)", async () => {
+    const id = mk().data.id;
+    await launchTask(id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(id).data.worktree!;
+    writeFileSync(join(wt, "dirty.txt"), "commitsiz");
+    setState(id, "failed"); setState(id, "queued");
+    const racing: Launcher = { async launch() { setState(id, "cancelled"); return { ok: true, method: "fake" }; } };
+    await expect(launchTask(id, { launcher: racing, cfg, closeWorker: () => {} })).rejects.toThrow(/korundu/);
+    expect(existsSync(join(wt, "dirty.txt"))).toBe(true);
   });
 });

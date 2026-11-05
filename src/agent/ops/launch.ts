@@ -78,13 +78,13 @@ const envOf = (id: string, ctx: WorkerCtx) => ({ VLAD_TASK_ID: id, VLAD_HOME: ge
 
 let launchChain: Promise<unknown> = Promise.resolve();
 /** Async git removed the accidental serialisation sync calls gave: launches on one worker run one at a time again (worktree/branch/lock races). */
-export function launchOp(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher } = {}): Promise<LaunchResultW> {
+export function launchOp(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher; close?: CloseFn } = {}): Promise<LaunchResultW> {
   const run = launchChain.then(() => launchOne(args, c, o));
   launchChain = run.catch(() => undefined);
   return run;
 }
 
-async function launchOne(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher }): Promise<LaunchResultW> {
+async function launchOne(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher; close?: CloseFn }): Promise<LaunchResultW> {
   const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact", "retry"]);
   const id = taskIdArg(a);
   projectArg(a);
@@ -104,7 +104,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   // F-vlad-239: the brain re-queued a failed task (retry:true). A FINISHED earlier launch is then dead weight, not a double
   // launch: close its window and let the record be replaced; launchCore re-adopts the worktree. A half-done record stays a conflict.
   if (a.retry === true && existing?.result && existing.opId !== c.opId) {
-    try { defaultClose(id); } catch { /* the new window opens anyway; a stuck old one is the user's to close */ }
+    try { (o.close ?? defaultClose)(id); } catch (e) { throw new RemoteError("conflict", `conflict: önceki pencere kapatılamadı, ikinci pencere açılmadı: ${(e as Error).message}`); }
     rmSync(recordFile(id), { force: true });
     existing = null;
   }
@@ -123,7 +123,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   try {
     if (parent) integration = await ensureIntegrationGitWith(ASYNC_GIT, repo, parent, wcfg, defaultBranch);
     res = await launchCore({
-      taskId: id, repo, worktree, branch: `vlad/${id}`,
+      taskId: id, repo, worktree, branch: `vlad/${id}`, ...(a.retry === true ? { adopt: true } : {}),
       ...(integration ? { base: integration.branch } : defaultBranch && (await branchExistsAsync(repo, defaultBranch)) ? { base: defaultBranch } : {}),
       prompt: fill(template, ctx, id), env: envOf(id, ctx), title,
       ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),

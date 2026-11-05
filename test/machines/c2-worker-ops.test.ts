@@ -107,6 +107,20 @@ describe("machines:C2 launch op (işçi)", () => {
     expect(record()).toMatchObject({ opId: "op-2" });
   });
 
+  it("retry:true ama eski pencere kapatılamıyorsa conflict; kayıt silinmez, ikinci pencere açılmaz", async () => {
+    await launchOp(L(), ctx("op-1"), { launcher });
+    await expect(launchOp(L({ retry: true }), ctx("op-2"), { launcher, close: () => { throw new Error("kilitli"); } })).rejects.toMatchObject({ code: "conflict" });
+    expect(record()).toMatchObject({ opId: "op-1" });
+    expect(reqs).toHaveLength(1);
+  });
+
+  it("retry:true eski pencereyi kapatır (close çağrılır)", async () => {
+    await launchOp(L(), ctx("op-1"), { launcher });
+    const closed: string[] = [];
+    await launchOp(L({ retry: true }), ctx("op-2"), { launcher, close: (id) => { closed.push(id); } });
+    expect(closed).toEqual([ID]);
+  });
+
   it("retry:true ama önceki launch sonuçsuz (yarım) ise yine conflict; retry olmadan biten kayıt da conflict", async () => {
     mkdirSync(join(home, ".vlad-agent", "launches"), { recursive: true });
     writeFileSync(join(home, ".vlad-agent", "launches", `${ID}.json`), JSON.stringify({ taskId: ID, repo, worktree: `${repo}-wt${sep}${ID}`, branch: `vlad/${ID}`, opId: "op-x" }));

@@ -87,12 +87,12 @@ describe("machines:C1 ensureIntegrationGit", () => {
 describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden launch (F-vlad-239)", () => {
   it("sahibi doğrulanmış (vlad/<id> dalında) worktree'ye bağlanır; commit'ler korunur, launcher çağrılır", async () => {
     const r = req();
-    await launchCore(r, fake());
+    await launchCore({ ...r, adopt: true }, fake());
     writeFileSync(join(r.worktree, "w.txt"), "iş");
     git(r.worktree, "add", ".");
     git(r.worktree, "commit", "-m", "wip: önceki tur");
     const l = fake();
-    const again = await launchCore(r, l);
+    const again = await launchCore({ ...r, adopt: true }, l);
     expect(again).toMatchObject({ branch: r.branch, worktree: r.worktree });
     expect(l.reqs).toHaveLength(1);
     expect(existsSync(join(r.worktree, "w.txt"))).toBe(true);
@@ -100,28 +100,28 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
 
   it("yeniden kullanılan worktree'de launcher başarısızsa önceki iş silinmez (dal ve worktree kalır)", async () => {
     const r = req();
-    await launchCore(r, fake());
+    await launchCore({ ...r, adopt: true }, fake());
     writeFileSync(join(r.worktree, "w.txt"), "iş");
     git(r.worktree, "add", ".");
     git(r.worktree, "commit", "-m", "wip");
-    await expect(launchCore(r, fake(false))).rejects.toThrow(/launcher başarısız/);
+    await expect(launchCore({ ...r, adopt: true }, fake(false))).rejects.toThrow(/launcher başarısız/);
     expect(existsSync(r.worktree)).toBe(true);
     expect(branchExists(repo, r.branch)).toBe(true);
   });
 
   it("worktree gitti ama dal kaldıysa dala yeniden bağlanır", async () => {
     const r = req();
-    await launchCore(r, fake());
+    await launchCore({ ...r, adopt: true }, fake());
     git(repo, "worktree", "remove", "--force", r.worktree);
-    const again = await launchCore(r, fake());
+    const again = await launchCore({ ...r, adopt: true }, fake());
     expect(existsSync(again.worktree)).toBe(true);
   });
 
   it("klasör var ama başka dalda ise (sahip doğrulanamadı) reddeder ve dokunmaz", async () => {
     const r = req();
-    await launchCore(r, fake());
+    await launchCore({ ...r, adopt: true }, fake());
     const l = fake();
-    await expect(launchCore({ ...r, branchOf: () => "baska" }, l)).rejects.toThrow(/zaten var/);
+    await expect(launchCore({ ...r, adopt: true, branchOf: () => "baska" }, l)).rejects.toThrow(/zaten var/);
     expect(l.reqs).toHaveLength(0);
     expect(existsSync(r.worktree)).toBe(true);
     expect(branchExists(repo, r.branch)).toBe(true);
@@ -131,5 +131,19 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
     const r = req();
     mkdirSync(r.worktree, { recursive: true });
     await expect(launchCore(r, fake())).rejects.toThrow(/zaten var/);
+  });
+
+  it("adopt olmadan (ilk launch) mevcut worktree/dal yabancı sayılır: zaten var", async () => {
+    const r = req();
+    await launchCore(r, fake());
+    const l = fake();
+    await expect(launchCore(r, l)).rejects.toThrow(/zaten var/);
+    expect(l.reqs).toHaveLength(0);
+  });
+
+  it("reused sonucu işaretlenir; yeni açılışta işaret yok", async () => {
+    const r = req();
+    expect((await launchCore({ ...r, adopt: true }, fake())).reused).toBeUndefined();
+    expect((await launchCore({ ...r, adopt: true }, fake())).reused).toBe(true);
   });
 });
