@@ -8,9 +8,8 @@ import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
-import { worktreePath } from "../../src/git/git.js";
 import { launchTask } from "../../src/tasks/launch.js";
-import { makeHome } from "../helpers.js";
+import { makeHome, wtp } from "../helpers.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const cli = join(root, "dist", "cli.js");
@@ -152,11 +151,11 @@ describe("projeler arası pipeline: launch → list → cleanup (F-vlad-063, uç
     const iw = row.integration_worktrees as Array<{ project: string; repo: string; branch: string; worktree: string }>;
     expect(iw.map((w) => w.project).sort()).toEqual(["alpha", "beta"]);
     const b = iw.find((w) => w.project === "beta")!;
-    expect(b).toMatchObject({ repo: beta, branch: `vlad/${pid}`, worktree: worktreePath(cfg, beta, pid) });
+    expect(b).toMatchObject({ repo: beta, branch: `vlad/${pid}`, worktree: wtp(cfg, beta, pid) });
     expect(existsSync(b.worktree)).toBe(true);
     expect(git(b.worktree, "branch", "--show-current").trim()).toBe(`vlad/${pid}`);
     // çatı kaydı yalnızca kendi projesindeki worktree'yi tutar; /status'un uyardığı tuzak budur
-    expect(row.worktree).toBe(worktreePath(cfg, alpha, pid));
+    expect(row.worktree).toBe(wtp(cfg, alpha, pid));
     expect(row.worktree).not.toBe(b.worktree);
   });
 
@@ -167,8 +166,8 @@ describe("projeler arası pipeline: launch → list → cleanup (F-vlad-063, uç
 
   it("cleanup: done çatı her iki projedeki entegrasyon worktree'sini kaldırır, dalları korur; ikinci çağrı hata vermez", async () => {
     const { pid, phases } = await startPipeline(["alpha", "beta"]);
-    const aw = worktreePath(cfg, alpha, pid);
-    const bw = worktreePath(cfg, beta, pid);
+    const aw = wtp(cfg, alpha, pid);
+    const bw = wtp(cfg, beta, pid);
     expect(existsSync(aw) && existsSync(bw)).toBe(true);
     for (const f of phases) finish(f);
     finish(pid);
@@ -185,7 +184,7 @@ describe("projeler arası pipeline: launch → list → cleanup (F-vlad-063, uç
     const r = vlad(home, ["task", "cleanup", pid, "--json"]);
     expect(r.code).toBe(1);
     expect(JSON.parse(r.err).error).toMatch(/done\/cancelled/);
-    expect(existsSync(worktreePath(cfg, beta, pid))).toBe(true);
+    expect(existsSync(wtp(cfg, beta, pid))).toBe(true);
   });
 
   it("gerileme: aynı projedeki pipeline tek entegrasyon worktree'si listeler ve cleanup onu kaldırır", async () => {
@@ -195,7 +194,7 @@ describe("projeler arası pipeline: launch → list → cleanup (F-vlad-063, uç
     for (const f of phases) finish(f);
     finish(pid);
     expect(vlad(home, ["task", "cleanup", pid]).code).toBe(0);
-    expect(existsSync(worktreePath(cfg, alpha, pid))).toBe(false);
+    expect(existsSync(wtp(cfg, alpha, pid))).toBe(false);
     expect(existsSync(beta)).toBe(true);
   });
 
@@ -207,7 +206,7 @@ describe("projeler arası pipeline: launch → list → cleanup (F-vlad-063, uç
     for (const f of phases) finish(f);
     finish(pid);
     expect(vlad(home, ["task", "cleanup", pid]).code).toBe(0);
-    expect(existsSync(worktreePath(cfg, alpha, pid))).toBe(false);
+    expect(existsSync(wtp(cfg, alpha, pid))).toBe(false);
   });
 });
 
