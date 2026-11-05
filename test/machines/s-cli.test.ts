@@ -5,7 +5,6 @@ import { exitCodeFor, remoteErrorDetails } from "../../src/machines/exit.js";
 import { makeHome } from "../helpers.js";
 import { spawnVlad } from "../support/spawn-vlad.js";
 
-const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 beforeEach(() => { home = makeHome(); });
 const vlad = (args: string[]) => {
