@@ -187,6 +187,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
       if ([...active.values()].filter((o) => o.state === "receiving" || o.state === "committing").length >= XFER_MAX_ACTIVE) throw err("busy", "çok fazla etkin aktarım");
 
       const stage = path.join(incoming(), id);
+      let created = false;
       try {
         await fsp.mkdir(d.downloads(), { recursive: true });
         await fsp.mkdir(incoming(), { recursive: true, mode: 0o700 });
@@ -205,6 +206,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
         if (st.bavail * st.bsize - reserved() - m.total < XFER_MIN_FREE_BYTES) throw err("too_large", "boş alan yetersiz");
 
         await fsp.mkdir(stage, { mode: 0o700 });
+        created = true;
         const tree = path.join(stage, "tree");
         await fsp.mkdir(tree);
         const meta: Meta = { from, id, manifestHash, state: "receiving", createdAt: d.now() };
@@ -222,7 +224,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
         armTimer(x);
         return { id, chunkBytes: XFER_CHUNK_BYTES, state: "new" };
       } catch (e) {
-        await rmStage(stage);
+        if (created) await rmStage(stage); // yabancı/sahipsiz klasöre dokunulmaz
         return mapFs(e);
       }
     }
@@ -308,6 +310,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
       const png = await fsp.readFile(x.files.get(0)!.file);
       const dims = pngDims(png);
       if (!dims || dims[0] < 1 || dims[1] < 1 || dims[0] * dims[1] > CLIP_MAX_PIXELS) throw err("bad_request", "resim geçersiz");
+      await ledger.put(x.key, { state: "committing", planned: ["clip.png"], published: [] }); // apply∥çökme: tekrar begin uncertain
       const clip = await d.clipImage!.apply(png, { eventTs: x.meta!.eventTs as number, rank: x.meta!.rank as 0 | 1 }, from);
       await ledger.put(x.key, { state: "committed", items: [] });
       await forget(x);
@@ -340,7 +343,9 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
     await forget(x);
     try {
       await d.notifier.notify(`${from}'den dosya geldi`, items.length === 1 ? items[0]!.name : `${items[0]!.name} ve ${items.length - 1} öğe daha (${items.length} öğe)`);
-    } catch { /* bildirim teslimi bozmaz */ }
+    } catch (e) { // teslim bozulmaz; ama izolasyon korkuluğu görünür kalır
+      if ((e as Error).name === "NativeDisabledError") process.stderr.write(`xfer: ${(e as Error).message}\n`);
+    }
     return failed ? { items, failed } : { items };
   }
 
@@ -388,9 +393,14 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
     for (const e of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
       if (!e.isDirectory() || e.isSymbolicLink() || !isXferId(e.name) || [...active.values()].some((x) => x.id === e.name)) continue;
       const stage = path.join(dir, e.name);
-      const meta = await readMeta(stage);
-      if (!meta || typeof meta.createdAt !== "number" || d.now() - meta.createdAt <= XFER_STALE_MS) continue;
-      await rmStage(stage); n++;
+      const run = beginChain.then(async () => { // begin ile yarışmasın: silmeden hemen önce yeniden kontrol
+        if ([...active.values()].some((x) => x.id === e.name)) return false;
+        const meta = await readMeta(stage);
+        if (!meta || typeof meta.createdAt !== "number" || d.now() - meta.createdAt <= XFER_STALE_MS) return false;
+        await rmStage(stage); return true;
+      });
+      beginChain = run.catch(() => {});
+      if (await run) n++;
     }
     return n;
   }

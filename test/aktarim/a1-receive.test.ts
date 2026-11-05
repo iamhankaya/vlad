@@ -468,3 +468,39 @@ describe("A1.2/A1.5 çökme: yeniden başlama", () => {
     expect(readdirSync(r.downloads).filter((x) => x !== ".vlad-incoming")).toEqual(["one"]);
   });
 });
+
+describe("A1 inceleme düzeltmeleri", () => {
+  it("begin hata yolu yabancı hazırlık klasörünü silmez (meta yok / başka sahip)", async () => {
+    const r = rig(); const inc = join(r.downloads, ".vlad-incoming"); mkdirSync(inc);
+    const a = newId(); mkdirSync(join(inc, a)); writeFileSync(join(inc, a, "x"), "başkasının");
+    expect((await code(r.begin(a, [{ path: "f", kind: "file", size: 1 }]))).startsWith("failed|")).toBe(true);
+    expect(readFileSync(join(inc, a, "x"), "utf8")).toBe("başkasının");
+    const b = newId(); mkdirSync(join(inc, b)); writeFileSync(join(inc, b, "x"), "y");
+    writeFileSync(join(inc, b, "meta.json"), JSON.stringify({ from: "windows", id: b, manifestHash: "h", state: "receiving", createdAt: r.clock.t }));
+    expect((await code(r.begin(b, [{ path: "f", kind: "file", size: 1 }]))).startsWith("conflict|")).toBe(true);
+    expect(existsSync(join(inc, b, "x"))).toBe(true);
+  });
+  it("sweep∥begin: eski yetimi silmeye çalışan sweep, araya giren aynı id'li begin'in klasörünü silmez", async () => {
+    const r = rig(); const inc = join(r.downloads, ".vlad-incoming"); mkdirSync(inc);
+    const id = newId(); const e = [{ path: "f", kind: "file" as const, size: 1 }];
+    await r.begin(id, e); await r.rx.close();
+    // yetim: aynı manifestHash'li eski meta ile yeniden başlama senaryosu
+    const meta = JSON.parse(readFileSync(join(inc, id, "meta.json"), "utf8"));
+    writeFileSync(join(inc, id, "meta.json"), JSON.stringify({ ...meta, createdAt: r.clock.t - 25 * 3600_000 }));
+    await r.restart();
+    const [, res] = await Promise.all([r.rx.sweep(), r.begin(id, e)]);
+    expect(res.state).toBe("new");
+    await r.chunk(id, 0, 0, Buffer.from("x")); // klasör sağ
+    expect((await r.commit(id, [sha("x")])).items).toHaveLength(1);
+  });
+  it("clip-image: apply çağrılırken teslim kaydı committing (apply∥çökme sonrası yeniden begin uncertain)", async () => {
+    let during: string | undefined; let r!: Rig;
+    r = rig({ clipImage: { enabled: () => true, apply: async () => { const { createLedger } = await import("../../src/transfer/ledger.js"); during = (await createLedger(r.stateDir).get(`mac\0${id}`))?.state; return "applied"; } } });
+    const png = Buffer.alloc(33); Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(png); png.writeUInt32BE(13, 8); png.write("IHDR", 12); png.writeUInt32BE(2, 16); png.writeUInt32BE(2, 20);
+    var id = newId(); const e = [{ path: "clip.png", kind: "file" as const, size: png.length }];
+    await r.begin(id, e, { purpose: "clip-image", meta: { eventTs: 1, rank: 0 } }); await r.chunk(id, 0, 0, png);
+    await r.commit(id, [sha(png)]);
+    expect(during).toBe("committing");
+    expect(await r.begin(id, e, { purpose: "clip-image", meta: { eventTs: 1, rank: 0 } })).toMatchObject({ state: "committed" });
+  });
+});

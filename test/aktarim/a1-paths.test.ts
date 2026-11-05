@@ -78,3 +78,8 @@ describe("A1.1 downloadsDir", () => {
     expect(downloadsDir("darwin", { HOME: "/Users/u" })).toMatch(/Downloads$/);
   });
 });
+
+describe("A1 inceleme: ek ret kuralları", () => {
+  for (const [raw, os] of [["CONIN$", "win32"], ["conout$.txt", "win32"], ["NUL .txt", "win32"], ["a‎b", "darwin"], ["a‏b", "darwin"]] as const)
+    it(`reddeder ${JSON.stringify(raw)} (${os})`, () => { expect(() => sanitizeEntryPath(raw, os)).toThrow(XferPathError); });
+});

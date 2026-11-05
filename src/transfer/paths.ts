@@ -10,7 +10,7 @@ export class XferPathError extends RemoteError {
 const bad = (why: string) => new XferPathError(`bad_request: yol geçersiz: ${why}`);
 
 const MAX_COMPONENT = 255, MAX_TOTAL = 240, MAX_DEPTH = 32;
-const WIN_RESERVED = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])$/i;
+const WIN_RESERVED = /^(con|prn|aux|nul|conin\$|conout\$|com[0-9¹²³]|lpt[0-9¹²³])$/i;
 
 /** "/" ayraçlı göreli yolu doğrular, NFC bileşenlere böler. Geçersizse XferPathError. */
 export function sanitizeEntryPath(raw: string, os: Os): string[] {
@@ -23,12 +23,12 @@ export function sanitizeEntryPath(raw: string, os: Os): string[] {
     if (p === "") throw bad("boş bileşen veya mutlak yol");
     if (p === "." || p === "..") throw bad("nokta bileşeni");
     if (/[\\:]/.test(p)) throw bad("ters eğik çizgi veya iki nokta");
-    if (/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/.test(p)) throw bad("denetim karakteri");
+    if (/[\u0000-\u001f\u007f-\u009f\u200e\u200f‪-‮⁦-⁩]/.test(p)) throw bad("denetim karakteri");
     if (p.length > MAX_COMPONENT || Buffer.byteLength(p, "utf8") > MAX_COMPONENT) throw bad("bileşen çok uzun");
     if (os === "win32") {
       if (/[<>"|?*]/.test(p)) throw bad("Windows'ta yasak karakter");
       if (/[. ]$/.test(p)) throw bad("sondaki nokta veya boşluk");
-      if (WIN_RESERVED.test(p.split(".")[0]!)) throw bad("Windows ayrılmış adı");
+      if (WIN_RESERVED.test(p.split(".")[0]!.replace(/ +$/, ""))) throw bad("Windows ayrılmış adı");
     }
   }
   if (parts[0]!.toLowerCase() === XFER_STAGING_DIR) throw bad("ayrılmış ad");
