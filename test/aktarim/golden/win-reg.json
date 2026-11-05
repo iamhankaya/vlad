@@ -1,0 +1,46 @@
+[
+ {
+  "file": "reg.exe",
+  "args": [
+   "add",
+   "HKCU\\Software\\Classes\\*\\shell\\VladSend",
+   "/ve",
+   "/d",
+   "mac makinesine gönder",
+   "/f"
+  ]
+ },
+ {
+  "file": "reg.exe",
+  "args": [
+   "add",
+   "HKCU\\Software\\Classes\\*\\shell\\VladSend\\command",
+   "/ve",
+   "/d",
+   "wscript.exe \"C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs\" \"%1\"",
+   "/f"
+  ]
+ },
+ {
+  "file": "reg.exe",
+  "args": [
+   "add",
+   "HKCU\\Software\\Classes\\Directory\\shell\\VladSend",
+   "/ve",
+   "/d",
+   "mac makinesine gönder",
+   "/f"
+  ]
+ },
+ {
+  "file": "reg.exe",
+  "args": [
+   "add",
+   "HKCU\\Software\\Classes\\Directory\\shell\\VladSend\\command",
+   "/ve",
+   "/d",
+   "wscript.exe \"C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs\" \"%1\"",
+   "/f"
+  ]
+ }
+]

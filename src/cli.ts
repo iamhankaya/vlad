@@ -68,17 +68,18 @@ function fail(e: unknown): never {
 }
 
 /** vlad install: sağ tık "Gönder" menüsü (aktarım). Tek karşı makine yoksa atlanır; --dry-run hiçbir şeye dokunmaz. */
-async function sendMenuActions(dryRun: boolean): Promise<string[]> {
+async function sendMenuActions(dryRun: boolean, uninstall = false): Promise<string[]> {
   let cfg: ReturnType<typeof loadConfig>;
   try { cfg = loadConfig(); } catch { return ["sağ tık menüsü atlandı: yapılandırma okunamadı"]; }
   if (!cfg.machines) return ["sağ tık menüsü atlandı: machines yok"];
-  const self = selfName();
+  let self: string;
+  try { self = selfName(); } catch { return ["sağ tık menüsü atlandı: makine kimliği belirsiz (VLAD_MACHINE / vlad.local.json self)"]; }
   const others = cfg.machines.filter((m) => m.name !== self);
   const me = cfg.machines.find((m) => m.name === self);
   if (!me || others.length !== 1) return ["sağ tık menüsü atlandı: karşı makine tek değil"];
   const { installSendMenu } = await import("./menu/index.js");
   const servicesDir = process.env.VLAD_SERVICES_DIR || join(homedir(), "Library", "Services");
-  return (await installSendMenu({ os: me.os, node: process.execPath, cli: fileURLToPath(import.meta.url), home: getVladHome(), peer: others[0]!.name, servicesDir, dryRun })).actions;
+  return (await installSendMenu({ os: me.os, node: process.execPath, cli: fileURLToPath(import.meta.url), home: getVladHome(), peer: others[0]!.name, servicesDir, dryRun, uninstall })).actions;
 }
 
 function out(o: Opts, data: unknown, text: string): void {
@@ -995,10 +996,10 @@ def(clip, "set [metin]", "Yerel panoya yazar (metin, --file <yol|->, ya da --ima
 
 def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", async (o: Opts) => {
   const claudeDir = process.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");
-  const { actions } = installGlobal({ home: getVladHome(), claudeDir, dryRun: !!o.dryRun });
-  actions.push(...(await sendMenuActions(!!o.dryRun)));
+  const actions = o.removeMenu ? [] : installGlobal({ home: getVladHome(), claudeDir, dryRun: !!o.dryRun }).actions;
+  actions.push(...(await sendMenuActions(!!o.dryRun, !!o.removeMenu)));
   out(o, { actions }, actions.join("\n"));
-}).option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster");
+}).option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster").option("--remove-menu", "yalnız sağ tık \"gönder\" menüsünü kaldırır (geri alma)");
 
 try {
   await program.parseAsync(process.argv);
