@@ -29,6 +29,8 @@ for (let l; (l = readLine()) !== null;) {
     if (p[1] === 'count') reply({ id, ok: true, n: seq() });
     else if (p[1] === 'read') {
       const n = seq();
+      const ty = ObjC.deepUnwrap(pb.types) || [];
+      if (ty.indexOf('org.nspasteboard.ConcealedType') >= 0 || ty.indexOf('org.nspasteboard.TransientType') >= 0) { reply({ id, ok: true, n, after: seq(), text: null, png: null, hidden: true }); continue; } // gizli/geçici: içeriği okuma
       let t = dat(pb.dataForType('public.utf8-plain-text')), g = null;
       if (!t) {
         g = dat(pb.dataForType('public.png'));

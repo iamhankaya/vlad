@@ -157,12 +157,21 @@ describe("aktarim:B ClipSync.applyRemote", () => {
     r.cb.read = orig; adv(r, 20); await r.sync.tick();
     expect(Buffer.from(r.pushed[0]!.data, "base64").toString()).toBe("kullanıcı");
   });
-  it("okumadan önceki (yoklamanın görmediği) yerel kopyayı daha yeni uzak değer ezer", async () => {
+  it("yoklamanın görmediği yerel kopya uzak yazmadan önce işlenir: yerel anahtar büyükse uzak 'stale', yerel kopya ezilmez ve gönderilir", async () => {
     const r = rig(); await r.sync.tick();
     adv(r); r.cb.setLocal(text("görülmemiş yerel"));
-    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [r.clock.t + 1, 1, 1], from: "x" })).toBe("applied");
+    adv(r); const remoteKey: [number, 0 | 1, number] = [r.clock.t - 5, 1, 1]; // yerel olaydan daha eski uzak olay
+    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: remoteKey, from: "x" })).toBe("stale");
+    expect(r.cb.writes).toEqual([]);
     adv(r, 20); await r.sync.tick();
-    expect(r.pushed).toEqual([]); // ezilen yerel kopya gönderilmez
+    expect(Buffer.from(r.pushed[0]!.data, "base64").toString()).toBe("görülmemiş yerel");
+  });
+  it("görülmemiş yerel kopyadan SONRAKİ uzak olay uygulanır; yerel kopya da (eski anahtarla) gönderim için kuyruğa alınmıştı ama ezilince atılır", async () => {
+    const r = rig(); await r.sync.tick();
+    adv(r); r.cb.setLocal(text("görülmemiş yerel"));
+    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [r.clock.t + 50, 1, 1], from: "x" })).toBe("applied");
+    adv(r, 100); await r.sync.tick();
+    expect(r.pushed).toEqual([]);
   });
   it("yazma yarışı: backend 'written:false' dönerse 'local_changed'", async () => {
     const r = rig(); vi.spyOn(r.cb, "write").mockResolvedValueOnce({ written: false, seqAfter: 99, reason: "local_changed" });
@@ -181,6 +190,37 @@ describe("aktarim:B ClipSync.applyRemote", () => {
     await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("x"), key: [r.clock.t + 1, 1, 1], from: "x" });
     expect(sleeps.length).toBeGreaterThanOrEqual(1); expect(sleeps[0]).toBe(150);
     adv(r, 10); await r.sync.tick(); expect(r.pushed).toEqual([]);
+  });
+});
+
+describe("aktarim:B yerleşme penceresi", () => {
+  it("pencerede farklı içerik gelirse (üçüncü taraf/kullanıcı) yankı sayılmaz, yerel olay olarak gönderilir", async () => {
+    const r = rig({ settleMs: 150 }); await r.sync.tick();
+    let n = 0; (r.sync as unknown as { d: ClipDeps }).d.sleep = async () => { if (n++ === 0) r.cb.setLocal(text("kullanıcı kopyası")); };
+    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [r.clock.t + 1, 1, 1], from: "x" })).toBe("applied");
+    adv(r, 20); await r.sync.tick();
+    expect(r.pushed.map((p) => Buffer.from(p.data, "base64").toString())).toEqual(["kullanıcı kopyası"]);
+  });
+  it("pencerede aynı içeriğin yeniden yazılması (CRLF dönüşümü dahil) yankıdır, gönderilmez", async () => {
+    const r = rig({ settleMs: 150 }); await r.sync.tick();
+    let n = 0; (r.sync as unknown as { d: ClipDeps }).d.sleep = async () => { if (n++ === 0) r.cb.setLocal(text("a\r\nb")); };
+    await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("a\nb"), key: [r.clock.t + 1, 1, 1], from: "x" });
+    adv(r, 20); await r.sync.tick(); expect(r.pushed).toEqual([]);
+  });
+});
+
+describe("aktarim:B gizli kopyalar", () => {
+  it("backend hidden:true derse (parola yöneticisi) gönderilmez; yalnız sayaç ilerler; sonraki normal kopya gider", async () => {
+    const r = rig(); await r.sync.tick();
+    const orig = r.cb.read.bind(r.cb); r.cb.read = async () => ({ ...(await orig()), hidden: true });
+    adv(r); r.cb.setLocal(text("parola")); adv(r); await r.sync.tick();
+    expect(r.pushed).toEqual([]);
+    r.cb.read = orig; adv(r); r.cb.setLocal(text("normal")); adv(r); await r.sync.tick();
+    expect(r.pushed.map((p) => Buffer.from(p.data, "base64").toString())).toEqual(["normal"]);
+  });
+  it("günlükte içerik özeti yok, yalnız bayt sayısı", async () => {
+    const r = rig(); await r.sync.tick(); adv(r); r.cb.setLocal(text("gizli metin")); adv(r); await r.sync.tick();
+    const line = r.logs.find((l) => l.includes("gönderildi"))!; expect(line).toMatch(/11 bayt/); expect(line).not.toMatch(/[0-9a-f]{8}/);
   });
 });
 

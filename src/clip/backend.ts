@@ -2,6 +2,7 @@ import { assertNative } from "../platform/native.js";
 import { darwinHelperArgs } from "./backend-darwin.js";
 import { winHelperArgs } from "./backend-win32.js";
 import { spawnLineHelper } from "./helper.js";
+import { settle } from "./sync.js";
 import type { ClipboardBackend, ClipContent, PersistentHelper, PersistentRunner } from "./types.js";
 
 // Platform panosu: Windows (STA PowerShell) ve macOS (JXA/NSPasteboard) için aynı satır protokolüyle kalıcı yardımcı süreç.
@@ -9,9 +10,8 @@ import type { ClipboardBackend, ClipContent, PersistentHelper, PersistentRunner 
 // Yanıt (tek satır JSON): {id,ok:true,n,...} (read: n=okumadan önceki sayaç, after=sonraki, text/png base64|null; write: written,n) | {id,ok:false,err}.
 // İçerik yalnız stdin'den base64 gider: komut satırına, kabuk dizesine ya da ortam değişkenine asla girmez.
 export interface BackendOptions { sleep?(ms: number): Promise<void>; settleMs?: number; timeoutMs?: number }
-interface Resp { id: number; ok: boolean; err?: string; n?: number; after?: number; text?: string | null; png?: string | null; written?: boolean }
+interface Resp { id: number; ok: boolean; err?: string; n?: number; after?: number; text?: string | null; png?: string | null; hidden?: boolean; written?: boolean }
 
-const SETTLE_TRIES = 3;
 const realRunner = (): PersistentRunner => ({
   run: async () => { throw new Error("pano: tek seferlik komut desteklenmiyor"); },
   spawnHelper: (file, args) => spawnLineHelper(file, args),
@@ -39,26 +39,20 @@ class HelperBackend implements ClipboardBackend {
 
   async changeCount(): Promise<number> { return (await this.call(["count"], this.t(20_000))).n!; }
 
-  async read(): Promise<{ seq: number; content: ClipContent | null }> {
+  async read(): Promise<{ seq: number; content: ClipContent | null; hidden?: boolean }> {
     let r = await this.call(["read"], this.t(20_000));
     if (r.after !== undefined && r.after !== r.n) r = await this.call(["read"], this.t(20_000)); // okuma sırasında değişti: bir kez tekrar
     const content: ClipContent | null = r.text ? { kind: "text", bytes: Buffer.from(r.text, "base64") } // metin+resim birlikteyse yalnız metin
       : r.png ? { kind: "image", bytes: Buffer.from(r.png, "base64") } : null;
-    return { seq: r.n!, content };
+    return { seq: r.n!, content, ...(r.hidden ? { hidden: true } : {}) };
   }
 
   async write(c: ClipContent, expectSeq: number): Promise<{ written: boolean; seqAfter: number; reason?: "local_changed" }> {
     const r = await this.call(["write", c.kind, expectSeq, c.bytes.toString("base64")], this.t(60_000));
     if (!r.written) return { written: false, seqAfter: r.n!, reason: "local_changed" };
-    // Ayar süresi: Windows gecikmeli panoda sayaç yanıttan sonra da artabilir; durulana dek (en çok 3 kez) oku.
+    // Ayar süresi: Windows gecikmeli panoda sayaç yanıttan sonra da artabilir; durulana dek oku. Farklı içerik yankı sayılmaz (settle).
     const sleep = this.o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
-    let after = r.n!;
-    for (let i = 0; i < SETTLE_TRIES; i++) {
-      await sleep(this.o.settleMs ?? 150);
-      const now = await this.changeCount();
-      if (now === after) break;
-      after = now;
-    }
+    const after = await settle(this, c, r.n!, sleep, this.o.settleMs ?? 150);
     return { written: true, seqAfter: after };
   }
 

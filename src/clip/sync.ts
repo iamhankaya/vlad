@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { RemoteError } from "../machines/types.js";
 import { CLIP_MAX_IMAGE_BYTES, CLIP_MAX_PIXELS, CLIP_MAX_TEXT_BYTES, CLIP_POLL_MS } from "./types.js";
-import type { ApplyResult, ClipContent, ClipDeps, ClipKind, ClipSyncLike, OrderKey } from "./types.js";
+import type { ApplyResult, ClipboardBackend, ClipContent, ClipDeps, ClipKind, ClipSyncLike, OrderKey } from "./types.js";
 
 // Ortak pano eşitleyici (plan T20261105-04 karar 5). Tasarım:
 // - Yankı: uzak yazmadan sonra `lastSeq = seqAfter` (yazma ve yoklama tek kilit altında), böylece (fromSeq, toSeq] aralığındaki
@@ -43,6 +43,21 @@ function rejectReason(c: ClipContent): string | null {
   return c.bytes.length > CLIP_MAX_IMAGE_BYTES ? "resim 20 MiB'ı aşıyor" : !validPng(c.bytes) ? "resim geçerli PNG değil" : null;
 }
 
+/** Yazım sonrası yerleşme: sayaç durulana dek bekler. Pencerede gelen artış yazdığımız içerikle (anlamsal) aynıysa yankıdır; farklıysa
+ *  (kullanıcı/üçüncü taraf kopyası) `first` döner, böylece sonraki yoklama onu yerel olay görür. Resimde yeniden kodlama olabileceğinden içerik karşılaştırılmaz. */
+export async function settle(be: Pick<ClipboardBackend, "changeCount" | "read">, c: ClipContent, first: number, sleep: (ms: number) => Promise<void>, ms: number): Promise<number> {
+  let after = first;
+  for (let i = 0; i < SETTLE_TRIES; i++) {
+    await sleep(ms);
+    const now = await be.changeCount();
+    if (now === after) break;
+    after = now;
+  }
+  if (after === first || c.kind !== "text") return after;
+  const r = await be.read();
+  return !r.hidden && r.content?.kind === "text" && semanticHash(r.content) === semanticHash(c) ? Math.max(after, r.seq) : first;
+}
+
 interface Pending { content: ClipContent; key: OrderKey; fails: number; nextAt: number }
 
 export class ClipSync implements ClipSyncLike {
@@ -73,6 +88,12 @@ export class ClipSync implements ClipSyncLike {
   }
 
   async applyRemote(m: { kind: ClipKind; bytes: Buffer; key: OrderKey; from: string }): Promise<ApplyResult> {
+    const res = await this.applyLocked(m);
+    void this.flush().catch(() => {}); // uzak yazmadan önce yakalanan yerel kopya gecikmeden gitsin
+    return res;
+  }
+
+  private applyLocked(m: { kind: ClipKind; bytes: Buffer; key: OrderKey; from: string }): Promise<ApplyResult> {
     return this.exclusive(async () => {
       const d = this.d;
       await this.ready;
@@ -84,21 +105,18 @@ export class ClipSync implements ClipSyncLike {
         if (m.bytes.length > CLIP_MAX_IMAGE_BYTES) return "too_large";
         if (!validPng(m.bytes)) return "bad_image";
       }
+      // Yoklamanın henüz görmediği yerel kopya varsa önce yerel olay olarak işlenir (anahtar alır, gönderime kuyruğa girer); yerel anahtar
+      // uzaktan büyük/eşitse uzak "stale" olur. Yerel kopya sessizce ezilmez.
+      await this.detect();
       if (compareKeys(m.key, this.lastWinner) <= 0) return "stale";
       // Okuma anındaki sürüm (seq) yazmanın koşuludur: okuma ile yazma arasında kullanıcı kopyalarsa yazma reddedilir (local_changed),
-      // yerel değer ezilmez ve sonraki yoklama onu gönderir. Okumadan ÖNCEKİ görülmemiş yerel kopyayı uzak değer ezer (daha yeni olay kazanır).
+      // yerel değer ezilmez ve sonraki yoklama onu gönderir.
       const snap = await d.backend.read();
       const w = await d.backend.write({ kind: m.kind, bytes: m.bytes }, snap.seq);
       if (!w.written) return "local_changed";
-      let after = w.seqAfter;
-      if ((d.settleMs ?? 0) > 0) {
-        for (let i = 0; i < SETTLE_TRIES; i++) {
-          await (d.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))))(d.settleMs!);
-          const now = await d.backend.changeCount();
-          if (now === after) break;
-          after = now;
-        }
-      }
+      const after = (d.settleMs ?? 0) > 0
+        ? await settle(d.backend, { kind: m.kind, bytes: m.bytes }, w.seqAfter, d.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))), d.settleMs!)
+        : w.seqAfter;
       this.lastSeq = after;
       this.lastWinner = m.key;
       if (this.pending && compareKeys(this.pending.key, m.key) < 0) this.pending = null;
@@ -150,6 +168,7 @@ export class ClipSync implements ClipSyncLike {
     }
     const r = await d.backend.read();
     this.lastSeq = r.seq;
+    if (r.hidden) { this.pending = null; return; } // gizli/geçici kopya (parola yöneticisi): gönderme, yalnız sayaç ilerler
     const key = this.nextKey(eventTs);
     this.lastWinner = key; // içerik gönderilemese de (CF_HDROP, sınır) daha eski uzak değerlerin üstüne yazılmasını engeller
     this.pending = null;
@@ -178,7 +197,7 @@ export class ClipSync implements ClipSyncLike {
       const res = p.content.kind === "text"
         ? await d.send.pushText({ kind: "text", data: p.content.bytes.toString("base64"), eventTs, rank, counter })
         : await d.send.pushImage(p.content.bytes, { eventTs, rank });
-      d.log(`${p.content.kind} gönderildi (${semanticHash(p.content).slice(0, 8)}): ${res}`);
+      d.log(`${p.content.kind} gönderildi (${p.content.bytes.length} bayt): ${res}`);
       if (this.pending === p) this.pending = null;
     } catch (e) {
       p.fails++;

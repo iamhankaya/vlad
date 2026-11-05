@@ -21,14 +21,23 @@ while ($true) {
     switch ($p[1]) {
       'count' { Reply @{ id = $id; ok = $true; n = (Seq) } }
       'read' {
-        $n = Seq; $text = $null; $png = $null
+        $n = Seq; $text = $null; $png = $null; $hidden = $false
+        # Gizli/geçici kopya (parola yöneticileri): içeriği okuma, hidden:true dön
+        if ([System.Windows.Forms.Clipboard]::ContainsData('ExcludeClipboardContentFromMonitorProcessing')) { $hidden = $true }
+        elseif ([System.Windows.Forms.Clipboard]::ContainsData('CanIncludeInClipboardHistory')) {
+          $d = [System.Windows.Forms.Clipboard]::GetData('CanIncludeInClipboardHistory')
+          if ($d -is [System.IO.MemoryStream]) { $b = $d.ToArray(); if ($b.Length -ge 1 -and $b[0] -eq 0) { $hidden = $true } }
+        }
+        if ($hidden) { Reply @{ id = $id; ok = $true; n = $n; after = (Seq); text = $null; png = $null; hidden = $true }; break }
         if ([System.Windows.Forms.Clipboard]::ContainsText()) {
           $t = Retry { [System.Windows.Forms.Clipboard]::GetText([System.Windows.Forms.TextDataFormat]::UnicodeText) }
           if ($t) { $text = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t)) }
         }
         if (-not $text -and [System.Windows.Forms.Clipboard]::ContainsImage()) {
           $img = Retry { [System.Windows.Forms.Clipboard]::GetImage() }
-          if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); $png = [Convert]::ToBase64String($ms.ToArray()); $img.Dispose(); $ms.Dispose() }
+          $ms = $null
+          try { if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); $png = [Convert]::ToBase64String($ms.ToArray()) } }
+          finally { if ($ms) { $ms.Dispose() }; if ($img) { $img.Dispose() } }
         }
         Reply @{ id = $id; ok = $true; n = $n; after = (Seq); text = $text; png = $png }
       }
@@ -40,8 +49,9 @@ while ($true) {
           $s = [Text.Encoding]::UTF8.GetString($bytes)
           if ($s.Length -eq 0) { Retry { [System.Windows.Forms.Clipboard]::Clear() } } else { Retry { [System.Windows.Forms.Clipboard]::SetText($s, [System.Windows.Forms.TextDataFormat]::UnicodeText) } }
         } else {
-          $ms = New-Object System.IO.MemoryStream(, $bytes); $img = [System.Drawing.Image]::FromStream($ms)
-          Retry { [System.Windows.Forms.Clipboard]::SetImage($img) }
+          $ms = New-Object System.IO.MemoryStream(, $bytes); $img = $null
+          try { $img = [System.Drawing.Image]::FromStream($ms); Retry { [System.Windows.Forms.Clipboard]::SetImage($img) } }
+          finally { if ($img) { $img.Dispose() }; $ms.Dispose() } # SetImage panoyu kopyalayarak koyar (copy=true), Dispose güvenli
         }
         Reply @{ id = $id; ok = $true; written = $true; n = (Seq) }
       }

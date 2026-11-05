@@ -13,7 +13,8 @@ export interface ClipContent { kind: ClipKind; bytes: Buffer }
 export type OrderKey = readonly [eventTs: number, rank: 0 | 1, counter: number];
 
 export interface ClipboardBackend {
-  read(): Promise<{ seq: number; content: ClipContent | null }>;
+  /** hidden: gizli/geçici işaretli kopya (parola yöneticisi); eşitlenmez */
+  read(): Promise<{ seq: number; content: ClipContent | null; hidden?: boolean }>;
   write(c: ClipContent, expectSeq: number): Promise<{ written: boolean; seqAfter: number; reason?: "local_changed" }>;
   changeCount(): Promise<number>;
   /** yardımcı süreçler dahil sonlandırır */

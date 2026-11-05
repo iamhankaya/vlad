@@ -141,7 +141,7 @@ describe("aktarim:B yardımcı yaşam döngüsü (spawnLineHelper)", () => {
 describe("aktarim:B platform betikleri ve createBackend", () => {
   it("Windows: -EncodedCommand ile sabit betik; betikte sıra numarası, STA, metin/resim ve yeniden deneme; kullanıcı verisi yok", () => {
     const s = winHelperScript();
-    for (const m of ["GetClipboardSequenceNumber", "System.Windows.Forms", "ContainsText", "GetImage", "SetImage", "ImageFormat]::Png", "ReadLine", "ConvertTo-Json", "FromBase64String", "Split"]) expect(s, m).toContain(m);
+    for (const m of ["GetClipboardSequenceNumber", "System.Windows.Forms", "ContainsText", "GetImage", "SetImage", "ImageFormat]::Png", "ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "finally", "Dispose", "ReadLine", "ConvertTo-Json", "FromBase64String", "Split"]) expect(s, m).toContain(m);
     expect(winHelperScript()).toBe(s); // deterministik
     const a = winHelperArgs();
     expect(a).toContain("-STA"); expect(a).toContain("-NoProfile");
@@ -150,7 +150,7 @@ describe("aktarim:B platform betikleri ve createBackend", () => {
   });
   it("macOS: osascript -l JavaScript -e <betik>; changeCount/png/tiff→png/utf8; pano adı yalnız üretici parametresi", () => {
     const s = darwinHelperScript();
-    for (const m of ["generalPasteboard", "changeCount", "public.utf8-plain-text", "public.png", "public.tiff", "availableData", "clearContents"]) expect(s, m).toContain(m);
+    for (const m of ["generalPasteboard", "changeCount", "public.utf8-plain-text", "public.png", "public.tiff", "availableData", "clearContents", "org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType"]) expect(s, m).toContain(m);
     expect(darwinHelperScript({ pasteboard: "unique" })).toContain("pasteboardWithUniqueName");
     expect(darwinHelperScript({ pasteboard: "unique" })).not.toContain("generalPasteboard");
     expect(darwinHelperArgs()).toEqual(["-l", "JavaScript", "-e", s]);

@@ -52,3 +52,10 @@ Durum `<VLAD_HOME>/.vlad-agent/clip.json` (`{"enabled":true}`; dosya yoksa açı
 
 `src/clip/`: `sync.ts` (ClipSync), `receive.ts` (`clip-push` + `ClipImageSink`), `senders.ts` (gerçek `ClipSenders`), `index.ts` (`startClipSync`), `backend.ts` + `backend-win32.ts` + `backend-darwin.ts` + `helper.ts` (platform panosu, yardımcı süreç), `state.ts` (`clip.json`), `cli.ts`.
 Testler: `test/aktarim/b-*.test.ts`, taklit yardımcı `test/aktarim/fixtures/fake-helper.mjs`.
+
+## Değişiklik turu 1 davranışları
+- Uzak yazmadan önce yoklamanın görmediği yerel kopya `detect()` ile yerel olay olarak işlenir; yerel anahtar uzaktan büyük/eşitse uzak `stale` döner, yerel kopya ezilmez ve gönderilir.
+- Yazım sonrası yerleşme penceresinde (150 ms, ≤3 deneme) gelen sayaç artışı yalnız içerik yazdığımızla anlamsal olarak aynıysa yankıdır (metin); farklıysa yerel olaydır. Resimde yeniden kodlama olabildiğinden içerik karşılaştırılmaz (bilinen sınır).
+- `clip-push` ve clip-image yalnız yapılandırılmış tek eşten (`ctx.from === peer`) kabul edilir; 3+ makinede (peer null) `forbidden`.
+- Gizli kopyalar (Mac `org.nspasteboard.ConcealedType`/`TransientType`; Windows `ExcludeClipboardContentFromMonitorProcessing`, `CanIncludeInClipboardHistory=0`) okunmaz ve gönderilmez, yalnız sayaç ilerler. Not: önceki turda "gizli kopyalar da senkronlanır" kararı vardı; VLAD bu turda varsayılanı "atla" yaptı, ayar olarak açma yapılmadı.
+- Günlükte içerik özeti yok, yalnız bayt sayısı.

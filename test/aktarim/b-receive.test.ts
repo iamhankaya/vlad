@@ -16,9 +16,9 @@ const arg = (o: Partial<ClipPushArgs> = {}): ClipPushArgs => ({ kind: "text", da
 const ctx = { from: "mac", opId: "t" };
 const png = (w = 2, h = 2): Buffer => { const b = Buffer.alloc(33); Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b); b.writeUInt32BE(13, 8); b.write("IHDR", 12, "ascii"); b.writeUInt32BE(w, 16); b.writeUInt32BE(h, 20); return b; };
 
-function unit(o: { enabled?: boolean } = {}) {
+function unit(o: { enabled?: boolean; peer?: string | null } = {}) {
   const cb = new FakeClipboard(); const st = { enabled: o.enabled ?? true, now: T };
-  const d: ClipDeps = { backend: cb, now: () => st.now, sleep: async () => {}, settleMs: 0, isEnabled: () => st.enabled, log: () => {}, rank: 0, peer: "mac", send: { pushText: async () => "applied", pushImage: async () => "applied" } };
+  const d: ClipDeps = { backend: cb, now: () => st.now, sleep: async () => {}, settleMs: 0, isEnabled: () => st.enabled, log: () => {}, rank: 0, peer: o.peer === undefined ? "mac" : o.peer, send: { pushText: async () => "applied", pushImage: async () => "applied" } };
   return { cb, st, d, r: createClipReceiver(d) };
 }
 const code = (p: Promise<unknown>) => p.then(() => "ok", (e) => (e instanceof RemoteError ? e.code : `non-remote:${(e as Error).message}`));
@@ -55,6 +55,23 @@ describe("aktarim:B clip-push", () => {
     const orig = cb.read.bind(cb); cb.read = async () => { const x = await orig(); cb.setLocal({ kind: "text", bytes: Buffer.from("yerel") }); return x; };
     expect(await r.ops["clip-push"](arg(), ctx)).toBe("stale");
     expect(cb.writes).toEqual([]);
+  });
+});
+
+describe("aktarim:B gönderen doğrulaması", () => {
+  it("clip-push yalnız tek eşten kabul edilir: başka kimlik ya da peer null → forbidden", async () => {
+    const { r, d, cb } = unit();
+    expect(await code(r.ops["clip-push"](arg(), { from: "baska", opId: "t" }))).toBe("forbidden");
+    expect(cb.writes).toEqual([]);
+    const n = unit({ peer: null });
+    expect(await code(n.r.ops["clip-push"](arg(), ctx))).toBe("forbidden");
+    expect(d.peer).toBe("mac");
+  });
+  it("clip-image sink'i de aynı: yanlış from → forbidden; doğru from uygulanır", async () => {
+    const { r, cb } = unit();
+    expect(await code(Promise.resolve().then(() => r.sink.apply(png(), { eventTs: T + 9, rank: 1 }, "baska")))).toBe("forbidden");
+    expect(cb.writes).toEqual([]);
+    expect(await r.sink.apply(png(), { eventTs: T + 9, rank: 1 }, "mac")).toBe("applied");
   });
 });
 
