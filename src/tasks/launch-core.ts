@@ -78,13 +78,16 @@ const parseCount = (out: string | null): number | null => (out !== null && /^\d+
 
 /** The worktree entry that has `branch` checked out, from `git worktree list --porcelain -z` output (NUL-separated fields, empty field between entries). */
 function checkedOutAt(porcelain: string | null, branch: string): { path: string; prunable: boolean } | null {
-  let cur: { path: string; prunable: boolean } | null = null;
+  const found: { path: string; prunable: boolean }[] = [];
+  let cur: { path: string; prunable: boolean } | null = null, onBranch = false;
+  const flush = () => { if (cur && onBranch) found.push(cur); };
   for (const l of (porcelain ?? "").split("\0")) {
-    if (l.startsWith("worktree ")) cur = { path: l.slice(9), prunable: false };
-    else if (l.startsWith("prunable") && cur) cur.prunable = true;
-    else if (l === `branch refs/heads/${branch}` && cur) return cur;
+    if (l.startsWith("worktree ")) { flush(); cur = { path: l.slice(9), prunable: false }; onBranch = false; }
+    else if (l.startsWith("prunable") && cur) cur.prunable = true; // comes after the `branch` field, so the entry is read whole
+    else if (l === `branch refs/heads/${branch}`) onBranch = true;
   }
-  return null;
+  flush();
+  return found[0] ?? null;
 }
 
 /** Throws with the same messages the pre-split `launchTask` recorded; the caller records the error. */
@@ -102,7 +105,7 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
     const list = () => g.runGit(repo, ["worktree", "list", "--porcelain", "-z"]);
     let holder = checkedOutAt(await list(), branch);
     // F-vlad-253: a hand-deleted folder leaves a stale record that would look like another holder; prune only when the holder is that
-    // stale entry (never repo-wide), and fail closed if git could not clear it
+    // stale entry (git prunes every stale record of the repo, none of the live ones), and fail closed if git could not clear it
     if (holder && (holder.prunable || !existsSync(holder.path))) {
       await g.runGit(repo, ["worktree", "prune"]);
       holder = checkedOutAt(await list(), branch);
