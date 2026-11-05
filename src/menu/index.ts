@@ -5,12 +5,14 @@ import type { ShellRunner } from "../clip/types.js";
 import type { Os } from "../machines/types.js";
 import { nativeAllowed } from "../platform/native.js";
 import { macQuickAction } from "./mac.js";
-import { WIN_KEYS, winHiddenLauncher, winLauncherPath, winMenuRegCommands } from "./win.js";
+import { WIN_KEYS, winAclCommands, winHiddenLauncher, winLauncherPath, winMenuRegCommands } from "./win.js";
 
 // Sağ tık "gönder" menüsü: Windows HKCU kaydı + gizli VBS başlatıcı, Mac Finder Hızlı Eylemi. Hepsi yönetici gerektirmez.
 export { macQuickAction } from "./mac.js";
-export { winHiddenLauncher, winMenuRegCommands } from "./win.js";
-export interface MenuCtx { os: Os; node: string; cli: string; home: string; peer: string; servicesDir: string; dryRun: boolean; /** menüyü kaldırır (geri alma) */ uninstall?: boolean }
+export { winAclCommands, winHiddenLauncher, winMenuRegCommands } from "./win.js";
+export interface MenuCtx { os: Os; node: string; cli: string; home: string; peer: string; servicesDir: string; dryRun: boolean; /** menüyü kaldırır (geri alma) */ uninstall?: boolean;
+  /** bu makinenin kimliği: başlatıcılarda VLAD_MACHINE olarak açıkça ayarlanır (Finder/Gezgin kabuk ortamını devralmaz) */ self?: string;
+  /** Windows kullanıcı profili; VLAD_HOME bunun dışındaysa uyarı */ userProfile?: string }
 export interface MenuDeps {
   run?: ShellRunner; write?: (f: string, content: string | Buffer) => Promise<void>; exists?: (f: string) => Promise<boolean>;
   /** boş eşitlik denetimi için: dosya yoksa null */ read?: (f: string) => Promise<string | Buffer | null>;
@@ -49,6 +51,18 @@ async function installWin(c: MenuCtx, d: Required<MenuDeps>): Promise<string[]> 
   }
   if (same(await d.read(l.file), bytes)) actions.push(`sağ tık başlatıcısı güncel: ${l.file}`);
   else { await d.write(l.file, bytes); actions.push(`sağ tık başlatıcısı yazıldı: ${l.file}`); }
+  // ACL kayıttan önce: kurulamazsa menü kaydedilmez (başka yerel kullanıcı başlatıcıyı değiştirebilirdi)
+  const sys32 = win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+  const who = await d.run(win32.join(sys32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]);
+  const sid = /^"[^"]*","(S-1-\d+(?:-\d+)+)"/.exec(who.stdout.toString("utf8").trim().split(/\r?\n/)[0] ?? "")?.[1];
+  if (who.code !== 0 || !sid) throw new Error("ACL kurulamadı: kullanıcı SID'i okunamadı");
+  for (const a of winAclCommands(sys32, win32.dirname(l.file), l.file, sid)) {
+    const r = await d.run(a.file, a.args);
+    if (r.code !== 0) throw new Error(`ACL kurulamadı (icacls ${a.args[0]}): ${r.stderr.trim() || `çıkış ${r.code}`}`);
+  }
+  actions.push(`başlatıcı erişimi kısıtlandı (yalnız geçerli kullanıcı + SYSTEM): ${win32.dirname(l.file)}`);
+  if (c.userProfile && !win32.resolve(c.home).toLowerCase().startsWith(win32.resolve(c.userProfile).toLowerCase() + "\\"))
+    actions.push(`uyarı: VLAD_HOME kullanıcı profili altında değil (${c.home}); başlatıcı dizini ACL ile kısıtlandı ama yol paylaşımlı olabilir`);
   for (const cmd of winMenuRegCommands(c)) await reg(d.run, cmd); // reg add /f: tekrar çalıştırmak aynı sonucu verir
   actions.push(`sağ tık menüsü kuruldu (Gezgin, HKCU): ${c.peer}`);
   return actions;
@@ -84,5 +98,7 @@ export async function installSendMenu(c: MenuCtx, d: MenuDeps = {}): Promise<{ a
   }
   if (!(d.run && d.write && d.read && d.exists && d.remove) && !nativeAllowed()) return { actions: ["sağ tık menüsü atlandı: native devre dışı (VLAD_NO_NATIVE=1)"] };
   const deps = { ...realDeps, ...d } as Required<MenuDeps>;
-  return { actions: win ? await installWin(c, deps) : await installMac(c, deps) };
+  const actions = win ? await installWin(c, deps) : await installMac(c, deps);
+  if (!c.uninstall && /-wt[\\/]/.test(c.cli)) actions.push(`uyarı: menü bir worktree'den kuruldu (${c.cli}); dal/worktree silinince menü çalışmaz, ana kopyadan yeniden kur`);
+  return { actions };
 }

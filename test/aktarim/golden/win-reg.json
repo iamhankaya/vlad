@@ -16,8 +16,10 @@
    "add",
    "HKCU\\Software\\Classes\\*\\shell\\VladSend\\command",
    "/ve",
+   "/t",
+   "REG_EXPAND_SZ",
    "/d",
-   "wscript.exe \"C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs\" \"%1\"",
+   "%SystemRoot%\\System32\\wscript.exe \"C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs\" \"%1\"",
    "/f"
   ]
  },
@@ -38,8 +40,10 @@
    "add",
    "HKCU\\Software\\Classes\\Directory\\shell\\VladSend\\command",
    "/ve",
+   "/t",
+   "REG_EXPAND_SZ",
    "/d",
-   "wscript.exe \"C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs\" \"%1\"",
+   "%SystemRoot%\\System32\\wscript.exe \"C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs\" \"%1\"",
    "/f"
   ]
  }

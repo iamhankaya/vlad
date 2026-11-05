@@ -29,6 +29,17 @@ function resolveTarget(cfg: VladConfig, self: string, to: string | undefined): s
   throw new Error(others.length === 0 ? "karşı makine tanımlı değil (vlad.config.json machines)" : `--to gerekli (makineler: ${others.join(", ")})`);
 }
 
+/** `--args-env`: yollar `VLAD_ARG_COUNT` + `VLAD_ARG_1..n` ortam değişkenlerinden (Windows VBS başlatıcısı; komut satırı/%VAR% yorumlamasından kaçınır). */
+export function argsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const n = Number(env.VLAD_ARG_COUNT);
+  if (!Number.isInteger(n) || n < 1 || n > 10_000) throw new Error("VLAD_ARG_COUNT geçersiz (--args-env)");
+  return Array.from({ length: n }, (_, i) => {
+    const v = env[`VLAD_ARG_${i + 1}`];
+    if (!v) throw new Error(`VLAD_ARG_${i + 1} boş ya da yok (--args-env)`);
+    return v;
+  });
+}
+
 export async function runSendCommand(paths: string[], o: SendCommandOpts, io: SendCommandIo = {}): Promise<void> {
   const write = io.write ?? ((s: string) => { process.stdout.write(s); });
   const writeErr = io.writeErr ?? ((s: string) => { process.stderr.write(s); });

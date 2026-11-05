@@ -79,7 +79,7 @@ async function sendMenuActions(dryRun: boolean, uninstall = false): Promise<stri
   if (!me || others.length !== 1) return ["sağ tık menüsü atlandı: karşı makine tek değil"];
   const { installSendMenu } = await import("./menu/index.js");
   const servicesDir = process.env.VLAD_SERVICES_DIR || join(homedir(), "Library", "Services");
-  return (await installSendMenu({ os: me.os, node: process.execPath, cli: fileURLToPath(import.meta.url), home: getVladHome(), peer: others[0]!.name, servicesDir, dryRun, uninstall })).actions;
+  return (await installSendMenu({ os: me.os, node: process.execPath, cli: fileURLToPath(import.meta.url), home: getVladHome(), peer: others[0]!.name, servicesDir, dryRun, uninstall, self, userProfile: process.env.USERPROFILE })).actions;
 }
 
 function out(o: Opts, data: unknown, text: string): void {
@@ -978,10 +978,11 @@ def(machine, "probe-window <ad>", "İşçide kısa ömürlü bir pencere açtır
 // --- /machines:C2 ---
 
 // --- aktarim:S --- vlad send / vlad clip (ince kabuk; gövde src/transfer/cli.ts ve src/clip/cli.ts)
-def(program, "send <yol...>", "Dosya/klasörleri karşı makinenin İndirilenler klasörüne gönderir (--to: makine; 2'den çok makinede zorunlu)", async (paths: string[], o: Opts) => {
-  const { runSendCommand } = await import("./transfer/cli.js");
+def(program, "send [yol...]", "Dosya/klasörleri karşı makinenin İndirilenler klasörüne gönderir (--to: makine; 2'den çok makinede zorunlu)", async (paths: string[], o: Opts) => {
+  const { runSendCommand, argsFromEnv } = await import("./transfer/cli.js");
+  if (o.argsEnv) paths = argsFromEnv(); else if (!paths?.length) throw new Error("gönderilecek yol verilmedi (<yol...> ya da --args-env)");
   await runSendCommand(paths, { to: o.to as string | undefined, json: !!o.json, notify: !!o.notify, isTTY: !!process.stderr.isTTY });
-}).option("--to <makine>", "hedef makine").option("--notify", "sonucu (başarı/hata) bildirimle de göster");
+}).option("--to <makine>", "hedef makine").option("--notify", "sonucu (başarı/hata) bildirimle de göster").option("--args-env", "yolları VLAD_ARG_COUNT/VLAD_ARG_<n> ortam değişkenlerinden al (sağ tık başlatıcısı)");
 const clip = program.command("clip").description("Ortak pano (Mac↔Windows)");
 def(clip, "on", "Pano eşitlemeyi açar", async (o: Opts) => { await (await import("./clip/cli.js")).runClip("on", { json: !!o.json }); });
 def(clip, "off", "Pano eşitlemeyi kapatır", async (o: Opts) => { await (await import("./clip/cli.js")).runClip("off", { json: !!o.json }); });

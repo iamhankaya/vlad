@@ -4,15 +4,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ShellRunner } from "../../src/clip/types.js";
-import { installSendMenu, macQuickAction, winHiddenLauncher, winMenuRegCommands, type MenuCtx } from "../../src/menu/index.js";
+import { installSendMenu, macQuickAction, winAclCommands, winHiddenLauncher, winMenuRegCommands, type MenuCtx } from "../../src/menu/index.js";
 import { rmTemp } from "../helpers.js";
 
 const temps: string[] = [];
 afterEach(() => { for (const t of temps.splice(0)) rmTemp(t); });
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), "vlad-cmenu-")); temps.push(d); return d; };
 
-const W = { node: "C:\\Program Files\\nodejs\\node.exe", cli: "C:\\dev\\vlad\\dist\\cli.js", home: "C:\\dev\\vlad", peer: "mac" };
-const M = { node: "/opt/homebrew/bin/node", cli: "/Users/me/dev/vlad/dist/cli.js", home: "/Users/me/dev/vlad", peer: "windows" };
+const W = { node: "C:\\Program Files\\nodejs\\node.exe", cli: "C:\\dev\\vlad\\dist\\cli.js", home: "C:\\dev\\vlad", peer: "mac", self: "windows" };
+const M = { node: "/opt/homebrew/bin/node", cli: "/Users/me/dev/vlad/dist/cli.js", home: "/Users/me/dev/vlad", peer: "windows", self: "mac" };
 const golden = (name: string, actual: string | Buffer) => {
   const f = join(import.meta.dirname, "golden", name);
   if (process.env.VLAD_GOLDEN_UPDATE === "menu") { mkdirSync(dirname(f), { recursive: true }); writeFileSync(f, actual); }
@@ -29,36 +29,47 @@ describe("aktarim:C1 Windows kayıt + gizli başlatıcı", () => {
       "HKCU\\Software\\Classes\\Directory\\shell\\VladSend", "HKCU\\Software\\Classes\\Directory\\shell\\VladSend\\command",
     ]);
     expect(cmds[0]!.args).toEqual(["add", keys[0], "/ve", "/d", "mac makinesine gönder", "/f"]);
-    expect(cmds[1]!.args[4]).toBe('wscript.exe "C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs" "%1"');
+    // F-vlad-228: tam yol, REG_EXPAND_SZ (%SystemRoot% reg.exe'ye düz metin gider: argv, kabuk yok)
+    expect(cmds[1]!.args).toEqual(["add", keys[1], "/ve", "/t", "REG_EXPAND_SZ", "/d", '%SystemRoot%\\System32\\wscript.exe "C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs" "%1"', "/f"]);
+    expect(cmds[3]!.args.slice(4, 6)).toEqual(["REG_EXPAND_SZ", "/d"]);
     expect(JSON.stringify(cmds)).not.toMatch(/HKLM/);
     golden("win-reg.json", JSON.stringify(cmds, null, 1) + "\n");
   });
-  it("VBS: UTF-16LE+BOM, yollar gömülü, argümanlar Q() ile, -- ayırıcı, tam yol", () => {
+  it("VBS: UTF-16LE+BOM, komut dizesi sabit (argüman gömülmez), argümanlar VLAD_ARG_* ortamıyla, VLAD_MACHINE açık", () => {
     const l = winHiddenLauncher(W);
     expect(l.encoding).toBe("utf16le-bom");
     expect(l.file).toBe("C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs");
     expect(l.content).toContain('sh.Environment("Process")("VLAD_HOME") = "C:\\dev\\vlad"');
-    expect(l.content).toContain('"""C:\\Program Files\\nodejs\\node.exe"" ""C:\\dev\\vlad\\dist\\cli.js"" send --to ""mac"" --notify --"');
-    expect(l.content).toContain("Q(WScript.Arguments(i))");
+    expect(l.content).toContain('sh.Environment("Process")("VLAD_MACHINE") = "windows"');
+    expect(l.content).toContain('env("VLAD_ARG_COUNT") = CStr(WScript.Arguments.Count)');
+    expect(l.content).toContain('env("VLAD_ARG_" & (i + 1)) = WScript.Arguments(i)');
+    expect(l.content).toContain('cmd = """C:\\Program Files\\nodejs\\node.exe"" ""C:\\dev\\vlad\\dist\\cli.js"" send --to ""mac"" --notify --args-env"');
+    // F-vlad-227: argüman komut dizesine hiç karışmaz (%VAR% genişlemesi yok)
+    expect(l.content).not.toMatch(/cmd\s*=\s*cmd\s*&/);
+    expect(l.content).not.toContain("Q(");
     expect(l.content).toContain("sh.Run cmd, 0, False");
     expect(l.content).toMatch(/\r\n/);
     golden("win-send.vbs", Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(l.content, "utf16le")]));
   });
-  it("tırnak/özel karakter tablosu: yollar VBS dizesinde çift tırnaklanır, kabuk özel karakterleri etkisiz", () => {
-    for (const home of ["C:\\a b\\x", "C:\\a&b^c%d'e", "C:\\şıǧ ü\\yol", "C:\\😀\\vlad"]) {
+  it("tırnak/özel karakter tablosu: yollar VBS dizesinde çift tırnaklanır; % ve tırnak/denetim karakteri reddedilir", () => {
+    for (const home of ["C:\\a b\\x", "C:\\a&b^c'd", "C:\\şıǧ ü\\yol", "C:\\😀\\vlad"]) {
       const l = winHiddenLauncher({ ...W, home, node: `${home}\\node.exe`, cli: `${home}\\cli.js` });
       expect(l.content).toContain(`("VLAD_HOME") = "${home}"`);
       expect(l.content).toContain(`""${home}\\node.exe""`);
-      const reg = winMenuRegCommands({ ...W, home })[1]!.args[4]!;
-      expect(reg).toBe(`wscript.exe "${home}\\.vlad-agent\\send-mac.vbs" "%1"`);
+      expect(winMenuRegCommands({ ...W, home })[1]!.args[6]).toBe(`%SystemRoot%\\System32\\wscript.exe "${home}\\.vlad-agent\\send-mac.vbs" "%1"`);
     }
-    // ", satır sonu ve denetim karakteri yol/peer içinde reddedilir
-    for (const bad of ['C:\\a"b', "C:\\a\nb", "C:\\a\u0000b"]) expect(() => winHiddenLauncher({ ...W, home: bad })).toThrow(/geçersiz/);
+    // % (REG_EXPAND_SZ/Run genişlemesi), ", satır sonu ve denetim karakteri yol/peer/self içinde reddedilir
+    for (const bad of ['C:\\a"b', "C:\\a\nb", "C:\\a\u0000b", "C:\\%TEMP%\\x"]) expect(() => winHiddenLauncher({ ...W, home: bad })).toThrow(/geçersiz/);
     expect(() => winHiddenLauncher({ ...W, peer: "x y" })).toThrow(/geçersiz/);
+    expect(() => winHiddenLauncher({ ...W, self: "x y" })).toThrow(/geçersiz/);
   });
-  it("VBS'de Q(): sondaki ters bölü iki katına çıkar (D:\\ → \"D:\\\\\")", () => {
-    const l = winHiddenLauncher(W).content;
-    expect(l).toMatch(/Function Q\(s\)[\s\S]*String\(n, "\\"\)[\s\S]*End Function/);
+  it("ACL üreticisi: icacls argv, miras kaldır, yalnız SID + SYSTEM tam yetki (dizin OI/CI)", () => {
+    const sid = "S-1-5-21-1-2-3-1001";
+    expect(winAclCommands("C:\\sys32", "C:\\dev\\vlad\\.vlad-agent", "C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs", sid)).toEqual([
+      { file: "C:\\sys32\\icacls.exe", args: ["C:\\dev\\vlad\\.vlad-agent", "/inheritance:r", "/grant:r", `*${sid}:(OI)(CI)F`, "*S-1-5-18:(OI)(CI)F"] },
+      { file: "C:\\sys32\\icacls.exe", args: ["C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs", "/inheritance:r", "/grant:r", `*${sid}:F`, "*S-1-5-18:F"] },
+    ]);
+    expect(() => winAclCommands("C:\\s", "d", "f", "S-1-5-21-1; calc")).toThrow(/SID/);
   });
 });
 
@@ -68,7 +79,7 @@ describe("aktarim:C2 Mac Hızlı Eylem", () => {
     expect(q.dir).toBe("windows makinesine gönder.workflow");
     expect(q.files.map((f) => f.rel).sort()).toEqual(["Contents/Info.plist", "Contents/document.wflow"]);
     const wf = q.files.find((f) => f.rel.endsWith("wflow"))!.content;
-    expect(wf).toContain("export VLAD_HOME=&apos;/Users/me/dev/vlad&apos;");
+    expect(wf).toContain("export VLAD_HOME=&apos;/Users/me/dev/vlad&apos;\nexport VLAD_MACHINE=&apos;mac&apos;");
     expect(wf).toContain("&apos;/opt/homebrew/bin/node&apos; &apos;/Users/me/dev/vlad/dist/cli.js&apos; send --to &apos;windows&apos; --notify -- &quot;$@&quot;");
     expect(wf).toContain("<key>inputMethod</key>\n\t\t\t\t\t<integer>1</integer>");
     const plist = q.files.find((f) => f.rel.endsWith("Info.plist"))!.content;
@@ -80,6 +91,11 @@ describe("aktarim:C2 Mac Hızlı Eylem", () => {
     const wf = q.files.find((f) => f.rel.endsWith("wflow"))!.content;
     expect(wf).toContain("it&apos;\\&apos;&apos;s &amp; &lt;x&gt; &quot;q&quot; şığ 😀");
     expect(wf).not.toContain("<x>");
+  });
+  it("self yoksa VLAD_MACHINE yazılmaz; geçersiz self reddedilir", () => {
+    const wf = macQuickAction({ ...M, self: undefined }).files.find((f) => f.rel.endsWith("wflow"))!.content;
+    expect(wf).not.toContain("VLAD_MACHINE");
+    expect(() => macQuickAction({ ...M, self: "a b" })).toThrow(/geçersiz/);
   });
   it("peer adı yalnız [A-Za-z0-9._-]; aksi reddedilir", () => {
     expect(() => macQuickAction({ ...M, peer: "a/b" })).toThrow(/geçersiz/);
@@ -93,7 +109,10 @@ describe("aktarim:C2 Mac Hızlı Eylem", () => {
 
 function fakeFs() {
   const files = new Map<string, string | Buffer>(); const writes: string[] = []; const removed: string[] = []; const runs: { file: string; args: string[] }[] = [];
-  const run: ShellRunner = async (file, args) => { runs.push({ file, args }); return { stdout: Buffer.alloc(0), stderr: "", code: 0 }; };
+  const run: ShellRunner = async (file, args) => {
+    runs.push({ file, args });
+    return { stdout: /whoami/.test(file) ? Buffer.from('"pc\\u","S-1-5-21-1-2-3-1001"\r\n') : Buffer.alloc(0), stderr: "", code: 0 };
+  };
   return {
     files, writes, removed, runs,
     d: {
@@ -129,17 +148,36 @@ describe("aktarim:C3 installSendMenu", () => {
     const r = await installSendMenu(ctx({}), f.d);
     expect(f.writes).toHaveLength(2); expect(r.actions.join("\n")).toMatch(/pbs.*pbs yok/);
   });
-  it("Windows: 4 reg add + UTF-16LE+BOM başlatıcı; ikinci çalıştırmada başlatıcı yeniden yazılmaz (reg /f idempotent)", async () => {
+  it("Windows: başlatıcı yaz → ACL (dizin + dosya) → 4 reg add; ikinci çalıştırmada başlatıcı yeniden yazılmaz", async () => {
     const f = fakeFs(); const c = ctx({ os: "win32", ...W });
     await installSendMenu(c, f.d);
-    expect(f.runs.map((r) => r.file)).toEqual(Array(4).fill("reg.exe"));
+    const sid = "S-1-5-21-1-2-3-1001";
+    expect(f.runs.map((r) => r.file.replace(/^.*[\\/]/, ""))).toEqual(["whoami.exe", "icacls.exe", "icacls.exe", ...Array(4).fill("reg.exe")]);
+    expect(f.runs[1]!.args).toEqual(["C:\\dev\\vlad\\.vlad-agent", "/inheritance:r", "/grant:r", `*${sid}:(OI)(CI)F`, "*S-1-5-18:(OI)(CI)F"]);
+    expect(f.runs[2]!.args).toEqual(["C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs", "/inheritance:r", "/grant:r", `*${sid}:F`, "*S-1-5-18:F"]);
     const vbs = f.files.get("C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs") as Buffer;
     expect(Buffer.isBuffer(vbs) && vbs[0] === 0xff && vbs[1] === 0xfe).toBe(true);
     f.writes.length = 0; await installSendMenu(c, f.d);
     expect(f.writes).toEqual([]);
   });
+  it("Windows: ACL kurulamazsa kayıt yazılmaz (açık hata)", async () => {
+    const f = fakeFs(); const base = f.d.run;
+    f.d.run = async (file, args, o) => (/icacls/.test(file) ? { stdout: Buffer.alloc(0), stderr: "erişim reddedildi", code: 5 } : base(file, args, o));
+    await expect(installSendMenu(ctx({ os: "win32", ...W }), f.d)).rejects.toThrow(/ACL.*erişim reddedildi/);
+    expect(f.runs.some((r) => r.file === "reg.exe")).toBe(false);
+  });
+  it("uyarılar: VLAD_HOME kullanıcı profili dışında (Windows), worktree'den kurulum (F-vlad-228)", async () => {
+    const f = fakeFs();
+    const out = await installSendMenu(ctx({ os: "win32", ...W, userProfile: "C:\\Users\\u" }), f.d);
+    expect(out.actions.join("\n")).toMatch(/uyarı: VLAD_HOME kullanıcı profili altında değil/);
+    const ok = await installSendMenu(ctx({ os: "win32", ...W, home: "C:\\Users\\U\\vlad", userProfile: "c:\\users\\u" }), fakeFs().d);
+    expect(ok.actions.join("\n")).not.toMatch(/profili/);
+    const wt = await installSendMenu(ctx({ cli: "/Users/me/dev/vlad-wt/T1/dist/cli.js" }), fakeFs().d);
+    expect(wt.actions.join("\n")).toMatch(/uyarı: .*worktree/);
+    expect((await installSendMenu(ctx({}), fakeFs().d)).actions.join()).not.toMatch(/worktree/);
+  });
   it("Windows: reg hatası açık hata olarak fırlar (yarım kurulum sessiz kalmaz)", async () => {
-    const f = fakeFs(); f.d.run = async () => ({ stdout: Buffer.alloc(0), stderr: "ERROR: erişim", code: 1 });
+    const f = fakeFs(); const base = f.d.run; f.d.run = async (file, args, o) => (file === "reg.exe" ? { stdout: Buffer.alloc(0), stderr: "ERROR: erişim", code: 1 } : base(file, args, o));
     await expect(installSendMenu(ctx({ os: "win32", ...W }), f.d)).rejects.toThrow(/reg.*erişim/);
   });
   it("geri alma: uninstall Mac paketini ve Windows anahtarlarını/başlatıcıyı kaldırır, yoksa sorun çıkarmaz", async () => {

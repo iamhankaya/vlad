@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { argsFromEnv } from "../../src/transfer/cli.js";
 import { isolatedEnv } from "../isolate-env.js";
 import { makeHome, rmTemp } from "../helpers.js";
 
@@ -46,5 +47,21 @@ describe("aktarim:C vlad install sağ tık", () => {
     const r = run(["install", "--remove-menu", "--dry-run", "--json"]);
     const a: string[] = JSON.parse(r.out).actions;
     expect(a).toHaveLength(1); expect(a[0]).toMatch(/kaldırılacak/); expect(a[0]).not.toMatch(/SessionEnd/);
+  });
+});
+
+describe("aktarim:C F-vlad-227 vlad send --args-env", () => {
+  it("argsFromEnv: VLAD_ARG_COUNT/VLAD_ARG_n sırayla, değerler olduğu gibi (%VAR% genişlemez)", () => {
+    expect(argsFromEnv({ VLAD_ARG_COUNT: "2", VLAD_ARG_1: "C:\\x\\%TEMP%a.txt", VLAD_ARG_2: "ş ı ğ 😀" })).toEqual(["C:\\x\\%TEMP%a.txt", "ş ı ğ 😀"]);
+    for (const env of [{}, { VLAD_ARG_COUNT: "0" }, { VLAD_ARG_COUNT: "x" }, { VLAD_ARG_COUNT: "2", VLAD_ARG_1: "a" }, { VLAD_ARG_COUNT: "1", VLAD_ARG_1: "" }, { VLAD_ARG_COUNT: "100000", VLAD_ARG_1: "a" }])
+      expect(() => argsFromEnv(env)).toThrow(/VLAD_ARG/);
+  });
+  it("CLI: --args-env yolları ortamdan alır; %TEMP% içeren yol harfiyen aranır (yol yok hatasında olduğu gibi görünür)", () => {
+    const r = run(["send", "--args-env", "--to", "windows", "--json"], { VLAD_ARG_COUNT: "1", VLAD_ARG_1: "/yok/%TEMP%x.txt" });
+    expect(r.code).toBe(1); expect(r.err).toContain("/yok/%TEMP%x.txt");
+  });
+  it("CLI: yol da --args-env de yoksa açık hata", () => {
+    const r = run(["send", "--to", "windows", "--json"]);
+    expect(r.code).toBe(1); expect(r.err).toMatch(/yol/);
   });
 });

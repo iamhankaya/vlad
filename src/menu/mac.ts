@@ -1,7 +1,7 @@
 import { checkMenuCtx } from "./win.js";
 import type { MenuCtx } from "./index.js";
 
-type Mc = Pick<MenuCtx, "node" | "cli" | "home" | "peer">;
+type Mc = Pick<MenuCtx, "node" | "cli" | "home" | "peer" | "self">;
 export const macName = (peer: string): string => `${peer} makinesine gönder`;
 const sh = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
@@ -11,7 +11,7 @@ const HEAD = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-/
 export function macQuickAction(c: Mc): { dir: string; files: { rel: string; content: string }[] } {
   checkMenuCtx(c, false); // Mac yolunda " olabilir: kabukta tek tırnakla, XML'de kaçışla taşınır
   const name = macName(c.peer);
-  const script = `export VLAD_HOME=${sh(c.home)}\n${sh(c.node)} ${sh(c.cli)} send --to ${sh(c.peer)} --notify -- "$@"\n`;
+  const script = `export VLAD_HOME=${sh(c.home)}\n${c.self ? `export VLAD_MACHINE=${sh(c.self)}\n` : ""}${sh(c.node)} ${sh(c.cli)} send --to ${sh(c.peer)} --notify -- "$@"\n`;
   const info = `${HEAD}<plist version="1.0">
 <dict>
 \t<key>NSServices</key>

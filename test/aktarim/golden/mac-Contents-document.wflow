@@ -47,6 +47,7 @@
 				<dict>
 					<key>COMMAND_STRING</key>
 					<string>export VLAD_HOME=&apos;/Users/me/dev/vlad&apos;
+export VLAD_MACHINE=&apos;mac&apos;
 &apos;/opt/homebrew/bin/node&apos; &apos;/Users/me/dev/vlad/dist/cli.js&apos; send --to &apos;windows&apos; --notify -- &quot;$@&quot;
 </string>
 					<key>CheckedForUserDefaultShell</key>
