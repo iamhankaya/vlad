@@ -7,7 +7,7 @@
       "roots": ["C:\\dev"], "kbDir": "C:\\dev\\vlad-kb" }
   ],
   "ignore": ["*-wt", "node_modules", "vlad"],
-  "defaultAutonomy": "commit",
+  "defaultAutonomy": "pr",
   "staleAfterHours": 6,
   "workerAutoCompact": "300k",
   "launcher": "auto",
