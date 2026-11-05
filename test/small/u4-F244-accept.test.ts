@@ -52,3 +52,50 @@ describe("F-244 unmergedCommits", () => {
     expect(fn()(repo, "vlad/x", "taban-yok")).toBeNull();
   });
 });
+
+// Çağrı noktası KARAKTERİZASYONU (tasks/launch.ts cleanupTask): kendi commit'i olmayan iptal dalı silinir, olan korunur. NOT: sıradan görev dalı
+// default_branch'ten değil HEAD'den kesildiği için bu senaryo 'taban HEAD'in önünde' durumunu GERÇEKTEN zorlamaz (yeşil geçer); gerçek entegrasyon-tabanlı
+// durum (pipeline fazı) raporda açık nokta olarak bırakıldı. Kural kanıtı yukarıdaki unmergedCommits testlerindedir.
+import { rmSync } from "node:fs";
+import { dirname } from "node:path";
+import { defaultConfig } from "../../src/kb/index.js";
+import type { Launcher } from "../../src/launcher/index.js";
+import { writeProject } from "../../src/projects/store.js";
+import { cleanupTask, launchTask } from "../../src/tasks/launch.js";
+import { createTask, getTask, setState } from "../../src/tasks/index.js";
+import { makeHome } from "../helpers.js";
+
+describe("F-244 çağrı noktası: yerel cleanupTask, taban HEAD'in önünde", () => {
+  let home: string, r: string, wtRoot: string;
+  const launcher: Launcher = { async launch() { return { ok: true, method: "fake" }; } };
+  beforeEach(() => {
+    home = makeHome();
+    const b = realpathSync.native(mkdtempSync(join(tmpdir(), "vlad-u4f244b-")));
+    r = join(b, "alpha"); mkdirSync(r); wtRoot = join(b, "wt");
+    git(r, "init", "-q", "-b", "main");
+    writeFileSync(join(r, "a"), "1"); git(r, "add", "."); git(r, "commit", "-qm", "c1");
+    git(r, "checkout", "-qb", "develop"); writeFileSync(join(r, "d"), "d"); git(r, "add", "."); git(r, "commit", "-qm", "develop önde");
+    git(r, "checkout", "-q", "main"); // HEAD main'de, taban develop önde
+    writeProject("alpha", `---\nslug: alpha\nname: Alpha\npath: ${JSON.stringify(r)}\nstack: [ts]\nstatus: active\nautonomy: commit\ndefault_branch: develop\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n`);
+  });
+  afterEach(() => { rmTemp(dirname(r)); rmTemp(home); });
+  const cfg = () => { const c = defaultConfig(); c.worktreeDir = wtRoot; return c; };
+
+  it("kendi commit'i olmayan dal silinir (yeniden launch engellenmez)", async () => {
+    const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "## Tanım\nx\n" });
+    await launchTask(t.data.id, { launcher, cfg: cfg() });
+    setState(t.data.id, "cancelled");
+    cleanupTask(t.data.id, { closeWorker: () => {} });
+    expect(git(r, "branch", "--list", `vlad/${t.data.id}`)).toBe("");
+  });
+  it("kendi commit'i olan dal korunur", async () => {
+    const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "## Tanım\nx\n" });
+    await launchTask(t.data.id, { launcher, cfg: cfg() });
+    const wt = getTask(t.data.id).data.worktree!;
+    writeFileSync(join(wt, "w"), "w"); git(wt, "add", "."); git(wt, "commit", "-qm", "iş");
+    setState(t.data.id, "cancelled");
+    cleanupTask(t.data.id, { closeWorker: () => {} });
+    expect(git(r, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
+  });
+  void rmSync;
+});

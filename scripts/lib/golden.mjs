@@ -113,7 +113,8 @@ export async function captureClasses(distDir, { dumpCli } = {}) {
     WORKER_LOCAL: sort(fwd.WORKER_LOCAL),
     FORWARD: Object.fromEntries(Object.entries(fwd.FORWARD).sort(([a], [b]) => a.localeCompare(b))),
     INNER_LOCK: sort(lock.INNER_LOCK),
-    CONSOLE_CATALOG: JSON.parse(JSON.stringify(cat.CONSOLE_CATALOG)),
+    // sıra anlamsız (eşleşme en uzun yola göre); manifestten türetilince sıra değişir, bu yüzden yola göre sıralı
+    CONSOLE_CATALOG: JSON.parse(JSON.stringify(cat.CONSOLE_CATALOG)).sort((a, b) => a.path.join(" ").localeCompare(b.path.join(" "))),
   };
 }
 
