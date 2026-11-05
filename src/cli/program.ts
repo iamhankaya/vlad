@@ -1026,7 +1026,7 @@ def(machine, "probe-window <ad>", "İşçide kısa ömürlü bir pencere açtır
 def(program, "send [yol...]", "Dosya/klasörleri karşı makinenin İndirilenler klasörüne gönderir (--to: makine; 2'den çok makinede zorunlu)", async (paths: string[], o: Opts) => {
   const { runSendCommand, argsFromEnv } = await import("../transfer/cli.js");
   if (o.argsEnv) paths = argsFromEnv(); else if (!paths?.length) throw new Error("gönderilecek yol verilmedi (<yol...> ya da --args-env)");
-  await runSendCommand(paths, { to: o.to as string | undefined, json: !!o.json, notify: !!o.notify, isTTY: !!process.stderr.isTTY });
+  await runSendCommand(paths, { to: o.to as string | undefined, json: !!o.json, notify: !!o.notify, isTTY: !!(ctx.stderr as NodeJS.WriteStream).isTTY });
 }).option("--to <makine>", "hedef makine").option("--notify", "sonucu (başarı/hata) bildirimle de göster").option("--args-env", "yolları VLAD_ARG_COUNT/VLAD_ARG_<n> ortam değişkenlerinden al (sağ tık başlatıcısı)");
 const clip = program.command("clip").description("Ortak pano (Mac↔Windows)");
 def(clip, "on", "Pano eşitlemeyi açar", async (o: Opts) => { await (await import("../clip/cli.js")).runClip("on", { json: !!o.json }); });
