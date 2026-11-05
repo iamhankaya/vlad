@@ -4,13 +4,16 @@ import { exec } from "./exec.js";
 import { forwardWrite } from "./forward-write.js";
 import { kbHead } from "./kb-head.js";
 import { opStatus } from "./op-status.js";
-import { ping } from "./ping.js";
+import { makePing, ping } from "./ping.js";
 import { kbSync } from "./kb-sync.js";
 import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
 import { probeWindow } from "./probe-window.js";
 import { gateRun, mergeOp, mergePreview } from "./gate.js";
 import { liveness } from "./liveness.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
+import { createClipReceiver } from "../../clip/receive.js";
+import { createXferReceiver } from "../../transfer/receive.js";
+import type { AktarimDeps } from "../../transfer/types.js";
 
 // Sözleşme (S): rol -> izinli op tablosu ve op gövdeleri. Her faz yalnız kendi op satırlarını
 // `notImplemented` yerine kendi modülüne bağlar (B: ping, op-status, apply-write, exec, kb-head, forward-write, queue-*;
@@ -28,13 +31,16 @@ export class NotImplementedOp extends Error {
 }
 const notImplemented = (op: AgentOp): OpHandler => async () => { throw new NotImplementedOp(op); };
 
+/** Aktarım/pano op'ları: yalnız beyin↔işçi (iki yönlü itme); `console` ve `self` rollerine verilmez. */
+export const TRANSFER_OPS: readonly AgentOp[] = ["xfer-begin", "xfer-chunk", "xfer-commit", "xfer-abort", "clip-push"];
+
 const ALLOWED: Record<AgentKind, Partial<Record<CallerRole, readonly AgentOp[]>>> = {
   "worker-agent": {
-    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge"],
+    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", ...TRANSFER_OPS],
     self: ["forward-write", "queue-list", "queue-flush", "queue-drop"],
   },
   "brain-agent": {
-    worker: ["ping", "apply-write"],
+    worker: ["ping", "apply-write", ...TRANSFER_OPS],
     console: ["ping", "exec", "kb-head"],
   },
 };
@@ -45,6 +51,7 @@ export const isAllowed = (agent: AgentKind, caller: CallerRole, op: AgentOp): bo
 const OPS: AgentOp[] = [
   "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge",
   "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop",
+  ...TRANSFER_OPS,
 ];
 export const OP_TABLE = Object.fromEntries(OPS.map((op) => [op, notImplemented(op)])) as Record<AgentOp, OpHandler>;
 // --- machines:B --- B'nin op satırları
@@ -74,3 +81,15 @@ OP_TABLE["gate-run"] = (a) => gateRun(a);
 OP_TABLE["merge-preview"] = (a) => mergePreview(a);
 OP_TABLE.merge = (a) => mergeOp(a);
 // --- /machines:C4 ---
+
+/**
+ * Aktarım S: op tablosunu `d`'ye bağlar. Süreç geneli durum yok: her çağrı ayrı alıcılar kurar (aynı süreçte iki Agent: test).
+ * `sweep`/`close` yaşam döngüsü start.ts içindir. OP_TABLE dışa aktarımı mevcut testler için kalır.
+ */
+export function buildAktarim(d: AktarimDeps): { ops: Record<AgentOp, OpHandler>; sweep(): Promise<number>; close(): Promise<void> } {
+  const xfer = createXferReceiver(d.xfer);
+  const clip = createClipReceiver(d.clip);
+  const ops = { ...OP_TABLE, ping: makePing(d.env), ...xfer.ops, ...clip.ops } as Record<AgentOp, OpHandler>;
+  return { ops, sweep: () => xfer.sweep(), close: () => xfer.close() };
+}
+export const buildOps = (d: AktarimDeps): Record<AgentOp, OpHandler> => buildAktarim(d).ops;

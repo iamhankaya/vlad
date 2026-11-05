@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "./helpers.js";
 
@@ -541,13 +541,13 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       claude = join(mkdtempSync(join(tmpdir(), "vlad-claude-")), ".claude");
     });
     it("--dry-run lists actions and leaves the disk untouched", () => {
-      const r = vlad(["install", "--dry-run", "--json"], undefined, { VLAD_CLAUDE_DIR: claude });
+      const r = vlad(["install", "--dry-run", "--json"], undefined, { VLAD_CLAUDE_DIR: claude, VLAD_SERVICES_DIR: join(dirname(claude), "Services") });
       expect(r.code, r.err).toBe(0);
       expect(JSON.parse(r.out).actions.length).toBeGreaterThan(0);
       expect(existsSync(claude)).toBe(false);
     });
     it("writes the SessionEnd hook and the worker skill", () => {
-      const r = vlad(["install"], undefined, { VLAD_CLAUDE_DIR: claude });
+      const r = vlad(["install"], undefined, { VLAD_CLAUDE_DIR: claude, VLAD_SERVICES_DIR: join(dirname(claude), "Services") });
       expect(r.code, r.err).toBe(0);
       expect(r.out).toContain("SessionEnd");
       const s = JSON.parse(readFileSync(join(claude, "settings.json"), "utf8"));
