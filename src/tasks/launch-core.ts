@@ -23,12 +23,12 @@ export interface GitApi {
   branchExists(repo: string, branch: string): Maybe<boolean>;
   remoteBranchExists(repo: string, branch: string): Maybe<boolean>;
   isWorktree(repo: string, dir: string): Maybe<boolean>;
-  runGit(cwd: string, args: string[]): Maybe<string | null>;
+  runGit(cwd: string, args: string[], timeoutMs?: number): Maybe<string | null>;
 }
-export const SYNC_GIT: GitApi = { addWorktree, attachWorktree, worktreeBranch, removeWorktree, branchExists, remoteBranchExists, isWorktree, runGit: (c, a) => runGit(c, a) };
+export const SYNC_GIT: GitApi = { addWorktree, attachWorktree, worktreeBranch, removeWorktree, branchExists, remoteBranchExists, isWorktree, runGit: (c, a, t) => runGit(c, a, t) };
 export const ASYNC_GIT: GitApi = {
   addWorktree: addWorktreeAsync, attachWorktree: attachWorktreeAsync, worktreeBranch: worktreeBranchAsync, removeWorktree: removeWorktreeAsync,
-  branchExists: branchExistsAsync, remoteBranchExists: remoteBranchExistsAsync, isWorktree: isWorktreeAsync, runGit: (c, a) => runGitAsync(c, a),
+  branchExists: branchExistsAsync, remoteBranchExists: remoteBranchExistsAsync, isWorktree: isWorktreeAsync, runGit: (c, a, t) => runGitAsync(c, a, t),
 };
 
 /**
@@ -59,7 +59,7 @@ export function unmergedCommits(repo: string, branch: string, base: string): num
 /** `unmergedCommits` over a `GitApi` (a worker Agent's async git). */
 export async function unmergedCommitsWith(g: GitApi, repo: string, branch: string, base: string): Promise<number | null> {
   const args = countArgs(branch, base);
-  return parseCount(args && (await g.runGit(repo, args)));
+  return parseCount(args && (await g.runGit(repo, args, 30_000)));
 }
 const countArgs = (branch: string, base: string): string[] | null =>
   base === branch || base === `refs/heads/${branch}` ? null : ["rev-list", "--count", `refs/heads/${branch}`, "--not", base, "--"];
