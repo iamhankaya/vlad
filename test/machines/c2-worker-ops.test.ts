@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupOp, closeOp, launchOp, reconcileLaunch, resumeOp } from "../../src/agent/ops/launch.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
@@ -42,7 +42,7 @@ describe("machines:C2 launch op (işçi)", () => {
   it("worktree + dal işçide açılır, güven kaydı yazılır, başlatıcı bir kez çağrılır, kayıt opId'yi taşır", async () => {
     const r = await launchOp(L(), ctx("op-1"), { launcher });
     expect(r.branch).toBe(`vlad/${ID}`);
-    expect(r.worktree).toBe(`${repo}-wt\\${ID}`);
+    expect(r.worktree).toBe(`${repo}-wt${sep}${ID}`);
     expect(existsSync(r.worktree)).toBe(true);
     expect(git(repo, "branch", "--list", `vlad/${ID}`)).toContain(ID);
     expect(readFileSync(claudeJson, "utf8").split("\\\\").join("/")).toContain(ID);
@@ -63,7 +63,7 @@ describe("machines:C2 launch op (işçi)", () => {
 
   it("pipeline fazı: entegrasyon dalı işçide açılır, faz dalı ondan çıkar, sonuçta integration döner, çatı için de kayıt yazılır", async () => {
     const r = await launchOp(L({ base: { kind: "integration", parent: PARENT } }), ctx(), { launcher });
-    expect(r.integration).toEqual({ branch: `vlad/${PARENT}`, worktree: `${repo}-wt\\${PARENT}` });
+    expect(r.integration).toEqual({ branch: `vlad/${PARENT}`, worktree: `${repo}-wt${sep}${PARENT}` });
     expect(existsSync(r.integration!.worktree)).toBe(true);
     expect(readdirSync(join(home, ".vlad-agent", "launches")).sort()).toEqual([`${PARENT}.json`, `${ID}.json`]);
   });
@@ -86,7 +86,7 @@ describe("machines:C2 launch op (işçi)", () => {
 
   it("başlatıcı başarısızsa failed ve worktree/dal geri alınır, kayıt yazılmaz", async () => {
     await expect(launchOp(L(), ctx(), { launcher: failing })).rejects.toMatchObject({ code: "failed", message: expect.stringContaining("pencere açılamadı") });
-    expect(existsSync(`${repo}-wt\\${ID}`)).toBe(false);
+    expect(existsSync(`${repo}-wt${sep}${ID}`)).toBe(false);
     expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
     expect(existsSync(join(home, ".vlad-agent", "launches", `${ID}.json`))).toBe(false);
   });
@@ -113,7 +113,7 @@ describe("machines:C2 launch op (işçi)", () => {
     expect((seen as unknown as { result?: unknown }).result).toBeUndefined();
     // gerçek çökme: kayıt sonuçsuz diskte kalır (başlatıcı hiç dönmedi)
     mkdirSync(join(home, ".vlad-agent", "launches"), { recursive: true });
-    writeFileSync(join(home, ".vlad-agent", "launches", `${ID}.json`), JSON.stringify({ taskId: ID, repo, worktree: `${repo}-wt\\${ID}`, branch: `vlad/${ID}`, opId: "op-x" }));
+    writeFileSync(join(home, ".vlad-agent", "launches", `${ID}.json`), JSON.stringify({ taskId: ID, repo, worktree: `${repo}-wt${sep}${ID}`, branch: `vlad/${ID}`, opId: "op-x" }));
     const rec = { opId: "op-x", from: "mac", op: "launch" as const, state: "started" as const, ts: 0, argsHash: "" };
     expect(reconcileLaunch(rec)).toBe("unknown");
     reqs = [];
