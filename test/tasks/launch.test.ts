@@ -9,9 +9,8 @@ import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
 import { buildPrompt, cleanupTask, closeTaskWindow, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, listTasks, saveTask, setState } from "../../src/tasks/index.js";
-import { worktreePath } from "../../src/git/git.js";
 import { trustKey } from "../../src/tasks/trust.js";
-import { assertInside, makeHome, makeJunction, rmTemp } from "../helpers.js";
+import { assertInside, makeHome, makeJunction, rmTemp, wtp } from "../helpers.js";
 
 function git(cwd: string, ...args: string[]) {
   return execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
@@ -88,7 +87,7 @@ describe("launchTask", () => {
     const t = mk();
     const l = fakeLauncher();
     const r = await launchTask(t.data.id, { launcher: l, cfg });
-    const wt = worktreePath(cfg, repo, t.data.id);
+    const wt = wtp(cfg, repo, t.data.id);
     expect(r.data.state).toBe("running");
     expect(r.data.branch).toBe(`vlad/${t.data.id}`);
     expect(r.data.worktree).toBe(wt);
@@ -109,7 +108,7 @@ describe("launchTask", () => {
     const after = getTask(t.data.id);
     expect(after.data.state).toBe("queued");
     expect(after.data.error).toContain("boom");
-    expect(existsSync(worktreePath(cfg, repo, t.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, repo, t.data.id))).toBe(false);
   });
 
   it("can be retried after a launcher failure", async () => {
@@ -122,7 +121,7 @@ describe("launchTask", () => {
 
   it("existing worktree dir: error, state unchanged, dir untouched", async () => {
     const t = mk();
-    const wt = worktreePath(cfg, repo, t.data.id);
+    const wt = wtp(cfg, repo, t.data.id);
     mkdirSync(wt, { recursive: true });
     writeFileSync(join(wt, "keep.txt"), "mine");
     const l = fakeLauncher();
@@ -137,7 +136,7 @@ describe("launchTask", () => {
 
   it("rollback uses branch -d: an unmerged branch survives and the failure is appended to the error", async () => {
     const t = mk();
-    const wt = worktreePath(cfg, repo, t.data.id);
+    const wt = wtp(cfg, repo, t.data.id);
     const launcher: Launcher = {
       async launch() {
         writeFileSync(join(wt, "w.txt"), "work");
@@ -160,7 +159,7 @@ describe("launchTask", () => {
         return { ok: true, method: "fake" };
       },
     };
-    const wt = worktreePath(cfg, repo, t.data.id);
+    const wt = wtp(cfg, repo, t.data.id);
     const closed: string[] = [];
     await expect(launchTask(t.data.id, { launcher, cfg, closeWorker: (i) => { closed.push(i); } })).rejects.toThrow(/cancelled yapıldı; açılan pencere kapatıldı, worktree kaldırıldı/);
     expect(closed).toEqual([t.data.id]);
@@ -232,7 +231,7 @@ describe("launchTask", () => {
     const l = fakeLauncher();
     await expect(launchTask(t.data.id, { launcher: l, cfg })).rejects.toThrow(/rol bulunamadı: tester/);
     expect(getTask(t.data.id).data).toMatchObject({ state: "queued", error: expect.stringMatching(/rol bulunamadı/) });
-    expect(existsSync(worktreePath(cfg, repo, t.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, repo, t.data.id))).toBe(false);
     expect(l.reqs).toHaveLength(0);
   });
 
@@ -241,7 +240,7 @@ describe("launchTask", () => {
     const t = createTask({ project: "alpha", title: "x", kind: "dev", body: "", role: "tester" });
     writeFileSync(file, readFileSync(file, "utf8").replace("kind: executor", "kind: advisory"));
     await expect(launchTask(t.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/dev görevinde kullanılamaz/);
-    expect(existsSync(worktreePath(cfg, repo, t.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, repo, t.data.id))).toBe(false);
   });
 
   it("rejects non-queued and non-dev tasks", async () => {
@@ -263,7 +262,7 @@ describe("pipeline launch", () => {
     const c = child(p.data.id);
     await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
     const pd = getTask(p.data.id).data;
-    expect(pd).toMatchObject({ state: "running", branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, repo, p.data.id) });
+    expect(pd).toMatchObject({ state: "running", branch: `vlad/${p.data.id}`, worktree: wtp(cfg, repo, p.data.id) });
     expect(existsSync(pd.worktree!)).toBe(true);
     expect(git(pd.worktree!, "branch", "--show-current").trim()).toBe(`vlad/${p.data.id}`);
   });
@@ -301,7 +300,7 @@ describe("pipeline launch", () => {
     const iwt = getTask(p.data.id).data.worktree!;
     expect(existsSync(iwt)).toBe(true);
     expect(git(repo, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
-    expect(existsSync(worktreePath(cfg, repo, a.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, repo, a.data.id))).toBe(false);
   });
 
   it("after a launcher failure on a moved integration branch, the phase can be retried", async () => {
@@ -342,7 +341,7 @@ describe("pipeline launch", () => {
     const a = child(p.data.id);
     setState(p.data.id, "cancelled");
     await expect(launchTask(a.data.id, { launcher: fakeLauncher(), cfg })).rejects.toThrow(/çatı görev .* cancelled/);
-    expect(existsSync(worktreePath(cfg, repo, p.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, repo, p.data.id))).toBe(false);
   });
 
   it("a pipeline task itself cannot be launched", async () => {
@@ -414,7 +413,7 @@ x
     const c = betaPhase(p.data.id);
     const r = await launchTask(c.data.id, { launcher: fakeLauncher(), cfg });
     const wt = r.data.worktree!;
-    expect(wt).toBe(worktreePath(cfg, beta, c.data.id));
+    expect(wt).toBe(wtp(cfg, beta, c.data.id));
     expect(git(wt, "branch", "--show-current").trim()).toBe(`vlad/${c.data.id}`);
     expect(existsSync(join(wt, "remote.txt"))).toBe(true);
     // integration branch is a tracking local branch in beta
@@ -445,7 +444,7 @@ x
     expect(launcher.reqs).toHaveLength(0);
     expect(getTask(c.data.id).data.state).toBe("queued");
     expect(getTask(c.data.id).data.error).toMatch(/beklenen faz dalı/);
-    expect(existsSync(worktreePath(cfg, beta, c.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, beta, c.data.id))).toBe(false);
     expect(git(beta, "branch", "--list", `vlad/${p.data.id}`)).toContain(`vlad/${p.data.id}`);
   });
 
@@ -453,7 +452,7 @@ x
     const p = pipe();
     const a = createTask({ project: "alpha", title: "faz", kind: "dev", body: "", parent: p.data.id, phase: "uygulama" });
     await launchTask(a.data.id, { launcher: fakeLauncher(), cfg });
-    expect(getTask(p.data.id).data).toMatchObject({ branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, repo, p.data.id) });
+    expect(getTask(p.data.id).data).toMatchObject({ branch: `vlad/${p.data.id}`, worktree: wtp(cfg, repo, p.data.id) });
   });
 
   it("F-vlad-063: integrationWorktrees derives the integration worktree per phase project", async () => {
@@ -464,9 +463,9 @@ x
     const w = integrationWorktrees(p.data.id, cfg);
     expect(w.map((x) => x.project).sort()).toEqual(["alpha", "beta"]);
     expect(w.find((x) => x.project === "beta")).toMatchObject({
-      repo: beta, branch: `vlad/${p.data.id}`, worktree: worktreePath(cfg, beta, p.data.id),
+      repo: beta, branch: `vlad/${p.data.id}`, worktree: wtp(cfg, beta, p.data.id),
     });
-    expect(w.find((x) => x.project === "alpha")!.worktree).toBe(worktreePath(cfg, repo, p.data.id));
+    expect(w.find((x) => x.project === "alpha")!.worktree).toBe(wtp(cfg, repo, p.data.id));
   });
 
   it("F-vlad-094: integrationWorktrees gives the same answer from an already loaded task list (no per-pipeline re-read)", async () => {
@@ -496,7 +495,7 @@ x
     const p = pipe();
     await launchTask(betaPhase(p.data.id).data.id, { launcher: fakeLauncher(), cfg });
     await launchTask(createTask({ project: "alpha", title: "a", kind: "dev", body: "", parent: p.data.id, phase: "plan" }).data.id, { launcher: fakeLauncher(), cfg });
-    const bwt = worktreePath(cfg, beta, p.data.id);
+    const bwt = wtp(cfg, beta, p.data.id);
     const awt = getTask(p.data.id).data.worktree!;
     expect(existsSync(bwt)).toBe(true);
     setState(p.data.id, "awaiting_approval");
@@ -757,7 +756,7 @@ describe("deps/ launch enforcement", () => {
     const l = fakeLauncher();
     await expect(launchTask(x.data.id, { launcher: l, cfg })).rejects.toThrow(`bağımlılıklar tamamlanmadı: ${dep.data.id}`);
     expect(l.reqs).toHaveLength(0);
-    expect(existsSync(worktreePath(cfg, repo, x.data.id))).toBe(false);
+    expect(existsSync(wtp(cfg, repo, x.data.id))).toBe(false);
     expect(getTask(x.data.id).data.state).toBe("queued");
     setState(dep.data.id, "running"); setState(dep.data.id, "awaiting_approval"); setState(dep.data.id, "done");
     expect((await launchTask(x.data.id, { launcher: l, cfg })).data.state).toBe("running");

@@ -45,8 +45,16 @@ x
 }
 
 // the launch script carries the prompt as base64 (T20261103-26)
-const scriptPrompt = (file: string): string =>
-  Buffer.from(/FromBase64String\('([^']*)'\)/.exec(readFileSync(file, "utf8"))![1], "base64").toString("utf8");
+// Windows scripts carry the prompt as base64; the POSIX (macOS/Linux) script carries it as a plain heredoc.
+const scriptPrompt = (file: string): string => {
+  const text = readFileSync(file, "utf8");
+  const b64 = /FromBase64String\('([^']*)'\)/.exec(text);
+  return b64 ? Buffer.from(b64[1], "base64").toString("utf8") : text;
+};
+// External launch scripts differ per host: PowerShell (.ps1, `claude $p`) on Windows, bash (.sh, `claude "$p"`) elsewhere.
+const WIN = process.platform === "win32";
+const SCRIPT_EXT = WIN ? "ps1" : "sh";
+const claudeLine = (flags: string): RegExp => new RegExp(`\\nclaude ${flags}${WIN ? "\\$p" : '"\\$p"'}\\n$`);
 
 describe("vlad cli", { timeout: 30_000 }, () => {
   it("has a shebang", () => {
@@ -352,22 +360,22 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(j.state).toBe("running");
       expect(j.branch).toBe(`vlad/${id}`);
       expect(j.method).toBe("external");
-      expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
+      expect(j.script).toBe(join(tmp, "vlad", `${id}.${SCRIPT_EXT}`));
       expect(existsSync(j.script)).toBe(true);
-      expect(readFileSync(j.script, "utf8")).toContain(`$env:VLAD_TASK_ID = '${id}'`);
+      expect(readFileSync(j.script, "utf8")).toContain(WIN ? `$env:VLAD_TASK_ID = '${id}'` : `export VLAD_TASK_ID='${id}'`);
       expect(j.cwd).toBe(j.worktree);
-      expect(j.command).toContain("powershell -NoExit -ExecutionPolicy Bypass -File ");
-      expect(j.command).toContain(`${id}.ps1`);
+      expect(j.command).toContain(WIN ? "powershell -NoExit -ExecutionPolicy Bypass -File " : "bash ");
+      expect(j.command).toContain(`${id}.${SCRIPT_EXT}`);
     });
     it("task resume --external writes a resume script for a running task", () => {
       vlad(["task", "launch", id, "--external", "--json"], undefined, env());
-      rmSync(join(tmp, "vlad", `${id}.ps1`));
+      rmSync(join(tmp, "vlad", `${id}.${SCRIPT_EXT}`));
       const r = vlad(["task", "resume", id, "--external", "--json"], undefined, env());
       expect(r.code, r.err).toBe(0);
       const j = JSON.parse(r.out);
-      expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
+      expect(j.script).toBe(join(tmp, "vlad", `${id}.${SCRIPT_EXT}`));
       expect(scriptPrompt(j.script)).toContain("kaldığı yerden sürdürülüyor");
-      expect(j.command).toContain(`${id}.ps1`);
+      expect(j.command).toContain(`${id}.${SCRIPT_EXT}`);
       expect(j.cwd).toBe(j.worktree);
     });
     it("task resume re-adds the worktree trust record (F-vlad-081)", () => {
@@ -381,21 +389,21 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     it("task resume --external resumes the recorded session; without one it starts fresh instead of guessing --continue (F-vlad-097)", () => {
       vlad(["task", "launch", id, "--external", "--json"], undefined, env());
       const without = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
-      expect(readFileSync(without.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?\$p\n$/);
+      expect(readFileSync(without.script, "utf8")).toMatch(claudeLine("(--model '[^']+' )?"));
       expect(vlad(["task", "session", id, "sess-42", "--json"]).code).toBe(0);
       const withSid = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
-      expect(readFileSync(withSid.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--resume 'sess-42' \$p\n$/);
+      expect(readFileSync(withSid.script, "utf8")).toMatch(claudeLine("(--model '[^']+' )?--resume 'sess-42' "));
     });
     it("workerAutoCompact puts --autocompact on launch --external and resume --external scripts; absent → no flag", () => {
       const plain = JSON.parse(vlad(["task", "launch", id, "--external", "--json"], undefined, env()).out);
       expect(readFileSync(plain.script, "utf8")).not.toContain("--autocompact");
       writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ worktreeDir: join(base, "wt"), workerAutoCompact: "300k" }));
       const res = JSON.parse(vlad(["task", "resume", id, "--external", "--json"], undefined, env()).out);
-      expect(readFileSync(res.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--autocompact '300k' \$p\n$/);
+      expect(readFileSync(res.script, "utf8")).toMatch(claudeLine("(--model '[^']+' )?--autocompact '300k' "));
       // fresh launch path: new task so launch itself writes the script
       const id2 = mkTask();
       const l = JSON.parse(vlad(["task", "launch", id2, "--external", "--json"], undefined, env()).out);
-      expect(readFileSync(l.script, "utf8")).toMatch(/\nclaude (--model '[^']+' )?--autocompact '300k' \$p\n$/);
+      expect(readFileSync(l.script, "utf8")).toMatch(claudeLine("(--model '[^']+' )?--autocompact '300k' "));
     });
     it("--external is refused together with --dry-run and in cloud mode", () => {
       const both = vlad(["task", "launch", id, "--external", "--dry-run", "--json"], undefined, env());

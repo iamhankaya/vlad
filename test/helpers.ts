@@ -2,6 +2,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symli
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { VladConfig } from "../src/kb/index.js";
+import { worktreePath } from "../src/git/git.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const made: string[] = [];
@@ -60,4 +62,9 @@ export function makeJunction(link: string, target: string, root: string): void {
 export function rmTemp(p: string | undefined): void {
   if (!p) return;
   try { rmSync(p, { recursive: true, force: true }); } catch { /* left for the OS temp cleanup */ }
+}
+
+/** worktreePath for the host OS, as the product code (launch.ts) derives it; the bare default is win32 (backslash). */
+export function wtp(cfg: VladConfig, repoPath: string, taskId: string): string {
+  return worktreePath(cfg, repoPath, taskId, process.platform as "win32" | "darwin" | "linux");
 }
