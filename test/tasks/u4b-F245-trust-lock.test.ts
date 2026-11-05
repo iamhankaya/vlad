@@ -76,6 +76,11 @@ describe("withFileLock owner.json", () => {
     expect(withFileLock(file, 100, () => "ok")).toBe("ok");
   });
 
+  it("owner.json with pid 0 is invalid (kill(0) would look alive): treated as missing, broken by age", () => {
+    seed({ pid: 0, nonce: "n1", startedAt: 0 }, 20_000);
+    expect(withFileLock(file, 100, () => "ok")).toBe("ok");
+  });
+
   it("injected now(): stale limit is measured on it", () => {
     seed(null, 0);
     expect(withFileLock(file, 100, () => "ok", { now: () => Date.now() + 20_000 })).toBe("ok");

@@ -27,7 +27,7 @@ type Owner = { pid: number; nonce: string; startedAt: number };
 const readOwner = (dir: string): Owner | null => {
   try {
     const o = JSON.parse(readFileSync(join(dir, "owner.json"), "utf8")) as Owner;
-    return Number.isInteger(o?.pid) && typeof o.nonce === "string" ? o : null;
+    return Number.isInteger(o?.pid) && o.pid > 0 && typeof o.nonce === "string" ? o : null;
   } catch { return null; }
 };
 
@@ -59,7 +59,7 @@ export function withFileLock<T>(file: string, waitMs: number, fn: () => T, o: Tr
     }
   }
   try { return fn(); } finally {
-    try { if (readOwner(lock)?.nonce === nonce) rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ }
+    try { const cur = readOwner(lock); if (!cur || cur.nonce === nonce) rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ }
   }
 }
 
