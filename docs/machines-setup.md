@@ -52,3 +52,16 @@ vlad machine probe-window windows
 
 - `--external` yalnız beyin makinesinde.
 - Gerçek bir ikinci makinede uçtan uca deneme (pencere görünürlüğü, kb-sync, launch/resume/cleanup) elle yapılmalı; testler sahte taşıma ve geçici dizin kullanır.
+
+## 6. Mac mini (beyin) kurulumu ve denetimi (F-vlad-115)
+
+`scripts/mac/audit.sh [--json] [--strict]` salt okuma denetimidir (madde, durum, kanıt; Agent anahtar değerlerini asla basmaz). Eksikleri `scripts/mac/setup.sh` tamamlar (varsayılan `--dry-run`, `--apply` ile yazar; idempotent): ana oturum için `~/.vlad-agent/main-session.sh` + LaunchAgent `com.vlad.main` (açılışta tmux `vlad` oturumunu açar; `VLAD_MAIN_CMD` ile komut değişir) ve Agent LaunchAgent'ı yoksa `vlad agent install --apply`.
+
+Betiğin yapmadığı, **kullanıcının elle yaptığı** adımlar:
+1. Uyku kapalı, elektrik gelince açılış: `sudo pmset -a sleep 0 disksleep 0 womp 1 autorestart 1`.
+2. Remote Control: ana oturumda (`tmux attach -t vlad`) `/remote-control`.
+3. Agent anahtarları: §2 (`keygen`/`setkey`; anahtar güvenli kanaldan).
+4. `vlad install` (kullanıcı düzeyi: `~/.claude` skill'leri, sağ tık menüsü); `~/.claude` dosyalarına dokunduğu için betik çalıştırmaz.
+5. Son kontrol: `scripts/mac/audit.sh --strict`.
+
+CI runner için `docs/mac-ci-runner.md`.
