@@ -1,0 +1,541 @@
+{
+  "base": "bbe6ccd",
+  "version": 1,
+  "KB_WRITES": [
+    "decision add",
+    "decision migrate",
+    "decision set",
+    "finding add",
+    "finding set",
+    "inbox done",
+    "journal append",
+    "kb maintain",
+    "mode night",
+    "mode off",
+    "mode status",
+    "mode watch",
+    "pending add",
+    "pending done",
+    "project note",
+    "project refresh",
+    "project set",
+    "project summary",
+    "project write",
+    "session register",
+    "task answer",
+    "task ask",
+    "task cleanup",
+    "task deps",
+    "task digested",
+    "task ingest",
+    "task log",
+    "task new",
+    "task report",
+    "task resume",
+    "task session",
+    "task set"
+  ],
+  "REFRESH_KEYS": [
+    "decision add",
+    "decision set",
+    "finding add",
+    "finding set",
+    "project write",
+    "task set"
+  ],
+  "WORKER_LOCAL": [
+    "agent install",
+    "agent keygen",
+    "agent setkey",
+    "agent start",
+    "agent status",
+    "audit skills",
+    "clip get",
+    "clip off",
+    "clip on",
+    "clip set",
+    "clip status",
+    "decision list",
+    "finding list",
+    "inbox count",
+    "inbox list",
+    "journal get",
+    "kb check",
+    "kb get",
+    "kb refs",
+    "kb search",
+    "machine list",
+    "machine ping",
+    "machine probe-window",
+    "pending list",
+    "project list",
+    "project status",
+    "queue drop",
+    "queue flush",
+    "queue list",
+    "role list",
+    "session name",
+    "task close-window",
+    "task idle",
+    "task list",
+    "task ready",
+    "vlad install",
+    "vlad scan",
+    "vlad send",
+    "vlad status"
+  ],
+  "FORWARD": {
+    "task ask": "task.ask",
+    "task log": "task.log",
+    "task report": "task.report",
+    "task session": "task.session"
+  },
+  "INNER_LOCK": [
+    "task cleanup",
+    "task resume"
+  ],
+  "CONSOLE_CATALOG": [
+    {
+      "path": [
+        "audit",
+        "skills"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "decision",
+        "add"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--body-file"
+      ]
+    },
+    {
+      "path": [
+        "decision",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "decision",
+        "migrate"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "decision",
+        "set"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "digest",
+        "pending",
+        "add"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "digest",
+        "pending",
+        "done"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "digest",
+        "pending",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "finding",
+        "add"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--detail-file"
+      ]
+    },
+    {
+      "path": [
+        "finding",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "finding",
+        "set"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "inbox",
+        "count"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "inbox",
+        "done"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "inbox",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "journal",
+        "append"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--file"
+      ]
+    },
+    {
+      "path": [
+        "journal",
+        "get"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "kb",
+        "check"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "kb",
+        "commit"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "kb",
+        "get"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "kb",
+        "lint"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "kb",
+        "maintain"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "kb",
+        "refs"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "kb",
+        "search"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "mode",
+        "night"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "mode",
+        "off"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "mode",
+        "status"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "mode",
+        "watch"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "project",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "project",
+        "note"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--file"
+      ]
+    },
+    {
+      "path": [
+        "project",
+        "refresh"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "project",
+        "set"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "project",
+        "status"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "project",
+        "summary"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--file"
+      ]
+    },
+    {
+      "path": [
+        "project",
+        "write"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--file"
+      ]
+    },
+    {
+      "path": [
+        "role",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "scan"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "session",
+        "name"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "session",
+        "register"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "status"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "task",
+        "answer"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "ask"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "cleanup"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "close-window"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "deps"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "digested"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "gate"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "idle"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "task",
+        "ingest"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--events-file",
+        "--file"
+      ]
+    },
+    {
+      "path": [
+        "task",
+        "launch"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "task",
+        "log"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "merge"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "merge-preview"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "task",
+        "new"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--body-file"
+      ]
+    },
+    {
+      "path": [
+        "task",
+        "ready"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "task",
+        "report"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--file"
+      ]
+    },
+    {
+      "path": [
+        "task",
+        "resume"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "session"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "task",
+        "set"
+      ],
+      "kind": "write"
+    }
+  ]
+}
