@@ -58,6 +58,37 @@ sonra `ClipImageSink.apply`. İndirilenler'de iz ve bildirim yok; teslim kaydı 
 `<makine>'den dosya geldi`; çoklu öğede tek bildirim. Metin Mac'te `osascript` argv'siyle, Windows'ta `VLAD_TOAST_*` ortam değişkenleriyle
 geçer; kabuk dizesine gömülmez. Bildirim hatası teslimi bozmaz. `VLAD_NO_NATIVE=1` iken gerçek çalıştırıcı `NativeDisabledError` verir.
 
+## Gönderici (A2): `vlad send`
+
+```
+vlad send <yol...> [--to <makine>] [--json] [--notify]
+```
+
+`--to` verilmezse yapılandırmada kendimizden başka tek makine varsa o seçilir; 2+ makinede zorunlu. Bilinmeyen makine, kendine gönderme ve
+olmayan yol ağa çıkmadan çıkış 1 verir. `src/transfer/send.ts` (`sendPaths`, `uploadBuffer`), `src/transfer/cli.ts` (`runSendCommand`).
+
+- **Yol gezme:** `lstat`; sembolik bağ ve özel dosya (fifo, soket…) izlenmez, `skipped` listesine düşer (`reason: symlink|special`). İçinde
+  gönderilecek bir şey kalmayan klasör boş dizin olarak gider. Hiçbir şey kalmazsa `failed: gönderilecek bir şey yok`.
+- **Üst ad çakışması** (harf duyarsız) gönderici tarafında `uniqueName` ile çözülür: `a.txt`, `a (1).txt`.
+- **Ön denetim** (veri göndermeden): toplam > 4 GiB → `too_large`; 10 000'den çok girdi → `too_large`; sonra `ping` ile `caps` içinde `xfer`
+  aranır, yoksa `failed: karşı Agent güncel değil (xfer yok); yeniden başlat`.
+- **Akış:** `xfer-begin` → `xfer-chunk` (3 MiB, tek uçuşta, parça başına 60 sn) → `xfer-commit`. Dosya SHA-256'sı akarken hesaplanır; açılan
+  tanıtıcı `fstat` ile doğrulanır, gönderim sırasında boyut/mtime değişirse `failed: dosya gönderim sırasında değişti` (alıcıda iz yok).
+- **Yeniden deneme:** geçici hatada (timeout, unreachable, busy, clock_skew) 200/800 ms arayla en çok 3 deneme; parçalar ve begin
+  idempotenttir. Alıcı aktarımı unuttuysa (`not_found`) AYNI id ile `xfer-begin` bir kez tekrarlanır ve parçalar baştan gönderilir.
+- **Belirsizlik:** commit yanıtı alınamazsa aynı commit tekrarlanır (alıcı kayıtlı sonucu döner). Bir deneme yanıtsız kaldıysa (istek işlenmiş
+  olabilir) ve sonuç hâlâ alınamıyorsa `XferUncertainError` (`uncertain`, çıkış 1): İndirilenler'e bak. İstek hiç gitmediyse (`unreachable`)
+  geçici hata (çıkış 75). Hiçbir yolda yeni id ile baştan başlanmaz; belirsiz/geçici durumda `xfer-abort` gönderilmez.
+- **Çıkış kodları:** 0 başarı (`skipped` dolu olsa da); 75 geçici; 1 diğer (forbidden, eski Agent, yol yok, sınır, değişen dosya, `uncertain`,
+  kısmi teslim `failed`).
+- **`--json`:** stdout yalnız `{"to","items":[{"name","kind","size","path"}],"failed"?,"skipped":[{"path","reason"}],"totalBytes"}`; hata
+  `{error,details}` olarak stderr'e. TTY'de (ve `--json` yokken) ilerleme stderr'e yazılır. `--notify`: gönderen tarafta başarıda ve hatada
+  yerel bildirim (bildirim hatası yutulur).
+
+Gönderici `open` için `O_NOFOLLOW|O_NONBLOCK` kullanır (Windows'ta yok) ve planlama anındaki mtime'ı açılışta karşılaştırır. Göreli yollar (`.`, `..`) mutlaklaştırılır; kök dizin reddedilir.
+
+Bilinen sınırlar: gönderici alıcının ad kurallarını (`:`/`\`, Windows ayrılmış adları, iç düzeyde harf duyarsız çakışma) önceden denetlemez; tek kötü ad alıcıda tüm manifest'i `bad_request` ile düşürür. `concurrency: 2` şimdilik yok sayılır (alıcı aynı dosyada offset sırası ister).
+
 ## Bilinen sınırlar
 
 - Mark-of-the-Web / karantina işareti eklenmez (karar `docs/aktarim.md`).
