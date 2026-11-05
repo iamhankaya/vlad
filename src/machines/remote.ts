@@ -83,6 +83,7 @@ export async function remoteCleanup(transport: RemoteTransport, machine: string,
   projects.delete(own);
   const call = (project: string) => transport.call(machine, "cleanup", {
     taskId: task.data.id, project, repoName: repoNameOf(cardOf(project).path), terminal: true,
+    ...(task.data.state === "cancelled" ? { dropBranch: true } : {}),
   });
   for (const p of projects) {
     try { await call(p); } catch (e) {

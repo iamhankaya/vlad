@@ -144,6 +144,24 @@ describe("machines:C2 cleanup op (güvenlik)", () => {
   const C = (extra: object = {}) => ({ taskId: ID, project: "alpha", repoName: "alpha", terminal: true, ...extra });
   const launched = async () => (await launchOp(L(), ctx(), { launcher })).worktree;
 
+  it("dropBranch: iptal edilen görevin commit'siz dalı silinir, commit'li dal korunur (F-vlad-231)", async () => {
+    const wt = await launched();
+    await cleanupOp(C({ dropBranch: true }), { close: () => [] });
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
+    expect(existsSync(wt)).toBe(false);
+  });
+  it("dropBranch: worktree zaten yoksa da (yarım kalan launch) commit'siz dal silinir", async () => {
+    const wt = await launched();
+    rmSync(wt, { recursive: true, force: true }); git(repo, "worktree", "prune");
+    expect(await cleanupOp(C({ dropBranch: true }), { close: () => [] })).toEqual({ removed: false });
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
+  });
+  it("dropBranch yokken dal kalır; commit'li dal dropBranch ile de kalır", async () => {
+    const wt = await launched();
+    writeFileSync(join(wt, "w.txt"), "x"); git(wt, "add", "."); git(wt, "commit", "-q", "-m", "iş");
+    await cleanupOp(C({ dropBranch: true }), { close: () => [] });
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toContain(ID);
+  });
   it("worktree işçide silinir, güven kaydı kalkar, başlatma kaydı silinir", async () => {
     const wt = await launched();
     expect(await cleanupOp(C(), { close: () => [] })).toEqual({ removed: true });

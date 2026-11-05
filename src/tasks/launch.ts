@@ -578,6 +578,8 @@ export function cleanupTask(
       /* a window that could not be closed is reported by the removal below */
     }
     removeTaskWorktree(projectPath(t.data.project), wt, id);
+    // F-vlad-231: a cancelled task's branch without own commits would block a relaunch; `-d` keeps any branch with unmerged work
+    if (t.data.state === "cancelled") runGit(projectPath(t.data.project), ["branch", "-d", `vlad/${id}`]);
   }
   const trustWarning = untrustWorktree(wt);
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);

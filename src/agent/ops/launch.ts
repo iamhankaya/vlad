@@ -176,14 +176,18 @@ export async function closeOp(args: unknown, o: { close?: CloseFn } = {}): Promi
 }
 
 export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ removed: boolean }> {
-  const a = argObject(args, ["taskId", "project", "repoName", "terminal"]);
+  const a = argObject(args, ["taskId", "project", "repoName", "terminal", "dropBranch"]);
   const id = taskIdArg(a);
   projectArg(a);
   const repoName = repoNameArg(a);
   if (a.terminal !== true) throw forbidden("cleanup yalnız done/cancelled görev için (terminal:true)");
   const ctx = workerCtx();
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
-  if (!existsSync(wt)) { dropEntry(id, repo, wt); return { removed: false }; }
+  if (!existsSync(wt)) {
+    if (a.dropBranch === true) await runGitAsync(repo, ["branch", "-d", `vlad/${id}`]);
+    dropEntry(id, repo, wt);
+    return { removed: false };
+  }
   if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree kendi görev klasörü değil / kök dışında: ${wt}`); // kök config'ten, wt'den değil (F-vlad-133)
   try { (o.close ?? defaultClose)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
   let warn: string | null = null;
@@ -191,6 +195,8 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   if (warn) throw failed(`güven kaydı kaldırılamadı, worktree silinmedi: ${warn}`); // fail-closed
   if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree silmeden hemen önce kök denetimi başarısız: ${wt}`); // pencere kapatma/güven adımları sırasında yol değişmiş olabilir (F-vlad-154)
   try { removeTaskWorktree(repo, wt, id); } catch (e) { throw failed((e as Error).message); }
+  // F-vlad-231: cancelled task: a branch without own commits would block a relaunch; `-d` keeps any branch with unmerged work
+  if (a.dropBranch === true) await runGitAsync(repo, ["branch", "-d", `vlad/${id}`]);
   dropEntry(id, repo, wt);
   return { removed: true };
 }
