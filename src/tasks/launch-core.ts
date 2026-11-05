@@ -41,17 +41,31 @@ export interface LaunchCoreReq extends Omit<LaunchRequest, "cwd"> {
   worktree: string;
   branch: string;
   base?: string;
+  /** F-vlad-239: the task is a retry (failed → queued); only then may an existing worktree/branch of `branch` be re-adopted */
+  adopt?: boolean;
   /** test seam: the branch a worktree sits on (default: git) */
   branchOf?: (worktree: string) => string | null;
 }
-export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string };
+export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string; reused?: boolean };
 
 /** Throws with the same messages the pre-split `launchTask` recorded; the caller records the error. */
 export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitApi = SYNC_GIT): Promise<LaunchCoreResult> {
-  const { repo, worktree: wt, branch, base, branchOf, ...lr } = req;
-  await g.addWorktree(repo, wt, branch, base);
+  const { repo, worktree: wt, branch, base, branchOf, adopt, ...lr } = req;
+  // F-vlad-239: a failed task re-queued for a retry keeps its worktree/branch (the worker's commits). Re-adopt them only when
+  // the owner checks out: the folder is a git worktree sitting on exactly `branch`, or only the branch is left. Anything else
+  // (foreign folder, other branch) falls through to addWorktree, which refuses with "zaten var".
+  let reused = false;
+  if (!adopt) { /* first launch: anything already there is foreign, addWorktree refuses */ }
+  else if (existsSync(wt)) {
+    reused = (await g.isWorktree(repo, wt)) && (await (branchOf ?? g.worktreeBranch)(wt)) === branch;
+  } else if (await g.branchExists(repo, branch)) {
+    await g.attachWorktree(repo, wt, branch);
+    reused = true;
+  }
+  if (!reused) await g.addWorktree(repo, wt, branch, base);
   // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
   const actual = await (branchOf ?? g.worktreeBranch)(wt);
+  if (actual !== branch && reused) throw new Error(`worktree beklenen dalda değil (beklenen ${branch}, bulunan ${actual ?? "yok"}): ${wt}`); // earlier work lives here: no rollback
   if (actual !== branch) {
     try { await g.removeWorktree(repo, wt); } catch { /* the branch cleanup and the error below still matter */ }
     // addWorktree refuses an existing branch, so `branch` (if present) was created just now; keep the name free for a retry
@@ -89,11 +103,12 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
     failure = `launcher başarısız: ${(e as Error).message}`;
   }
   if (failure || !res) {
+    if (reused) throw new Error(failure!); // the earlier run's commits live here: never roll back what this launch did not create
     const cleanup = await undo();
     untrustWorktree(wt);
     throw new Error(`${failure}${cleanup ? `; temizlik başarısız: ${cleanup}` : ""}`);
   }
-  return { ...res, branch, worktree: wt };
+  return { ...res, branch, worktree: wt, ...(reused ? { reused } : {}) };
 }
 
 /**

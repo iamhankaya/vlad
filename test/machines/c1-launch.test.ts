@@ -330,3 +330,19 @@ describe("machines:C1 launchTask — yerleştirme + uzak yol", () => {
     await expect(launchTask(task.data.id, { launcher: fakeLauncher(), cfg: c2, machine: "windows" })).rejects.toThrow(/yalnız config'te machines/);
   });
 });
+
+describe("F-vlad-239: failed → queued → uzak yeniden launch", () => {
+  it("ilk launch'ta retry yok; failed→queued sonrası (worktree kayıtlı) launch args'ta retry:true gider ve görev running olur", async () => {
+    const task = mk();
+    const id = task.data.id;
+    const f = fakeTransport({ ...ok, launch: (a) => ({ ...launched, branch: a.branch }) });
+    await launchTask(id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });
+    expect(f.ops("launch")[0].args.retry).toBeUndefined();
+    setState(id, "failed");
+    setState(id, "queued");
+    const r = await launchTask(id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });
+    expect(r.data).toMatchObject({ state: "running", machine: "windows", launch_op: null });
+    expect(f.ops("launch")).toHaveLength(2);
+    expect(f.ops("launch")[1].args.retry).toBe(true);
+  });
+});

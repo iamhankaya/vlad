@@ -330,15 +330,27 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
       if (claimed) releasePin(parent, patch.machine!, id);
     });
   };
+  // F-vlad-239: a recorded worktree on a queued task = an earlier run ended (failed → queued). Its window must be gone before
+  // a second session attaches to the same worktree; a window that cannot be closed refuses the launch.
+  const adopt = !!task.data.worktree;
+  if (adopt) {
+    try { (o.closeWorker ?? closeWorkerWindow)(id); } catch (e) {
+      try { await unclaim(); } catch { /* best effort */ }
+      const msg = `önceki pencere kapatılamadı, yeniden launch yapılmadı: ${(e as Error).message}`;
+      await recordError(id, msg);
+      throw new Error(msg);
+    }
+  }
+  let reused = false;
   try {
-    await launchCore({
-      taskId: id, repo, worktree: wt, branch, ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
+    ({ reused = false } = await launchCore({
+      taskId: id, repo, worktree: wt, branch, ...(adopt ? { adopt } : {}), ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
       prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
       ...(autoCompact ? { autoCompact } : {}),
-    }, o.launcher);
+    }, o.launcher));
   } catch (e) {
     const msg = (e as Error).message;
     try { await unclaim(); } catch { /* best effort: asıl hata kaybolmasın */ }
@@ -357,9 +369,11 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     if (now === "cancelled" || now === "failed" || now === "done") { // yalnız terminal: blocked/stalled canlı görevin worktree'ine dokunulmaz
       const problems: string[] = [];
       try { (o.closeWorker ?? closeWorkerWindow)(id); } catch (x) { problems.push(`pencere kapatılamadı: ${(x as Error).message}`); }
-      try { removeTaskWorktree(repo, wt, id); } catch (x) { problems.push(`worktree kaldırılamadı: ${(x as Error).message}`); }
-      try { untrustWorktree(wt); } catch { /* best effort */ }
-      throw new Error(`görev başlatılırken ${now} yapıldı; açılan pencere kapatıldı, worktree kaldırıldı${problems.length ? ` (${problems.join("; ")}; elle temizle: ${wt})` : ""}`);
+      if (!reused) { // a re-adopted worktree carries the earlier run's work: only the window goes
+        try { removeTaskWorktree(repo, wt, id); } catch (x) { problems.push(`worktree kaldırılamadı: ${(x as Error).message}`); }
+        try { untrustWorktree(wt); } catch { /* best effort */ }
+      }
+      throw new Error(`görev başlatılırken ${now} yapıldı; açılan pencere kapatıldı, ${reused ? "yeniden kullanılan worktree korundu" : "worktree kaldırıldı"}${problems.length ? ` (${problems.join("; ")}; elle temizle: ${wt})` : ""}`);
     }
     const msg = `terminal açıldı ama durum güncellenemedi: ${(e as Error).message}; worktree: ${wt}`;
     try { await recordError(id, msg); } catch { /* best effort */ }
@@ -532,6 +546,8 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     title: `VLAD ${id} — ${task.data.title}`,
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
+    // F-vlad-239: a recorded worktree on a queued task means an earlier run ended (failed → queued); the worker re-adopts it
+    ...(task.data.worktree && !old ? { retry: true } : {}),
   };
   const op = await reserve(old);
 
