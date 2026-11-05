@@ -8,6 +8,7 @@ import {
   tmuxSession,
 } from "../../src/launcher/index.js";
 import type { LaunchRequest } from "../../src/launcher/types.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const req = (o: Partial<LaunchRequest> = {}): LaunchRequest => ({
   taskId: "T20261101-18", cwd: "/Users/me/vlad wt/T20261101-18", prompt: "merhaba",
@@ -68,7 +69,7 @@ describe("buildPosixScript run by a real bash", () => {
     const script = join(dir, "w.sh");
     writeFileSync(script, buildPosixScript(req({ cwd: dir, prompt })));
     const out = join(dir, "out.txt");
-    const res = spawnSync("bash", [script], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
+    const res = spawnSync("bash", [script], { env: { ...isolatedEnv(), PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
     expect(res.status).toBe(0);
     expect(readFileSync(out, "utf8")).toBe(prompt);
   });

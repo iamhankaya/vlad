@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 let home: string;
@@ -17,7 +18,7 @@ beforeEach(() => {
 
 type Res = { code: number | null; out: string; err: string };
 function spawnVlad(args: string[], input = "", env: Record<string, string> = {}) {
-  const p = spawn("node", [cli, ...args], { env: { ...process.env, VLAD_HOME: home, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+  const p = spawn("node", [cli, ...args], { env: { ...isolatedEnv(), VLAD_HOME: home, ...env }, stdio: ["pipe", "pipe", "pipe"] });
   let out = "", err = "";
   p.stdout.on("data", (d) => (out += d));
   p.stderr.on("data", (d) => (err += d));

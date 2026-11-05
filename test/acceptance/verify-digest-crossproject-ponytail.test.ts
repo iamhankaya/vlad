@@ -10,6 +10,7 @@ import { defaultConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { launchTask } from "../../src/tasks/launch.js";
 import { makeHome, wtp } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const cli = join(root, "dist", "cli.js");
@@ -20,7 +21,7 @@ function git(cwd: string, ...args: string[]) {
 }
 function vlad(home: string, args: string[], input?: string) {
   // CLAUDE_CODE_REMOTE="" keeps the CLI in local mode whatever the host runs in
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home, CLAUDE_CODE_REMOTE: "" } });
+  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: home, CLAUDE_CODE_REMOTE: "" } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 const fakeLauncher = (): Launcher => ({ async launch(_q: LaunchRequest) { return { ok: true, method: "fake" }; } });

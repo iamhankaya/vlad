@@ -10,6 +10,7 @@ import { createTask, getTask } from "../../src/tasks/index.js";
 import { launchTask } from "../../src/tasks/launch.js";
 import { makeHome, rmTemp } from "../helpers.js";
 import { CLI, makeHomePair, spawnVlad } from "./harness.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 // Son kapı Codex 2. tur P2: beyin-yerel launch kapasiteyi kilit altında ayırır (maxParallel=1 → yalnız biri açılır).
 const git = (cwd: string, ...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd, stdio: "pipe", encoding: "utf8" });
@@ -94,7 +95,7 @@ describe("yerel launch kapasite rezervasyonu — eşzamanlı alt süreç", () =>
       writeFileSync(join(p.brain.home, "card.md"), cardText(repo));
       expect(spawnVlad(p.brain, ["project", "write", "alpha", "--file", join(p.brain.home, "card.md")]).code).toBe(0);
       const ids = [0, 1].map(() => JSON.parse(spawnVlad(p.brain, ["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--body-file", "-", "--json"], { stdin: "## Tanım\nx\n" }).out).id as string);
-      const env = { ...process.env, ...p.brain.env, VLAD_LAUNCHER: "noop" };
+      const env = { ...isolatedEnv(), ...p.brain.env, VLAD_LAUNCHER: "noop" };
       const runs = await Promise.all(ids.map((id) => new Promise<number | null>((res) => {
         const c = spawn(process.execPath, [CLI, "task", "launch", id, "--machine", "mac"], { env, stdio: "ignore" });
         c.on("exit", res);

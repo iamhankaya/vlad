@@ -11,7 +11,7 @@ let home: string;
 beforeEach(() => { home = makeHome(); });
 
 function vlad(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env: { ...process.env, VLAD_HOME: home, ...env } });
+  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env: { ...isolatedEnv(), VLAD_HOME: home, ...env } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 
@@ -58,4 +58,5 @@ describe("vlad task idle / audit skills", () => {
 });
 
 import { readFileSync } from "node:fs";
+import { isolatedEnv } from "../isolate-env.js";
 const readTask = (id: string) => readFileSync(join(home, "kb", "tasks", `${id}.md`), "utf8");

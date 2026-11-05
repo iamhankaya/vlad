@@ -8,10 +8,11 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { commitKb } from "../../src/kb/commit.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const ident = { GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" };
 let home: string;
-const git = (...a: string[]) => execFileSync("git", a, { cwd: home, encoding: "utf8", stdio: "pipe", env: { ...process.env, ...ident } }).trim();
+const git = (...a: string[]) => execFileSync("git", a, { cwd: home, encoding: "utf8", stdio: "pipe", env: { ...isolatedEnv(), ...ident } }).trim();
 
 beforeEach(() => {
   home = makeHome();

@@ -47,6 +47,7 @@
     "test/projects/store.test.ts",
     "test/roles/**/*.test.ts",
     "test/scope/u2-imports-posix.test.ts",
+    "test/scope/u2-no-process-env.test.ts",
     "test/scope/u2-scope.test.ts",
     "test/skills/**/*.test.ts",
     "test/stdout-epipe.test.ts",

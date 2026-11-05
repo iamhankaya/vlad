@@ -16,6 +16,7 @@ import { parsedTaskCacheSize } from "../../src/tasks/store.js";
 import { probeIntegrationBranch, prepareCloudLaunch } from "../../src/tasks/cloud.js";
 import { trustWorktree } from "../../src/tasks/trust.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 let home: string;
 beforeEach(() => { home = makeHome(); });
@@ -61,7 +62,7 @@ describe("F-vlad-070 opus gerekçesi şemada zorunlu", () => {
 describe("F-vlad-103 kb commit kilit altında", () => {
   it("canlı sahip kilidi tutarken commit kilidi bekler ve zaman aşımında hata verir", () => {
     const repo = home;
-    const run = (...a: string[]) => execFileSync("git", a, { cwd: repo, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" } });
+    const run = (...a: string[]) => execFileSync("git", a, { cwd: repo, stdio: "pipe", env: { ...isolatedEnv(), GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" } });
     run("init", "-b", "main");
     writeFileSync(join(repo, "kb", "tasks", "T1.md"), "x");
     writeFileSync(join(home, "kb", ".vlad.lock"), JSON.stringify({ pid: process.pid, started: Date.now(), token: "other" }));

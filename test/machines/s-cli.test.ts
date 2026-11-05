@@ -4,12 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { RemoteError, TRANSIENT_CODES, type AgentCode } from "../../src/machines/index.js";
 import { exitCodeFor, remoteErrorDetails } from "../../src/machines/exit.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 beforeEach(() => { home = makeHome(); });
 const vlad = (args: string[]) => {
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env: { ...process.env, VLAD_HOME: home } });
+  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env: { ...isolatedEnv(), VLAD_HOME: home } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 

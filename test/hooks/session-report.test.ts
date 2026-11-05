@@ -9,6 +9,7 @@ import { resolve } from "node:path";
 import { afterAll, beforeAll } from "vitest";
 import { buildReport, loadProjects, main, readStdin } from "../../src/hooks/report.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 let home: string;
 beforeEach(() => { home = makeHome(); });
@@ -142,7 +143,7 @@ describe("entry process", () => {
   afterAll(() => {});
   it("exits 0 on invalid stdin and logs", () => {
     const r = spawnSync("node", [join(out, "hooks", "session-report.js")], {
-      input: "not json", encoding: "utf8", env: { ...process.env, VLAD_HOME: home },
+      input: "not json", encoding: "utf8", env: { ...isolatedEnv(), VLAD_HOME: home },
     });
     expect(r.status).toBe(0);
     expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);
@@ -153,7 +154,7 @@ describe("entry process", () => {
     writeFileSync(join(d, "report.js"), "import \"./does-not-exist.js\";");
     writeFileSync(join(d, "package.json"), '{"type":"module"}');
     const r = spawnSync("node", [join(d, "session-report.js")], {
-      input: "x", encoding: "utf8", env: { ...process.env, VLAD_HOME: home },
+      input: "x", encoding: "utf8", env: { ...isolatedEnv(), VLAD_HOME: home },
     });
     expect(r.status).toBe(0);
     expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);

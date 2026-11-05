@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { checkKb, kbCheckExitCode } from "../../src/kb/check.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const ident = (n: string) => ({
   GIT_AUTHOR_NAME: n, GIT_AUTHOR_EMAIL: `${n}@t`, GIT_COMMITTER_NAME: n, GIT_COMMITTER_EMAIL: `${n}@t`,
@@ -13,7 +14,7 @@ let remote: string;
 let kb: string;
 let other: string; // second clone: plays "VLAD on another machine" or a foreign writer
 const run = (cwd: string, who: string, ...a: string[]) =>
-  execFileSync("git", a, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, ...ident(who) } }).trim();
+  execFileSync("git", a, { cwd, encoding: "utf8", stdio: "pipe", env: { ...isolatedEnv(), ...ident(who) } }).trim();
 const commitIn = (cwd: string, who: string, subject: string) => {
   writeFileSync(join(cwd, `f-${Math.random().toString(36).slice(2)}.md`), subject);
   run(cwd, who, "add", ".");
@@ -122,7 +123,7 @@ describe("checkKb", () => {
     ackHead();
     writeFileSync(join(other, "z.md"), "z");
     run(other, "T", "add", ".");
-    execFileSync("git", ["commit", "-q", "-m", "evil"], { cwd: other, stdio: "pipe", env: { ...process.env, GIT_AUTHOR_NAME: "x	kb: foo", GIT_AUTHOR_EMAIL: "x@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" } });
+    execFileSync("git", ["commit", "-q", "-m", "evil"], { cwd: other, stdio: "pipe", env: { ...isolatedEnv(), GIT_AUTHOR_NAME: "x	kb: foo", GIT_AUTHOR_EMAIL: "x@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" } });
     run(other, "T", "push", "-q", "origin", "HEAD");
     expect(checkKb().foreign.map((c) => c.subject)).toEqual(["evil"]);
   });
