@@ -127,7 +127,8 @@
     "test/tasks/launch.test.ts",
     "test/tasks/resume-window.test.ts",
     "test/tasks/resume.test.ts",
-    "test/tasks/trust.test.ts"
+    "test/tasks/trust.test.ts",
+    "test/tasks/u4b-F245-trust-lock.test.ts"
   ],
   "agent": [
     "test/acceptance/aktarim-dosya.test.ts",
@@ -184,6 +185,7 @@
     "test/machines/c2-probe-window.test.ts",
     "test/machines/s-config.test.ts",
     "test/machines/t51-fail-closed.test.ts",
-    "test/tasks/liveness.test.ts"
+    "test/tasks/liveness.test.ts",
+    "test/machines/u4b-F246-forward-parse.test.ts"
   ]
 }

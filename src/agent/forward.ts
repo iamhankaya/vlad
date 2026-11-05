@@ -22,7 +22,10 @@ export function workerState(): WorkerState {
   if (!existsSync(f)) return { kind: "off" };
   let raw: string;
   try { raw = readFileSync(f, "utf8"); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
-  if (!raw.includes('"machines"')) return { kind: "off" }; // ucuz hızlı yol: machines yok → tek makine davranışı
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch (e) { return { kind: "unknown", reason: `config ayrıştırılamadı: ${(e as Error).message}` }; } // fail-closed (F-vlad-246): metin araması değil
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { kind: "unknown", reason: "config bir nesne değil" };
+  if (!("machines" in parsed)) return { kind: "off" }; // machines yok → tek makine davranışı
   let cfg: VladConfig;
   try { cfg = loadConfig(); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
   if (!cfg.machines) return { kind: "off" };
