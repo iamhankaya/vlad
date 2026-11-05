@@ -3,7 +3,16 @@
 GitHub self-hosted runner, Mac mini'de **ayrı, admin olmayan** kullanıcı hesabında. Betik: `scripts/mac/ci-runner.sh` (varsayılan `--dry-run`). Denetim: `scripts/mac/audit.sh` (`ci-user`, `ci-runner` satırları).
 
 ## Neden ayrı hesap
-Runner, workflow'daki kodu çalıştırır. Beyin hesabında (`~/.claude`, `vlad.local.json` Agent anahtarları, kb, GitHub oturumu) çalışırsa bir workflow bunların hepsini okuyabilir. Ayrı hesap bu yüzeyi keser; runner'ın bu hesaptan beyin dizinlerine okuma izni olmamalı (`chmod 700` ev dizinleri varsayılandır, doğrula).
+Runner, workflow'daki kodu çalıştırır. Beyin hesabında (`~/.claude`, `vlad.local.json` Agent anahtarları, kb, GitHub oturumu) çalışırsa bir workflow bunların hepsini okuyabilir. Ayrı hesap bu yüzeyi keser; runner'ın bu hesaptan beyin dizinlerine okuma izni olmamalı (§0'daki `chmod 700 ~` adımı runner kurulmadan önce yapılmalı).
+
+## 0. Ev dizinini kapat (runner'dan önce, beyin hesabında)
+`sysadminctl` yeni hesabı `staff` grubuna koyar; ev dizini 750/755 ise `vlad-ci` kb'yi (`~/dev/vlad-kb`) ve `~/.claude` transkriptlerini okuyabilir.
+```
+chmod 700 ~
+sudo -u vlad-ci ls ~/dev/vlad-kb     # "Permission denied" vermeli; dosya listelenirse runner kurma
+scripts/mac/audit.sh                  # home-perms satırı ok olmalı
+```
+`~/dev` ve `~/.claude` modları 755 olsa da `~` kapalıyken `vlad-ci` içeri giremez.
 
 ## Kullanıcı adımları (betik yapmaz)
 1. **Hesap (§2):** `sudo sysadminctl -addUser vlad-ci -fullName "VLAD CI" -password -` (admin DEĞİL; parola istenir). `vlad-ci` kullanıcısı GUI oturumunda açık olmalı (runner kullanıcı LaunchAgent'ı olarak çalışır): Fast User Switching ile giriş yapıp açık bırak. Kontrol: `id -Gn vlad-ci` içinde `admin` yok.
@@ -17,13 +26,16 @@ Runner, workflow'daki kodu çalıştırır. Beyin hesabında (`~/.claude`, `vlad
 ```
 # önce neyi yapacağını gör
 scripts/mac/ci-runner.sh --repo-url https://github.com/<sahip>/<repo> --version <X.Y.Z> --sha256 <hex>
-# uygula; token stdin'den (kabuk geçmişine/argv'ye yazılmasın)
-pbpaste | scripts/mac/ci-runner.sh --repo-url ... --version ... --sha256 ... --apply --token-stdin
+# uygula; token stdin'den, ekrana yansımadan (kabuk geçmişine/argv'ye/ortak panoya düşmesin; pbpaste kullanma: pano Mac↔Windows'a senkronlanır)
+read -rs T; printf '%s\n' "$T" | scripts/mac/ci-runner.sh --repo-url ... --version ... --sha256 ... --apply --token-stdin; unset T
 ```
 İdempotent: `.runner` varsa indirme/kayıt, `.service` varsa servis kurulumu atlanır. Betik root'ta, CI hesabı dışında ve admin grubundaki hesapta `--apply`'ı reddeder; sha256 uyuşmazsa hiçbir şey kurmaz.
 
 ## Ağır iş ve VLAD paralelliği
 Runner ile VLAD çalışanları aynı makinenin CPU/RAM'ini paylaşır. iOS build sırasında `vlad.config.json` > `machines[mac].maxParallel` değerini düşür (ör. 2) ve build bitince geri al; değişiklik elle yapılır, betik config'e dokunmaz.
+
+## Anahtar zinciri uyarısı
+`vlad-ci` anahtar zincirindeki imzalama sertifikaları ve profiller workflow koduna açıktır: runner'da çalışan her workflow bunlara erişebilir. Yalnız güvenilen dallarda çalıştır; sertifikaları yalnız iOS imzası için gereken en az kapsamda tut.
 
 ## Bilinen sınırlar
 - `config.sh` token'ı yalnız argv ile alır; token kısa süre `ps`te görünür (tek kullanımlık, 1 saat). Betik token'ı komut çıktısına yazmaz.

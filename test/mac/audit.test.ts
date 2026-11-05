@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { run, sandbox, stub, type Sandbox } from "./helpers.js";
@@ -22,6 +22,7 @@ function fullMac(s: Sandbox) {
   writeFileSync(join(repo, "dist", "cli.js"), "");
   writeFileSync(join(repo, "vlad.local.json"), JSON.stringify({ self: "mac", keys: { mac: KEY, windows: KEY } }));
   mkdirSync(join(s.home, "dev", "vlad-kb"), { recursive: true });
+  chmodSync(s.home, 0o700);
   const la = join(s.home, "Library", "LaunchAgents"); mkdirSync(la, { recursive: true });
   writeFileSync(join(la, "com.vlad.agent.plist"), "x"); writeFileSync(join(la, "com.vlad.main.plist"), "x");
 }
@@ -66,5 +67,31 @@ describe("mac/audit.sh", () => {
     const s = sandbox(); fullMac(s); run("audit.sh", [], s);
     const calls = readFileSync(s.log, "utf8") as string;
     expect(calls).not.toMatch(/bootstrap|load |kickstart|new-session|install|--apply/);
+  });
+  // F-vlad-249
+  it("ev dizini group/other okunabiliyorsa home-perms uyarısı verir; 700'de ok", () => {
+    const s = sandbox(); fullMac(s);
+    const get = () => (JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string; kanit: string }>).find((x) => x.madde === "home-perms");
+    expect(get()?.durum).toBe("ok");
+    chmodSync(s.home, 0o755);
+    const w = get();
+    expect(w?.durum).toBe("uyarı"); expect(w?.kanit).toContain("chmod 700");
+  });
+  // F-vlad-250
+  it("vlad-kb origin URL'sindeki kimlik bilgisini maskeler (tablo ve --json)", () => {
+    const s = sandbox(); fullMac(s);
+    stub(s, "git", 'case "$*" in *"remote get-url"*) echo "https://user:SECRETTOKEN@github.com/iamhankaya/vlad-kb.git";; *"rev-parse"*) echo true;; esac');
+    for (const args of [[], ["--json"]]) {
+      const r = run("audit.sh", args, s);
+      expect(r.stdout + r.stderr).not.toContain("SECRETTOKEN");
+      expect(r.stdout).toContain("github.com/iamhankaya/vlad-kb");
+    }
+  });
+  // F-vlad-251
+  it("geçersiz VLAD_CI_USER'ı reddeder, kabuk ifadesini çalıştırmaz", () => {
+    const s = sandbox(); fullMac(s); delete s.env.VLAD_CI_HOME;
+    const r = run("audit.sh", [], s, { VLAD_CI_USER: `a$(touch ${join(s.root, "PWN")})` });
+    expect(r.status).toBe(2);
+    expect(existsSync(join(s.root, "PWN"))).toBe(false);
   });
 });
