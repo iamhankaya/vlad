@@ -127,7 +127,8 @@
     "test/tasks/launch.test.ts",
     "test/tasks/resume-window.test.ts",
     "test/tasks/resume.test.ts",
-    "test/tasks/trust.test.ts"
+    "test/tasks/trust.test.ts",
+    "test/tasks/u4b-F245-trust-lock.test.ts"
   ],
   "agent": [
     "test/acceptance/aktarim-dosya.test.ts",

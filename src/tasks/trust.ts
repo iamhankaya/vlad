@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -10,26 +11,73 @@ export const trustKey = (dir: string): string => dir.replaceAll("\\", "/");
 
 type Json = { projects?: Record<string, Record<string, unknown>> } & Record<string, unknown>;
 
-export interface TrustOpts { /** how long to wait for the lock before giving up with a warning (default 5000 ms) */ lockWaitMs?: number }
+export interface TrustOpts {
+  /** how long to wait for the lock before giving up with a warning (default 5000 ms) */ lockWaitMs?: number;
+  /** test injection: is this pid a live process (default: signal 0) */ isAlive?: (pid: number) => boolean;
+  /** test injection: clock for the stale-directory check (default Date.now) */ now?: () => number;
+}
 
 const STALE_LOCK_MS = 15_000;
 const sleepMs = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
+const pidAlive = (pid: number): boolean => {
+  try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; }
+};
 
-/** Cross-process lock next to the file (mkdir is atomic); a lock older than STALE_LOCK_MS belongs to a dead process and is broken. */
-function withFileLock<T>(file: string, waitMs: number, fn: () => T): T | { locked: false } {
+type Owner = { pid: number; nonce: string; startedAt: number };
+const readOwner = (dir: string): Owner | null => {
+  try {
+    const o = JSON.parse(readFileSync(join(dir, "owner.json"), "utf8")) as Owner;
+    return Number.isInteger(o?.pid) && typeof o.nonce === "string" ? o : null;
+  } catch { return null; }
+};
+
+/**
+ * Cross-process lock next to the file (mkdir is atomic; the holder is recorded in `<lock>/owner.json`, F-vlad-245).
+ * A lock is only broken when its owner pid is dead, or (no readable owner.json) the directory is older than
+ * STALE_LOCK_MS; a live pid is never broken (pid reuse can only make us wait). Breaking renames the directory away first
+ * (atomic: of two breakers one wins) and gives it back if it turns out to be a different, live lock. Release deletes the
+ * lock only while owner.json still carries our nonce.
+ */
+export function withFileLock<T>(file: string, waitMs: number, fn: () => T, o: TrustOpts = {}): T | { locked: false } {
   const lock = `${file}.vlad-lock`;
+  const isAlive = o.isAlive ?? pidAlive;
+  const now = o.now ?? Date.now;
+  const nonce = randomUUID();
   const deadline = Date.now() + waitMs;
   for (;;) {
-    try { mkdirSync(lock); break; } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      let broke = false;
-      try { if (Date.now() - statSync(lock).mtimeMs > STALE_LOCK_MS) { rmSync(lock, { recursive: true, force: true }); broke = true; } } catch { /* vanished or not removable: wait below, the deadline still applies */ }
-      if (broke) continue;
+    try {
+      mkdirSync(lock);
+      const tmp = join(lock, `owner.json.${nonce}.tmp`);
+      writeFileSync(tmp, JSON.stringify({ pid: process.pid, nonce, startedAt: now() } satisfies Owner));
+      renameSync(tmp, join(lock, "owner.json"));
+      break;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") { try { rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ } throw e; }
+      if (breakIfStale(lock, nonce, isAlive, now)) continue;
       if (Date.now() >= deadline) return { locked: false };
       sleepMs(10 + Math.floor(Math.random() * 20));
     }
   }
-  try { return fn(); } finally { try { rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ } }
+  try { return fn(); } finally {
+    try { if (readOwner(lock)?.nonce === nonce) rmSync(lock, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+}
+
+/** true when a stale lock was moved away (retry mkdir now); false when the lock stays (live owner, fresh, or lost the race). */
+function breakIfStale(lock: string, nonce: string, isAlive: (pid: number) => boolean, now: () => number): boolean {
+  const seen = readOwner(lock);
+  try {
+    const stale = seen ? !isAlive(seen.pid) : now() - statSync(lock).mtimeMs > STALE_LOCK_MS;
+    if (!stale) return false;
+    const away = `${lock}.stale-${nonce}`;
+    renameSync(lock, away);
+    if (readOwner(away)?.nonce !== seen?.nonce) { // replaced between our check and the rename: not the lock we judged
+      try { renameSync(away, lock); } catch { /* someone re-created it already; the lock we moved is lost, but it was only ever waited on */ }
+      return false;
+    }
+    rmSync(away, { recursive: true, force: true });
+    return true;
+  } catch { return false; } // vanished (the other breaker won) or not movable: wait below, the deadline still applies
 }
 
 /**
@@ -47,7 +95,7 @@ function edit(file: string, change: (j: Json) => boolean, o: TrustOpts = {}): st
         if (last !== VERIFY_FAILED) return last;
       }
       return `${file}: güven kaydı yazıldı ama başka süreç üzerine yazdı, kayıt doğrulanamadı`;
-    });
+    }, o);
     return typeof r === "object" && r !== null ? `${file} kilitli (${file}.vlad-lock), güven kaydı atlandı` : r;
   } catch (e) {
     return `${file} yazılamadı, güven kaydı atlandı: ${(e as Error).message}`;
