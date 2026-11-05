@@ -44,7 +44,7 @@ describe("buildPosixScript", () => {
   it("keeps model, autocompact and resume flags in the Windows order", () => {
     expect(buildPosixScript(req({ model: "sonnet", autoCompact: "300k", resume: { sessionId: "s1" } })))
       .toMatch(/\nclaude --model 'sonnet' --autocompact '300k' --resume 's1' "\$p"\n$/);
-    expect(buildPosixScript(req({ resume: {} }))).toMatch(/\nclaude --continue "\$p"\n$/);
+    expect(() => buildPosixScript(req({ resume: {} }))).toThrow(/oturum kimliği yok/); // F-vlad-247: no --continue
   });
   it("validates model, autocompact and env names", () => {
     expect(() => buildPosixScript(req({ model: "a'; rm -rf ~" }))).toThrow(/geçersiz model/);
