@@ -14,7 +14,7 @@ export interface CatalogEntry {
  * Hariç tutulanlar manifestte `console: none` + gerekçe. `status` işaretleme yan etkisine rağmen okuma sayılır (günlüğe girmez).
  */
 export const CONSOLE_CATALOG: readonly CatalogEntry[] = COMMANDS.flatMap((s): CatalogEntry[] =>
-  s.console.kind === "none" ? [] : [{ path: [...s.path], kind: s.console.kind, ...(s.console.fileFlags ? { fileFlags: s.console.fileFlags } : {}) }]);
+  s.console.kind === "none" ? [] : [{ path: [...s.path], kind: s.console.kind, ...(s.console.fileFlags ? { fileFlags: [...s.console.fileFlags] } : {}) }]);
 
 const MAX_ARG = 64 * 1024;
 const MAX_TOTAL = 1024 * 1024;

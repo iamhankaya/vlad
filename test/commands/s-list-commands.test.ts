@@ -30,6 +30,9 @@ describe("s-list-commands", () => {
     expect(errs).toHaveLength(inv.commands.length);
     expect(errs[0]).toMatch(/^manifestte yok: /);
   });
+  it("manifest `json` flag = the real --json option of each leaf", () => {
+    for (const c of inv.commands) expect(COMMANDS.find((s) => s.path.join(" ") === c.path.join(" "))?.json, c.path.join(" ")).toBe(c.hasJson);
+  });
   it("manifest ↔ Commander tree is complete both ways", () => {
     expect(validateManifest(COMMANDS, inv.commands.map((c) => c.path))).toEqual([]);
   });

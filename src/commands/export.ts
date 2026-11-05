@@ -9,5 +9,5 @@ export interface DesktopCatalog {
 
 /** Plain-JSON command catalog for vlad-desktop, straight from the manifest. */
 export function exportCatalog(): DesktopCatalog {
-  return { version: 1, commands: COMMANDS.map((s) => ({ path: [...s.path], json: s.json, console: s.console })) };
+  return { version: 1, commands: COMMANDS.map((s) => ({ path: [...s.path], json: s.json, console: structuredClone(s.console) })) };
 }

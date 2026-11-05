@@ -83,6 +83,16 @@ describe("u1-manifest: console timeouts and validation stay the same", () => {
     expect(consoleExecTimeoutMs(["scan"])).toBe(110_000);
     expect(consoleTimeoutMs(["task", "gate"])).toBe(31 * 60_000);
   });
+  it("only task gate / task merge carry a console timeoutMs", () => {
+    expect(COMMANDS.filter((s) => s.console.kind !== "none" && s.console.timeoutMs !== undefined).map(keyOf).sort()).toEqual(["task gate", "task merge"]);
+  });
+  it("catalog entries do not alias manifest arrays", () => {
+    for (const e of CONSOLE_CATALOG) {
+      if (!e.fileFlags) continue;
+      const spec = COMMANDS.find((s) => s.path.join(" ") === e.path.join(" "))!;
+      expect(e.fileFlags, e.path.join(" ")).not.toBe((spec.console as { fileFlags: string[] }).fileFlags);
+    }
+  });
   it("validateConsoleArgv: allowed commands pass, off-catalog ones are forbidden (negative cases kept)", () => {
     expect(validateConsoleArgv(["task", "list", "--json"]).entry.path).toEqual(["task", "list"]);
     expect(validateConsoleArgv(["project", "write", "x", "--file", "-"], "# kart").entry.fileFlags).toEqual(["--file"]);
