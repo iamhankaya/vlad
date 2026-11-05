@@ -37,6 +37,12 @@ const RETRY_DELAYS_MS = [200, 800]; // 3 deneme
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const fail = (msg: string) => new RemoteError("failed", `failed: ${msg}`);
 const changed = () => fail("dosya gönderim sırasında değişti");
+/** macOS TCC (Dosyalar ve Klasörler) reddi: ham "EPERM operation not permitted" yerine yapılacak iş söylenir (F-vlad-235). */
+const tccHint = (e: unknown): RemoteError | null => {
+  const c = (e as NodeJS.ErrnoException | null)?.code;
+  return process.platform === "darwin" && c === "EPERM" // EACCES sıradan dosya izni (chmod) olabilir: ham kalır
+    ? fail("macOS dosya izni gerekli: Sistem Ayarları → Gizlilik ve Güvenlik → Dosyalar ve Klasörler (ya da Tam Disk Erişimi) altında VLAD'a/Terminal'e izin ver") : null;
+};
 
 /** Alıcıyla aynı `sanitizeEntryPath` + harf duyarsız (NFC) çakışma; boş dizi = sorun yok. Alıcı tüm manifest'i düşürmeden önce gönderici söyler. */
 export function checkEntryNames(paths: string[], os: Os): { path: string; reason: string }[] {
@@ -123,7 +129,7 @@ async function transfer(t: RemoteTransport, j: Job): Promise<XferCommitResult> {
 /** Dosyayı `size` bayta kadar okur; tür/boyut/mtime gönderim boyunca değişirse hata (lstat sonrası açılan tanıtıcı fstat ile yeniden doğrulanır). */
 async function feedFile(abs: string, size: number, mtimeMs: number, chunkBytes: number, emit: (offset: number, data: Buffer) => Promise<void>): Promise<string> {
   // O_NOFOLLOW: lstat→open arasında bağa çevrilen yol izlenmez; O_NONBLOCK: fifo'ya çevrilirse açılışta bloklanmaz (Windows'ta sabitler yok → 0)
-  const fh = await open(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0));
+  const fh = await open(abs, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0)).catch((e) => { throw tccHint(e) ?? e; });
   try {
     const st = await fh.stat();
     if (!st.isFile() || st.size !== size || st.mtimeMs !== mtimeMs) throw changed();
@@ -152,12 +158,12 @@ async function plan(paths: string[]): Promise<{ entries: Planned[]; skipped: Sen
   const entries: Planned[] = [], skipped: SendResult["skipped"] = [];
   const used = new Set<string>(); // üst düzey adlar, harf duyarsız
   const walk = async (abs: string, rel: string): Promise<number> => {
-    const st = await lstat(abs);
+    const st = await lstat(abs).catch((e) => { throw tccHint(e) ?? e; });
     if (st.isSymbolicLink()) { skipped.push({ path: abs, reason: "symlink" }); return 0; }
     if (st.isFile()) { entries.push({ path: rel, kind: "file", size: st.size, abs, mtimeMs: st.mtimeMs }); return 1; }
     if (!st.isDirectory()) { skipped.push({ path: abs, reason: "special" }); return 0; }
     let n = 0;
-    for (const name of (await readdir(abs)).sort()) n += await walk(join(abs, name), `${rel}/${name}`);
+    for (const name of (await readdir(abs).catch((e) => { throw tccHint(e) ?? e; })).sort()) n += await walk(join(abs, name), `${rel}/${name}`);
     if (n === 0) { entries.push({ path: rel, kind: "dir", size: 0, abs, mtimeMs: 0 }); n = 1; } // içinde gönderilecek bir şey yoksa boş dizin olarak
     return n;
   };
@@ -165,7 +171,7 @@ async function plan(paths: string[]): Promise<{ entries: Planned[]; skipped: Sen
     const p = resolve(given); // ".", ".." ve göreli yollar gerçek adıyla gider
     if (!basename(p)) throw fail(`kök dizin gönderilemez: ${given}`);
     let st;
-    try { st = await lstat(p); } catch { throw fail(`yol yok: ${given}`); }
+    try { st = await lstat(p); } catch (e) { throw tccHint(e) ?? fail(`yol yok: ${given}`); }
     if (st.isSymbolicLink() || (!st.isFile() && !st.isDirectory())) { skipped.push({ path: p, reason: st.isSymbolicLink() ? "symlink" : "special" }); continue; }
     const name = await uniqueName(basename(p), async (c) => used.has(c.toLowerCase()), st.isDirectory() ? "dir" : "file");
     used.add(name.toLowerCase());

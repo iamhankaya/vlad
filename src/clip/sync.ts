@@ -44,7 +44,7 @@ function rejectReason(c: ClipContent): string | null {
 }
 
 /** Yazım sonrası yerleşme: sayaç durulana dek bekler. Pencerede gelen artış yazdığımız içerikle (anlamsal) aynıysa yankıdır; farklıysa
- *  (kullanıcı/üçüncü taraf kopyası) `first` döner, böylece sonraki yoklama onu yerel olay görür. Resimde yeniden kodlama olabileceğinden içerik karşılaştırılmaz. */
+ *  (kullanıcı/üçüncü taraf kopyası) `first` döner, böylece sonraki yoklama onu yerel olay görür. Resimde yeniden kodlama olabileceğinden yalnız içerik TÜRÜ karşılaştırılır. */
 export async function settle(be: Pick<ClipboardBackend, "changeCount" | "read">, c: ClipContent, first: number, sleep: (ms: number) => Promise<void>, ms: number): Promise<number> {
   let after = first;
   for (let i = 0; i < SETTLE_TRIES; i++) {
@@ -53,9 +53,11 @@ export async function settle(be: Pick<ClipboardBackend, "changeCount" | "read">,
     if (now === after) break;
     after = now;
   }
-  if (after === first || c.kind !== "text") return after;
+  if (after === first) return after;
   const r = await be.read();
-  return !r.hidden && r.content?.kind === "text" && semanticHash(r.content) === semanticHash(c) ? Math.max(after, r.seq) : first;
+  if (r.hidden || (r.content && r.content.kind !== c.kind)) return first; // tür değişti (ör. resim→metin) ya da gizli kopya: kullanıcı olayı
+  if (c.kind === "image") return Math.max(after, r.seq); // shortcut: resim yeniden kodlanabildiğinden içerik karşılaştırılmaz (resim→resim kopyası yankı sayılır), piksel özeti sonraki iş
+  return r.content && semanticHash(r.content) === semanticHash(c) ? Math.max(after, r.seq) : first;
 }
 
 interface Pending { content: ClipContent; key: OrderKey; fails: number; nextAt: number }

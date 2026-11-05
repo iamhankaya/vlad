@@ -10,6 +10,8 @@ Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static cl
 [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 function Reply($o) { [Console]::Out.WriteLine(($o | ConvertTo-Json -Compress)); [Console]::Out.Flush() }
 function Seq { [int64][VladClip]::GetClipboardSequenceNumber() }
+# Yazmada her gerçek deneme öncesi seq yeniden doğrulanır (bekleme/resim çözme sırasında yerel kopya ezilmesin): $false = yerel değişti
+function WriteGuarded($f, $expect) { for ($i = 0; $i -lt 6; $i++) { if ((Seq) -ne $expect) { return $false }; try { $null = & $f; return $true } catch { if ($i -eq 5) { throw }; Start-Sleep -Milliseconds 40 } } }
 function Retry($f) { for ($i = 0; $i -lt 5; $i++) { try { return (& $f) } catch { Start-Sleep -Milliseconds 40 } }; return (& $f) }
 while ($true) {
   $line = [Console]::In.ReadLine()
@@ -42,17 +44,19 @@ while ($true) {
         Reply @{ id = $id; ok = $true; n = $n; after = (Seq); text = $text; png = $png }
       }
       'write' {
-        $n = Seq
-        if ($n -ne [int64]$p[3]) { Reply @{ id = $id; ok = $true; written = $false; n = $n }; break }
+        $expect = [int64]$p[3]
+        if ((Seq) -ne $expect) { Reply @{ id = $id; ok = $true; written = $false; n = (Seq) }; break }
         $bytes = [Convert]::FromBase64String($p[4])
+        $ok = $false
         if ($p[2] -eq 'text') {
           $s = [Text.Encoding]::UTF8.GetString($bytes)
-          if ($s.Length -eq 0) { Retry { [System.Windows.Forms.Clipboard]::Clear() } } else { Retry { [System.Windows.Forms.Clipboard]::SetText($s, [System.Windows.Forms.TextDataFormat]::UnicodeText) } }
+          if ($s.Length -eq 0) { $ok = WriteGuarded { [System.Windows.Forms.Clipboard]::Clear() } $expect } else { $ok = WriteGuarded { [System.Windows.Forms.Clipboard]::SetText($s, [System.Windows.Forms.TextDataFormat]::UnicodeText) } $expect }
         } else {
           $ms = New-Object System.IO.MemoryStream(, $bytes); $img = $null
-          try { $img = [System.Drawing.Image]::FromStream($ms); Retry { [System.Windows.Forms.Clipboard]::SetImage($img) } }
+          try { $img = [System.Drawing.Image]::FromStream($ms); $ok = WriteGuarded { [System.Windows.Forms.Clipboard]::SetImage($img) } $expect }
           finally { if ($img) { $img.Dispose() }; $ms.Dispose() } # SetImage panoyu kopyalayarak koyar (copy=true), Dispose güvenli
         }
+        if (-not $ok) { Reply @{ id = $id; ok = $true; written = $false; n = (Seq) }; break }
         Reply @{ id = $id; ok = $true; written = $true; n = (Seq) }
       }
       default { Reply @{ id = $id; ok = $false; err = 'bilinmeyen komut' } }
