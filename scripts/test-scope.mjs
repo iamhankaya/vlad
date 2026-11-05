@@ -1,0 +1,44 @@
+#!/usr/bin/env node
+// Selective test run: changed files → buckets (test/scope.json). Never replaces the full suite (card gate / final gate stay `npm test`).
+// Usage: node scripts/test-scope.mjs [--since <ref>] [--files a,b] [--json] [--run]
+//   --since <ref>  changed = `git diff --name-only <ref>` + untracked (default HEAD: working tree changes)
+//   --files        explicit list instead of git
+//   --run          execute via scripts/test-run.mjs (unit --changed, selected buckets, changed test files by path)
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { selectScope } from "./scope-lib.mjs";
+
+const root = resolve(import.meta.dirname, "..");
+const argv = process.argv.slice(2);
+const val = (flag) => (argv.includes(flag) ? argv[argv.indexOf(flag) + 1] : undefined);
+const since = val("--since") ?? "HEAD";
+const git = (...a) => {
+  const r = spawnSync("git", a, { cwd: root, encoding: "utf8" });
+  if (r.status !== 0) { process.stderr.write(`git ${a.join(" ")}: ${r.stderr}`); process.exit(1); }
+  return r.stdout.split("\n").filter(Boolean);
+};
+const files = val("--files") !== undefined
+  ? val("--files").split(",").filter(Boolean)
+  : [...new Set([...git("diff", "--name-only", since), ...git("ls-files", "-o", "--exclude-standard")])];
+
+const scope = JSON.parse(readFileSync(resolve(root, "test/scope.json"), "utf8"));
+const buckets = JSON.parse(readFileSync(resolve(root, "test/buckets.json"), "utf8"));
+const sel = selectScope(files, scope, buckets);
+
+if (argv.includes("--json")) process.stdout.write(JSON.stringify({ since, changed: files, ...sel }) + "\n");
+else {
+  process.stderr.write(`değişen dosya: ${files.length}; unit: ${sel.unit === "all" ? "tamamı" : `--changed ${since}`}; kovalar: ${sel.buckets.join(",") || "-"}; dosyalar: ${sel.files.length}\n`);
+  if (sel.unmapped.length) process.stderr.write(`eşlenmeyen yol (tüm kovalar koşar): ${sel.unmapped.join(", ")}\n`);
+  if (sel.warning) process.stderr.write(`uyarı: ${sel.warning}\n`);
+}
+
+if (argv.includes("--run")) {
+  const run = (args) => spawnSync(process.execPath, [resolve(root, "scripts/test-run.mjs"), ...args], { cwd: root, stdio: "inherit" }).status ?? 1;
+  let code = 0;
+  // one tsc per step is cheap (incremental no-op when nothing changed), steps stay independent
+  code ||= run(["--project", "unit", ...(sel.unit === "all" ? [] : ["--changed", since])]);
+  if (sel.buckets.length) code ||= run(["--project", sel.buckets.join(",")]);
+  if (sel.files.length) code ||= run(["--project", "process,agent,platform", "--", ...sel.files]);
+  process.exit(code);
+}

@@ -8,7 +8,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:fast": "node scripts/test-run.mjs",
+    "gate:changed": "node scripts/test-scope.mjs --run"
   },
   "engines": {
     "node": ">=22"
