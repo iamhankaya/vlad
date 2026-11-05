@@ -55,9 +55,9 @@ export async function settle(be: Pick<ClipboardBackend, "changeCount" | "read">,
   }
   if (after === first) return after;
   const r = await be.read();
-  if (r.hidden || r.content?.kind !== c.kind) return first; // tür değişti (ör. resim→metin) ya da gizli kopya: kullanıcı olayı
+  if (r.hidden || (r.content && r.content.kind !== c.kind)) return first; // tür değişti (ör. resim→metin) ya da gizli kopya: kullanıcı olayı
   if (c.kind === "image") return Math.max(after, r.seq); // shortcut: resim yeniden kodlanabildiğinden içerik karşılaştırılmaz (resim→resim kopyası yankı sayılır), piksel özeti sonraki iş
-  return semanticHash(r.content) === semanticHash(c) ? Math.max(after, r.seq) : first;
+  return r.content && semanticHash(r.content) === semanticHash(c) ? Math.max(after, r.seq) : first;
 }
 
 interface Pending { content: ClipContent; key: OrderKey; fails: number; nextAt: number }

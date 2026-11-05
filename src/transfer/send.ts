@@ -38,9 +38,9 @@ const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const fail = (msg: string) => new RemoteError("failed", `failed: ${msg}`);
 const changed = () => fail("dosya gönderim sırasında değişti");
 /** macOS TCC (Dosyalar ve Klasörler) reddi: ham "EPERM operation not permitted" yerine yapılacak iş söylenir (F-vlad-235). */
-export const tccHint = (e: unknown): RemoteError | null => {
+const tccHint = (e: unknown): RemoteError | null => {
   const c = (e as NodeJS.ErrnoException | null)?.code;
-  return process.platform === "darwin" && (c === "EPERM" || c === "EACCES")
+  return process.platform === "darwin" && c === "EPERM" // EACCES sıradan dosya izni (chmod) olabilir: ham kalır
     ? fail("macOS dosya izni gerekli: Sistem Ayarları → Gizlilik ve Güvenlik → Dosyalar ve Klasörler (ya da Tam Disk Erişimi) altında VLAD'a/Terminal'e izin ver") : null;
 };
 
