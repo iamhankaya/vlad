@@ -8,5 +8,7 @@ export function exitCodeFor(e: unknown): number {
 
 /** `--json` hatasının `details` satırları. */
 export function remoteErrorDetails(e: unknown): string[] {
-  return e instanceof RemoteError ? [`code: ${e.code}`, `machine: ${e.machine}`] : [];
+  if (!(e instanceof RemoteError)) return [];
+  const paths = (e as { paths?: unknown }).paths; // XferNameError: sorunlu yollar
+  return [`code: ${e.code}`, `machine: ${e.machine}`, ...(Array.isArray(paths) ? paths.map((p) => `path: ${p}`) : [])];
 }

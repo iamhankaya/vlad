@@ -29,32 +29,45 @@ function resolveTarget(cfg: VladConfig, self: string, to: string | undefined): s
   throw new Error(others.length === 0 ? "karşı makine tanımlı değil (vlad.config.json machines)" : `--to gerekli (makineler: ${others.join(", ")})`);
 }
 
+/** `--args-env`: yollar `VLAD_ARG_COUNT` + `VLAD_ARG_1..n` ortam değişkenlerinden (Windows VBS başlatıcısı; komut satırı/%VAR% yorumlamasından kaçınır). */
+export function argsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const n = Number(env.VLAD_ARG_COUNT);
+  if (!Number.isInteger(n) || n < 1 || n > 10_000) throw new Error("VLAD_ARG_COUNT geçersiz (--args-env)");
+  return Array.from({ length: n }, (_, i) => {
+    const v = env[`VLAD_ARG_${i + 1}`];
+    if (!v) throw new Error(`VLAD_ARG_${i + 1} boş ya da yok (--args-env)`);
+    return v;
+  });
+}
+
 export async function runSendCommand(paths: string[], o: SendCommandOpts, io: SendCommandIo = {}): Promise<void> {
   const write = io.write ?? ((s: string) => { process.stdout.write(s); });
   const writeErr = io.writeErr ?? ((s: string) => { process.stderr.write(s); });
-  const cfg = io.cfg ?? loadConfig();
-  const self = io.self ?? selfName();
-  const to = resolveTarget(cfg, self, o.to);
-  const transport = io.transport ?? new AgentClient({ self, keys: readLocal().keys, config: () => cfg });
-
+  // Başlatma ve hedef çözme de bildirim sınırının içinde (F-vlad-222): sağ tıktan gönderen hata görmeden kalmasın.
+  let cfg: VladConfig | undefined, to: string | undefined;
   const tell = async (title: string, body: string) => {
     if (!o.notify) return;
     try {
-      const os: Os = cfg.machines?.find((m) => m.name === self)?.os ?? (process.platform as Os);
+      const os: Os = cfg?.machines?.find((m) => m.name === io.self)?.os ?? (process.platform as Os);
       await (io.notifier ?? createNotifier(os)).notify(title, body);
     } catch { /* bildirim hatası gönderimin sonucunu değiştirmez */ }
   };
-
   const showProgress = !!o.isTTY && !o.json;
   let r: SendResult;
   try {
+    cfg = io.cfg ?? loadConfig();
+    const self = io.self ?? selfName();
+    to = resolveTarget(cfg, self, o.to);
+    const transport = io.transport ?? new AgentClient({ self, keys: readLocal().keys, config: () => cfg! });
+    const peerOs = cfg.machines?.find((m) => m.name === to)?.os;
     r = await sendPaths(transport, {
-      to, paths, sleep: io.sleep,
+      to, paths, sleep: io.sleep, peerOs,
       onProgress: showProgress ? (p) => writeErr(`\r${Math.floor((p.sentBytes / Math.max(p.totalBytes, 1)) * 100)}% ${p.sentBytes}/${p.totalBytes} ${p.file}\x1b[K`) : undefined,
     });
   } catch (e) {
     if (showProgress) writeErr("\n");
-    if (e instanceof RemoteError && e.code === "uncertain") await tell(`${to}: teslim belirsiz`, `sonuç belirsiz, ${to} makinesinde İndirilenler'e bak`);
+    if (to === undefined) await tell("Gönderilemedi", `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
+    else if (e instanceof RemoteError && e.code === "uncertain") await tell(`${to}: teslim belirsiz`, `sonuç belirsiz, ${to} makinesinde İndirilenler'e bak`);
     else await tell(`${to}'a gönderilemedi`, `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
     throw e;
   }

@@ -126,6 +126,31 @@ describe("aktarim:A2 vlad send CLI", () => {
     await runSendCommand([f], { notify: true }, io({ t: fake({ "xfer-commit": () => { throw new RemoteError("timeout", "timeout: x"); } }).t, notifier: r.n }).io).catch(() => {});
     expect(r.calls[0]!.body).toMatch(/belirsiz/); expect(r.calls[0]!.body).not.toMatch(/gönderilemedi/);
   });
+  it("F-vlad-222: --notify ile hedef çözme hataları da bildirilir (genel başlık), hata yine fırlar", async () => {
+    const src = tmp(); const f = makeFile(src, "a", 1, 1);
+    const three = cfgOf("mac", "windows", "linux");
+    for (const [o, cfg] of [[{ to: "olmayan" }, undefined], [{ to: "mac" }, undefined], [{}, three]] as const) {
+      const f2 = fake(); const r = rec();
+      const e = await runSendCommand([f], { ...o, notify: true }, io({ t: f2.t, cfg, notifier: r.n }).io).then(() => null, (x) => x);
+      expect(e).toBeInstanceOf(Error); expect(code(e)).toBe(1); expect(f2.calls).toEqual([]);
+      expect(r.calls).toHaveLength(1); expect(r.calls[0]!.title).toBe("Gönderilemedi"); expect(r.calls[0]!.body).toMatch(/gönderilemedi: /);
+    }
+  });
+  it("F-vlad-222: yapılandırma okunamazsa da bildirilir; --notify yoksa sessiz", async () => {
+    const src = tmp(); const f = makeFile(src, "a", 1, 1); const r = rec();
+    const bad = (n: Notifier) => ({ self: "mac", notifier: n, get cfg(): VladConfig { throw new Error("config bozuk"); } });
+    const e = await runSendCommand([f], { notify: true }, bad(r.n)).then(() => null, (x) => x);
+    expect(e.message).toMatch(/config bozuk/); expect(r.calls).toHaveLength(1); expect(r.calls[0]!.title).toBe("Gönderilemedi");
+    const r2 = rec();
+    await runSendCommand([f], {}, bad(r2.n)).catch(() => {});
+    expect(r2.calls).toEqual([]);
+  });
+  it("F-vlad-221: sorunlu ad → ağa çıkmadan bad_request, bildirimde sorunlu yol", async () => {
+    const src = tmp(); const f = makeFile(src, "a:b.txt", 1, 1); const r = rec(); const f2 = fake();
+    const e = await runSendCommand([f], { notify: true }, io({ t: f2.t, notifier: r.n }).io).then(() => null, (x) => x);
+    expect(e).toBeInstanceOf(RemoteError); expect(e.code).toBe("bad_request"); expect(code(e)).toBe(1); expect(f2.calls).toEqual([]);
+    expect(r.calls[0]!.body).toMatch(/a:b\.txt/);
+  });
   it("--notify yok → bildirim yok", async () => {
     const src = tmp(); const f = makeFile(src, "a", 1, 1); const r = rec();
     await runSendCommand([f], {}, io({ t: fake().t, notifier: r.n }).io);
