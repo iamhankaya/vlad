@@ -87,8 +87,9 @@ OP_TABLE.merge = (a) => mergeOp(a);
  * `sweep`/`close` yaşam döngüsü start.ts içindir. OP_TABLE dışa aktarımı mevcut testler için kalır.
  */
 export function buildAktarim(d: AktarimDeps): { ops: Record<AgentOp, OpHandler>; sweep(): Promise<number>; close(): Promise<void> } {
-  const xfer = createXferReceiver(d.xfer);
   const clip = createClipReceiver(d.clip);
+  // Resim panosu: clip-image commit'i clip alıcısının sink'ine gider (F-vlad-230); testte açıkça verilen sink ezilmez.
+  const xfer = createXferReceiver({ ...d.xfer, clipImage: d.xfer.clipImage ?? clip.sink });
   const ops = { ...OP_TABLE, ping: makePing(d.env), ...xfer.ops, ...clip.ops } as Record<AgentOp, OpHandler>;
   return { ops, sweep: () => xfer.sweep(), close: () => xfer.close() };
 }
