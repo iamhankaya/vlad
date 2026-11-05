@@ -10,7 +10,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:fast": "node scripts/test-run.mjs",
-    "gate:changed": "node scripts/test-scope.mjs --run"
+    "gate:changed": "node scripts/test-scope.mjs --run",
+    "check:desktop": "node scripts/check-desktop-catalog.mjs"
   },
   "engines": {
     "node": ">=22"
