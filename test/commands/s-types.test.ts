@@ -47,13 +47,14 @@ describe("s-types: validateManifest", () => {
   });
 });
 
-describe("s-types: stub manifest and accessors", () => {
-  it("COMMANDS is an empty stub in S", () => {
-    expect(COMMANDS).toEqual([]);
-  });
-  it("accessors refuse to answer from an unfilled manifest", () => {
-    for (const f of [kbWriteKeys, refreshKeys, workerLocalKeys, forwardMap, consoleCatalog]) expect(f).toThrow(/manifest henüz doldurulmadı/);
-    expect(() => lockPolicyFor("task log", () => ({}))).toThrow(/manifest henüz doldurulmadı/);
+describe("s-types: filled manifest and accessors (U1 replaced the S stub)", () => {
+  it("COMMANDS is filled and the accessors answer from it (the S-time throw is gone)", () => {
+    expect(COMMANDS.length).toBeGreaterThan(60);
+    for (const f of [kbWriteKeys, refreshKeys, workerLocalKeys]) expect(f().size).toBeGreaterThan(0);
+    expect(Object.keys(forwardMap())).toHaveLength(4);
+    expect(Object.keys(consoleCatalog())).toHaveLength(COMMANDS.length);
+    expect(lockPolicyFor("task log", () => ({}))).toBe("outer");
+    expect(lockPolicyFor("vlad scan", () => ({}))).toBe("none");
   });
 });
 

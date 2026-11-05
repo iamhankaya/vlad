@@ -23,7 +23,7 @@ import type { TaskKind, TaskState, VladConfig } from "../kb/index.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, queueLauncher, resolveLaunchMode } from "../launcher/index.js";
 import { exitCodeFor, remoteErrorDetails } from "../machines/exit.js";
 import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "../machines/remote.js";
-import { INNER_LOCK, lockPolicyOf } from "../machines/lock-policy.js";
+import { execKindOf, kbWriteKeys, lockPolicyFor, refreshKeys } from "../commands/accessors.js";
 import { forwardIfWorker, runRemote, callLocal, workerContext, workerState } from "../agent/forward.js";
 import { agentKeygen, agentSetKey, agentStart, agentStatus } from "../agent/start.js";
 import { installPlan } from "../agent/install.js";
@@ -94,15 +94,9 @@ export function handleParseError(program: Command, ctx: CliCtx, e: unknown): nev
  * `launchTask` (F-vlad-102), never the worktree/terminal wait. `status`/`mode status` write only as a side effect
  * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
  */
-export const KB_WRITES = new Set([
-  "project write", "project set", "project note", "project summary", "project refresh",
-  "finding add", "finding set",
-  "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
-  "mode night", "mode watch", "mode off", "mode status",
-  "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
-]);
+export const KB_WRITES: ReadonlySet<string> = kbWriteKeys(); // derived from the manifest (src/commands/manifest.ts)
 /** Commands whose kb write also refreshes derived project-card blocks (`runAndRefresh`). */
-export const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
+export const REFRESH_KEYS: ReadonlySet<string> = refreshKeys();
 
 /** Builds the whole command tree; parses nothing and keeps no module-level state, so two calls are independent. */
 export function buildProgram(ctx: CliCtx): Command {
@@ -168,7 +162,7 @@ program
 /** true → komut başka makineye iletildi (çıktı yazıldı), yerel handler çalışmaz. */
 const before = (key: string, args: any[]): Promise<boolean> => forwardIfWorker(key, args);
 /** "outer": tüm callback kilitli (bugünkü KB_WRITES); "inner": handler kendi evrelerinde kilitler; "none". */
-const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyOf(key, KB_WRITES, INNER_LOCK.has(key) ? loadConfig() : {}); // C1: resume/cleanup lock in phases once `machines` is set
+const lockPolicy = (key: string): "outer" | "inner" | "none" => lockPolicyFor(key, loadConfig); // C1: resume/cleanup lock in phases once `machines` is set (config read only for those)
 // --- /machines:S ---
 // --- machines:C3 --- uzak stalled: ağ çağrıları kilit DIŞINDA (status'un kilitli gövdesi yalnız sonucu uygular); --no-mark ve --hook yolunda hiç bağlantı yok
 async function remoteStallPlans(): Promise<RemoteStallPlan[]> {
@@ -220,8 +214,8 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
   c.action(async (...args: any[]) => {
     try {
       const opts = args[args.length - 2] as Opts;
-      if (key === "vlad status" && ["worker", "unknown"].includes(workerState().kind)) opts.mark = false; // kimlik belirsizken de yazma (F-vlad-144); // işçinin kb klonu salt okunur: işaretleme/mod temizliği yazmaz (kb-sync kirli ağaçta reddeder)
-      if (key === "vlad status" && opts.mark !== false) {
+      if (execKindOf(key) === "status" && ["worker", "unknown"].includes(workerState().kind)) opts.mark = false; // kimlik belirsizken de yazma (F-vlad-144); // işçinin kb klonu salt okunur: işaretleme/mod temizliği yazmaz (kb-sync kirli ağaçta reddeder)
+      if (execKindOf(key) === "status" && opts.mark !== false) {
         if (!opts.hook) opts.remotePlans = await remoteStallPlans(); // C3
         // SessionStart hook runs this: never block it behind a long writer; fall back to the side-effect-free read
         try { await withKbLock(() => fn(...args), { timeoutMs: 2000 }); } catch (e) {

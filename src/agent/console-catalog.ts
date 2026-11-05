@@ -1,4 +1,6 @@
 import { RemoteError } from "../machines/types.js";
+import { COMMANDS } from "../commands/manifest.js";
+import { consoleTimeoutMs } from "../commands/accessors.js";
 
 export interface CatalogEntry {
   path: string[];
@@ -8,70 +10,11 @@ export interface CatalogEntry {
 }
 
 /**
- * Konsol (vlad-desktop) komut kataloğu: tek kaynak. vlad-desktop `catalog/commands.json` ile eşitlenir (D4 testi).
- * Hariç tutulanlar: agent, machine, queue, remote, install. `status` işaretleme yan etkisine rağmen okuma sayılır (günlüğe girmez).
+ * Konsol (vlad-desktop) komut kataloğu: manifestten türer (src/commands/manifest.ts, tek kaynak).
+ * Hariç tutulanlar manifestte `console: none` + gerekçe. `status` işaretleme yan etkisine rağmen okuma sayılır (günlüğe girmez).
  */
-export const CONSOLE_CATALOG: readonly CatalogEntry[] = [
-  { path: ["scan"], kind: "read" },
-  { path: ["project", "write"], kind: "write", fileFlags: ["--file"] },
-  { path: ["project", "set"], kind: "write" },
-  { path: ["project", "note"], kind: "write", fileFlags: ["--file"] },
-  { path: ["project", "status"], kind: "read" },
-  { path: ["project", "summary"], kind: "write", fileFlags: ["--file"] },
-  { path: ["project", "list"], kind: "read" },
-  { path: ["project", "refresh"], kind: "write" },
-  { path: ["finding", "add"], kind: "write", fileFlags: ["--detail-file"] },
-  { path: ["finding", "list"], kind: "read" },
-  { path: ["finding", "set"], kind: "write" },
-  { path: ["role", "list"], kind: "read" },
-  { path: ["task", "new"], kind: "write", fileFlags: ["--body-file"] },
-  { path: ["task", "launch"], kind: "write" },
-  { path: ["task", "ingest"], kind: "write", fileFlags: ["--events-file", "--file"] },
-  { path: ["task", "log"], kind: "write" },
-  { path: ["task", "ask"], kind: "write" },
-  { path: ["task", "answer"], kind: "write" },
-  { path: ["task", "report"], kind: "write", fileFlags: ["--file"] },
-  { path: ["task", "set"], kind: "write" },
-  { path: ["task", "deps"], kind: "write" },
-  { path: ["task", "resume"], kind: "write" },
-  { path: ["task", "close-window"], kind: "write" },
-  { path: ["task", "cleanup"], kind: "write" },
-  { path: ["task", "digested"], kind: "write" },
-  { path: ["task", "session"], kind: "write" },
-  { path: ["task", "list"], kind: "read" },
-  { path: ["task", "idle"], kind: "read" },
-  { path: ["task", "ready"], kind: "read" },
-  { path: ["task", "gate"], kind: "write" },
-  { path: ["task", "merge-preview"], kind: "read" },
-  { path: ["task", "merge"], kind: "write" },
-  { path: ["status"], kind: "read" },
-  { path: ["mode", "night"], kind: "write" },
-  { path: ["mode", "watch"], kind: "write" },
-  { path: ["mode", "off"], kind: "write" },
-  { path: ["mode", "status"], kind: "read" },
-  { path: ["audit", "skills"], kind: "read" },
-  { path: ["inbox", "list"], kind: "read" },
-  { path: ["inbox", "count"], kind: "read" },
-  { path: ["inbox", "done"], kind: "write" },
-  { path: ["decision", "add"], kind: "write", fileFlags: ["--body-file"] },
-  { path: ["decision", "list"], kind: "read" },
-  { path: ["decision", "set"], kind: "write" },
-  { path: ["decision", "migrate"], kind: "write" },
-  { path: ["journal", "append"], kind: "write", fileFlags: ["--file"] },
-  { path: ["journal", "get"], kind: "read" },
-  { path: ["kb", "commit"], kind: "write" },
-  { path: ["kb", "maintain"], kind: "write" },
-  { path: ["kb", "get"], kind: "read" },
-  { path: ["kb", "search"], kind: "read" },
-  { path: ["kb", "check"], kind: "read" },
-  { path: ["kb", "refs"], kind: "read" },
-  { path: ["kb", "lint"], kind: "read" },
-  { path: ["digest", "pending", "list"], kind: "read" },
-  { path: ["digest", "pending", "add"], kind: "write" },
-  { path: ["digest", "pending", "done"], kind: "write" },
-  { path: ["session", "register"], kind: "write" },
-  { path: ["session", "name"], kind: "read" },
-];
+export const CONSOLE_CATALOG: readonly CatalogEntry[] = COMMANDS.flatMap((s): CatalogEntry[] =>
+  s.console.kind === "none" ? [] : [{ path: [...s.path], kind: s.console.kind, ...(s.console.fileFlags ? { fileFlags: s.console.fileFlags } : {}) }]);
 
 const MAX_ARG = 64 * 1024;
 const MAX_TOTAL = 1024 * 1024;
@@ -111,9 +54,5 @@ export function validateConsoleArgv(argv: string[], stdin?: string): { entry: Ca
   return { entry };
 }
 
-/** Konsol exec alt süreç sınırı: kapı komutları uzak çağrılarını (gate 30 dk, merge 330 sn) kapsar; diğerleri 110 sn. */
-export function consoleExecTimeoutMs(argv: string[]): number {
-  if (argv[0] === "task" && argv[1] === "gate") return 31 * 60_000;
-  if (argv[0] === "task" && argv[1] === "merge") return 6 * 60_000;
-  return 110_000;
-}
+/** Konsol exec alt süreç sınırı: kapı komutları uzak çağrılarını (gate 30 dk, merge 330 sn) kapsar; diğerleri 110 sn (manifestteki `timeoutMs`). */
+export const consoleExecTimeoutMs = (argv: string[]): number => consoleTimeoutMs(argv);
