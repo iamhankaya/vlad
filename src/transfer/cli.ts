@@ -1,8 +1,8 @@
 import { AgentClient } from "../agent/client.js";
-import { readLocal, selfName } from "../agent/state.js";
+import { readLocal, selfName } from "../fleet/state.js";
 import { loadConfig } from "../kb/config.js";
 import type { VladConfig } from "../kb/types.js";
-import { RemoteError, type Os, type RemoteTransport } from "../machines/types.js";
+import { RemoteError, type Os, type RemoteTransport } from "../fleet/types.js";
 import { createNotifier, type Notifier } from "../platform/notify.js";
 import { sendPaths, type SendResult } from "./send.js";
 

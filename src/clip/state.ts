@@ -1,6 +1,6 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentDir, ensurePrivateDir } from "../agent/state.js";
+import { agentDir, ensurePrivateDir } from "../fleet/state.js";
 
 // `.vlad-agent/clip.json`: yalnız {enabled}. Dosya yoksa enabled:true (varsayılan açık). Yoklama her turda okur (açma/kapama anında geçerli).
 export interface ClipState { enabled: boolean }

@@ -1,4 +1,4 @@
-import { RemoteError, type QueueEntry } from "../../machines/types.js";
+import { RemoteError, type QueueEntry } from "../../fleet/types.js";
 import { agentEnv } from "./env.js";
 import { flushQueue } from "./forward-write.js";
 

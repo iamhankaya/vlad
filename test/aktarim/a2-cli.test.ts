@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { VladConfig } from "../../src/kb/types.js";
 import { exitCodeFor } from "../../src/machines/exit.js";
-import { RemoteError, type AgentOp, type RemoteTransport } from "../../src/machines/types.js";
+import { RemoteError, type AgentOp, type RemoteTransport } from "../../src/fleet/types.js";
 import type { Notifier } from "../../src/platform/notify.js";
 import { runSendCommand } from "../../src/transfer/cli.js";
 import { rmTemp } from "../helpers.js";

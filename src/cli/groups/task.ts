@@ -7,10 +7,10 @@ import { probeIntegrationBranch } from "../../tasks/cloud.js";
 import { readInput } from "../../kb/input.js";
 import { kbPaths, loadConfig, withKbLock } from "../../kb/index.js";
 import type { TaskKind, TaskState } from "../../kb/index.js";
-import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, queueLauncher, resolveLaunchMode } from "../../launcher/index.js";
+import { NoopLauncher, PosixLauncher, TerminalLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, queueLauncher, resolveLaunchMode, closeWorkerWindow } from "../../launcher/index.js";
 import { brainTransport, gateMachineOf, makeRemote, markCleaned, syncKb, remoteCleanup, remoteClose, recordGreenGate, defaultGateTarget, remoteGateRun, remoteMerge, remoteMergePreview, remoteResume } from "../../machines/remote.js";
 import { workerContext } from "../../agent/forward.js";
-import { selfName } from "../../agent/state.js";
+import { selfName } from "../../fleet/state.js";
 import { AgentClient } from "../../agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js";
 import { TRANSITIONS, answerTask, askTask, cancelTask, cleanupTask, closeTaskWindow, createTask, launchTask, releaseTask, releaseWarning, remoteMachineOf, listTasksWithWarnings, modelInfo, eventList, getTask, ingestEvents, logTask, pageWarnings, parseEvents, markDigested, prepareCloudLaunch, readyWithLimit, reportReferencesPrior, reportTask, resumeLocalCheck, resumePrepare, saveTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
@@ -78,7 +78,7 @@ export function registerTask(program: Command, k: Kit): void {
     const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
     // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
     if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
-    const t = await launchTask(id, { launcher, cfg, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
+    const t = await launchTask(id, { launcher, cfg, closeWorker: closeWorkerWindow, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
     // --- /machines:C1 ---
     out(
       o,
@@ -192,7 +192,7 @@ export function registerTask(program: Command, k: Kit): void {
       if (openWindow) {
         const mode = resolveLaunchMode(cfg0.launcher);
         const launcher: Launcher = mode === "noop" ? new NoopLauncher() : new PosixLauncher({ mode: mode === "terminal" ? "terminal" : "tmux" });
-        try { closeTaskWindow(id); } catch (e) {
+        try { closeTaskWindow(id, { closeWorker: closeWorkerWindow }); } catch (e) {
           // the noop guard throws by design; a real survivor must not get a second worker beside it
           if (mode !== "noop") throw new Error(`açık pencere kapatılamadı, ikinci çalışan açılmadı: ${(e as Error).message}`);
         }
@@ -222,7 +222,7 @@ export function registerTask(program: Command, k: Kit): void {
   def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", async (id: string, o: Opts) => {
     const cfg0 = loadConfig();
     const remote = remoteMachineOf(getTask(id), cfg0, workerContext()?.self); // işçide kendi görevi yerel kapanır (F-vlad-149)
-    const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id);
+    const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id, { closeWorker: closeWorkerWindow });
     out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
   });
   def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", async (id: string, o: Opts) => {
@@ -235,7 +235,7 @@ export function registerTask(program: Command, k: Kit): void {
         if (t.data.state !== "done" && t.data.state !== "cancelled") throw new Error(`cleanup yalnızca done/cancelled görevde yapılır (${t.data.state}): ${id}`);
         return m;
       }
-      cleanupTask(id, { cfg: cfg0 });
+      cleanupTask(id, { cfg: cfg0, closeWorker: closeWorkerWindow });
       return null;
     });
     if (remote) {

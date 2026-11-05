@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FrameDecoder, encodeFrame } from "../../src/agent/frame.js";
 import { canonicalJson, signRequest, signResponse, verifyRequest, verifyResponse } from "../../src/agent/sign.js";
-import { MAX_FRAME_BYTES, RemoteError, type AgentRequest } from "../../src/machines/types.js";
+import { MAX_FRAME_BYTES, RemoteError, type AgentRequest } from "../../src/fleet/types.js";
 
 const KEY = "ab".repeat(32);
 const req = (o: Partial<AgentRequest> = {}): AgentRequest => signRequest(KEY, { v: 1, from: "windows", to: "mac", opId: "op-1", ts: 1000, op: "ping", args: { b: 1, a: [2, { y: 1, x: 2 }] }, ...o });

@@ -1,7 +1,7 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { dirname } from "node:path";
-import { ensurePrivateDir } from "./state.js";
-import { JOURNAL_RETENTION_DAYS, type AgentOp, type OpMeta, type OpRecord } from "../machines/types.js";
+import { ensurePrivateDir } from "../fleet/state.js";
+import { JOURNAL_RETENTION_DAYS, type AgentOp, type OpMeta, type OpRecord } from "../fleet/types.js";
 
 /** Günlükte saklanan sonuç üst sınırı (bayt); ötesi kırpılır (F-vlad-127). Canlı yanıt tam sonucu taşır, yalnız replay kırpılmış kaydı görür. */
 const MAX_RESULT_BYTES = 64 * 1024;

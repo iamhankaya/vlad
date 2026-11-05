@@ -5,13 +5,13 @@ import { readInput } from "../kb/input.js";
 import { getVladHome } from "../kb/home.js";
 import { loadConfig } from "../kb/config.js";
 import type { VladConfig } from "../kb/types.js";
-import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../machines/types.js";
+import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../fleet/types.js";
 import { readStdinSync } from "../kb/input.js";
 import { AgentClient } from "./client.js";
 import { forwardMap, workerLocalKeys } from "../commands/accessors.js";
 import { consoleExecTimeoutMs } from "./console-catalog.js";
-import { resolveSelf } from "../machines/registry.js";
-import { readLocal, roleOf, selfName } from "./state.js";
+import { resolveSelf } from "../fleet/registry.js";
+import { readLocal, roleOf, selfName } from "../fleet/state.js";
 
 type WorkerState = { kind: "off" } | { kind: "brain" } | { kind: "worker"; ctx: { cfg: VladConfig; self: string } } | { kind: "unknown"; reason: string };
 

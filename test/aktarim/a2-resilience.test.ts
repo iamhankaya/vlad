@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { RemoteError, type AgentOp, type RemoteTransport } from "../../src/machines/types.js";
+import { RemoteError, type AgentOp, type RemoteTransport } from "../../src/fleet/types.js";
 import { sendPaths, XferUncertainError } from "../../src/transfer/send.js";
 import { XFER_STAGING_DIR } from "../../src/transfer/types.js";
 import { rmTemp } from "../helpers.js";

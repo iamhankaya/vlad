@@ -1,4 +1,4 @@
-import { RemoteError } from "../machines/types.js";
+import { RemoteError } from "../fleet/types.js";
 import { COMMANDS } from "../commands/manifest.js";
 import { consoleTimeoutMs } from "../commands/accessors.js";
 

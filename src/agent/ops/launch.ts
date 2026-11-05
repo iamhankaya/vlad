@@ -6,13 +6,13 @@ import { fillRolePlaceholders } from "../../roles/store.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
-import { RemoteError } from "../../machines/types.js";
+import { RemoteError } from "../../fleet/types.js";
 import { ASYNC_GIT, ensureIntegrationGitWith, launchCore, unmergedCommitsWith } from "../../tasks/launch-core.js";
 import { removeTaskWorktree } from "../../tasks/launch.js";
 import { dirtyLine } from "../../tasks/resume.js";
 import { untrustWorktree } from "../../tasks/trust.js";
 import type { Reconciler } from "../reconcile.js";
-import { agentDir } from "../state.js";
+import { agentDir } from "../../fleet/state.js";
 import { argObject, bad, isOwnWorktree, projectArg, repoNameArg, resolveRepo, taskFileOf, taskIdArg, workerCtx, workerLauncher, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";
 

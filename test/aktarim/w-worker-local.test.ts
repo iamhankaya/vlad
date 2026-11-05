@@ -1,9 +1,9 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { FORWARD, WORKER_LOCAL } from "../../src/agent/forward.js";
-import { RemoteError } from "../../src/machines/types.js";
+import { RemoteError } from "../../src/fleet/types.js";
 import type { Notifier } from "../../src/platform/notify.js";
 import { notifySendFailure } from "../../src/transfer/cli.js";
 import { rmTemp } from "../helpers.js";
@@ -86,11 +86,12 @@ const BRAIN_ONLY = new Set([
 ]);
 
 function defKeys(): string[] {
-  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../src/cli/program.ts"), "utf8");
+  const dir = join(dirname(fileURLToPath(import.meta.url)), "../../src/cli/groups"); // U3: the commands live in cli/groups/*.ts
+  const src = readdirSync(dir).filter((f) => f.endsWith(".ts")).sort().map((f) => readFileSync(join(dir, f), "utf8")).join("\n");
   const names: Record<string, string> = { program: "vlad" };
   for (const m of src.matchAll(/const (\w+) = (\w+)\.command\("([^"]+)"\)/g)) names[m[1]!] = m[3]!;
   const keys: string[] = [];
-  for (const m of src.matchAll(/^def\((\w+), "([^"\s]+)/gm)) keys.push(`${names[m[1]!] ?? `?${m[1]}`} ${m[2]}`);
+  for (const m of src.matchAll(/^\s*def\((\w+), "([^"\s]+)/gm)) keys.push(`${names[m[1]!] ?? `?${m[1]}`} ${m[2]}`);
   return keys;
 }
 

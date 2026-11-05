@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, kbPaths } from "../../src/kb/index.js";
 import type { VladConfig } from "../../src/kb/index.js";
-import { kbDirtyOnWorker } from "../../src/kb/worker-dirty.js";
+import { kbDirtyOnWorker } from "../../src/tasks/worker-dirty.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { makeHome } from "../helpers.js";
 

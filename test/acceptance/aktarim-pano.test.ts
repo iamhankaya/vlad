@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import { CLIP_MAX_IMAGE_BYTES, CLIP_MAX_TEXT_BYTES, type ClipPushArgs } from "../../src/clip/types.js";
-import { CLOCK_SKEW_MS } from "../../src/machines/types.js";
+import { CLOCK_SKEW_MS } from "../../src/fleet/types.js";
 import { FakeClipboard, startAktarimPair, type AktarimPair } from "../aktarim/harness.js";
 import { b64, clipPair, clipResult, codeOf, hugePng, image, png, text, wire, type ClipHarness } from "./aktarim-helpers.js";
 

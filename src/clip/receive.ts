@@ -1,5 +1,5 @@
 import type { OpHandler } from "../agent/ops/index.js";
-import { CLOCK_SKEW_MS, RemoteError } from "../machines/types.js";
+import { CLOCK_SKEW_MS, RemoteError } from "../fleet/types.js";
 import type { ClipImageResult, ClipImageSink } from "../transfer/types.js";
 import { ClipSync } from "./sync.js";
 import { CLIP_MAX_TEXT_BYTES } from "./types.js";

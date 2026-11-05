@@ -6,7 +6,7 @@ import type { RemoteStallPlan } from "../tasks/liveness.js";
 import { kbPaths, loadConfig, withKbLock, KbLockTimeout } from "../kb/index.js";
 import { execKindOf, lockPolicyFor } from "../commands/accessors.js";
 import { forwardIfWorker, workerState } from "../agent/forward.js";
-import { readLocal, selfName } from "../agent/state.js";
+import { readLocal, selfName } from "../fleet/state.js";
 import { AgentClient } from "../agent/client.js";
 import { refreshProject } from "../projects/derived.js";
 import { integrationWorktrees, modelInfo } from "../tasks/index.js";

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { loadConfig } from "../../kb/index.js";
 import type { VladConfig } from "../../kb/index.js";
 import { brainTransport } from "../../machines/remote.js";
-import { selfName } from "../../agent/state.js";
+import { selfName } from "../../fleet/state.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 

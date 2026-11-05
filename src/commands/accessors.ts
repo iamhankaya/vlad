@@ -2,7 +2,7 @@ import type { VladConfig } from "../kb/types.js";
 import type { CommandSpec, ConsolePolicy, ExecKind } from "./types.js";
 import { keyOf } from "./types.js";
 import { COMMANDS } from "./manifest.js";
-import type { WriteCmd } from "../machines/types.js";
+import type { WriteCmd } from "../fleet/types.js";
 
 /** Pure views over the manifest; the old hand-kept sets (KB_WRITES, WORKER_LOCAL, FORWARD, INNER_LOCK, console catalog) derive from these. */
 const byKey = new Map<string, CommandSpec>(COMMANDS.map((s) => [keyOf(s), s]));

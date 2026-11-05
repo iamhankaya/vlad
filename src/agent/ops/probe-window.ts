@@ -1,5 +1,5 @@
 import { defaultExec } from "../../launcher/terminal.js";
-import { RemoteError } from "../../machines/types.js";
+import { RemoteError } from "../../fleet/types.js";
 
 export const PROBE_TITLE = "VLAD probe-window";
 type Exec = (file: string, args: string[], cwd?: string) => void | Promise<void>;

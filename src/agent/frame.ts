@@ -1,4 +1,4 @@
-import { MAX_FRAME_BYTES, RemoteError } from "../machines/types.js";
+import { MAX_FRAME_BYTES, RemoteError } from "../fleet/types.js";
 
 /** 4 bayt big-endian uzunluk + UTF-8 JSON. */
 export function encodeFrame(msg: unknown): Buffer {

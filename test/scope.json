@@ -32,6 +32,7 @@
       "match": [
         "src/agent/**",
         "src/machines/**",
+        "src/fleet/**",
         "src/transfer/**",
         "src/clip/**"
       ],

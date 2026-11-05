@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { installGlobal } from "../../install.js";
 import { getVladHome, loadConfig } from "../../kb/index.js";
-import { selfName } from "../../agent/state.js";
+import { selfName } from "../../fleet/state.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 

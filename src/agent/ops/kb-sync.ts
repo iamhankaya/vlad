@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { RemoteError } from "../../machines/types.js";
+import { RemoteError } from "../../fleet/types.js";
 import { argObject, bad, workerCtx, workerKbDir } from "./worker.js";
 
 const SHA = /^[0-9a-f]{40}$/;

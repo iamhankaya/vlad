@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { AgentClient } from "../agent/client.js";
-import { readLocal } from "../agent/state.js";
+import { readLocal } from "../fleet/state.js";
 import { commitKb, git } from "../kb/commit.js";
 import { isSeparateKb, kbPaths } from "../kb/home.js";
 import { readDoc } from "../kb/index.js";
@@ -12,9 +12,9 @@ import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
 import { remoteMachineOf } from "../tasks/launch.js";
 import type { RemoteDeps } from "../tasks/launch.js";
-import { repoNameOf } from "./paths.js";
-import { RemoteError } from "./types.js";
-import type { GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "./types.js";
+import { repoNameOf } from "../fleet/paths.js";
+import { RemoteError } from "../fleet/types.js";
+import type { GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "../fleet/types.js";
 
 /** Beyin kimliğiyle işçi Agent'larına konuşan gerçek taşıma (anahtarlar `vlad.local.json`'dan). */
 export const brainTransport = (cfg: VladConfig, self: string): RemoteTransport =>

@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { writeFileAtomic } from "./atomic.js";
-import { kbPaths } from "./home.js";
+import { writeFileAtomic } from "../kb/atomic.js";
+import { kbPaths } from "../kb/home.js";
 import type { LintCode, LintResult } from "./lint.js";
-import { nowIso } from "./time.js";
+import { nowIso } from "../kb/time.js";
 
 /** What `vlad status --summary` shows: the last full `kb lint` run. Linting the whole kb takes ~75 s, so the startup hook only reads this file. */
 export interface LintSummary {

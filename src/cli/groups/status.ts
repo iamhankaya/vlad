@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { join } from "node:path";
 import type { RemoteStallPlan } from "../../tasks/liveness.js";
-import { lintAgeNote } from "../../kb/lint-cache.js";
+import { lintAgeNote } from "../../audit/lint-cache.js";
 import { loadConfig } from "../../kb/index.js";
 import { staleSummaryText } from "../../projects/status.js";
 import { statusSummary } from "../../tasks/index.js";

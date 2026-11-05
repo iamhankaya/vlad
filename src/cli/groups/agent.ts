@@ -5,7 +5,7 @@ import { getVladHome, loadConfig } from "../../kb/index.js";
 import { runRemote, callLocal, workerContext } from "../../agent/forward.js";
 import { agentKeygen, agentSetKey, agentStart, agentStatus } from "../../agent/start.js";
 import { installPlan } from "../../agent/install.js";
-import { selfName } from "../../agent/state.js";
+import { selfName } from "../../fleet/state.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 

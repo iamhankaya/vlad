@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import type { Os } from "../machines/types.js";
+import type { Os } from "../fleet/types.js";
 import { assertNative } from "./native.js";
 
 // Bildirim metni argv (Mac) ya da env (Windows) ile geçer; kabuk/betik dizesine gömülmez (enjeksiyon yok).

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { kbPaths } from "../../kb/home.js";
-import { RemoteError } from "../../machines/types.js";
+import { RemoteError } from "../../fleet/types.js";
 
 const git = (cwd: string, ...a: string[]) => execFileSync("git", a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 

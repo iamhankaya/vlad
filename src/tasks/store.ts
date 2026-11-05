@@ -5,9 +5,9 @@ import {
   setSection, validate, writeDoc, writeFileAtomic,
 } from "../kb/index.js";
 import type { ProjectCard, TaskData, TaskKind, TaskModel, TaskState, VladConfig } from "../kb/index.js";
-import { simulateReady } from "../machines/placement.js";
-import { nowMs } from "../machines/clock.js";
-import type { HeldByLimit, Placement } from "../machines/types.js";
+import { simulateReady } from "../fleet/placement.js";
+import { nowMs } from "../fleet/clock.js";
+import type { HeldByLimit, Placement } from "../fleet/types.js";
 import { getRole, type Role } from "../roles/store.js";
 import { assertTransition } from "./state.js";
 
