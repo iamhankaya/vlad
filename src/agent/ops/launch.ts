@@ -18,7 +18,9 @@ import type { WorkerCtx } from "./worker.js";
 
 export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string } }
 interface RecEntry { repo: string; worktree: string; branch: string }
-interface LaunchRecord extends RecEntry { taskId: string; opId: string | null; /** set once the launch finished; a record without it is a launch that started and may or may not have opened a window */ result?: LaunchResultW; /** a pipeline parent's integration worktrees in further repos */ extra?: RecEntry[] }
+interface LaunchRecord extends RecEntry { taskId: string; opId: string | null; /** set once the launch finished; a record without it is a launch that started and may or may not have opened a window */ result?: LaunchResultW; /** a pipeline parent's integration worktrees in further repos */ extra?: RecEntry[];
+  /** F-vlad-242: pipeline phase only — the integration worktree ensured before the launch, so an uncertain launch can still report it */ parent?: string; integration?: { branch: string; worktree: string };
+  /** F-vlad-243: the branch the task branch was cut from; no commits beyond it means a leftover branch is safe to drop */ base?: string }
 type CloseFn = (id: string) => number[] | void;
 
 const MAX_TEXT = 256 * 1024;
@@ -117,11 +119,15 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   if (existing) throw new RemoteError("conflict", `conflict: bu launch (op ${c.opId}) yarım kaldı; pencere açılmış olabilir, kontrol et`);
   // The record goes down BEFORE anything opens: a crash after the window opened still leaves proof the launch started,
   // so reconcile reports it uncertain instead of letting a retry open a second window.
-  writeRecord({ taskId: id, repo, worktree, branch: `vlad/${id}`, opId: c.opId });
+  const baseRef = parent ? `vlad/${parent}` : defaultBranch;
+  writeRecord({ taskId: id, repo, worktree, branch: `vlad/${id}`, opId: c.opId, ...(baseRef ? { base: baseRef } : {}) });
   let integration: { branch: string; worktree: string } | undefined;
   let res;
   try {
-    if (parent) integration = await ensureIntegrationGitWith(ASYNC_GIT, repo, parent, wcfg, defaultBranch);
+    if (parent) {
+      integration = await ensureIntegrationGitWith(ASYNC_GIT, repo, parent, wcfg, defaultBranch);
+      writeRecord({ ...readRecord(id)!, parent, integration });
+    }
     res = await launchCore({
       taskId: id, repo, worktree, branch: `vlad/${id}`, ...(a.retry === true ? { adopt: true } : {}),
       ...(integration ? { base: integration.branch } : defaultBranch && (await branchExistsAsync(repo, defaultBranch)) ? { base: defaultBranch } : {}),
@@ -134,13 +140,16 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   }
   const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}) };
   writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, result });
-  if (parent && integration) {
-    const pr = readRecord(parent);
-    const entry = { repo, worktree: integration.worktree, branch: integration.branch };
-    if (!pr) writeRecord({ taskId: parent, ...entry, opId: null });
-    else if (!entriesOf(pr).some((e) => e.repo === repo && e.worktree === entry.worktree)) writeRecord({ ...pr, extra: [...(pr.extra ?? []), entry] });
-  }
+  if (parent && integration) recordParent(parent, repo, integration);
   return result;
+}
+
+/** The pipeline parent's launch record gets the integration worktree, so cleanup of the parent finds it. */
+function recordParent(parent: string, repo: string, integration: { branch: string; worktree: string }): void {
+  const pr = readRecord(parent);
+  const entry = { repo, worktree: integration.worktree, branch: integration.branch };
+  if (!pr) writeRecord({ taskId: parent, ...entry, opId: null });
+  else if (!entriesOf(pr).some((e) => e.repo === repo && e.worktree === entry.worktree)) writeRecord({ ...pr, extra: [...(pr.extra ?? []), entry] });
 }
 
 /**
@@ -157,8 +166,17 @@ export async function resolveUncertainLaunch(opId: string): Promise<{ state: "ab
     }
   } catch { /* kayıt klasörü yok */ }
   if (!found) return { state: "aborted" };
-  if (existsSync(found.worktree) && (await branchExistsAsync(found.repo, found.branch))) {
-    return { state: "done", result: { branch: found.branch, worktree: found.worktree, method: "recovered" } };
+  const branchThere = await branchExistsAsync(found.repo, found.branch);
+  if (existsSync(found.worktree) && branchThere) {
+    // F-vlad-242: the brain records the integration worktree from the result, so it must be in it; the parent's own record too
+    if (found.parent && found.integration) recordParent(found.parent, found.repo, found.integration);
+    return { state: "done", result: { branch: found.branch, worktree: found.worktree, method: "recovered", ...(found.integration ? { integration: found.integration } : {}) } };
+  }
+  // F-vlad-243: a branch left without its worktree blocks every relaunch; only a branch with no commits of its own may go
+  if (branchThere) {
+    const own = found.base ? await runGitAsync(found.repo, ["rev-list", "--count", found.branch, "--not", found.base]) : null;
+    if (own !== "0") throw failed(`launch yarım kaldı: dal ${found.branch} kaldı, worktree yok ve dalda kendi commit'leri var (ya da taban bilinmiyor); kayıt korundu, silmeden önce dalı incele, sonra cleanup ile temizle`);
+    if ((await runGitAsync(found.repo, ["branch", "-d", found.branch])) === null) throw failed(`launch yarım kaldı: kalan dal ${found.branch} silinemedi; kayıt korundu`);
   }
   rmSync(recordFile(found.taskId), { force: true });
   return { state: "aborted" };
