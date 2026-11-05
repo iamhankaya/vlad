@@ -31,11 +31,13 @@ describe("config", () => {
   it("loads the committed vlad.config.json", () => {
     const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
     const cfg = loadConfig(repo);
-    expect(cfg).toEqual({
-      roots: ["C:\\dev"], ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
+    // roots/brain/machines are per-machine (Mac brain + Windows worker, D-vlad-055); only the machine-independent fields are pinned.
+    expect(cfg).toMatchObject({
+      ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
       staleAfterHours: 6, launcher: "auto", kbDir: "../vlad-kb", workerAutoCompact: "300k", worktreeDir: "{repo}-wt",
       projects: { watchparty: { autonomy: "commit" }, "ashen-bastion": { autonomy: "pr" } },
     });
+    expect(cfg.roots.length).toBeGreaterThan(0);
   });
   it("uses schemas of the given home, not VLAD_HOME", () => {
     process.env.VLAD_HOME = mkdtempSync(join(tmpdir(), "vlad-empty-"));

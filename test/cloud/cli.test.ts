@@ -54,13 +54,14 @@ describe("cloud CLI", { timeout: 30_000 }, () => {
     expect(vlad(["task", "list", "--state", "running", "--json"]).out).toContain(id);
   });
 
-  // launcher=auto only fails off Windows; on Windows it would open a real terminal, so skip there
-  it.skipIf(process.platform === "win32")("launch outside the cloud on a non-Windows host fails with a clear error and stays queued", () => {
+  // Off Windows launcher=auto resolves to tmux (F-vlad-112), no longer to a "bulut algılanmadı" error; here the card's
+  // C:\dev path makes the worktree step fail first, and the task must stay queued. On Windows it would open a real terminal.
+  it.skipIf(process.platform === "win32")("launch outside the cloud on a non-Windows host fails and stays queued", () => {
     const id = newTask();
     writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ launcher: "auto" }));
     const r = vlad(["task", "launch", id, "--json"]);
     expect(r.code).toBe(1);
-    expect(JSON.parse(r.err).error).toMatch(/bulut algılanmadı/);
+    expect(JSON.parse(r.err).error).toMatch(/git worktree başarısız/);
     expect(vlad(["task", "list", "--state", "queued", "--json"]).out).toContain(id);
   });
 

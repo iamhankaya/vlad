@@ -118,6 +118,8 @@ export function closePosixWorker(
     selfPid?: number;
   } = {},
 ): number[] {
+  // Throw up front: the per-call guard below sits inside try/catch blocks and would be swallowed (F-vlad-064).
+  if (!o.run) assertRealLauncherAllowed();
   const run = o.run ?? ((f: string, a: string[]) => {
     assertRealLauncherAllowed();
     return execFileSync(f, a, { encoding: "utf8", timeout: 20000, stdio: ["ignore", "pipe", "ignore"] });

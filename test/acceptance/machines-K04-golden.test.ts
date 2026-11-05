@@ -85,6 +85,11 @@ describe("machines:K — K4 machines yokken çıktılar golden ile aynı", () =>
     const g = JSON.parse(readFileSync(GOLDEN, "utf8")) as Step[];
     const now = scenario(CLI);
     expect(now.map((s) => s.cmd)).toEqual(g.map((s) => s.cmd));
-    for (let i = 0; i < g.length; i++) expect(now[i], `adım ${i}: ${g[i].cmd}`).toEqual(g[i]);
+    for (let i = 0; i < g.length; i++) {
+      // The golden was recorded on Windows: the launch dry-run prints the host launcher (powershell there, tmux on macOS/Linux).
+      // Off Windows only the launcher-independent parts (code, stderr) are compared for that step.
+      const hostLauncher = process.platform !== "win32" && g[i].cmd.includes("--dry-run");
+      expect(hostLauncher ? { ...now[i], out: "" } : now[i], `adım ${i}: ${g[i].cmd}`).toEqual(hostLauncher ? { ...g[i], out: "" } : g[i]);
+    }
   }, 120_000);
 });
