@@ -457,7 +457,10 @@ export function askTask(id: string, q: string): Task {
     appendToSection(b, "## Sorular", `- ${nowIso()} **Soru:** ${q}`));
 }
 
+/** F-vlad-238: an answer only resumes a task that asked; from any other state `running` would skip the launch checks. */
 export function answerTask(id: string, a: string): Task {
+  const state = getTask(id).data.state;
+  if (state !== "blocked") throw new Error(`answer yalnızca blocked görevde yapılır (${state}): ${id}`);
   return transitionWith(id, "running", (b) =>
     appendToSection(b, "## Sorular", `- ${nowIso()} **Cevap:** ${a}`));
 }

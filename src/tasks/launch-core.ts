@@ -49,7 +49,17 @@ export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string
 /** Throws with the same messages the pre-split `launchTask` recorded; the caller records the error. */
 export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitApi = SYNC_GIT): Promise<LaunchCoreResult> {
   const { repo, worktree: wt, branch, base, branchOf, ...lr } = req;
-  await g.addWorktree(repo, wt, branch, base);
+  // F-vlad-239: a failed task re-queued for a retry keeps its worktree/branch (the worker's commits). Re-adopt them only when
+  // the owner checks out: the folder is a git worktree sitting on exactly `branch`, or only the branch is left. Anything else
+  // (foreign folder, other branch) falls through to addWorktree, which refuses with "zaten var".
+  let reused = false;
+  if (existsSync(wt)) {
+    reused = (await g.isWorktree(repo, wt)) && (await (branchOf ?? g.worktreeBranch)(wt)) === branch;
+  } else if (await g.branchExists(repo, branch)) {
+    await g.attachWorktree(repo, wt, branch);
+    reused = true;
+  }
+  if (!reused) await g.addWorktree(repo, wt, branch, base);
   // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
   const actual = await (branchOf ?? g.worktreeBranch)(wt);
   if (actual !== branch) {
@@ -89,6 +99,7 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
     failure = `launcher başarısız: ${(e as Error).message}`;
   }
   if (failure || !res) {
+    if (reused) throw new Error(failure!); // the earlier run's commits live here: never roll back what this launch did not create
     const cleanup = await undo();
     untrustWorktree(wt);
     throw new Error(`${failure}${cleanup ? `; temizlik başarısız: ${cleanup}` : ""}`);

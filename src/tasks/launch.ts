@@ -506,6 +506,8 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     title: `VLAD ${id} — ${task.data.title}`,
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
+    // F-vlad-239: a recorded worktree on a queued task means an earlier run ended (failed → queued); the worker re-adopts it
+    ...(task.data.worktree ? { retry: true } : {}),
   };
   const op = await reserve(old);
 

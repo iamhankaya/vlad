@@ -762,3 +762,23 @@ describe("deps/ launch enforcement", () => {
     expect((await launchTask(x.data.id, { launcher: l, cfg })).data.state).toBe("running");
   });
 });
+
+describe("launchTask: failed → queued → yeniden launch (F-vlad-239)", () => {
+  it("çalışanın failed bıraktığı worktree'ye bağlanır, running olur", async () => {
+    const t = mk();
+    const id = t.data.id;
+    await launchTask(id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(id).data.worktree!;
+    writeFileSync(join(wt, "w.txt"), "iş");
+    git(wt, "add", ".");
+    git(wt, "commit", "-m", "wip");
+    setState(id, "failed");
+    setState(id, "queued");
+    const l = fakeLauncher();
+    const r = await launchTask(id, { launcher: l, cfg });
+    expect(r.data.state).toBe("running");
+    expect(r.data.worktree).toBe(wt);
+    expect(l.reqs).toHaveLength(1);
+    expect(existsSync(join(wt, "w.txt"))).toBe(true);
+  });
+});

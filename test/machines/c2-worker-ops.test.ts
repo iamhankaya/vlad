@@ -97,6 +97,23 @@ describe("machines:C2 launch op (işçi)", () => {
     expect(reqs).toHaveLength(1);
   });
 
+  it("retry:true — failed→queued sonrası biten önceki launch kaydı yenisiyle değişir, worktree yeniden bağlanır (F-vlad-239)", async () => {
+    const r1 = await launchOp(L(), ctx("op-1"), { launcher });
+    writeFileSync(join(r1.worktree, "w.txt"), "iş"); git(r1.worktree, "add", "-A"); git(r1.worktree, "commit", "-q", "-m", "wip");
+    const r2 = await launchOp(L({ retry: true }), ctx("op-2"), { launcher });
+    expect(r2.worktree).toBe(r1.worktree);
+    expect(existsSync(join(r2.worktree, "w.txt"))).toBe(true);
+    expect(reqs).toHaveLength(2);
+    expect(record()).toMatchObject({ opId: "op-2" });
+  });
+
+  it("retry:true ama önceki launch sonuçsuz (yarım) ise yine conflict; retry olmadan biten kayıt da conflict", async () => {
+    mkdirSync(join(home, ".vlad-agent", "launches"), { recursive: true });
+    writeFileSync(join(home, ".vlad-agent", "launches", `${ID}.json`), JSON.stringify({ taskId: ID, repo, worktree: `${repo}-wt${sep}${ID}`, branch: `vlad/${ID}`, opId: "op-x" }));
+    await expect(launchOp(L({ retry: true }), ctx("op-2"), { launcher })).rejects.toMatchObject({ code: "conflict" });
+    expect(reqs).toHaveLength(0);
+  });
+
   it("açılış uzlaştırması: kayıt varsa sonucu geri verir (applied), yoksa not-applied", async () => {
     const r = await launchOp(L(), ctx("op-9"), { launcher });
     const rec = { opId: "op-9", from: "mac", op: "launch" as const, state: "started" as const, ts: 0, argsHash: "" };

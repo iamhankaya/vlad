@@ -85,7 +85,7 @@ export function launchOp(args: unknown, c: { from: string; opId: string }, o: { 
 }
 
 async function launchOne(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher }): Promise<LaunchResultW> {
-  const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact"]);
+  const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact", "retry"]);
   const id = taskIdArg(a);
   projectArg(a);
   const repoName = repoNameArg(a);
@@ -100,7 +100,14 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   const autoCompact = optStr(a, "autoCompact", COMPACT);
 
   const ctx = workerCtx();
-  const existing = readRecord(id);
+  let existing = readRecord(id);
+  // F-vlad-239: the brain re-queued a failed task (retry:true). A FINISHED earlier launch is then dead weight, not a double
+  // launch: close its window and let the record be replaced; launchCore re-adopts the worktree. A half-done record stays a conflict.
+  if (a.retry === true && existing?.result && existing.opId !== c.opId) {
+    try { defaultClose(id); } catch { /* the new window opens anyway; a stuck old one is the user's to close */ }
+    rmSync(recordFile(id), { force: true });
+    existing = null;
+  }
   if (existing && existing.opId !== c.opId) throw new RemoteError("conflict", `conflict: görev bu makinede zaten başlatılmış (op ${existing.opId ?? "?"})`);
   const repo = resolveRepo(ctx.def, repoName);
   const worktree = workerWorktree(ctx, repo, id);
