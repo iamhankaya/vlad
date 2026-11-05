@@ -190,6 +190,7 @@ describe("aktarim-kabul: son yazan kazanır, yerel kopya ezilmez", () => {
     await pending.catch(() => {});
     expect((await lc.read()).content!.bytes.toString("utf8")).toBe("kullanıcı şimdi kopyaladı");
     // alıcı bozulmadı: gecikme olmadan gelen daha yeni uzak değer normal uygulanır (stub/ölü alıcıdan ayırt eder)
+    await recv.sync.tick(); // kullanıcının kopyası yoklanır; ondan SONRAKİ uzak değer geçerlidir
     t += 10;
     expect(clipResult(await recv.ops["clip-push"](push({ s: "sonraki uzak", eventTs: t, rank: 0, counter: 2 }), { from: "windows", opId: randomUUID() }))).toBe("applied");
     expect((await lc.read()).content!.bytes.toString("utf8")).toBe("sonraki uzak");
