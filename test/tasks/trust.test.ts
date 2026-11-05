@@ -85,3 +85,37 @@ describe("untrustWorktree", () => {
     expect(untrustWorktree("C:\\dev\\a-wt\\T1", file)).toMatch(/bozuk/);
   });
 });
+
+describe("F-vlad-202: eşzamanlı yazım güven kaydını kaybetmez", () => {
+  it("birden çok süreç aynı anda farklı worktree'leri güvenilir yapınca hepsi kayıtlı kalır", async () => {
+    const { spawn } = await import("node:child_process");
+    writeFileSync(file, JSON.stringify({ numStartups: 3, projects: {} }));
+    const mod = join(process.cwd(), "dist", "tasks", "trust.js");
+    const n = 10;
+    const run = (i: number) => new Promise<number | null>((res) => {
+      const c = spawn(process.execPath, ["--input-type=module", "-e",
+        `const m = await import(${JSON.stringify("file://" + mod)}); for (let k = 0; k < 15; k++) { const w = m.trustWorktree("/wt/p${i}-" + k, process.argv[1]); if (w) { console.error(w); process.exit(3); } }`, file],
+      { stdio: "inherit" });
+      c.on("exit", res);
+    });
+    const codes = await Promise.all(Array.from({ length: n }, (_, i) => run(i)));
+    expect(codes).toEqual(Array(n).fill(0));
+    const j = read();
+    expect(j.numStartups).toBe(3);
+    expect(Object.keys(j.projects)).toHaveLength(n * 15);
+  }, 60_000);
+
+  it("tutulan taze kilit varken yazmaz, uyarı döner; bayat kilit kırılır", async () => {
+    const { mkdirSync, utimesSync } = await import("node:fs");
+    writeFileSync(file, JSON.stringify({ projects: {} }));
+    mkdirSync(`${file}.vlad-lock`);
+    const w = trustWorktree("/wt/a", file, { lockWaitMs: 100 });
+    expect(w).toMatch(/kilit/);
+    expect(read().projects).toEqual({});
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(`${file}.vlad-lock`, old, old);
+    expect(trustWorktree("/wt/a", file, { lockWaitMs: 100 })).toBeNull();
+    expect(read().projects["/wt/a"].hasTrustDialogAccepted).toBe(true);
+    expect(existsSync(`${file}.vlad-lock`)).toBe(false);
+  });
+});
