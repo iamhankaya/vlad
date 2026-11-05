@@ -113,3 +113,52 @@ describe("beyin: işçi sonuçsuz done diyorsa release --force çıkış sağlar
     await expect(releaseTask(id, { cfg, transport: tr, force: true })).rejects.toThrow(/tamamlanmış|task launch/);
   });
 });
+
+describe("F-vlad-231: zaman aşımından sonra işçi launch'ı sürdürüyorsa beyin durumu sorgular", () => {
+  let repo: string; let home: string; let cfg: VladConfig;
+  beforeEach(() => {
+    home = makeHome();
+    const base = mkdtempSync(join(tmpdir(), "vlad-t47c-"));
+    repo = join(base, "alpha"); mkdirSync(repo);
+    git(repo, "init", "-q", "-b", "main"); writeFileSync(join(repo, "a.txt"), "1"); git(repo, "add", "."); git(repo, "commit", "-q", "-m", "f");
+    cfg = defaultConfig(); cfg.worktreeDir = join(base, "wt"); cfg.brain = "mac";
+    cfg.machines = [{ name: "mac", os: "darwin", agent: { port: 7437 }, maxParallel: 1 }, { name: "windows", os: "win32", agent: { host: "10.0.0.2", port: 7437 }, maxParallel: 1 }];
+    writeProject("alpha", `---\nslug: alpha\nname: Alpha\npath: ${JSON.stringify(repo)}\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\nmachines: [windows]\n---\n\n## Özet\nx\n`);
+  });
+  afterEach(() => { rmTemp(join(repo, "..")); rmTemp(home); });
+  const noopLauncher: Launcher = { async launch() { return { ok: true, method: "fake" }; } };
+  const mkTransport = (statuses: unknown[]) => {
+    const calls: string[] = [];
+    const t: RemoteTransport = {
+      async call(to, op, _a, o) {
+        calls.push(op);
+        if (op === "ping") return { opId: "x", result: {} as any };
+        if (op === "launch") throw new RemoteError("timeout", "yanıt yok", to);
+        if (op === "op-status") { const s = statuses.length > 1 ? statuses.shift() : statuses[0]; return { opId: o?.opId ?? "x", result: s as any }; }
+        throw new RemoteError("unreachable", "x", to);
+      },
+    };
+    return { t, calls };
+  };
+  const pollOpts = { statusPollMs: 1000, pollIntervalMs: 1 };
+
+  it("timeout → started, started, done(sonuç): görev running olur, ikinci launch yok", async () => {
+    const id = createTask({ project: "alpha", title: "G", kind: "dev", body: "## Tanım\nx\n" } as any).data.id;
+    const f = mkTransport([{ state: "started" }, { state: "started" }, { state: "done", result: { branch: `vlad/${id}`, worktree: "W:\\wt\\X", method: "wt" } }]);
+    const t = await launchTask(id, { launcher: noopLauncher, cfg, remote: { transport: f.t, ...pollOpts } });
+    expect(t.data).toMatchObject({ state: "running", worktree: "W:\\wt\\X", launch_op: null });
+    expect(f.calls.filter((c) => c === "launch")).toHaveLength(1);
+  });
+  it("timeout → aborted: rezervasyon bırakılır, hata yükselir (yeniden denenebilir)", async () => {
+    const id = createTask({ project: "alpha", title: "G", kind: "dev", body: "## Tanım\nx\n" } as any).data.id;
+    const f = mkTransport([{ state: "aborted" }]);
+    await expect(launchTask(id, { launcher: noopLauncher, cfg, remote: { transport: f.t, ...pollOpts } })).rejects.toThrow();
+    expect(getTask(id).data).toMatchObject({ state: "queued", launch_op: null, machine: null });
+  });
+  it("süre dolana kadar started: rezervasyon kalır (sonraki launch op-status'a bakar)", async () => {
+    const id = createTask({ project: "alpha", title: "G", kind: "dev", body: "## Tanım\nx\n" } as any).data.id;
+    const f = mkTransport([{ state: "started" }]);
+    await expect(launchTask(id, { launcher: noopLauncher, cfg, remote: { transport: f.t, statusPollMs: 30, pollIntervalMs: 5 } })).rejects.toThrow();
+    expect(getTask(id).data.launch_op).toBeTruthy();
+  });
+});

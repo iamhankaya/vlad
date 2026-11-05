@@ -161,6 +161,9 @@ export interface RemoteDeps {
   transport: RemoteTransport;
   /** Called (outside the kb lock) before the remote `launch`; throw to refuse (e.g. kb not pushed). */
   syncKb?: (machine: string) => Promise<void>;
+  /** F-vlad-231: after a `launch` timeout, how long to keep asking the worker for the op's outcome (default 180 s) and how often (default 3 s) */
+  statusPollMs?: number;
+  pollIntervalMs?: number;
 }
 
 /** A remote launch whose outcome is unknown keeps its reservation; anything else is a definite failure. */
@@ -442,6 +445,20 @@ async function cancelReleased(id: string, machine: string, transport: RemoteTran
 
 class LostRace extends Error {}
 
+/** Polls `op-status` (no cancel) until the launch settled or the budget ran out; `pending`: still unknown/started, `error`: the worker could not be asked. */
+async function pollLaunch(transport: RemoteTransport, machine: string, op: string, d: RemoteDeps): Promise<OpStatus | { state: "pending" | "error" }> {
+  const deadline = Date.now() + (d.statusPollMs ?? 180_000);
+  const every = d.pollIntervalMs ?? 3000;
+  while (Date.now() < deadline) {
+    let st: OpStatus;
+    try { st = (await transport.call<OpStatus>(machine, "op-status", { target: op })).result; } catch { return { state: "error" }; }
+    if (st.state === "done" || (RETRY_STATES.has(st.state) && st.state !== "unknown")) return st;
+    if (st.state !== "started" && st.state !== "unknown") return { state: "error" };
+    await new Promise((r) => setTimeout(r, every));
+  }
+  return { state: "pending" };
+}
+
 interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
 interface OpStatus { state: string; result?: RemoteLaunched; truncated?: boolean }
 
@@ -524,7 +541,13 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     res = await transport.call<RemoteLaunched>(machine, "launch", args, { opId: op });
   } catch (e) {
     // no answer: the worker may have launched anyway -> keep the reservation, the next `task launch` asks op-status
-    if (e instanceof RemoteError && UNCERTAIN.has(e.code)) throw e;
+    if (e instanceof RemoteError && UNCERTAIN.has(e.code)) {
+      // F-vlad-231: a slow worker keeps launching after our timeout; ask for the outcome before giving up
+      const polled = e.code === "timeout" ? await pollLaunch(transport, machine, op, remote) : null;
+      if (polled?.state === "done" && polled.result) return commit(op, polled.result);
+      if (polled && RETRY_STATES.has(polled.state) && polled.state !== "unknown") { await failReservation(id, op, e.message, claimedPin); }
+      throw e;
+    }
     await failReservation(id, op, (e as Error).message, claimedPin);
     throw e;
   }
