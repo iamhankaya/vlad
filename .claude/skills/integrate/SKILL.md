@@ -16,7 +16,7 @@ Kapı yetkisi VLAD'dadır; çalışan merge etmez. **Merge, push ve PR her zaman
 ## 2. Gate
 Projenin kartındaki **`gate`** komutunu (`vlad project list --json` → `gate`) ilgili worktree'de çalıştır; çıkış kodu ve kırmızıysa özetini göster. Kırmızı gate'te merge önerme. Kartta `gate` yoksa ad hoc koşu yap ve uyar: "⚠ gate tanımlı değil — kart için öneri: `vlad project set <slug> gate "<komut>"`; önbellek/şablon DB temizliği ve build'i içersin." Gate'i onaysız kendin yazma.
 
-**Uzak makinedeki görev/faz** (config'te `machines` varken görev bir işçiye yerleşmişse): gate yerelde değil işçide, görevin kendi worktree'sinde çalışır: `vlad task gate <id> [--target integration|task] --json` (varsayılan `integration` = çatı worktree'si, `task` = görevin kendisi; çıkış kodu 1 = kırmızı, 75 = makine erişilemiyor). Komut önce kb'yi işçiye senkronlar; işçi kartın `gate`'ini kendi kb klonundan okur.
+**Uzak makinedeki görev/faz** (config'te `machines` varken görev bir işçiye yerleşmişse): gate yerelde değil işçide, görevin kendi worktree'sinde çalışır: `vlad task gate <id> [--target integration|task] --json` (varsayılan görev türüne göre: pipeline çatısı → `integration` = çatı worktree'si; dev görevi/fazı → `task` = görevin kendisi; çıkış kodu 1 = kırmızı, 75 = makine erişilemiyor). Komut önce kb'yi işçiye senkronlar; işçi kartın `gate`'ini kendi kb klonundan okur.
 
 ## 3. Merge ön izleme
 Merge'den önce etkiyi göster: `git -C <worktree> log --oneline <taban>..HEAD`, `git -C <worktree> diff --stat <taban>...HEAD` ve çakışma ön izlemesi `git merge-tree --write-tree <hedef> vlad/<id>` (git ≥ 2.38; yoksa atla, çakışma merge sırasında `--abort` ile yakalanır). Taban: pipeline fazında `vlad/<çatı-id>`, değilse ana branch. Çakışma varsa merge önerme, rebase isteği öner. **Uzak görevde** ön izleme `vlad task merge-preview <id> [--into <dal>] --json` ile alınır (log, diff --stat, çakışmalar; yazmaz); `--into` verilmezse hedef `vlad/<çatı>` ya da kartın `default_branch`'i.
@@ -36,4 +36,4 @@ Paylaşılan kayıt dosyaları (test_map, registry, `contract.ts` gibi üretilen
 - Başarılı merge sonrası `vlad task set <id> done` ve `vlad task cleanup <id>` (cleanup yalnız `done`/`cancelled` sonrası).
 
 ## Değişiklik isteği yolu
-`vlad task log <id> "Değişiklik isteği: <özet>"` + `vlad task set <id> running`; çalışan açıksa `SendMessage`, kapalıysa `claude --resume <session_id>` (yoksa `--continue`). Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır.
+`vlad task log <id> "Değişiklik isteği: <özet>"` + `vlad task set <id> running`; çalışan açıksa `SendMessage`, kapalıysa `claude --resume <session_id>` (session_id yoksa worktree'deki tek transcript; o da yoksa taze oturum, `--continue` kullanılmaz). Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır.

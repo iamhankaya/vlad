@@ -6,7 +6,7 @@ Tasarım: [`docs/superpowers/specs/2026-10-15-vlad-core-design.md`](docs/superpo
 
 ## Gereksinimler
 
-- Windows, Node.js 22+, git, Claude Code (`claude`)
+- Node.js 22+, git, Claude Code (`claude`); beyin Mac veya Windows olabilir (çok makine kurulumu için bkz. `docs/machines-setup.md`)
 - İsteğe bağlı: Windows Terminal (`wt`), GitHub CLI (`gh`, PR için)
 
 ## Kurulum
@@ -22,10 +22,10 @@ vlad install
 
 `vlad install` şunları yapar:
 - `~/.claude/settings.json`'u `settings.json.bak-<YYYYMMDDTHHmmss>` olarak yedekler (dosya varsa ve değişiklik gerekiyorsa) ve `hooks.SessionEnd`'e `node "C:/dev/vlad/dist/hooks/session-report.js"` kaydını ekler. Hook `timeout: 10` ile kaydedilir (Claude Code'un SessionEnd varsayılanı 1,5 sn; hook'un git çağrıları ~6 sn sürebilir); zaman aşımı olmadan kayıtlı eski bir girdi yerinde yükseltilir. Diğer ayarlara dokunmaz; tekrar çalıştırmak güvenlidir.
-- `global/skills/vlad-worker/` klasörünü `~/.claude/skills/vlad-worker/`'a kopyalar (çalışan protokolü her repoda kullanılabilir olur). Her çalıştırmada hedefteki `vlad-worker` klasörünün üzerine yazılır; orada yaptığınız elle değişiklikler kaybolur.
+- `global/skills/*` klasörlerinin tümünü (`vlad-worker` zorunlu, `ci-triage` dahil) `~/.claude/skills/<ad>/`'a kopyalar (çalışan protokolü ve CI skill'i her repoda kullanılabilir olur). Her çalıştırmada hedefteki klasörlerin üzerine yazılır; orada yaptığınız elle değişiklikler kaybolur.
 - `VLAD_CLAUDE_DIR` ortam değişkeni `~/.claude` yerine başka bir klasörü hedefler (test ve deneme için).
 
-Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterHours`, launcher (`auto|wt|powershell|cloud|tmux|terminal`; macOS'ta `auto` = `tmux new-session -d -s vlad-<id>`, `terminal` = Terminal.app; `--external` POSIX betik `$TMPDIR/vlad/<id>.sh` + `bash <betik>` döner; `close-window`/`cleanup` tmux oturumunu kapatır), opsiyonel `maxParallel` — aynı anda en fazla bu kadar `running` dev çalışanı; yoksa sınırsız; opsiyonel `workerAutoCompact` — çalışanların `claude --autocompact` eşiği, ör. `"300k"`, aralık 100000–1000000, `k`/`M` eki; yerel launch, `task launch --external` ve `task resume --external` betiklerine girer, bulutta karşılığı yok).
+Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterHours`, launcher (`auto|wt|powershell|cloud|tmux|terminal`; macOS'ta `auto` = `tmux new-session -d -s vlad-<id>`, `terminal` = Terminal.app; `--external` POSIX betik `$TMPDIR/vlad/<id>.sh` + `bash <betik>` döner; `close-window`/`cleanup` tmux oturumunu kapatır), opsiyonel `maxParallel` — aynı anda en fazla bu kadar `running` dev çalışanı; yoksa sınırsız; çok makine alanları (kök `consoles`, `workerSilentMinutes`; makine başına `agent.bind`) `docs/machines-setup.md` §1'de; opsiyonel `workerAutoCompact` — çalışanların `claude --autocompact` eşiği, ör. `"300k"`, aralık 100000–1000000, `k`/`M` eki; yerel launch, `task launch --external` ve `task resume --external` betiklerine girer, bulutta karşılığı yok).
 
 `vlad task ready --parent <id>` sınıra uyan fazları `tasks`, sınır yüzünden bekleyenleri `held_by_limit` olarak verir. `vlad task resume <id>` kesilmiş (`running`/`stalled`) bir çalışan için devam bilgisi üretir: yerelde worktree/branch/kirli ağaç kontrolü ve devam prompt'u, bulutta `send_message` argümanları.
 

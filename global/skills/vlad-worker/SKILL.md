@@ -12,13 +12,13 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 ## 0. Görevini bul
 
 - Görev ID'si ortamdadır: `VLAD_TASK_ID` (Bash: `echo $VLAD_TASK_ID`, PowerShell: `$env:VLAD_TASK_ID`).
-- VLAD kökü: `VLAD_HOME` (yoksa `C:\dev\vlad`). Görev dosyası: `<VLAD_HOME>/kb/tasks/<id>.md`.
+- VLAD kökü: `VLAD_HOME` (yoksa `C:\dev\vlad`). Görev dosyasının yolunu elle varsayma: kb ayrı repodadır ve `kbDir`/`VLAD_KB_DIR` ile çözülür. `vlad kb get <id> --json` çıktısındaki `file` alanı gerçek yoldur.
 - `VLAD_TASK_ID` yoksa dur ve kullanıcıya görev ID'sini sor.
 
 ## 1. Oku
 
 - Görev dosyası: `## Tanım`, `## Kabul kriterleri`, `## Bağlam`, frontmatter'daki `project`, `autonomy`, `branch`.
-- Proje kartı: `<VLAD_HOME>/kb/projects/<project>.md`. Kartın `## Çalışma notları` bölümü bu projede öğrenilmiş derslerdir (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
+- Proje kartı: kb kökündeki `projects/<project>.md` (kb kökü `kbDir`/`VLAD_KB_DIR` ile çözülür; `vlad kb get <id> --json` `file` yolunda `/tasks/` öncesini al, arşivde yol `tasks/archive/<YYYY-MM>/` içerir; özet için `vlad project status <project> --json`). Kartın `## Çalışma notları` bölümü bu projede öğrenilmiş derslerdir (test ortamı, tuzaklar, kalıplar); işe başlamadan oku ve uy.
 - Rol: frontmatter'da `role` doluysa `<VLAD_HOME>/roles/<role>.md`'yi oku (başlangıç prompt'u da bu dosyayı söyler). Rolün sorumluluk, yetki ve çıktı kuralları bu protokolle birlikte geçerlidir; rol kuralı ile `autonomy` kuralı çelişirse **daha kısıtlayıcı** olan uygulanır. Kapanış raporunu rolün `## Çıktı` bölümündeki başlıklarla yaz (adım 6'daki başlıklar her durumda bulunur).
 - Pipeline fazı: frontmatter'da `parent` doluysa bir pipeline'ın `phase` fazısın. `vlad task list --parent <parent> --json` ile kardeş fazları gör; `depends_on`'daki her görevin `## Kapanış raporu`'nu oku (`vlad kb get <dep-id> --section "## Kapanış raporu"`; bağımlılık arşivlenmiş olabilir, sabit `kb/tasks/<dep-id>.md` yoluna güvenme) — fazın girdisi (spec, plan, test matrisi…) budur. Danışma fazlarının (`phase: danışma`) raporları da bağlamdır.
 - Bu dosyaları **elle düzenleme**; yalnızca okursun.
@@ -41,6 +41,8 @@ Düz metinde (ilerleme notları, sorular, rapor gövdesi) kısa ve somut yaz; do
 vlad task log <id> "<kısa Türkçe açıklama>"
 ```
 Uzun süre sessiz kalma: kayıt `staleAfterHours`'tan eskirse görev `stalled` sayılır.
+
+**Stalled kurtarma:** `stalled` görevde `task report` ve `task ask` durum makinesince reddedilir (`stalled → running|cancelled`). Yerel çalışan önce `vlad task set <id> running` çalıştırır, sonra devam eder. Çok makine işçisinde `task set` reddedilir ("bu makine beyin değil"): `vlad task log <id> "stalled: <neden>"` yaz ve dur; `/status` beyinde `task set <id> running` ile geri alır.
 
 **Checkpoint kuralı:** oturum limiti veya çökme seni her an kesebilir. Her anlamlı adımda (test yeşile döndü, bir dosya/modül bitti, review düzeltmesi) WIP commit at (`git commit -m "wip: <ne>"`) ve `vlad task log <id> "kaldığım yer: <sonraki adım>"` yaz. Kaydedilmemiş iş bırakma.
 

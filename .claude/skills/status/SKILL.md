@@ -94,7 +94,7 @@ Sonra seçenekleri sun:
    `git -C <worktree> push -u origin vlad/<id>` ve `gh pr create --head vlad/<id> --fill` (worktree'de). PR linkini göster. (Pipeline fazında sunulmaz; PR son kapıda açılır.)
 3. **Değişiklik iste:** istenen değişikliği al →
    `vlad task log <id> "Değişiklik isteği: <özet>"` ve `vlad task set <id> running --json`.
-   Çalışanın session'ı açıksa (`ListAgents`) ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder; kapalıysa kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa `claude --continue`. Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır (`/delegate` 5b).
+   Çalışanın session'ı açıksa (`ListAgents`) ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder; kapalıysa kullanıcıya worktree'de devam komutunu öner: `session_id` doluysa `claude --resume <session_id>`, boşsa worktree'deki tek transcript için `claude --resume` (o da yoksa taze oturum; `--continue` önerilmez, F-vlad-097). Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır (`/delegate` 5b).
 4. **Olduğu gibi kabul et** (dışa eylem yok). Pipeline **dev** fazında sunma: merge'süz `done`, bağımlı fazların bu değişikliği görmeden başlaması demektir (spec §2, §6). Kullanıcı yine de isterse bu sonucu açıkça söyle ve bağımlı fazları başlatmadan önce ayrıca onay al.
 5. **İptal et:** gerekçe **zorunludur** (`--reason` olmadan CLI hata verir); kullanıcıdan kısa gerekçeyi al, yoksa sor. `vlad task set <id> cancelled --reason "<gerekçe>" --json` gerekçeyi `## İlerleme`'ye `İptal: <gerekçe>` olarak yazar (`/setup-audit` bunu sayar); ardından `vlad task cleanup <id> --json`.
 
@@ -192,7 +192,7 @@ vlad task answer <id> "<cevap>" --json
 
 Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
 - **Devam:** önce `vlad task resume <id> --json` (yalnızca `running`/`stalled`). Hata verirse (worktree yok, yanlış branch, session yok) mesajı göster; **yanlış worktree'de devam ettirme**. Başarılıysa (sürdürme ve her `SendMessage` uyandırmasından sonra çalışan için `notify_when_idle: true` aboneliğini yeniden kur, `/delegate` 5a; idle bildirimi gelince görev dosyasını oku, durum değişmemişse çalışanı dürt):
-  - `mode: "local"`: `dirty` doluysa kullanıcıya söyle; `stalled` ise `vlad task set <id> running --json`; kullanıcıya `worktree` yolunda devam etmesini ve `prompt`'u çalışana vermesini öner (`claude --resume <session_id>` / `claude --continue` ile birlikte).
+  - `mode: "local"`: `dirty` doluysa kullanıcıya söyle; `stalled` ise `vlad task set <id> running --json`; kullanıcıya `worktree` yolunda devam etmesini ve `prompt`'u çalışana vermesini öner (`claude --resume <session_id>` ile birlikte; session_id yoksa `vlad task resume` çıktısındaki yönergeyi izle).
   - Gömülü istemci (vlad-desktop) için `vlad task resume <id> --external --json` devam prompt'lu betik yazar ve `script`/`command`/`cwd` döner (terminal açmaz). Çalışan penceresini kapatmak için `vlad task close-window <id>` (durum ve worktree değişmez). Yan etkisiz durum okuması: `vlad status --json --no-mark`.
   - `mode: "cloud"`: `stalled` ise `vlad task set <id> running --json`; `args` ile `send_message` çağır (`session_id`, `message`). Bu bir dış eylem değil, mevcut çalışana devam mesajıdır.
   Kesilen çalışanları (oturum limiti, çökme) bu yolla sürdür; yeni görev açma.
