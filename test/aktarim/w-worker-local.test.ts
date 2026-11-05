@@ -33,6 +33,12 @@ describe("işçide send/clip forward reddi almaz", () => {
     expect(r.err).not.toMatch(/beyin değil/);
   });
 
+  it("clip status işçide gerçekten çalışır (JSON çıktı, çıkış 0)", () => {
+    const r = spawnVlad(pair().worker, ["clip", "status", "--json"], { env: { VLAD_NO_NATIVE: "1" } });
+    expect(r.code, r.err).toBe(0);
+    expect(JSON.parse(r.out)).toHaveProperty("enabled");
+  });
+
   it("kontrol: kb yazan komut işçide hâlâ reddedilir", () => {
     const p = pair();
     expect(spawnVlad(p.worker, ["kb", "commit", "x"]).err).toMatch(/beyin değil/);
