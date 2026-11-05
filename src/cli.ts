@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { fileURLToPath } from "node:url";
+import { cliPathFromUrl } from "./cli/cli-path.js";
 import { buildProgram, handleParseError } from "./cli/program.js";
 import type { CliCtx } from "./cli/program.js";
 import { swallowEpipe } from "./stdout.js";
@@ -8,7 +8,7 @@ swallowEpipe(process.stdout);
 swallowEpipe(process.stderr);
 
 const ctx: CliCtx = {
-  cliPath: fileURLToPath(import.meta.url),
+  cliPath: cliPathFromUrl(import.meta.url),
   argv: process.argv,
   stdout: process.stdout,
   stderr: process.stderr,

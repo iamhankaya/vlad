@@ -87,6 +87,23 @@ export function handleParseError(program: Command, ctx: CliCtx, e: unknown): nev
   return failWith(ctx, e);
 }
 
+/**
+ * Commands that write the kb run under the cross-process kb lock (F-vlad-096): ID generation and the write
+ * share one lock region. Read-only commands, `kb commit` (takes the lock itself around add+commit only, never during the push; F-vlad-103) and
+ * `task close-window` (no kb write) stay lock-free. `task launch` locks only its kb write regions inside
+ * `launchTask` (F-vlad-102), never the worktree/terminal wait. `status`/`mode status` write only as a side effect
+ * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
+ */
+export const KB_WRITES = new Set([
+  "project write", "project set", "project note", "project summary", "project refresh",
+  "finding add", "finding set",
+  "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
+  "mode night", "mode watch", "mode off", "mode status",
+  "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
+]);
+/** Commands whose kb write also refreshes derived project-card blocks (`runAndRefresh`). */
+export const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
+
 /** Builds the whole command tree; parses nothing and keeps no module-level state, so two calls are independent. */
 export function buildProgram(ctx: CliCtx): Command {
 const fail = (e: unknown): never => failWith(ctx, e);
@@ -146,20 +163,6 @@ program
   .exitOverride()
   .configureOutput({ writeErr: (str) => { pendingHelp += str; } });
 
-/**
- * Commands that write the kb run under the cross-process kb lock (F-vlad-096): ID generation and the write
- * share one lock region. Read-only commands, `kb commit` (takes the lock itself around add+commit only, never during the push; F-vlad-103) and
- * `task close-window` (no kb write) stay lock-free. `task launch` locks only its kb write regions inside
- * `launchTask` (F-vlad-102), never the worktree/terminal wait. `status`/`mode status` write only as a side effect
- * (stalled marks, expired mode window), so they lock unless `--no-mark` is given.
- */
-const KB_WRITES = new Set([
-  "project write", "project set", "project note", "project summary", "project refresh",
-  "finding add", "finding set",
-  "task new", "task ingest", "task resume", "task log", "task ask", "task answer", "task report", "task set", "task deps", "task cleanup", "task digested", "task session",
-  "mode night", "mode watch", "mode off", "mode status",
-  "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append", "kb maintain", "session register",
-]);
 
 // --- machines:S --- kancalar; varsayılan = mevcut davranış. B `before`'ı (iletim), C `lockPolicy`'yi (resume/cleanup iç kilit) doldurur.
 /** true → komut başka makineye iletildi (çıktı yazıldı), yerel handler çalışmaz. */
@@ -200,7 +203,6 @@ function targetsOf(key: string, args: any[]): { slugs: (string | undefined)[]; o
 }
 /** `D-<proje>-NNN` → proje slug'ı (kimlik değilse undefined). */
 const decisionProject = (id: unknown): string | undefined => /^D-([a-z0-9][a-z0-9-]*)-\d{3,}$/.exec(String(id ?? ""))?.[1];
-const REFRESH_KEYS = new Set(["project write", "finding add", "finding set", "task set", "decision add", "decision set"]);
 async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
   await fn(...args);
   if (!REFRESH_KEYS.has(key)) return;
