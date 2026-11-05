@@ -14,8 +14,7 @@ afterEach(async () => { for (const p of pairs.splice(0)) await p.stop(); });
 const pair = async (...a: Parameters<typeof startAktarimPair>) => { const p = await startAktarimPair(...a); pairs.push(p); return p; };
 
 describe("V: pano resmi kablodan (buildAktarim bağlaması)", () => {
-  // Bulgu V-1: buildAktarim, xfer'e clipImage (= clip.sink) bağlamıyor; createProdDeps de bağlamıyor. Sonuç: uzaktan clip-image
-  // her zaman "pano kapalı veya desteklenmiyor" (receive.ts:168) ile reddedilir, resim panosu üretimde hiç eşitlenmez.
+  // V-1 (F-vlad-230) T20261105-34'te düzeltildi: buildAktarim clipImage = clip.sink bağlar; bu iki test regresyon koruması.
   it("mac'te kopyalanan resim windows panosuna yazılır", async () => {
     const p = await pair();
     await p.mac.clip.sync.tick(); // açılış taban çizgisi
@@ -35,6 +34,27 @@ describe("V: pano resmi kablodan (buildAktarim bağlaması)", () => {
     await p.windows.clip.sync.tick();
     expect(p.mac.clipboard.writes.length).toBe(1);
     expect(p.mac.clipboard.writes[0]!.bytes.equals(img)).toBe(true);
+  });
+});
+
+describe("V2: resim panosu kablodan, yankı ve ardışık gönderim", () => {
+  it("resim bir kez iletilir, karşı taraf yoklayınca geri yankı olmaz; ardından ters yönde yeni resim gelir", async () => {
+    const p = await pair();
+    await p.mac.clip.sync.tick(); await p.windows.clip.sync.tick();
+    const a = png(3, 3, 11), b = png(5, 2, 13);
+    p.mac.clipboard.setLocal(image(a));
+    await p.mac.clip.sync.tick();
+    await p.windows.clip.sync.tick(); // yankı üretmemeli
+    await p.mac.clip.sync.tick();
+    expect(p.windows.clipboard.writes.length).toBe(1);
+    expect(p.mac.clipboard.writes).toEqual([]);
+    p.windows.clipboard.setLocal(image(b));
+    await p.windows.clip.sync.tick();
+    await p.mac.clip.sync.tick();
+    await p.windows.clip.sync.tick();
+    expect(p.mac.clipboard.writes.length).toBe(1);
+    expect(p.mac.clipboard.writes[0]!.bytes.equals(b)).toBe(true);
+    expect(p.windows.clipboard.writes.length).toBe(1);
   });
 });
 
