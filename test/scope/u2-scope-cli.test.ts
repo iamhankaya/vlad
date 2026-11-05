@@ -10,9 +10,9 @@ const node = (script: string, args: string[], cwd = root) => runSpawn(process.ex
 
 describe("u2 scope CLI", () => {
   it("--files … --json prints the selection", () => {
-    const r = node("test-scope.mjs", ["--files", "src/launcher/posix.ts,notes/todo.md", "--json"]);
+    const r = node("test-scope.mjs", ["--files", "src/launcher/posix.ts,vendor/x.txt", "--json"]);
     expect(r.status, r.stderr).toBe(0);
-    expect(JSON.parse(r.stdout)).toMatchObject({ buckets: ["process", "platform"], unit: "changed", ignored: ["notes/todo.md"], all: false });
+    expect(JSON.parse(r.stdout)).toMatchObject({ buckets: ["unit", "process", "platform"], unit: "changed", ignored: ["vendor/x.txt"], all: false, warnings: [] });
   });
   it("an unmapped path is reported on stderr and selects everything", () => {
     const r = node("test-scope.mjs", ["--files", "tools/x.bin"]);

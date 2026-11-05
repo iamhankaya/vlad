@@ -34,8 +34,6 @@ describe("u2 scope: file → bucket selection", () => {
     "package.json", "vitest.config.ts", "test/global-setup.ts", "test/isolate-env.ts", "test/support/helper.ts",
     "test/machines/harness.ts", "test/fixtures/kb-mini/vlad.config.json", "src/cli/program.ts", "src/commands/manifest.ts",
     "src/kb/types.ts", "schemas/task.schema.json", "roles/developer.md", "global/skills/ci-triage/SKILL.md", "test/buckets.json", "test/scope.json",
-    // unit tests read these with readFileSync (no import edge, so --changed cannot see them)
-    "CLAUDE.md", "README.md", "docs/superpowers/spec.md", ".claude/skills/x/SKILL.md",
   ])("shared infrastructure %s selects every bucket", (f) => {
     const r = sel(f);
     expect(r.all).toBe(true);
@@ -47,12 +45,20 @@ describe("u2 scope: file → bucket selection", () => {
     expect(r.all).toBe(true);
     expect(r.unmapped).toEqual(["tools/whatever.bin"]);
   });
-  it("a note with no test reading it selects nothing beyond unit --changed (never zero silently)", () => {
-    const r = sel("vendor/skills/x/NOTES.md", "notes/todo.md");
+  it.each(["CLAUDE.md", "README.md", "docs/superpowers/spec.md", ".claude/skills/x/SKILL.md", "notes/todo.md"])(
+    "document %s: the whole unit bucket runs (unit tests read these with readFileSync, so --changed cannot see them), other buckets do not", (f) => {
+      const r = sel(f);
+      expect(r.unit).toBe("all");
+      expect(r.buckets).toEqual([]);
+      expect(r.all).toBe(false);
+      expect(r.warnings.join(" ")).toMatch(/yalnız docs/);
+    });
+  it("a path ignored by scope.json selects nothing beyond unit --changed (never zero silently)", () => {
+    const r = sel("vendor/skills/x/NOTES.txt");
     expect(r.buckets).toEqual([]);
     expect(r.files).toEqual([]);
     expect(r.unit).toBe("changed");
-    expect(r.ignored).toEqual(["vendor/skills/x/NOTES.md", "notes/todo.md"]);
+    expect(r.ignored).toEqual(["vendor/skills/x/NOTES.txt"]);
     expect(r.all).toBe(false);
   });
   it("a changed test file runs by path instead of its whole bucket", () => {
@@ -68,7 +74,7 @@ describe("u2 scope: file → bucket selection", () => {
   it("no changed files at all warns instead of running zero tests", () => {
     const r = sel();
     expect(r.unit).toBe("changed");
-    expect(r.warning).toMatch(/dosya yok|değişiklik yok/);
+    expect(r.warnings.join(" ")).toMatch(/değişiklik yok/);
   });
 });
 

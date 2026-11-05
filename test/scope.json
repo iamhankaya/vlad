@@ -1,5 +1,5 @@
 {
-  "_doc": "Seçici koşum haritası (scripts/test-scope.mjs). Sıra: all → ignore → rules → test dosyası (yola göre) → eşlenmeyen = TÜM kovalar. Kart gate'i ve son kapı seçici değil, tam suite'tir.",
+  "_doc": "Seçici koşum haritası (scripts/test-scope.mjs). Sıra: all → unitAll (belgeler: unit kovasının tamamı + uyarı, diğer kovalar değil; unit testleri bu dosyaları readFileSync ile okur) → ignore → rules → test dosyası (yola göre) → eşlenmeyen = TÜM kovalar. Kart gate'i ve son kapı seçici değil, tam suite'tir.",
   "all": [
     "package.json",
     "package-lock.json",
@@ -22,15 +22,10 @@
     "src/layers.baseline.json",
     "schemas/**",
     "roles/**",
-    "global/skills/**",
-    "CLAUDE.md",
-    "README.md",
-    "docs/**",
-    ".claude/**"
+    "global/skills/**"
   ],
   "ignore": [
-    "vendor/**",
-    "**/*.md"
+    "vendor/**"
   ],
   "rules": [
     {
@@ -103,5 +98,12 @@
         "process"
       ]
     }
+  ],
+  "unitAll": [
+    "CLAUDE.md",
+    "README.md",
+    "docs/**",
+    ".claude/**",
+    "**/*.md"
   ]
 }
