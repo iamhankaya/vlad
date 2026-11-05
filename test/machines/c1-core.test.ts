@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { branchExists, worktreePath } from "../../src/git/git.js";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
@@ -145,5 +145,47 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
     const r = req();
     expect((await launchCore({ ...r, adopt: true }, fake())).reused).toBeUndefined();
     expect((await launchCore({ ...r, adopt: true }, fake())).reused).toBe(true);
+  });
+
+  // F-vlad-248
+  it("kirli worktree'ye yeniden bağlanır: kaydedilmemiş dosya korunur, launcher çağrılır", async () => {
+    const r = req();
+    await launchCore({ ...r, adopt: true }, fake());
+    writeFileSync(join(r.worktree, "kirli.txt"), "bitmemiş");
+    const l = fake();
+    expect((await launchCore({ ...r, adopt: true }, l)).reused).toBe(true);
+    expect(readFileSync(join(r.worktree, "kirli.txt"), "utf8")).toBe("bitmemiş");
+    expect(l.reqs).toHaveLength(1);
+  });
+
+  it("dal başka bir worktree'de checkout'luysa ham git hatası değil, yolu söyleyen açık hata", async () => {
+    const r = req();
+    await launchCore({ ...r, adopt: true }, fake());
+    const other = join(dirname(r.worktree), "baska-yer");
+    git(repo, "worktree", "move", r.worktree, other);
+    const l = fake();
+    await expect(launchCore({ ...r, adopt: true }, l)).rejects.toThrow(new RegExp(`başka worktree'de.*${other.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}`));
+    expect(l.reqs).toHaveLength(0);
+  });
+
+  it("base verilmiş ve dal ondan geride kalmışsa uyarır (yine bağlanır, iş silinmez)", async () => {
+    const r = req({ base: "main" });
+    await launchCore({ ...r, adopt: true }, fake());
+    writeFileSync(join(repo, "b.txt"), "2"); git(repo, "add", "."); git(repo, "commit", "-m", "ilerledi");
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect((await launchCore({ ...r, adopt: true }, fake())).reused).toBe(true);
+      expect(err.mock.calls.flat().join("\n")).toMatch(/main.*geride/);
+    } finally { err.mockRestore(); }
+  });
+
+  it("base ile güncel dalda uyarı yok", async () => {
+    const r = req({ base: "main" });
+    await launchCore({ ...r, adopt: true }, fake());
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await launchCore({ ...r, adopt: true }, fake());
+      expect(err.mock.calls.flat().join("\n")).not.toMatch(/geride/);
+    } finally { err.mockRestore(); }
   });
 });

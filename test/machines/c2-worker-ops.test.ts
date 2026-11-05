@@ -187,6 +187,21 @@ describe("machines:C2 cleanup op (güvenlik)", () => {
     expect(await cleanupOp(C({ dropBranch: true }), { close: () => [] })).toEqual({ removed: false });
     expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
   });
+  it("dropBranch: entegrasyon dalından açılan commit'siz faz dalı, HEAD'in gerisinde olmasa da silinir (F-vlad-244)", async () => {
+    const other = "T20261101-62";
+    const ir = await launchOp(L({ taskId: other, branch: `vlad/${other}`, base: { kind: "integration", parent: PARENT } }), ctx("op-0"), { launcher });
+    writeFileSync(join(ir.integration!.worktree, "i.txt"), "i"); git(ir.integration!.worktree, "add", "."); git(ir.integration!.worktree, "commit", "-q", "-m", "entegrasyon ilerledi");
+    await launchOp(L({ base: { kind: "integration", parent: PARENT } }), ctx("op-1"), { launcher });
+    const r = await cleanupOp(C({ dropBranch: true }), { close: () => [] });
+    expect(r).toEqual({ removed: true });
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
+  });
+  it("dropBranch: kendi commit'i olan dal korunur ve uyarı döner (sessiz kalmaz)", async () => {
+    const wt = await launched();
+    writeFileSync(join(wt, "w.txt"), "x"); git(wt, "add", "."); git(wt, "commit", "-q", "-m", "iş");
+    const r = await cleanupOp(C({ dropBranch: true }), { close: () => [] }) as { removed: boolean; warning?: string };
+    expect(r.warning).toMatch(/dal korundu.*1 commit/);
+  });
   it("dropBranch yokken dal kalır; commit'li dal dropBranch ile de kalır", async () => {
     const wt = await launched();
     writeFileSync(join(wt, "w.txt"), "x"); git(wt, "add", "."); git(wt, "commit", "-q", "-m", "iş");
@@ -276,10 +291,10 @@ describe("machines:C2 resume op (işçi)", () => {
     await expect(resumeOp(R({ sessionId: "-x" }), { launcher })).rejects.toMatchObject({ code: "bad_request" });
   });
 
-  it("sessionId yoksa --continue (resume.sessionId undefined)", async () => {
+  it("sessionId yoksa resume yok: --continue başka oturumu seçebilir, taze oturum açılır (F-vlad-247/097)", async () => {
     await launchOp(L(), ctx(), { launcher }); reqs = [];
     await resumeOp(R(), { launcher });
-    expect(reqs[0]!.resume).toEqual({ sessionId: undefined });
+    expect(reqs[0]!.resume).toBeUndefined();
   });
 
   it("worktree yok → not_found; yanlış dal → failed; kayıt yok → forbidden; hiçbiri pencere açmaz", async () => {
