@@ -26,9 +26,8 @@ describe("s-layers: layer rules (skeleton; known violations sit in layers.baseli
     expect(bad).toEqual([]);
   });
   it("scanner sees the import forms (static, dynamic, re-export, mixed type)", () => {
-    const here = edges.filter((e) => e.from === "cli/program.ts");
-    expect(here.some((e) => e.to === "findings/store.ts" && !e.typeOnly)).toBe(true);
-    expect(here.some((e) => e.to === "transfer/cli.ts")).toBe(true); // import("../transfer/cli.js")
+    expect(edges.some((e) => e.from === "cli/groups/finding.ts" && e.to === "findings/store.ts" && !e.typeOnly)).toBe(true);
+    expect(edges.some((e) => e.from === "cli/groups/transfer.ts" && e.to === "transfer/cli.ts")).toBe(true); // import("../../transfer/cli.js")
     expect(edges.some((e) => e.from === "kb/index.ts" && e.to === "kb/home.ts")).toBe(true); // export * from
     expect(edges.some((e) => e.from === "commands/types.ts" && e.to === "machines/types.ts" && e.typeOnly)).toBe(true);
   });
