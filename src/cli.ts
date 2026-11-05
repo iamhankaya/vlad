@@ -496,7 +496,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
       return;
     }
     try {
-      const queued = enqueueDesktop(rq.dir, { kind: "resume", taskId: id, script: ext.script!, cwd: ext.cwd! });
+      const queued = enqueueDesktop(rq.dir, { kind: "resume", taskId: id, script: ext.script!, cwd: ext.cwd!, ...(ext.scriptSha256 ? { scriptSha256: ext.scriptSha256 } : {}) });
       out(o, { ...r, method: "desktop-queue", queued, script: ext.script, cwd: ext.cwd }, `${id} vlad-desktop kuyruğuna yazıldı: ${queued}`);
       return;
     } catch (e) {
@@ -650,6 +650,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
       (s.pendingDigest ? `, ${s.pendingDigest} onay bekleyen digest maddesi` : "") +
       (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
       (s.kbLint.count ? `, ${s.kbLint.count} kb çelişkisi${lintAgeNote(s.kbLint)}` : "") +
+      (s.kbDirty ? `; UYARI: ${s.kbDirty.message}` : "") +
       (s.mode ? `; ${s.mode}` : "");
     if (o.hook) {
       // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
@@ -664,6 +665,7 @@ def(program, "status", "Aktif görevler; eski running görevleri stalled yapar",
   }
   const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];
   if (s.mode) lines.push(`mod: ${s.mode}`);
+  if (s.kbDirty) lines.push(`UYARI: ${s.kbDirty.message}`);
   if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
   if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
   out(o, { ...s, active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));

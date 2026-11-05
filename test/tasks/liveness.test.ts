@@ -79,12 +79,30 @@ describe("markSilentWorkers", () => {
     expect(stalledIds(probe({ alive: () => false }))).toEqual([]);
   });
   it("marks outside Windows too (F-vlad-111)", () => {
-    const id = runningLocal(300);
+    const id = runningLocal(300, "/home/x/wt/T1");
     expect(markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), "linux").map((t) => t.data.id)).toEqual([id]);
   });
   it("statusSummary reports the silent worker in newlyStalled", () => {
     const id = runningLocal(300);
     expect(statusSummary(defaultConfig(), now, probe({ alive: () => false }), "win32").newlyStalled).toContain(id);
+  });
+});
+
+describe("F-vlad-195: worktree of another OS is not local", () => {
+  const stalledOn = (platform: NodeJS.Platform) => markSilentWorkers(now, defaultConfig(), probe({ alive: () => false }), platform).map((t) => t.data.id);
+  it("a task without machine and a C:\\ worktree is not stalled on a darwin brain", () => {
+    const id = runningLocal(300, "C:\\dev\\vlad-wt\\T1");
+    expect(stalledOn("darwin")).toEqual([]);
+    expect(getTask(id).data.state).toBe("running");
+  });
+  it("a /Users worktree is not stalled on a win32 host either", () => {
+    const id = runningLocal(300, "/Users/x/wt/T1");
+    expect(stalledOn("win32")).toEqual([]);
+    expect(getTask(id).data.state).toBe("running");
+  });
+  it("a worktree of the host's own OS is still checked", () => {
+    const id = runningLocal(300, "/Users/x/wt/T1");
+    expect(stalledOn("darwin")).toEqual([id]);
   });
 });
 

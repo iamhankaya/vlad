@@ -23,6 +23,8 @@ import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { staleSummaries } from "../projects/status.js";
 import { readLintCache } from "../kb/lint-cache.js";
+import { kbDirtyOnWorker } from "../kb/worker-dirty.js";
+import type { KbDirty } from "../kb/worker-dirty.js";
 import type { LintSummary } from "../kb/lint-cache.js";
 import { countPending } from "../digest/pending.js";
 import type { StaleSummary } from "../projects/status.js";
@@ -615,7 +617,7 @@ export function statusSummary(
   opts: { mark?: boolean; /** machines C3: remote probe results, applied here under the kb lock */ remotePlans?: RemoteStallPlan[] } = {},
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
-  undigested: number; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number; kbLint: LintSummary;
+  undigested: number; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number; kbLint: LintSummary; kbDirty?: KbDirty;
 } {
   const mark = opts.mark !== false;
   // a read-only/locked kb must not take the startup summary (SessionStart hook) down: marking is best effort (F-vlad-052)
@@ -627,6 +629,7 @@ export function statusSummary(
   ].map((t) => t.data.id) : [];
   const mode = modeLine(now);
   if (mark) try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared
+  const dirty = kbDirtyOnWorker(cfg);
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
   for (const t of tasks) counts[t.data.state]++;
@@ -641,6 +644,7 @@ export function statusSummary(
     mode,
     pendingDigest: (() => { try { return countPending(); } catch { return 0; } })(),
     staleSummaries: (() => { try { return staleSummaries(); } catch { return []; } })(),
+    ...(dirty ? { kbDirty: dirty } : {}), // absent when clean: single-machine JSON stays byte-identical (K4 golden)
     kbLint: readLintCache(), // last full `kb lint` run; the startup hook never lints (~75 s on a large kb)
   };
 }

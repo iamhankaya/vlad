@@ -1,8 +1,10 @@
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { chmodSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { assertRealLauncherAllowed } from "./mode.js";
+import { securePosixDir } from "./posix-dir.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
 // Same patterns as terminal.ts; the values land in a shell script.
@@ -16,7 +18,8 @@ const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 export function buildPosixScript(req: LaunchRequest): string {
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);
-  const lines = ["#!/usr/bin/env bash"];
+  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
+  const lines = ["#!/usr/bin/env bash", "unset VLAD_DESKTOP_QUEUE"];
   for (const [k, v] of Object.entries(req.env)) {
     if (!ENV_NAME.test(k)) throw new Error(`geçersiz env adı: ${JSON.stringify(k)}`);
     lines.push(`export ${k}=${q(v)}`);
@@ -54,14 +57,18 @@ export const posixCommand = (script: string): string =>
 export function externalPosixLaunch(req: LaunchRequest, scriptDir?: string): LaunchResult {
   const dir = scriptDir ?? join(tmpdir(), "vlad");
   const script = join(dir, `${req.taskId}.sh`);
+  let scriptSha256: string;
   try {
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(script, buildPosixScript(req), { encoding: "utf8", mode: 0o755 });
+    securePosixDir(dir); // 0700, own, no symlink, safe ancestors; unsafe → error (a vlad-<uid> fallback would break the /vlad/<id>.sh process match)
+    const content = Buffer.from(buildPosixScript(req), "utf8");
+    writeFileSync(script, content, { mode: 0o700 });
+    chmodSync(script, 0o700); // mode only applies to new files; the desktop app requires no group/other bits
+    scriptSha256 = createHash("sha256").update(content).digest("hex");
   } catch (e) {
     return { ok: false, method: "external", detail: (e as Error).message };
   }
   const command = posixCommand(script);
-  return { ok: true, method: "external", script, command, cwd: req.cwd, detail: command };
+  return { ok: true, method: "external", script, command, cwd: req.cwd, scriptSha256, detail: command };
 }
 
 function defaultRun(file: string, args: string[]): Promise<void> {
@@ -95,8 +102,9 @@ export class PosixLauncher implements Launcher {
       return { ok: false, method, detail: "tmux bulunamadı; kur: brew install tmux (Linux: paket yöneticisiyle tmux)" };
     }
     try {
-      mkdirSync(dirname(scriptPath), { recursive: true });
-      writeFileSync(scriptPath, buildPosixScript(req), { encoding: "utf8", mode: 0o755 });
+      securePosixDir(dirname(scriptPath));
+      writeFileSync(scriptPath, buildPosixScript(req), { encoding: "utf8", mode: 0o700 });
+      chmodSync(scriptPath, 0o700);
       await (this.o.run ?? defaultRun)(cmd.file, cmd.args);
       return { ok: true, method, detail: JSON.stringify(cmd) };
     } catch (e) {

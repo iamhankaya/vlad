@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { writeFileAtomic } from "../kb/atomic.js";
+import { posixDirProblem, securePosixDir } from "./posix-dir.js";
 import { externalLaunch } from "./terminal.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
@@ -24,34 +25,46 @@ export type DesktopQueueState = { dir: string } | { dir: null; warning?: string 
 
 /**
  * vlad-desktop sets VLAD_DESKTOP_QUEUE on the main VLAD tab only. Unset → no queue (silent); set but not an existing
- * absolute directory → no queue plus a warning (the caller falls back to the usual launch). Windows only (.ps1 scripts).
+ * absolute directory → no queue plus a warning (the caller falls back to the usual launch). Windows queues `.ps1`
+ * scripts, macOS/Linux `.sh`; on POSIX the folder must also be a real (non-symlink) 0700 directory of the current user.
  */
 export function desktopQueueDir(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): DesktopQueueState {
   const raw = env.VLAD_DESKTOP_QUEUE?.trim();
-  if (!raw || platform !== "win32") return { dir: null };
+  if (!raw || (platform !== "win32" && platform !== "darwin" && platform !== "linux")) return { dir: null };
   // a worker (VLAD_TASK_ID set) must not enqueue launches; fall back to the usual window (v2 contract)
   if (env.VLAD_TASK_ID?.trim()) return { dir: null };
   const isDir = (): boolean => { try { return statSync(raw).isDirectory(); } catch { return false; } };
   if (!isAbsolute(raw) || !isDir()) {
     return { dir: null, warning: `VLAD_DESKTOP_QUEUE kullanılamıyor (mutlak, var olan klasör değil): ${raw}; normal başlatmaya düşülüyor` };
   }
+  if (platform !== "win32") {
+    const bad = posixDirProblem(raw, false);
+    if (bad) return { dir: null, warning: `VLAD_DESKTOP_QUEUE güvensiz (${bad}): ${raw}; normal başlatmaya düşülüyor` };
+  }
   return { dir: raw };
 }
 
 /** Atomically (temp name + rename) writes `<dir>/<taskId>.json`. Throws when the folder is not writable. */
-export function enqueueDesktop(dir: string, req: Omit<DesktopQueueRequest, "v" | "createdAt" | "pid" | "scriptSha256"> & { createdAt?: string; pid?: number }): string {
-  const scriptSha256 = createHash("sha256").update(readFileSync(req.script)).digest("hex");
-  const body: DesktopQueueRequest = { v: 2, scriptSha256, createdAt: new Date().toISOString(), pid: process.pid, ...req };
+export function enqueueDesktop(dir: string, req: Omit<DesktopQueueRequest, "v" | "createdAt" | "pid" | "scriptSha256"> & { createdAt?: string; pid?: number; scriptSha256?: string }): string {
+  // prefer the hash of the bytes the launcher wrote; re-reading the path would hash whatever is there now
+  const scriptSha256 = req.scriptSha256 ?? createHash("sha256").update(readFileSync(req.script)).digest("hex");
+  const body: DesktopQueueRequest = { v: 2, createdAt: new Date().toISOString(), pid: process.pid, ...req, scriptSha256 };
   const file = join(dir, `${req.taskId}.json`);
   writeFileAtomic(file, JSON.stringify(body));
   return file;
 }
 
 /**
- * Creates `dir` and locks it to the current user + SYSTEM (inheritance removed) via icacls. Windows only; throws on failure
+ * Creates `dir` and locks it to the current user (POSIX: 0700, no symlink) or, on Windows, to the current user + SYSTEM
+ * (inheritance removed) via icacls; throws on failure
  * so the caller can fall back to the window path instead of queueing through an open folder.
  */
 export function secureDir(dir: string): void {
+  if (process.platform !== "win32") {
+    // POSIX: our own folder, so tighten it to 0700 after refusing symlinks / foreign owners (chmod would follow a symlink)
+    securePosixDir(dir);
+    return;
+  }
   mkdirSync(dir, { recursive: true });
   // absolute System32 paths: PATH may put Git's coreutils whoami first
   const sys32 = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
@@ -93,7 +106,7 @@ export function queueLauncher(dir: string, kind: DesktopQueueRequest["kind"], fa
       const ext = externalLaunch(req, scriptDir);
       if (!ext.ok || !ext.script || !ext.cwd) return ext;
       try {
-        const queued = enqueueDesktop(dir, { kind, taskId: req.taskId, script: ext.script, cwd: ext.cwd });
+        const queued = enqueueDesktop(dir, { kind, taskId: req.taskId, script: ext.script, cwd: ext.cwd, ...(ext.scriptSha256 ? { scriptSha256: ext.scriptSha256 } : {}) });
         return { ...ext, method: "desktop-queue", queued };
       } catch (e) {
         process.stderr.write(`uyarı: kuyruk yazılamadı (${(e as Error).message}); dış pencere açılıyor\n`);

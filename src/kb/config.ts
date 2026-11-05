@@ -39,8 +39,15 @@ export function loadConfig(home: string = getVladHome()): VladConfig {
     const n = autoCompactTokens(cfg.workerAutoCompact);
     if (!(n >= 100000 && n <= 1000000)) throw new Error(`config: workerAutoCompact 100000–1000000 aralığında olmalı: ${cfg.workerAutoCompact}`);
   }
+  checkWorktreeDir(cfg.worktreeDir, "worktreeDir");
+  for (const m of cfg.machines ?? []) if (m.worktreeDir) checkWorktreeDir(m.worktreeDir, `machines[${m.name}].worktreeDir`);
   checkMachines(cfg);
   return cfg;
+}
+
+/** `{repo}` the repo's full path is substituted: anything before it doubles the path (F-vlad-197: `C:\dev\{repo}-wt`). */
+function checkWorktreeDir(dir: string, label: string): void {
+  if (dir.indexOf("{repo}") > 0 || dir.split("{repo}").length > 2) throw new Error(`config: ${label} içinde {repo} tam repo yoludur; önüne yol koyma (yol ikilenir), "{repo}-wt" ya da {repo}'suz mutlak yol kullan: ${dir}`);
 }
 
 /** machines çapraz doğrulaması (şemanın ifade edemediği kurallar); `machines` yoksa hiçbir şey denetlenmez. */
