@@ -1,7 +1,7 @@
-import { selfName } from "../agent/state.js";
+import { selfName } from "../fleet/state.js";
 import { runGitRaw } from "../git/git.js";
-import { kbPaths } from "./home.js";
-import type { VladConfig } from "./types.js";
+import { kbPaths } from "../kb/home.js";
+import type { VladConfig } from "../kb/types.js";
 
 export interface KbDirty { machine: string; files: string[]; message: string }
 

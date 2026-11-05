@@ -13,9 +13,9 @@ import { opStatus } from "../../src/agent/ops/op-status.js";
 import { AgentQueue } from "../../src/agent/queue.js";
 import { handleRequest, type ServerOpts } from "../../src/agent/server.js";
 import { signRequest } from "../../src/agent/sign.js";
-import { ensurePrivateDir, lockDownFile, writeLocal } from "../../src/agent/state.js";
+import { ensurePrivateDir, lockDownFile, writeLocal } from "../../src/fleet/state.js";
 import { defaultConfig } from "../../src/kb/config.js";
-import type { AgentOp, AgentRequest } from "../../src/machines/types.js";
+import type { AgentOp, AgentRequest } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 
 // Bulgu temizliği, dilim A (T20261102-07): Agent depolama/protokol. Dosya sistemi çağrıları geçiş-yapan sarmalayıcıyla gözlenir.

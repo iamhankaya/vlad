@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createXferReceiver } from "../../src/transfer/receive.js";
 import type { ClipImageSink, XferBeginArgs, XferBeginResult, XferChunkResult, XferCommitResult, XferDeps, XferEntry, XferReceiver } from "../../src/transfer/types.js";
-import type { Os } from "../../src/machines/types.js";
+import type { Os } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 import { FakeNotifier } from "./harness.js";
 
@@ -32,7 +32,7 @@ export function makeRig(o: { os?: Os; deps?: Partial<XferDeps>; clipImage?: Clip
   mkdirSync(downloads); mkdirSync(stateDir);
   const notifier = new FakeNotifier();
   const clock = { t: 1_800_000_000_000 };
-  const deps: XferDeps = { downloads: () => downloads, stateDir: () => stateDir, os: o.os ?? "darwin", notifier, now: () => clock.t, idleTimers: false, clipImage: o.clipImage, ...o.deps };
+  const deps: XferDeps = { downloads: () => downloads, stateDir: () => stateDir, os: o.os ?? (process.platform === "win32" ? "win32" : "darwin"), notifier, now: () => clock.t, idleTimers: false, clipImage: o.clipImage, ...o.deps };
   const rig: Rig = {
     base, downloads, stateDir, notifier, clock, deps, rx: createXferReceiver(deps),
     call: (op, args, from = FROM) => rig.rx.ops[op](args, { from, opId: "x" }) as Promise<never>,

@@ -8,11 +8,14 @@ import {
   tmuxSession,
 } from "../../src/launcher/index.js";
 import type { LaunchRequest } from "../../src/launcher/types.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const req = (o: Partial<LaunchRequest> = {}): LaunchRequest => ({
   taskId: "T20261101-18", cwd: "/Users/me/vlad wt/T20261101-18", prompt: "merhaba",
   env: { VLAD_TASK_ID: "T20261101-18", VLAD_HOME: "/Users/me/vlad" }, title: "VLAD T20261101-18 — it's", ...o,
 });
+// POSIX launcher (tmux/osascript/bash, "/" yolları): Windows'ta anlamsız, gerçek platform kısıtı
+const WIN = process.platform === "win32";
 const sd = () => mkdtempSync(join(tmpdir(), "vlad-posix-"));
 
 describe("resolveLaunchMode (darwin/linux)", () => {
@@ -44,7 +47,7 @@ describe("buildPosixScript", () => {
   it("keeps model, autocompact and resume flags in the Windows order", () => {
     expect(buildPosixScript(req({ model: "sonnet", autoCompact: "300k", resume: { sessionId: "s1" } })))
       .toMatch(/\nclaude --model 'sonnet' --autocompact '300k' --resume 's1' "\$p"\n$/);
-    expect(buildPosixScript(req({ resume: {} }))).toMatch(/\nclaude --continue "\$p"\n$/);
+    expect(() => buildPosixScript(req({ resume: {} }))).toThrow(/oturum kimliği yok/); // F-vlad-247: no --continue
   });
   it("validates model, autocompact and env names", () => {
     expect(() => buildPosixScript(req({ model: "a'; rm -rf ~" }))).toThrow(/geçersiz model/);
@@ -68,7 +71,7 @@ describe("buildPosixScript run by a real bash", () => {
     const script = join(dir, "w.sh");
     writeFileSync(script, buildPosixScript(req({ cwd: dir, prompt })));
     const out = join(dir, "out.txt");
-    const res = spawnSync("bash", [script], { env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
+    const res = spawnSync("bash", [script], { env: { ...isolatedEnv(), PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
     expect(res.status).toBe(0);
     expect(readFileSync(out, "utf8")).toBe(prompt);
   });
@@ -77,7 +80,7 @@ describe("buildPosixScript run by a real bash", () => {
   });
 });
 
-describe("tmux / Terminal.app commands", () => {
+describe.skipIf(WIN)("tmux / Terminal.app commands", () => {
   it("names the session vlad-<id> and builds new-session args", () => {
     expect(tmuxSession("T1")).toBe("vlad-T1");
     expect(buildTmuxArgs(req(), "/tmp/vlad/T20261101-18.sh")).toEqual([
@@ -92,7 +95,7 @@ describe("tmux / Terminal.app commands", () => {
   });
 });
 
-describe("PosixLauncher", () => {
+describe.skipIf(WIN)("PosixLauncher", () => {
   it("tmux: writes <dir>/<id>.sh, runs tmux new-session", async () => {
     const dir = sd(); const calls: [string, string[]][] = [];
     const l = new PosixLauncher({ mode: "tmux", scriptDir: dir, hasTmux: () => true, run: (f, a) => { calls.push([f, a]); } });
@@ -127,7 +130,7 @@ describe("PosixLauncher", () => {
   });
 });
 
-describe("externalLaunch on darwin", () => {
+describe.skipIf(WIN)("externalLaunch on darwin", () => {
   it("writes a POSIX script and returns `bash <script>`", () => {
     const dir = sd();
     const r = externalLaunch(req(), dir, "darwin");
@@ -139,7 +142,7 @@ describe("externalLaunch on darwin", () => {
   });
 });
 
-describe("posixCommand", () => {
+describe.skipIf(WIN)("posixCommand", () => {
   it("leaves plain paths bare and double-quotes paths with spaces or shell characters", () => {
     expect(posixCommand("/var/folders/ab/T/vlad/T1.sh")).toBe("bash /var/folders/ab/T/vlad/T1.sh");
     expect(posixCommand("/Users/me x/T1.sh")).toBe('bash "/Users/me x/T1.sh"');
@@ -147,7 +150,7 @@ describe("posixCommand", () => {
   });
 });
 
-describe("closePosixWorker", () => {
+describe.skipIf(WIN)("closePosixWorker", () => {
   it("kills the tmux session, then the processes whose command line has the script path", () => {
     const calls: string[] = [];
     const killed: number[] = [];

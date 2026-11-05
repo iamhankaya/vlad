@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { TaskData, VladConfig } from "../../src/kb/index.js";
 import type { Task } from "../../src/tasks/store.js";
 import { defaultConfig } from "../../src/kb/index.js";
-import { RESERVATION_TTL_MS, capsOf, machineLoad, pickMachine, simulateReady } from "../../src/machines/placement.js";
+import { RESERVATION_TTL_MS, capsOf, machineLoad, pickMachine, simulateReady } from "../../src/fleet/placement.js";
 
 const NOW = 1_800_000_000_000; // fixed "now"; every other time is NOW ± delta
 const iso = (ms: number) => new Date(ms).toISOString();

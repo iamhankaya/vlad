@@ -4,8 +4,9 @@ import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDecision, setDecisionStatus } from "../../src/kb/decisions.js";
 import { DERIVED_CLOSE, derivedOpen } from "../../src/kb/derived.js";
-import { formatLint, lintExitCode, lintKb } from "../../src/kb/lint.js";
+import { formatLint, lintExitCode, lintKb } from "../../src/audit/lint.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 let home: string;
 const kb = (...p: string[]) => join(home, "kb", ...p);
@@ -242,7 +243,7 @@ describe("options, output, exit code", () => {
 describe("vlad kb lint (CLI)", () => {
   const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
   const run = (args: string[]) => {
-    const env = { ...process.env, VLAD_HOME: home } as Record<string, string | undefined>;
+    const env = { ...isolatedEnv(), VLAD_HOME: home } as Record<string, string | undefined>;
     delete env.VLAD_KB_DIR;
     const r = spawnSync("node", [cli, "kb", "lint", ...args], { encoding: "utf8", env });
     return { code: r.status, out: r.stdout, err: r.stderr };

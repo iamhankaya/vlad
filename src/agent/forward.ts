@@ -5,12 +5,13 @@ import { readInput } from "../kb/input.js";
 import { getVladHome } from "../kb/home.js";
 import { loadConfig } from "../kb/config.js";
 import type { VladConfig } from "../kb/types.js";
-import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../machines/types.js";
+import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../fleet/types.js";
 import { readStdinSync } from "../kb/input.js";
 import { AgentClient } from "./client.js";
+import { forwardMap, workerLocalKeys } from "../commands/accessors.js";
 import { consoleExecTimeoutMs } from "./console-catalog.js";
-import { resolveSelf } from "../machines/registry.js";
-import { readLocal, roleOf, selfName } from "./state.js";
+import { resolveSelf } from "../fleet/registry.js";
+import { readLocal, roleOf, selfName } from "../fleet/state.js";
 
 type WorkerState = { kind: "off" } | { kind: "brain" } | { kind: "worker"; ctx: { cfg: VladConfig; self: string } } | { kind: "unknown"; reason: string };
 
@@ -21,7 +22,10 @@ export function workerState(): WorkerState {
   if (!existsSync(f)) return { kind: "off" };
   let raw: string;
   try { raw = readFileSync(f, "utf8"); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
-  if (!raw.includes('"machines"')) return { kind: "off" }; // ucuz hızlı yol: machines yok → tek makine davranışı
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch (e) { return { kind: "unknown", reason: `config ayrıştırılamadı: ${(e as Error).message}` }; } // fail-closed (F-vlad-246): metin araması değil
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { kind: "unknown", reason: "config bir nesne değil" };
+  if (!("machines" in parsed)) return { kind: "off" }; // machines yok → tek makine davranışı
   let cfg: VladConfig;
   try { cfg = loadConfig(); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
   if (!cfg.machines) return { kind: "off" };
@@ -36,7 +40,7 @@ export function workerContext(): { cfg: VladConfig; self: string } | null {
   return s.kind === "worker" ? s.ctx : null;
 }
 
-export const FORWARD: Record<string, WriteArgs["cmd"]> = { "task log": "task.log", "task ask": "task.ask", "task report": "task.report", "task session": "task.session" };
+export const FORWARD: Record<string, WriteArgs["cmd"]> = { ...forwardMap() }; // manifestten türer (worker: forward)
 
 const localClient = (cfg: VladConfig, self: string) => new AgentClient({ self, keys: readLocal().keys, config: () => cfg, defaultTimeoutMs: 70_000 });
 
@@ -49,21 +53,11 @@ export async function callLocal<T>(cfg: VladConfig, self: string, op: AgentOp, a
 }
 
 /**
- * İşçide yerelde çalışabilen komutlar (açık izin listesi): kb klonunu okur ya da kb'ye hiç dokunmaz.
+ * İşçide yerelde çalışabilen komutlar (açık izin listesi; manifestte `worker: local`): kb klonunu okur ya da kb'ye hiç dokunmaz.
  * Liste dışı her komut ya iletilir (FORWARD) ya reddedilir; yeni komut varsayılan olarak reddedilir (fail-closed).
  * `task launch`/`kb commit` gibi iç kilitli yazıcılar KB_WRITES'ta olmadığı için burada olmamaları gerekir.
  */
-export const WORKER_LOCAL = new Set([
-  "vlad scan", "vlad status", "vlad install", "role list",
-  "project status", "project list", "finding list",
-  "task list", "task idle", "task ready", "task close-window",
-  "inbox list", "inbox count", "decision list", "journal get", "audit skills",
-  "kb get", "kb search", "kb check", "kb refs", "pending list", "session name",
-  "agent start", "agent status", "agent keygen", "agent setkey", "agent install",
-  "queue list", "queue flush", "queue drop", "machine list", "machine ping", "machine probe-window",
-  // aktarım (F-vlad-236): kb'ye yazmaz; yerel Agent'la / karşı makineyle ya da yerel panoyla konuşur (işçide sağ tık menüsü bunları çağırır)
-  "vlad send", "clip on", "clip off", "clip status", "clip get", "clip set",
-]);
+export const WORKER_LOCAL: ReadonlySet<string> = workerLocalKeys();
 
 /**
  * def() kancası: beyin olmayan makinede `task log|ask|report|session` yerel Agent'a iletilir; WORKER_LOCAL dışındaki

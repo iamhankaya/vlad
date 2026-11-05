@@ -1,4 +1,4 @@
-import type { ConsoleDef, MachineDef } from "../machines/types.js";
+import type { ConsoleDef, MachineDef } from "../fleet/types.js";
 export type Autonomy = "plan" | "commit" | "pr";
 export type TaskKind = "dev" | "research" | "pipeline";
 export type TaskState =

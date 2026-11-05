@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import net from "node:net";
 import type { VladConfig } from "../kb/types.js";
-import { nowMs } from "../machines/clock.js";
-import { PROTO_VERSION, RemoteError, type AgentCode, type AgentOp, type AgentRequest, type AgentResponse, type OpMeta, type RemoteTransport } from "../machines/types.js";
+import { nowMs } from "../fleet/clock.js";
+import { PROTO_VERSION, RemoteError, type AgentCode, type AgentOp, type AgentRequest, type AgentResponse, type OpMeta, type RemoteTransport } from "../fleet/types.js";
 import { FrameDecoder, encodeFrame } from "./frame.js";
 import { signRequest, verifyResponse } from "./sign.js";
-import { addressOf } from "./state.js";
+import { addressOf } from "../fleet/state.js";
 
 /** İmzasız dönebilen kodlar: sunucu kimliği doğrulamadan önce üretir. Bunlar yalnız durdurur, hiçbir şeyi silmez/onaylamaz. */
 const UNSIGNED: ReadonlySet<string> = new Set(["bad_request", "auth", "too_large"]);

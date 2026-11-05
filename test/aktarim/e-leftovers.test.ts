@@ -13,7 +13,7 @@ const { winHelperScript } = await import("../../src/clip/backend-win32.js");
 const { sendPaths } = await import("../../src/transfer/send.js");
 const { FakeClipboard } = await import("./harness.js");
 import type { ClipContent, ClipDeps, ClipPushArgs } from "../../src/clip/types.js";
-import type { RemoteTransport } from "../../src/machines/types.js";
+import type { RemoteTransport } from "../../src/fleet/types.js";
 
 const T0 = 1_900_000_000_000;
 const text = (s: string): ClipContent => ({ kind: "text", bytes: Buffer.from(s, "utf8") });

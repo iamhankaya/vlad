@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { VladConfig } from "../../src/kb/index.js";
 import { defaultConfig } from "../../src/kb/index.js";
-import { currentMachine, isBrain, machineDef, machinesOf, readLocalSettings, resolveSelf, roleOf } from "../../src/machines/registry.js";
+import { currentMachine, isBrain, machineDef, machinesOf, readLocalSettings, resolveSelf, roleOf } from "../../src/fleet/registry.js";
 import { makeHome } from "../helpers.js";
 
 let home: string;

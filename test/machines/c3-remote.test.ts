@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, kbPaths, type VladConfig } from "../../src/kb/index.js";
-import { RemoteError } from "../../src/machines/types.js";
+import { RemoteError } from "../../src/fleet/types.js";
 import { createTask, getTask, setState } from "../../src/tasks/index.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { applyRemoteStalls, probeRemoteWorkers } from "../../src/tasks/liveness.js";

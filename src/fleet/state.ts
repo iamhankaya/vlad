@@ -6,7 +6,7 @@ import { dirname, join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getVladHome } from "../kb/home.js";
 import type { VladConfig } from "../kb/types.js";
-import { RemoteError, type IdentityRole, type LocalSettings } from "../machines/types.js";
+import { RemoteError, type IdentityRole, type LocalSettings } from "./types.js";
 
 /** Agent'ın yerel durum dizini: <VLAD_HOME>/.vlad-agent (günlük, kuyruk, pid; .gitignore'da). */
 export const agentDir = (): string => join(getVladHome(), ".vlad-agent");

@@ -12,6 +12,7 @@ import { claudeProjectDir } from "../../src/tasks/liveness.js";
 import { createTask } from "../../src/tasks/index.js";
 import { makeHome, makeJunction } from "../helpers.js";
 import { getTask } from "../../src/tasks/index.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 let home: string;
 let cfgDir: string;
@@ -261,7 +262,7 @@ describe("auditSetup", () => {
   });
 
   describe("time coherence (rule dates from the VLAD repo's git history)", () => {
-    const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: home, env: { ...process.env, GIT_COMMITTER_DATE: process.env.D, GIT_AUTHOR_DATE: process.env.D } });
+    const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: home, env: { ...isolatedEnv(), GIT_COMMITTER_DATE: process.env.D, GIT_AUTHOR_DATE: process.env.D } });
     const commitAt = (iso: string, msg: string) => { process.env.D = iso; git("add", "roles"); git("commit", "-q", "-m", msg); };
     const roleFile = (skills: string[]) => role("developer", skills);
     const loadSkill = (id: string, skill: string) => {

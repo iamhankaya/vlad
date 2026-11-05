@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import net from "node:net";
 import type { VladConfig } from "../kb/types.js";
-import { nowMs } from "../machines/clock.js";
-import { CLOCK_SKEW_MS, MAX_CONNECTIONS, PROTO_VERSION, RemoteError, type AgentCode, type AgentOp, type AgentRequest, type AgentResponse, type OpMeta, type WireCode } from "../machines/types.js";
+import { nowMs } from "../fleet/clock.js";
+import { CLOCK_SKEW_MS, MAX_CONNECTIONS, PROTO_VERSION, RemoteError, type AgentCode, type AgentOp, type AgentRequest, type AgentResponse, type OpMeta, type WireCode } from "../fleet/types.js";
 import { FrameDecoder, encodeFrame } from "./frame.js";
 import type { Journal } from "./journal.js";
 import { isAllowed, type AgentKind, type CallerRole, type OpHandler } from "./ops/index.js";
 import { canonicalJson, signResponse, verifyRequest } from "./sign.js";
-import { roleOf } from "./state.js";
+import { roleOf } from "../fleet/state.js";
 
 type WireResponse = AgentResponse & { meta?: OpMeta };
 

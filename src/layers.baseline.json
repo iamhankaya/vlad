@@ -1,0 +1,4 @@
+{
+  "_doc": "Known upward runtime imports (file -> unit). Fix them, then remove the entry; the test also fails on stale entries. Empty since U3.",
+  "violations": []
+}

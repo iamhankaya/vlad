@@ -9,6 +9,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { prepareCloudLaunch } from "../../src/tasks/cloud.js";
 import { makeHome } from "../helpers.js";
 import { CLOUD_ENV, build, forceRunning, newTask, readTask, taskFile, taskState, vlad, writeCard, writeRoles } from "./cloud-helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const root = join(import.meta.dirname, "..", "..");
 const BODY = "GOREV-METNI-ISARETI";
@@ -155,7 +156,7 @@ describe("sözleşme: launch çıktısı ↔ settings.json ↔ skill'ler", () =>
 // --- vlad kb check: gerçek bare uzak depo + iki klon, süreç olarak CLI ---
 const ident = (n: string) => ({ GIT_AUTHOR_NAME: n, GIT_AUTHOR_EMAIL: `${n}@t`, GIT_COMMITTER_NAME: n, GIT_COMMITTER_EMAIL: `${n}@t` });
 const git = (cwd: string, who: string, ...a: string[]) =>
-  execFileSync("git", a, { cwd, encoding: "utf8", stdio: "pipe", env: { ...process.env, ...ident(who) } }).trim();
+  execFileSync("git", a, { cwd, encoding: "utf8", stdio: "pipe", env: { ...isolatedEnv(), ...ident(who) } }).trim();
 const commit = (cwd: string, who: string, subject: string, file = `f-${Math.random().toString(36).slice(2)}.md`) => {
   mkdirSync(join(cwd, file, ".."), { recursive: true });
   writeFileSync(join(cwd, file), subject + Math.random());

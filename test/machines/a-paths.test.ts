@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultConfig } from "../../src/kb/index.js";
 import { worktreePath } from "../../src/git/git.js";
-import { pickRepoDir, repoNameOf } from "../../src/machines/paths.js";
+import { pickRepoDir, repoNameOf } from "../../src/fleet/paths.js";
 
 const cfg = defaultConfig();
 

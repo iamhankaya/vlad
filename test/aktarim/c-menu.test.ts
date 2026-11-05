@@ -107,6 +107,9 @@ describe("aktarim:C2 Mac Hızlı Eylem", () => {
   });
 });
 
+// servicesDir join(...) ile birleşir; Windows'ta ayırıcı "\" olur, beklenti yola göre normalize edilir
+const slash = (s: string) => s.split("\\").join("/");
+
 function fakeFs() {
   const files = new Map<string, string | Buffer>(); const writes: string[] = []; const removed: string[] = []; const runs: { file: string; args: string[] }[] = [];
   const run: ShellRunner = async (file, args) => {
@@ -119,7 +122,7 @@ function fakeFs() {
       run,
       write: async (f: string, c: string | Buffer) => { writes.push(f); files.set(f, c); },
       read: async (f: string) => files.get(f) ?? null,
-      remove: async (f: string) => { removed.push(f); for (const k of [...files.keys()]) if (k === f || k.startsWith(f + "/")) files.delete(k); },
+      remove: async (f: string) => { removed.push(f); for (const k of [...files.keys()]) if (k === f || k.startsWith(f + "/") || k.startsWith(f + "\\")) files.delete(k); },
       exists: async (f: string) => files.has(f),
     },
   };
@@ -136,7 +139,7 @@ describe("aktarim:C3 installSendMenu", () => {
   it("Mac: dosyaları servicesDir altına yazar, pbs -update çalıştırır; ikinci çalıştırma içeriği değiştirmez", async () => {
     const f = fakeFs(); const c = ctx({});
     const a1 = await installSendMenu(c, f.d);
-    expect(f.writes.sort()).toEqual(["/tmp/svc/windows makinesine gönder.workflow/Contents/Info.plist", "/tmp/svc/windows makinesine gönder.workflow/Contents/document.wflow"]);
+    expect(f.writes.map(slash).sort()).toEqual(["/tmp/svc/windows makinesine gönder.workflow/Contents/Info.plist", "/tmp/svc/windows makinesine gönder.workflow/Contents/document.wflow"]);
     expect(f.runs).toEqual([{ file: "/System/Library/CoreServices/pbs", args: ["-update"] }]);
     const snap = new Map(f.files); f.writes.length = 0; f.runs.length = 0;
     const a2 = await installSendMenu(c, f.d);
@@ -184,7 +187,7 @@ describe("aktarim:C3 installSendMenu", () => {
     const f = fakeFs();
     await installSendMenu(ctx({}), f.d);
     const r = await installSendMenu(ctx({ uninstall: true }), f.d);
-    expect(f.removed).toEqual(["/tmp/svc/windows makinesine gönder.workflow"]); expect(f.files.size).toBe(0); expect(r.actions.join()).toMatch(/kaldırıldı/);
+    expect(f.removed.map(slash)).toEqual(["/tmp/svc/windows makinesine gönder.workflow"]); expect(f.files.size).toBe(0); expect(r.actions.join()).toMatch(/kaldırıldı/);
     await installSendMenu(ctx({ uninstall: true }), f.d); // ikinci kez: hata yok
     const w = fakeFs(); await installSendMenu(ctx({ os: "win32", ...W }), w.d); w.runs.length = 0;
     await installSendMenu(ctx({ os: "win32", ...W, uninstall: true }), w.d);

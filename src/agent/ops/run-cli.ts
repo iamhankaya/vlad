@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { RemoteError, type ExecResult } from "../../machines/types.js";
+import { RemoteError, type ExecResult } from "../../fleet/types.js";
 
 /** Alt süreç betiği: üretimde dist/cli.js; yalnız VLAD_AGENT_TEST=1 iken VLAD_AGENT_CLI (kaydedici betik) geçerlidir. */
 export function cliPath(): string {

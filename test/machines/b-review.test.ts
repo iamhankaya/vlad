@@ -12,7 +12,7 @@ import { AgentQueue } from "../../src/agent/queue.js";
 import { startServer } from "../../src/agent/server.js";
 import { signRequest, signResponse, verifyRequest } from "../../src/agent/sign.js";
 import { defaultConfig } from "../../src/kb/config.js";
-import { RemoteError } from "../../src/machines/types.js";
+import { RemoteError } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 
 // Review düzeltmeleri (T20261101-24): her biri düzeltmeden önce kırmızıydı.

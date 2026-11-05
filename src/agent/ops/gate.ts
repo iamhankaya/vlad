@@ -3,7 +3,7 @@ import { StringDecoder } from "node:string_decoder";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readDoc } from "../../kb/doc.js";
-import { RemoteError, type GateRunResult, type MergePreviewResult, type MergeResult } from "../../machines/types.js";
+import { RemoteError, type GateRunResult, type MergePreviewResult, type MergeResult } from "../../fleet/types.js";
 import { entriesOf, readRecord, verifiedRecord } from "./launch.js";
 import { argObject, bad, projectArg, repoNameArg, taskIdArg, workerCtx, workerKbDir, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";

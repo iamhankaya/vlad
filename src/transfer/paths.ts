@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import path from "node:path";
-import { RemoteError, type Os } from "../machines/types.js";
+import { RemoteError, type Os } from "../fleet/types.js";
 import { XFER_ID_RE, XFER_STAGING_DIR } from "./types.js";
 
 // Alıcı yol güvenliğinin tek yetkilisi: gönderenin yolu asla güvenilir sayılmaz.

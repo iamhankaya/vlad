@@ -1,4 +1,4 @@
-import { PROTO_VERSION } from "../../machines/types.js";
+import { PROTO_VERSION } from "../../fleet/types.js";
 import { agentEnv, type AgentEnv } from "./env.js";
 
 /** Yetenekler: karşı Agent'ın aktarım/pano op'larını bilip bilmediği (sendPaths önce bunu denetler). */

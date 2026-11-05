@@ -1,0 +1,606 @@
+{
+  "_doc": "equiv.mjs senaryoları: manifest anahtarı → argv (+ isteğe bağlı stdin `input`). Her senaryo taze bir kb-mini kopyasında, taban ve geçerli ikilide ayrı ayrı koşar; stdout/stderr/çıkış kodu ve kb ağacı özeti karşılaştırılır. Bu dosya + equiv.exempt.json anahtarları = manifest anahtarları (test/commands/u3-equiv-manifest.test.ts).",
+  "cases": [
+    {
+      "key": "vlad scan",
+      "argv": [
+        "scan",
+        "--json"
+      ]
+    },
+    {
+      "key": "project write",
+      "argv": [
+        "project",
+        "write",
+        "beta",
+        "--file",
+        "-",
+        "--json"
+      ],
+      "input": "---\nslug: beta\nname: Beta\npath: /nonexistent/beta\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n"
+    },
+    {
+      "key": "project set",
+      "argv": [
+        "project",
+        "set",
+        "alpha",
+        "gate",
+        "npm run gate",
+        "--json"
+      ]
+    },
+    {
+      "key": "project note",
+      "argv": [
+        "project",
+        "note",
+        "alpha",
+        "bir ders",
+        "--json"
+      ]
+    },
+    {
+      "key": "project status",
+      "argv": [
+        "project",
+        "status",
+        "alpha",
+        "--json"
+      ]
+    },
+    {
+      "key": "project summary",
+      "argv": [
+        "project",
+        "summary",
+        "alpha",
+        "--file",
+        "-",
+        "--json"
+      ],
+      "input": "Özet metni.\n"
+    },
+    {
+      "key": "project refresh",
+      "argv": [
+        "project",
+        "refresh",
+        "alpha",
+        "--json"
+      ]
+    },
+    {
+      "key": "project list",
+      "argv": [
+        "project",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "finding add",
+      "argv": [
+        "finding",
+        "add",
+        "--project",
+        "alpha",
+        "--severity",
+        "orta",
+        "--source",
+        "T20261105-04",
+        "--title",
+        "yeni bulgu",
+        "--json"
+      ]
+    },
+    {
+      "key": "finding list",
+      "argv": [
+        "finding",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "finding set",
+      "argv": [
+        "finding",
+        "set",
+        "F-alpha-001",
+        "fixed",
+        "--json"
+      ]
+    },
+    {
+      "key": "role list",
+      "argv": [
+        "role",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "task new",
+      "argv": [
+        "task",
+        "new",
+        "--project",
+        "alpha",
+        "--title",
+        "yeni görev",
+        "--kind",
+        "dev",
+        "--body-file",
+        "-",
+        "--json"
+      ],
+      "input": "## Tanım\nx\n"
+    },
+    {
+      "key": "task launch",
+      "argv": [
+        "task",
+        "launch",
+        "T20261105-07",
+        "--dry-run",
+        "--json"
+      ]
+    },
+    {
+      "key": "task release",
+      "argv": [
+        "task",
+        "release",
+        "T20261105-07",
+        "--json"
+      ]
+    },
+    {
+      "key": "task ingest",
+      "argv": [
+        "task",
+        "ingest",
+        "T20261105-08",
+        "--file",
+        "-",
+        "--json"
+      ],
+      "input": "[{\"type\":\"LOG\",\"text\":\"merhaba\"}]"
+    },
+    {
+      "key": "task log",
+      "argv": [
+        "task",
+        "log",
+        "T20261105-08",
+        "not",
+        "--json"
+      ]
+    },
+    {
+      "key": "task ask",
+      "argv": [
+        "task",
+        "ask",
+        "T20261105-08",
+        "soru",
+        "--json"
+      ]
+    },
+    {
+      "key": "task answer",
+      "argv": [
+        "task",
+        "answer",
+        "T20261105-01",
+        "cevap",
+        "--json"
+      ]
+    },
+    {
+      "key": "task report",
+      "argv": [
+        "task",
+        "report",
+        "T20261105-08",
+        "--file",
+        "-",
+        "--json"
+      ],
+      "input": "### Yapılanlar\nx\n"
+    },
+    {
+      "key": "task set",
+      "argv": [
+        "task",
+        "set",
+        "T20261105-03",
+        "done",
+        "--json"
+      ]
+    },
+    {
+      "key": "task deps",
+      "argv": [
+        "task",
+        "deps",
+        "T20261105-07",
+        "--clear",
+        "--json"
+      ]
+    },
+    {
+      "key": "task resume",
+      "argv": [
+        "task",
+        "resume",
+        "T20261105-02",
+        "--json"
+      ]
+    },
+    {
+      "key": "task close-window",
+      "argv": [
+        "task",
+        "close-window",
+        "T20261105-08",
+        "--json"
+      ]
+    },
+    {
+      "key": "task cleanup",
+      "argv": [
+        "task",
+        "cleanup",
+        "T20261105-04",
+        "--json"
+      ]
+    },
+    {
+      "key": "task gate",
+      "argv": [
+        "task",
+        "gate",
+        "T20261105-03",
+        "--json"
+      ]
+    },
+    {
+      "key": "task merge-preview",
+      "argv": [
+        "task",
+        "merge-preview",
+        "T20261105-03",
+        "--json"
+      ]
+    },
+    {
+      "key": "task merge",
+      "argv": [
+        "task",
+        "merge",
+        "T20261105-03",
+        "--json"
+      ]
+    },
+    {
+      "key": "task digested",
+      "argv": [
+        "task",
+        "digested",
+        "T20261105-04",
+        "--json"
+      ]
+    },
+    {
+      "key": "task session",
+      "argv": [
+        "task",
+        "session",
+        "T20261105-08",
+        "sess-1",
+        "--json"
+      ]
+    },
+    {
+      "key": "task list",
+      "argv": [
+        "task",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "task idle",
+      "argv": [
+        "task",
+        "idle",
+        "--json"
+      ]
+    },
+    {
+      "key": "task ready",
+      "argv": [
+        "task",
+        "ready",
+        "--json"
+      ]
+    },
+    {
+      "key": "vlad status",
+      "argv": [
+        "status",
+        "--summary",
+        "--json"
+      ]
+    },
+    {
+      "key": "mode night",
+      "argv": [
+        "mode",
+        "night",
+        "--until",
+        "23:59",
+        "--json"
+      ]
+    },
+    {
+      "key": "mode watch",
+      "argv": [
+        "mode",
+        "watch",
+        "on",
+        "--json"
+      ]
+    },
+    {
+      "key": "mode off",
+      "argv": [
+        "mode",
+        "off",
+        "--json"
+      ]
+    },
+    {
+      "key": "mode status",
+      "argv": [
+        "mode",
+        "status",
+        "--json"
+      ]
+    },
+    {
+      "key": "audit skills",
+      "argv": [
+        "audit",
+        "skills",
+        "--json"
+      ]
+    },
+    {
+      "key": "audit setup",
+      "argv": [
+        "audit",
+        "setup",
+        "--json"
+      ]
+    },
+    {
+      "key": "inbox list",
+      "argv": [
+        "inbox",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "inbox count",
+      "argv": [
+        "inbox",
+        "count",
+        "--json"
+      ]
+    },
+    {
+      "key": "inbox done",
+      "argv": [
+        "inbox",
+        "done",
+        "2026-11-05T10-00-00-fixture.md",
+        "--json"
+      ]
+    },
+    {
+      "key": "pending add",
+      "argv": [
+        "digest",
+        "pending",
+        "add",
+        "--text",
+        "madde",
+        "--json"
+      ]
+    },
+    {
+      "key": "pending list",
+      "argv": [
+        "digest",
+        "pending",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "pending done",
+      "argv": [
+        "digest",
+        "pending",
+        "done",
+        "P-001",
+        "--json"
+      ]
+    },
+    {
+      "key": "decision add",
+      "argv": [
+        "decision",
+        "add",
+        "--project",
+        "alpha",
+        "--title",
+        "karar",
+        "--body-file",
+        "-",
+        "--json"
+      ],
+      "input": "gerekçe\n"
+    },
+    {
+      "key": "decision list",
+      "argv": [
+        "decision",
+        "list",
+        "--project",
+        "alpha",
+        "--json"
+      ]
+    },
+    {
+      "key": "decision set",
+      "argv": [
+        "decision",
+        "set",
+        "D-alpha-001",
+        "geçersiz",
+        "--json"
+      ]
+    },
+    {
+      "key": "decision migrate",
+      "argv": [
+        "decision",
+        "migrate",
+        "--dry-run",
+        "--json"
+      ]
+    },
+    {
+      "key": "journal append",
+      "argv": [
+        "journal",
+        "append",
+        "2026-11-06",
+        "--file",
+        "-",
+        "--json"
+      ],
+      "input": "## alpha\nx\n"
+    },
+    {
+      "key": "journal get",
+      "argv": [
+        "journal",
+        "get",
+        "2026-11-05",
+        "--json"
+      ]
+    },
+    {
+      "key": "kb maintain",
+      "argv": [
+        "kb",
+        "maintain",
+        "--dry-run",
+        "--json"
+      ]
+    },
+    {
+      "key": "kb get",
+      "argv": [
+        "kb",
+        "get",
+        "T20261105-04",
+        "--json"
+      ]
+    },
+    {
+      "key": "kb search",
+      "argv": [
+        "kb",
+        "search",
+        "alpha",
+        "--json"
+      ]
+    },
+    {
+      "key": "kb refs",
+      "argv": [
+        "kb",
+        "refs",
+        "T20261105-04",
+        "--json"
+      ]
+    },
+    {
+      "key": "kb lint",
+      "argv": [
+        "kb",
+        "lint",
+        "--project",
+        "alpha",
+        "--json"
+      ]
+    },
+    {
+      "key": "kb check",
+      "argv": [
+        "kb",
+        "check",
+        "--json"
+      ]
+    },
+    {
+      "key": "session register",
+      "argv": [
+        "session",
+        "register",
+        "vlad-x",
+        "--json"
+      ]
+    },
+    {
+      "key": "session name",
+      "argv": [
+        "session",
+        "name",
+        "--json"
+      ]
+    },
+    {
+      "key": "agent status",
+      "argv": [
+        "agent",
+        "status",
+        "--json"
+      ]
+    },
+    {
+      "key": "machine list",
+      "argv": [
+        "machine",
+        "list",
+        "--json"
+      ]
+    },
+    {
+      "key": "vlad install",
+      "argv": [
+        "install",
+        "--dry-run",
+        "--json"
+      ]
+    }
+  ]
+}

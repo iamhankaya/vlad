@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, win32 } from "node:path";
 import type { ShellRunner } from "../clip/types.js";
-import type { Os } from "../machines/types.js";
+import type { Os } from "../fleet/types.js";
 import { nativeAllowed } from "../platform/native.js";
 import { macQuickAction } from "./mac.js";
 import { WIN_KEYS, winAclCommands, winHiddenLauncher, winLauncherPath, winMenuRegCommands } from "./win.js";

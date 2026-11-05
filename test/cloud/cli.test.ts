@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const cli = join(root, "dist", "cli.js");
@@ -32,7 +33,7 @@ x
 
 function vlad(args: string[], input?: string, env: Record<string, string> = {}) {
   const r = spawnSync("node", [cli, ...args], {
-    encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home, CLAUDE_CODE_REMOTE: "", ...env },
+    encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: home, CLAUDE_CODE_REMOTE: "", ...env },
   });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }

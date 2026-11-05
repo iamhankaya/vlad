@@ -3,13 +3,13 @@ import { homedir } from "node:os";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { projectStatus } from "../projects/status.js";
 import { listProjects } from "../projects/store.js";
-import { loadConfig } from "./config.js";
-import { DECISION_HEADING, listDecisions, parseUntil } from "./decisions.js";
-import { derivedLines } from "./derived.js";
-import { getVladHome, kbPaths } from "./home.js";
-import { recordStates } from "./refs.js";
-import type { RecordState } from "./refs.js";
-import { fencedLines } from "./sections.js";
+import { loadConfig } from "../kb/config.js";
+import { DECISION_HEADING, listDecisions, parseUntil } from "../kb/decisions.js";
+import { derivedLines } from "../kb/derived.js";
+import { getVladHome, kbPaths } from "../kb/home.js";
+import { recordStates } from "../kb/refs.js";
+import type { RecordState } from "../kb/refs.js";
+import { fencedLines } from "../kb/sections.js";
 
 export const LINT_CODES = [
   "closed_finding_listed_open", "finished_task_listed_active", "inactive_decision_listed_valid",

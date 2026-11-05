@@ -2,7 +2,7 @@ import type { AgentKind, OpHandler } from "../agent/ops/index.js";
 import type { AgentEnv } from "../agent/ops/env.js";
 import type { ClipDeps } from "../clip/types.js";
 import type { VladConfig } from "../kb/types.js";
-import type { Os } from "../machines/types.js";
+import type { Os } from "../fleet/types.js";
 import type { Notifier } from "../platform/notify.js";
 import type { OriginMarker } from "../platform/origin.js";
 

@@ -10,7 +10,7 @@ import { createClipReceiver } from "../../src/clip/receive.js";
 import type { ClipboardBackend, ClipContent, ClipDeps, ClipReceiver } from "../../src/clip/types.js";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { VladConfig } from "../../src/kb/types.js";
-import type { Os, RemoteTransport } from "../../src/machines/types.js";
+import type { Os, RemoteTransport } from "../../src/fleet/types.js";
 import type { Notifier } from "../../src/platform/notify.js";
 import { uploadBuffer } from "../../src/transfer/send.js";
 import type { AktarimDeps, XferFs, XferReceiver, XferTestHooks } from "../../src/transfer/types.js";
@@ -107,7 +107,8 @@ export async function startAktarimPair(o: { mac?: SideOpts; windows?: SideOpts; 
       pushImage: async (png, meta) => (await uploadBuffer(s.side.transport, peer, png, { purpose: "clip-image", name: "clip.png", meta })).clip ?? "invalid",
     };
     const clipDeps: ClipDeps = { backend: s.side.clipboard, send, now, isEnabled: () => s.opts.clipEnabled ?? true, log: () => {}, rank: n === "mac" ? 1 : 0, peer, autoStart: false };
-    const os: Os = n === "mac" ? "darwin" : "win32";
+    // alıcı OS ana makineye uyar: dosya sistemi semantiği (mkdir+rename, mod) gerçek ana makineninkidir
+    const os: Os = n === "mac" && process.platform !== "win32" ? "darwin" : "win32";
     const deps: AktarimDeps = {
       self: n, kind, cfg: () => s.cfg, now, env,
       xfer: { downloads: () => s.side.downloads, stateDir: () => s.side.stateDir, os, notifier: s.side.notifier, now, hooks: s.opts.hooks, fs: s.opts.fs, idleTimers: false },

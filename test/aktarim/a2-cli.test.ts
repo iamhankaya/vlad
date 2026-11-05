@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { VladConfig } from "../../src/kb/types.js";
 import { exitCodeFor } from "../../src/machines/exit.js";
-import { RemoteError, type AgentOp, type RemoteTransport } from "../../src/machines/types.js";
+import { RemoteError, type AgentOp, type RemoteTransport } from "../../src/fleet/types.js";
 import type { Notifier } from "../../src/platform/notify.js";
 import { runSendCommand } from "../../src/transfer/cli.js";
-import { rmTemp } from "../helpers.js";
+import { canSymlink, rmTemp } from "../helpers.js";
 import { makeFile } from "./harness.js";
 
 const temps: string[] = [];
@@ -60,7 +60,7 @@ describe("aktarim:A2 vlad send CLI", () => {
     expect(f2.calls.every((x) => x.to === "windows")).toBe(true);
     expect(c.out.join("")).toMatch(/windows/);
   });
-  it("skipped dolu → başarı (hata fırlatmaz) ve insan çıktısı uyarır", async () => {
+  it.skipIf(!canSymlink())("skipped dolu → başarı (hata fırlatmaz) ve insan çıktısı uyarır", async () => {
     const src = tmp(); makeFile(src, "d/a", 3, 1); symlinkSync(join(src, "d", "a"), join(src, "d", "l"));
     const c = io({ t: fake().t });
     await runSendCommand([join(src, "d")], { json: true }, c.io);

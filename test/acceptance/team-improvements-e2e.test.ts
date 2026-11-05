@@ -226,12 +226,15 @@ describe("adım 3: maxParallel + task ready + resume", { timeout: 30_000 }, () =
   });
 });
 
-describe("geriye uyumluluk: gerçek kb salt-okuma (kopya üzerinde)", { timeout: 30_000 }, () => {
-  // repodaki kb/ yalnızca okunur: `status` eski running'leri stalled'a yazabildiği için kopyada çalışılır
-  const realKb = resolveKbDir(root).dir;
-  const copy = () => {
+describe("geriye uyumluluk: kb-mini fixture (kopya üzerinde)", { timeout: 30_000 }, () => {
+  // test/fixtures/kb-mini sabit ve küçük; `status` eski running'leri stalled'a yazabildiği için kopyada çalışılır.
+  // Gerçek kb'ye karşı kontrol yalnız elle: VLAD_REAL_KB=1 (varsayılan koşuda yok; 28 MB kopya tam suite'i yavaşlatıyordu, F-vlad-121)
+  const realKb = process.env.VLAD_REAL_KB === "1" ? resolveKbDir(root).dir : undefined;
+  const miniKb = join(root, "test", "fixtures", "kb-mini", "kb");
+  const copy = (kb: string) => {
     const h = mkdtempSync(join(tmpdir(), "vlad-realkb-"));
-    cpSync(realKb, join(h, "kb"), { recursive: true });
+    cpSync(kb, join(h, "kb"), { recursive: true });
+    for (const d of ["logs", "inbox/processed", "journal"]) mkdirSync(join(h, "kb", d), { recursive: true });
     cpSync(join(root, "schemas"), join(h, "schemas"), { recursive: true });
     cpSync(join(root, "roles"), join(h, "roles"), { recursive: true });
     if (existsSync(join(root, "vlad.config.json"))) {
@@ -244,30 +247,40 @@ describe("geriye uyumluluk: gerçek kb salt-okuma (kopya üzerinde)", { timeout:
   };
   const real = (h: string, args: string[]) => run(h, args, { env: NO_CLOUD_ENV });
 
-  it.skipIf(!existsSync(realKb))("project list / task list / status / finding list / task ready / role list: çıkış 0, stderr boş, JSON geçerli", () => {
-    const h = copy();
-    for (const args of [
-      ["project", "list", "--json"], ["task", "list", "--json"], ["status", "--json"], ["status", "--summary"],
-      ["finding", "list", "--json"], ["task", "ready", "--json"], ["inbox", "count"], ["role", "list", "--json"],
-    ]) {
-      const r = real(h, args);
-      expect(r.code, `${args.join(" ")}: ${r.err}`).toBe(0);
-      expect(r.err, args.join(" ")).toBe("");
-      if (args.includes("--json")) expect(() => JSON.parse(r.out), args.join(" ")).not.toThrow();
-    }
+  describe.each([["kb-mini", miniKb], ...(realKb ? [["gerçek kb (VLAD_REAL_KB=1)", realKb] as const] : [])])("%s", (_name, kb) => {
+    it("project list / task list / status / finding list / task ready / role list: çıkış 0, stderr boş, JSON geçerli", () => {
+      const h = copy(kb);
+      for (const args of [
+        ["project", "list", "--json"], ["task", "list", "--json"], ["status", "--json"], ["status", "--summary"],
+        ["finding", "list", "--json"], ["task", "ready", "--json"], ["inbox", "count"], ["role", "list", "--json"],
+      ]) {
+        const r = real(h, args);
+        expect(r.code, `${args.join(" ")}: ${r.err}`).toBe(0);
+        expect(r.err, args.join(" ")).toBe("");
+        if (args.includes("--json")) expect(() => JSON.parse(r.out), args.join(" ")).not.toThrow();
+      }
+    });
+    it("her kart ve her görev dosyası yeni şemalarla uyarısız yüklenir (warnings boş)", () => {
+      const h = copy(kb);
+      const p = JSON.parse(real(h, ["project", "list", "--json"]).out);
+      expect(p.warnings).toEqual([]);
+      expect(p.projects.length).toBe(readdirSync(join(h, "kb", "projects")).filter((n) => n.endsWith(".md")).length);
+      const t = JSON.parse(real(h, ["task", "list", "--json"]).out);
+      expect(t.warnings ?? []).toEqual([]);
+      expect(t.tasks.length).toBe(readdirSync(join(h, "kb", "tasks")).filter((n) => n.endsWith(".md")).length);
+    });
+    it("gate/bulgu alanı olmayan eski kartlar gate=null olarak listelenir", () => {
+      const p = JSON.parse(real(copy(kb), ["project", "list", "--json"]).out).projects;
+      for (const c of p) expect(c.gate === undefined || c.gate === null || typeof c.gate === "string").toBe(true);
+    });
   });
-  it.skipIf(!existsSync(realKb))("her kart ve her görev dosyası yeni şemalarla uyarısız yüklenir (warnings boş)", () => {
-    const h = copy();
-    const p = JSON.parse(real(h, ["project", "list", "--json"]).out);
-    expect(p.warnings).toEqual([]);
-    expect(p.projects.length).toBe(readdirSync(join(h, "kb", "projects")).filter((n) => n.endsWith(".md")).length);
-    const t = JSON.parse(real(h, ["task", "list", "--json"]).out);
-    expect(t.warnings ?? []).toEqual([]);
-    expect(t.tasks.length).toBe(readdirSync(join(h, "kb", "tasks")).filter((n) => n.endsWith(".md")).length);
-  });
-  it.skipIf(!existsSync(realKb))("gerçek kb'de gate/bulgu alanı olmayan eski kartlar gate=null olarak listelenir", () => {
-    const p = JSON.parse(real(copy(), ["project", "list", "--json"]).out).projects;
-    for (const c of p) expect(c.gate === undefined || c.gate === null || typeof c.gate === "string").toBe(true);
+  it("kb-mini her görev durumunu ve gate'li/gate'siz kartı kapsar", () => {
+    const h = copy(miniKb);
+    const tasks = JSON.parse(real(h, ["task", "list", "--json"]).out).tasks as { state: string }[];
+    expect([...new Set(tasks.map((t) => t.state))].sort()).toEqual(["awaiting_approval", "blocked", "cancelled", "done", "queued", "running", "stalled"]);
+    const cards = JSON.parse(real(h, ["project", "list", "--json"]).out).projects as { slug: string; gate?: string | null }[];
+    expect(cards.find((c) => c.slug === "alpha")?.gate).toBe("npm test");
+    expect(cards.find((c) => c.slug === "legacy")?.gate ?? null).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
-import type { Os } from "../machines/types.js";
+import type { Os } from "../fleet/types.js";
 import { assertNative } from "./native.js";
 
 // Köken işareti (Mark-of-the-Web): VLAD ile gelen dosya "başka makineden" sayılır (SmartScreen/Gatekeeper).

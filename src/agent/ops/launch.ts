@@ -6,13 +6,13 @@ import { fillRolePlaceholders } from "../../roles/store.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
-import { RemoteError } from "../../machines/types.js";
-import { ASYNC_GIT, ensureIntegrationGitWith, launchCore } from "../../tasks/launch-core.js";
+import { RemoteError } from "../../fleet/types.js";
+import { ASYNC_GIT, ensureIntegrationGitWith, launchCore, unmergedCommitsWith } from "../../tasks/launch-core.js";
 import { removeTaskWorktree } from "../../tasks/launch.js";
 import { dirtyLine } from "../../tasks/resume.js";
 import { untrustWorktree } from "../../tasks/trust.js";
 import type { Reconciler } from "../reconcile.js";
-import { agentDir } from "../state.js";
+import { agentDir } from "../../fleet/state.js";
 import { argObject, bad, isOwnWorktree, projectArg, repoNameArg, resolveRepo, taskFileOf, taskIdArg, workerCtx, workerLauncher, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";
 
@@ -140,7 +140,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
     throw failed((e as Error).message);
   }
   const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}) };
-  writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, result });
+  writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, ...(baseRef ? { base: baseRef } : {}), result }); // base stays: cleanup judges the branch against it (F-vlad-244)
   if (parent && integration) recordParent(parent, repo, integration);
   return result;
 }
@@ -177,9 +177,9 @@ export async function resolveUncertainLaunch(opId: string): Promise<{ state: "ab
   // The base falls back to HEAD like launchCore does when the card's default branch is missing.
   if (branchThere) {
     const base = found.base && (await branchExistsAsync(found.repo, found.base)) ? found.base : "HEAD";
-    const own = await runGitAsync(found.repo, ["rev-list", "--count", found.branch, "--not", base], 30_000);
+    const own = await unmergedCommitsWith(ASYNC_GIT, found.repo, found.branch, base);
     // not "done + result": the brain must not adopt a worktree-less launch; "done" without a result sends it to `task release --force` (record stays for cleanup)
-    if (own !== "0") return { state: "done" };
+    if (own !== 0) return { state: "done" };
     // -D: `-d` checks against HEAD, not the base (an integration branch ahead of HEAD would refuse); rev-list proved nothing is lost
     if ((await runGitAsync(found.repo, ["branch", "-D", found.branch])) === null) return { state: "done" };
   }
@@ -205,7 +205,22 @@ export async function closeOp(args: unknown, o: { close?: CloseFn } = {}): Promi
   try { return { killed: (o.close ?? defaultClose)(id) ?? [] }; } catch (e) { throw failed((e as Error).message); }
 }
 
-export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ removed: boolean }> {
+/**
+ * F-vlad-244: a cancelled task's branch goes only when it has no commits of its own relative to the base it was cut from
+ * (`-d` would compare against HEAD and keep an integration-cut branch silently). Returns a warning when the branch stays.
+ */
+async function dropTaskBranch(repo: string, id: string): Promise<string | undefined> {
+  const branch = `vlad/${id}`;
+  if (!(await branchExistsAsync(repo, branch))) return undefined;
+  const rec = readRecord(id);
+  const base = rec?.base && (await branchExistsAsync(repo, rec.base)) ? rec.base : "HEAD";
+  const own = await unmergedCommitsWith(ASYNC_GIT, repo, branch, base);
+  if (own !== 0) return `dal korundu: ${branch} dalında ${base} dalına göre ${own ?? "bilinmeyen sayıda"} commit var; elle incele`;
+  if ((await runGitAsync(repo, ["branch", "-D", branch])) === null) return `dal silinemedi: ${branch}`;
+  return undefined;
+}
+
+export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ removed: boolean; warning?: string }> {
   const a = argObject(args, ["taskId", "project", "repoName", "terminal", "dropBranch"]);
   const id = taskIdArg(a);
   projectArg(a);
@@ -214,9 +229,9 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   const ctx = workerCtx();
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) {
-    if (a.dropBranch === true) await runGitAsync(repo, ["branch", "-d", `vlad/${id}`]);
+    const warning = a.dropBranch === true ? await dropTaskBranch(repo, id) : undefined;
     dropEntry(id, repo, wt);
-    return { removed: false };
+    return { removed: false, ...(warning ? { warning } : {}) };
   }
   if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree kendi görev klasörü değil / kök dışında: ${wt}`); // kök config'ten, wt'den değil (F-vlad-133)
   try { (o.close ?? defaultClose)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
@@ -226,9 +241,9 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
   if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree silmeden hemen önce kök denetimi başarısız: ${wt}`); // pencere kapatma/güven adımları sırasında yol değişmiş olabilir (F-vlad-154)
   try { removeTaskWorktree(repo, wt, id); } catch (e) { throw failed((e as Error).message); }
   // F-vlad-231: cancelled task: a branch without own commits would block a relaunch; `-d` keeps any branch with unmerged work
-  if (a.dropBranch === true) await runGitAsync(repo, ["branch", "-d", `vlad/${id}`]);
+  const warning = a.dropBranch === true ? await dropTaskBranch(repo, id) : undefined;
   dropEntry(id, repo, wt);
-  return { removed: true };
+  return { removed: true, ...(warning ? { warning } : {}) };
 }
 
 export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: CloseFn } = {}): Promise<{ worktree: string; method: string; dirty: string[] }> {
@@ -253,7 +268,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: 
   try { (o.close ?? defaultClose)(id); } catch { /* no window to close, or it could not be closed: the launcher reports real failures */ } // no second window beside a live one
   let r;
   try {
-    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id, ctx), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), resume: { sessionId } });
+    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id, ctx), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), ...(sessionId ? { resume: { sessionId } } : {}) });
   } catch (e) { throw failed(`launcher başarısız: ${(e as Error).message}`); }
   if (!r.ok) throw failed(`launcher başarısız (${r.method}): ${r.detail ?? "bilinmeyen hata"}`);
   return { worktree: wt, method: r.method, dirty };

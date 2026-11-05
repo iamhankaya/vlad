@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { rmTemp } from "../helpers.js";
 import { CLI } from "../machines/harness.js";
 import { git } from "./machines-world.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const GOLDEN = resolve(import.meta.dirname, "..", "fixtures", "machines-golden", "k4.json");
 const bases: string[] = [];
@@ -29,7 +30,7 @@ function scenario(cli: string): Step[] {
   git(repo, "init", "-q", "-b", "main");
   writeFileSync(join(repo, "a.txt"), "x\n");
   git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "i");
-  const env = { ...process.env, VLAD_HOME: home, VLAD_KB_DIR: "", VLAD_LAUNCHER: "noop", VLAD_CLAUDE_JSON: join(base, "claude.json"), CLAUDE_CODE_REMOTE: "" };
+  const env = { ...isolatedEnv(), VLAD_HOME: home, VLAD_KB_DIR: "", VLAD_LAUNCHER: "noop", VLAD_CLAUDE_JSON: join(base, "claude.json"), CLAUDE_CODE_REMOTE: "" };
   delete (env as Record<string, string | undefined>).VLAD_KB_DIR;
   delete (env as Record<string, string | undefined>).VLAD_MACHINE;
   delete (env as Record<string, string | undefined>).VLAD_LOCAL_FILE;

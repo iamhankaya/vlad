@@ -1,4 +1,4 @@
-import type { RemoteTransport } from "../machines/types.js";
+import type { RemoteTransport } from "../fleet/types.js";
 import { uploadBuffer } from "../transfer/send.js";
 import type { ClipSenders } from "./types.js";
 

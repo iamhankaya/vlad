@@ -1,4 +1,4 @@
-import { RemoteError, type ExecResult, type WriteArgs, type WriteCmd } from "../../machines/types.js";
+import { RemoteError, type ExecResult, type WriteArgs, type WriteCmd } from "../../fleet/types.js";
 import { getTask } from "../../tasks/index.js";
 import type { JournalRecord } from "../journal.js";
 import type { Verdict } from "../reconcile.js";

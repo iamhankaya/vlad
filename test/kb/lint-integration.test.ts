@@ -4,17 +4,18 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDecision, isDecisionExpired, listDecisions, parseUntil } from "../../src/kb/decisions.js";
-import { defaultMemoryDir, lintKb } from "../../src/kb/lint.js";
-import { lintAgeNote, readLintCache, writeLintCache } from "../../src/kb/lint-cache.js";
+import { defaultMemoryDir, lintKb } from "../../src/audit/lint.js";
+import { lintAgeNote, readLintCache, writeLintCache } from "../../src/audit/lint-cache.js";
 import { projectStatus } from "../../src/projects/status.js";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 let home: string;
 const kb = (...p: string[]) => join(home, "kb", ...p);
 const NOW = new Date("2026-11-03T12:00:00+03:00");
 const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 const run = (args: string[]) => {
-  const env = { ...process.env, VLAD_HOME: home } as Record<string, string | undefined>;
+  const env = { ...isolatedEnv(), VLAD_HOME: home } as Record<string, string | undefined>;
   delete env.VLAD_KB_DIR;
   const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env });
   return { code: r.status, out: r.stdout, err: r.stderr };

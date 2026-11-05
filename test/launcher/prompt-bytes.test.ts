@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildScript, externalLaunch } from "../../src/launcher/terminal.js";
 import type { LaunchRequest } from "../../src/launcher/types.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 // T20261103-26: Windows PowerShell 5.1 does not escape embedded double quotes when passing a native argument,
 // so the prompt was cut at the first `"`. Real powershell.exe, fake claude = a copy of node.exe named claude.exe
@@ -40,7 +41,7 @@ function run(script: string, name: string): string[] {
   const ps1 = join(dir, "run.ps1");
   writeFileSync(ps1, "﻿" + script, "utf8");
   execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1], {
-    env: { ...process.env, PATH: dir + ";" + process.env.PATH, VLAD_ARGV_OUT: out },
+    env: { ...isolatedEnv(), PATH: dir + ";" + process.env.PATH, VLAD_ARGV_OUT: out },
     stdio: "ignore", windowsHide: true, timeout: 60000,
   });
   return readFileSync(out, "utf8").split("\n").map((l) => l.trim()).filter(Boolean).map((l) => Buffer.from(l, "base64").toString("utf8"));
@@ -70,11 +71,17 @@ describe.skipIf(!win)("prompt reaches claude byte for byte (real powershell.exe)
     expect(argv).toHaveLength(5);
   });
   it("--external launch and resume scripts written to disk", () => {
-    for (const r of [req(), req({ resume: {} })]) {
+    // F-vlad-247: resume artık kayıtlı oturum kimliği ister (--continue kullanılmaz)
+    for (const r of [req(), req({ resume: { sessionId: "s-123" } })]) {
       const out = externalLaunch(r, join(root, "ext"), "win32");
       expect(out.ok).toBe(true);
       const argv = run(readFileSync(out.script!, "utf8").replace(/^﻿/, ""), "ext-" + (r.resume ? "resume" : "launch"));
       expect(norm(argv[argv.length - 1])).toBe(norm(NASTY));
     }
+  });
+  it("--external resume without a session id is rejected (no --continue fallback)", () => {
+    const out = externalLaunch(req({ resume: {} }), join(root, "ext"), "win32");
+    expect(out.ok).toBe(false);
+    expect(out.detail).toMatch(/oturum kimliği yok/);
   });
 });

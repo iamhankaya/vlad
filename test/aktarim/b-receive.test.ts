@@ -4,7 +4,7 @@ import { createClipSenders } from "../../src/clip/senders.js";
 import { createClipReceiver } from "../../src/clip/receive.js";
 import { startClipSync } from "../../src/clip/index.js";
 import type { ClipDeps, ClipPushArgs } from "../../src/clip/types.js";
-import { CLOCK_SKEW_MS, RemoteError } from "../../src/machines/types.js";
+import { CLOCK_SKEW_MS, RemoteError } from "../../src/fleet/types.js";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FakeClipboard, startAktarimPair, type AktarimPair } from "./harness.js";

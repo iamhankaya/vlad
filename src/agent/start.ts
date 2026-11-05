@@ -3,8 +3,8 @@ import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
-import { nowMs } from "../machines/clock.js";
-import { RemoteError } from "../machines/types.js";
+import { nowMs } from "../fleet/clock.js";
+import { RemoteError } from "../fleet/types.js";
 import { AgentClient } from "./client.js";
 import { Journal } from "./journal.js";
 import { setAgentEnv } from "./ops/env.js";
@@ -19,7 +19,7 @@ import { reconcileMerge } from "./ops/merge-reconcile.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
-import { addressOf, agentDir, ensurePrivateDir, assertPrivateBind, buildId, localFile, readLocal, roleOf, selfName, writeLocal } from "./state.js";
+import { addressOf, agentDir, ensurePrivateDir, assertPrivateBind, buildId, localFile, readLocal, roleOf, selfName, writeLocal } from "../fleet/state.js";
 
 const pidFile = () => join(agentDir(), "agent.pid");
 

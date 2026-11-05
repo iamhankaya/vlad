@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, win32 } from "node:path";
-import type { Os } from "../machines/types.js";
+import type { Os } from "../fleet/types.js";
 
 export interface InstallCtx { node: string; cli: string; home: string; path: string }
 

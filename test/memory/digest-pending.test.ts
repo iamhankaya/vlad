@@ -1,12 +1,11 @@
-import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../../src/kb/index.js";
 import { addPending, countPending, donePending, listPending } from "../../src/digest/pending.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { makeHome } from "../helpers.js";
+import { spawnVlad } from "../support/spawn-vlad.js";
 
-const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 beforeEach(() => { home = makeHome(); });
 
@@ -41,7 +40,7 @@ describe("digest pending (library, temp kb)", () => {
 
 describe("vlad digest pending (CLI)", { timeout: 30_000 }, () => {
   const vlad = (args: string[]) => {
-    const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env: { ...process.env, VLAD_HOME: home } });
+    const r = spawnVlad({ args, env: { VLAD_HOME: home } });
     return { code: r.status, out: r.stdout, err: r.stderr };
   };
   it("add/list/done end to end and status --summary shows the count", () => {

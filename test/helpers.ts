@@ -68,3 +68,14 @@ export function rmTemp(p: string | undefined): void {
 export function wtp(cfg: VladConfig, repoPath: string, taskId: string): string {
   return worktreePath(cfg, repoPath, taskId, process.platform as "win32" | "darwin" | "linux");
 }
+
+let symlinkOk: boolean | undefined;
+/** Windows'ta symlink yetkisi (yönetici/Geliştirici Modu) yoksa EPERM verir; o durumda symlink fixture'ı kuran testler atlanır. */
+export function canSymlink(): boolean {
+  if (symlinkOk !== undefined) return symlinkOk;
+  const d = mkdtempSync(join(tmpdir(), "vlad-symlink-probe-"));
+  try { symlinkSync(join(d, "hedef"), join(d, "bag")); symlinkOk = true; }
+  catch { symlinkOk = false; }
+  finally { rmTemp(d); }
+  return symlinkOk;
+}

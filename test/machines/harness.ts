@@ -150,7 +150,7 @@ export async function startProxy(target: { host?: string; port: number }): Promi
 
 // ---- FakeTransport: RemoteTransport'un bellek-içi test gerçeklemesi (C1/C2/C3 ve kabul testleri kullanır) ----
 import { randomUUID } from "node:crypto";
-import type { AgentOp, OpMeta, RemoteTransport } from "../../src/machines/types.js";
+import type { AgentOp, OpMeta, RemoteTransport } from "../../src/fleet/types.js";
 
 export interface FakeCall { to: string; op: AgentOp; args: unknown; opId: string; as?: string }
 /** `handler` sonucu döner ya da RemoteError fırlatır; her çağrı `calls`'a yazılır. */

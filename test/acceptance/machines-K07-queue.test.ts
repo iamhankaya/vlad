@@ -134,9 +134,9 @@ describe("machines:K — K7 kuyruk", () => {
     await runVlad(w.worker, ["task", "log", id, "L1"]);
     await runVlad(w.worker, ["task", "log", id, "L2"]);
     await w.stopAgent("worker");
-    px.up();
-    await w.startAgents(["worker"]);
+    await w.startAgents(["worker"]); // beyin hâlâ kapalı: açılıştaki tick() (start.ts) kuyruğu boşaltamaz (F-vlad-131)
     expect((await queueList(w)).length).toBe(2);
+    px.up();
     await runVlad(w.worker, ["queue", "flush"]);
     await until(() => logs(w, id).length >= 2);
     expect(logs(w, id)).toEqual(["L1", "L2"]);
