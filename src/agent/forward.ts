@@ -9,19 +9,31 @@ import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../m
 import { readStdinSync } from "../kb/input.js";
 import { AgentClient } from "./client.js";
 import { consoleExecTimeoutMs } from "./console-catalog.js";
+import { resolveSelf } from "../machines/registry.js";
 import { readLocal, roleOf, selfName } from "./state.js";
+
+type WorkerState = { kind: "off" } | { kind: "brain" } | { kind: "worker"; ctx: { cfg: VladConfig; self: string } } | { kind: "unknown"; reason: string };
+
+/** machines tanımlıyken kimlik/config okunamıyorsa "unknown" (fail-closed, F-vlad-144); machines yoksa "off". */
+export function workerState(): WorkerState {
+  if (process.env.VLAD_FORWARDED) return { kind: "off" }; // iletilmiş çağrı yeniden iletilmez
+  const f = join(getVladHome(), "vlad.config.json");
+  if (!existsSync(f)) return { kind: "off" };
+  let raw: string;
+  try { raw = readFileSync(f, "utf8"); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
+  if (!raw.includes('"machines"')) return { kind: "off" }; // ucuz hızlı yol: machines yok → tek makine davranışı
+  let cfg: VladConfig;
+  try { cfg = loadConfig(); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
+  if (!cfg.machines) return { kind: "off" };
+  let self: string;
+  try { self = resolveSelf(cfg)!; } catch (e) { return { kind: "unknown", reason: (e as Error).message }; }
+  return self === cfg.brain ? { kind: "brain" } : { kind: "worker", ctx: { cfg, self } };
+}
 
 /** Bu makinede çoklu makine etkin ve ben beyin değilim (ve iletilmiş bir çağrı değilim) → {cfg, self}. */
 export function workerContext(): { cfg: VladConfig; self: string } | null {
-  if (process.env.VLAD_FORWARDED) return null; // iletilmiş çağrı yeniden iletilmez
-  const f = join(getVladHome(), "vlad.config.json");
-  if (!existsSync(f) || !readFileSync(f, "utf8").includes('"machines"')) return null; // ucuz hızlı yol: machines yok → bugünkü davranış
-  let cfg: VladConfig;
-  try { cfg = loadConfig(); } catch { return null; } // config hatasını komutun kendisi raporlar
-  if (!cfg.machines) return null;
-  let self: string;
-  try { self = selfName(); } catch { return null; } // kimlik belirsiz: bugünkü (tek makine) davranış
-  return self === cfg.brain ? null : { cfg, self };
+  const s = workerState();
+  return s.kind === "worker" ? s.ctx : null;
 }
 
 export const FORWARD: Record<string, WriteArgs["cmd"]> = { "task log": "task.log", "task ask": "task.ask", "task report": "task.report", "task session": "task.session" };
@@ -60,8 +72,10 @@ export const WORKER_LOCAL = new Set([
  */
 export async function forwardIfWorker(key: string, args: any[]): Promise<boolean> {
   if (WORKER_LOCAL.has(key)) return false;
-  const ctx = workerContext();
-  if (!ctx) return false;
+  const st = workerState();
+  if (st.kind === "unknown") throw new Error(`çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (${key}): ${st.reason}`);
+  if (st.kind !== "worker") return false;
+  const ctx = st.ctx;
   const cmd = FORWARD[key];
   if (!cmd) throw new Error("bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı");
   const o = args[args.length - 2] as { json?: boolean; file?: string };
