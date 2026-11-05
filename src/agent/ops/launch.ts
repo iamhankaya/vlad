@@ -7,7 +7,7 @@ import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
 import { RemoteError } from "../../machines/types.js";
-import { ASYNC_GIT, ensureIntegrationGitWith, launchCore } from "../../tasks/launch-core.js";
+import { ASYNC_GIT, ensureIntegrationGitWith, launchCore, unmergedCommitsWith } from "../../tasks/launch-core.js";
 import { removeTaskWorktree } from "../../tasks/launch.js";
 import { dirtyLine } from "../../tasks/resume.js";
 import { untrustWorktree } from "../../tasks/trust.js";
@@ -177,9 +177,9 @@ export async function resolveUncertainLaunch(opId: string): Promise<{ state: "ab
   // The base falls back to HEAD like launchCore does when the card's default branch is missing.
   if (branchThere) {
     const base = found.base && (await branchExistsAsync(found.repo, found.base)) ? found.base : "HEAD";
-    const own = await runGitAsync(found.repo, ["rev-list", "--count", found.branch, "--not", base], 30_000);
+    const own = await unmergedCommitsWith(ASYNC_GIT, found.repo, found.branch, base);
     // not "done + result": the brain must not adopt a worktree-less launch; "done" without a result sends it to `task release --force` (record stays for cleanup)
-    if (own !== "0") return { state: "done" };
+    if (own !== 0) return { state: "done" };
     // -D: `-d` checks against HEAD, not the base (an integration branch ahead of HEAD would refuse); rev-list proved nothing is lost
     if ((await runGitAsync(found.repo, ["branch", "-D", found.branch])) === null) return { state: "done" };
   }
@@ -214,8 +214,8 @@ async function dropTaskBranch(repo: string, id: string): Promise<string | undefi
   if (!(await branchExistsAsync(repo, branch))) return undefined;
   const rec = readRecord(id);
   const base = rec?.base && (await branchExistsAsync(repo, rec.base)) ? rec.base : "HEAD";
-  const own = await runGitAsync(repo, ["rev-list", "--count", branch, "--not", base], 30_000);
-  if (own !== "0") return `dal korundu: ${branch} dalında ${base} dalına göre ${own ?? "bilinmeyen sayıda"} commit var; elle incele`;
+  const own = await unmergedCommitsWith(ASYNC_GIT, repo, branch, base);
+  if (own !== 0) return `dal korundu: ${branch} dalında ${base} dalına göre ${own ?? "bilinmeyen sayıda"} commit var; elle incele`;
   if ((await runGitAsync(repo, ["branch", "-D", branch])) === null) return `dal silinemedi: ${branch}`;
   return undefined;
 }

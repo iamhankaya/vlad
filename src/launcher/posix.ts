@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { assertRealLauncherAllowed } from "./mode.js";
 import { securePosixDir } from "./posix-dir.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
+import { resumeFlags } from "./resume.js";
 
 // Same patterns as terminal.ts; the values land in a shell script.
 const AUTOCOMPACT = /^\d+(\.\d+)?[kKmM]?$/;
@@ -33,7 +34,7 @@ export function buildPosixScript(req: LaunchRequest): string {
   const flags = [
     ...(req.model === undefined ? [] : ["--model", q(req.model)]),
     ...(req.autoCompact === undefined ? [] : ["--autocompact", q(req.autoCompact)]),
-    ...(req.resume ? (req.resume.sessionId ? ["--resume", q(req.resume.sessionId)] : ["--continue"]) : []),
+    ...(req.resume ? resumeFlags(req.resume.sessionId ?? null).map((f, i) => (i ? q(f) : f)) : []),
   ];
   lines.push(["claude", ...flags, '"$p"'].join(" "));
   return lines.join("\n") + "\n";

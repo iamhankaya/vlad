@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { assertRealLauncherAllowed } from "./mode.js";
 import { closePosixWorker, externalPosixLaunch } from "./posix.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
+import { resumeFlags } from "./resume.js";
 
 // PowerShell treats typographic single quotes as quote characters too; double each one.
 const SQ = /['‘’‚‛]/g;
@@ -39,7 +40,7 @@ export function buildScript(req: LaunchRequest): string {
   const flags = [
     ...(req.model === undefined ? [] : ["--model", q(req.model)]),
     ...(req.autoCompact === undefined ? [] : ["--autocompact", q(req.autoCompact)]),
-    ...(req.resume ? (req.resume.sessionId ? ["--resume", q(req.resume.sessionId)] : ["--continue"]) : []),
+    ...(req.resume ? resumeFlags(req.resume.sessionId ?? null).map((f, i) => (i ? q(f) : f)) : []),
   ];
   lines.push(["claude", ...flags, "$p"].join(" "));
   return lines.join("\n") + "\n";
