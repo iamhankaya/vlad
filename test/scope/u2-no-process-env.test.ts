@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM script without types
 import { findProcessEnvSpreads } from "../../scripts/list-process-env.mjs";
 
-// F-vlad-186: tests must not hand the developer's shell to children/helpers; isolatedEnv() (test/isolate-env.ts) or spawn-vlad's allowlist env instead.
+// F-vlad-186: tests must not hand the developer's shell to children/helpers; isolatedEnv() (test/isolate-env.ts) or the spawn helper's allowlist env instead.
 // Each exception names the line and why; the list may only shrink.
 const ALLOWED: Record<string, string> = {
   "test/cloud/mode.test.ts": "snapshot of process.env to restore it after the test, never passed to a child",
