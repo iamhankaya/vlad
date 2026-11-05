@@ -25,7 +25,7 @@
 - **Çoklu seçim (Windows):** Gezgin seçili her öğe için ayrı süreç başlatır; 3 dosya = 3 ayrı aktarım ve 3 bildirim. Mac Hızlı Eylemi tüm seçimi tek `vlad send` ile yollar.
 - **Windows başlatıcı güvenliği:** `.vlad-agent` dizini ve `send-<peer>.vbs` kurulumda `icacls` ile kilitlenir (miras kaldırılır, yalnız geçerli kullanıcı + SYSTEM tam yetki); ACL kurulamazsa menü kaydedilmez. `VLAD_HOME` kullanıcı profili altında değilse kurulum uyarır. Komut `REG_EXPAND_SZ` olarak `%SystemRoot%\System32\wscript.exe` ile yazılır. Yollarda `%` reddedilir (kayıt değeri/VBS genişlemesi); dosya adındaki `%VAR%` ise artık komut dizesine girmediği için etkisizdir.
 - **Worktree uyarısı:** menü bir worktree'den (`…-wt/…`) kurulursa `vlad install` uyarır; dal silinince menü çalışmaz, ana kopyadan yeniden kur.
-- **Bilinen sınırlar:** Config'te karşı makine adı değişirse eski menü (Mac'te eski `.workflow`, Windows'ta eski `.vbs`) kendiliğinden silinmez; eski adla `vlad install --remove-menu` çalıştırıp yeniden kur.
+- **Bilinen sınır:** Config'te karşı makine adı değişirse eski menü (Mac'te eski `.workflow`, Windows'ta eski `.vbs`) kendiliğinden silinmez; eski adla `vlad install --remove-menu` çalıştırıp yeniden kur.
 - **Mac gizlilik (TCC):** ilk kullanımda Masaüstü/Belgeler/İndirilenler erişimi için izin istenebilir; reddedilirse hata bildirimi gelir.
 
 ## Gelen dosya bildirimi
