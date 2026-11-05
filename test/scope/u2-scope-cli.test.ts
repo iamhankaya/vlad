@@ -14,6 +14,16 @@ describe("u2 scope CLI", () => {
     expect(r.status, r.stderr).toBe(0);
     expect(JSON.parse(r.stdout)).toMatchObject({ buckets: ["unit", "process", "platform"], unit: "changed", ignored: ["vendor/x.txt"], all: false, warnings: [] });
   });
+  it("an explicit unit test file is listed under its owning bucket (F-vlad-256)", () => {
+    const r = node("test-scope.mjs", ["--files", "test/kb/doc.test.ts", "--json"]);
+    expect(JSON.parse(r.stdout)).toMatchObject({ fileBuckets: { unit: ["test/kb/doc.test.ts"] } });
+  });
+  it("--run executes an explicit unit test file instead of passing with zero tests (F-vlad-256)", () => {
+    const r = node("test-scope.mjs", ["--files", "test/kb/doc.test.ts", "--run"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    // eslint-disable-next-line no-control-regex
+    expect((r.stdout + r.stderr).replace(/\u001b\[[0-9;]*m/g, "")).toMatch(/Test Files\s+1 passed/);
+  });
   it("an unmapped path is reported on stderr and selects everything", () => {
     const r = node("test-scope.mjs", ["--files", "tools/x.bin"]);
     expect(r.stderr).toMatch(/eşlenmeyen yol.*tools\/x\.bin/);

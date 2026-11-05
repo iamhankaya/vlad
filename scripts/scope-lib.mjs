@@ -48,3 +48,13 @@ export function selectScope(files, scope, buckets) {
   }
   return out;
 }
+
+/** Groups explicit test paths by the bucket whose globs claim them ("" = claimed by none, so callers can fail loudly instead of running zero tests). */
+export function groupFilesByBucket(files, buckets) {
+  const out = {};
+  for (const f of files) {
+    const b = Object.keys(buckets).find((k) => buckets[k].some((g) => matchGlob(f, g))) ?? "";
+    (out[b] ??= []).push(f);
+  }
+  return out;
+}
