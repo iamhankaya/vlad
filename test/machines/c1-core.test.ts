@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -167,7 +167,8 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
     const err = await launchCore({ ...r, adopt: true }, l).then(() => null, (e: Error) => e);
     expect(err?.message).toMatch(/başka worktree'de/);
     // git yolu eğik çizgiyle verir; Windows'ta join ters eğik çizgi üretir
-    expect(err?.message.split("\\").join("/")).toContain(other.split("\\").join("/"));
+    // Windows'ta tmpdir() 8.3 kısa ad verebilir (METOHA~1); git uzun adı yazar
+    expect(err?.message.split("\\").join("/")).toContain(realpathSync.native(other).split("\\").join("/"));
     expect(l.reqs).toHaveLength(0);
   });
 

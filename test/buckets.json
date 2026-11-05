@@ -130,6 +130,7 @@
     "test/projects/refresh-cli.test.ts",
     "test/scan/**/*.test.ts",
     "test/scope/u2-scope-cli.test.ts",
+    "test/small/golden-normalizer.test.ts",
     "test/small/u4-F244-accept.test.ts",
     "test/small/u4-F245-accept.test.ts",
     "test/small/u4-F246-accept.test.ts",

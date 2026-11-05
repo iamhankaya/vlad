@@ -107,7 +107,8 @@ export async function startAktarimPair(o: { mac?: SideOpts; windows?: SideOpts; 
       pushImage: async (png, meta) => (await uploadBuffer(s.side.transport, peer, png, { purpose: "clip-image", name: "clip.png", meta })).clip ?? "invalid",
     };
     const clipDeps: ClipDeps = { backend: s.side.clipboard, send, now, isEnabled: () => s.opts.clipEnabled ?? true, log: () => {}, rank: n === "mac" ? 1 : 0, peer, autoStart: false };
-    const os: Os = n === "mac" ? "darwin" : "win32";
+    // alıcı OS ana makineye uyar: dosya sistemi semantiği (mkdir+rename, mod) gerçek ana makineninkidir
+    const os: Os = n === "mac" && process.platform !== "win32" ? "darwin" : "win32";
     const deps: AktarimDeps = {
       self: n, kind, cfg: () => s.cfg, now, env,
       xfer: { downloads: () => s.side.downloads, stateDir: () => s.side.stateDir, os, notifier: s.side.notifier, now, hooks: s.opts.hooks, fs: s.opts.fs, idleTimers: false },

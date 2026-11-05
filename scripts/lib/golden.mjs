@@ -199,10 +199,12 @@ function makeWorld(root, ctxName, { repoRoot, port }) {
   return { base, home, card, env };
 }
 
-const normalizer = (w, port) => (s) => lf(s)
+export const normalizer = (w, port) => (s) => lf(s)
   .split(w.base).join("<BASE>")
   // Windows: JSON içinde yol "\\" kaçışlı yazılır (C:\\Users\\...), düz base eşleşmez
   .split(w.base.split("\\").join("\\\\")).join("<BASE>")
+  // <BASE>'ten sonraki ayırıcılar da `/` olur: JSON'da çift ters eğik çizgi (\n kaçışı korunur), düz metinde tek
+  .replace(/<BASE>[\w.\-\\/]*/g, (m) => w.base.includes("\\") ? (m.includes("\\\\") ? m.split("\\\\").join("/") : m.split("\\").join("/")) : m)
   .replace(new RegExp(String(port), "g"), "<PORT>")
   .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g, "<ISO>")
   .replace(/pid \d+/g, "pid <PID>")

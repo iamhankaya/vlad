@@ -53,7 +53,7 @@ describe("A1.3 begin: doğrulama", () => {
   it("Windows alıcıda CON reddedilir, darwin'de kabul", async () => {
     const w = rig({ os: "win32" });
     expect(await code(w.begin(newId(), [E("CON.txt")]))).toMatch(/^bad_request\|bad_request: yol geçersiz/);
-    const m = rig();
+    const m = rig({ os: "darwin" });
     expect(await code(m.begin(newId(), [E("CON.txt")]))).toBe("ok");
   });
 });
@@ -64,8 +64,10 @@ describe("A1.3 begin: durum, idempotans, kaynak sınırları", () => {
     const res = await r.begin(id, [{ path: "a.txt", kind: "file", size: 5 }]);
     expect(res).toMatchObject({ id, chunkBytes: XFER_CHUNK_BYTES, state: "new" });
     const st = join(r.downloads, ".vlad-incoming", id);
-    expect(statSync(st).mode & 0o777).toBe(0o700);
-    expect(statSync(join(r.downloads, ".vlad-incoming")).mode & 0o777).toBe(0o700);
+    if (process.platform !== "win32") { // Windows'ta POSIX mod bitleri yok
+      expect(statSync(st).mode & 0o777).toBe(0o700);
+      expect(statSync(join(r.downloads, ".vlad-incoming")).mode & 0o777).toBe(0o700);
+    }
     expect(JSON.parse(readFileSync(join(st, "meta.json"), "utf8"))).toMatchObject({ from: "mac", id });
     expect(readdirSync(r.downloads).filter((n) => n !== ".vlad-incoming")).toEqual([]); // teslimden önce görünür iz yok
   });
