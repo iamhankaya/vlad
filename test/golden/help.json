@@ -1,0 +1,581 @@
+{
+  "base": "bbe6ccd",
+  "commander": "^15.0.0",
+  "help": {
+    "(root) --help": {
+      "code": 0,
+      "stdout": "Usage: vlad [options] [command]\n\nVLAD: Claude Code orkestratörü\n\nOptions:\n  -h, --help                  display help for command\n\nCommands:\n  scan [options]              Kök klasörleri tara (kart yazmaz)\n  project                     Proje kartları\n  finding                     Bulgu kaydı (ertelenen/açık noktalar)\n  role                        Uzman roller\n  task                        Görevler\n  status [options]            Aktif görevler; eski running görevleri stalled\n                              yapar\n  mode                        Gece / bekçi modu (yetki penceresi kb/mode.json)\n  audit                       Denetimler\n  inbox                       Oturum raporları\n  digest                      Digest yardımcıları\n  decision                    Karar günlüğü\n  journal                     Günlük\n  kb                          Hafıza deposu\n  session                     VLAD oturum adı\n  agent                       VLAD Agent (çoklu makine; T20261101-19)\n  queue                       İşçi tarafı beyin-yazma kuyruğu (yerel Agent'a\n                              sorar)\n  remote [options] [argv...]  Konsol istemcisi: komutu beyin Agent'ında\n                              çalıştırır (vlad remote [--op-id id] [--stdin] --\n                              <vlad argv…>)\n  machine                     Makine kaydı ve uzak denetim\n  send [options] [yol...]     Dosya/klasörleri karşı makinenin İndirilenler\n                              klasörüne gönderir (--to: makine; 2'den çok\n                              makinede zorunlu)\n  clip                        Ortak pano (Mac↔Windows)\n  install [options]           SessionEnd hook'unu ve vlad-worker skill'ini\n                              ~/.claude'a kurar\n  help [command]              display help for command\n",
+      "stderr": ""
+    },
+    "scan --help": {
+      "code": 0,
+      "stdout": "Usage: vlad scan [options]\n\nKök klasörleri tara (kart yazmaz)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "project --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project [options] [command]\n\nProje kartları\n\nOptions:\n  -h, --help                            display help for command\n\nCommands:\n  write [options] <slug>                Kartı doğrulayıp yazar\n  set [options] <slug> <field> <value>  Tek kart alanını yazar\n                                        (exposure|repo|default_branch|local_only|local_only_reason|gate|machines);\n                                        boş değer alanı siler\n  note [options] <slug> [not]           Karta `## Çalışma notları` altına\n                                        tarihli not ekler (--file: çok satırlı,\n                                        - = stdin)\n  status [options] <slug>               Proje durum özeti: kayıtlardan üretilen\n                                        sayılar/listeler + kartın `## Durum\n                                        özeti` anlatısı (güncel/bayat/yok)\n  summary [options] <slug>              Kartın `## Durum özeti` bölümünü yazar\n                                        (/digest); ilk satıra 'Güncel' damgası\n                                        eklenir\n  refresh [options] [slug]              Kartın koddan üretilen bloklarını (açık\n                                        bulgular, Son aktivite) yeniden üretir;\n                                        blok dışı metne dokunmaz\n  list [options]                        Kartları listeler\n  help [command]                        display help for command\n",
+      "stderr": ""
+    },
+    "project (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad project [options] [command]\n\nProje kartları\n\nOptions:\n  -h, --help                            display help for command\n\nCommands:\n  write [options] <slug>                Kartı doğrulayıp yazar\n  set [options] <slug> <field> <value>  Tek kart alanını yazar\n                                        (exposure|repo|default_branch|local_only|local_only_reason|gate|machines);\n                                        boş değer alanı siler\n  note [options] <slug> [not]           Karta `## Çalışma notları` altına\n                                        tarihli not ekler (--file: çok satırlı,\n                                        - = stdin)\n  status [options] <slug>               Proje durum özeti: kayıtlardan üretilen\n                                        sayılar/listeler + kartın `## Durum\n                                        özeti` anlatısı (güncel/bayat/yok)\n  summary [options] <slug>              Kartın `## Durum özeti` bölümünü yazar\n                                        (/digest); ilk satıra 'Güncel' damgası\n                                        eklenir\n  refresh [options] [slug]              Kartın koddan üretilen bloklarını (açık\n                                        bulgular, Son aktivite) yeniden üretir;\n                                        blok dışı metne dokunmaz\n  list [options]                        Kartları listeler\n  help [command]                        display help for command\n"
+    },
+    "project write --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project write [options] <slug>\n\nKartı doğrulayıp yazar\n\nOptions:\n  --json       makine okunur çıktı\n  --file <md>  kart dosyası (- = stdin)\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "project set --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project set [options] <slug> <field> <value>\n\nTek kart alanını yazar\n(exposure|repo|default_branch|local_only|local_only_reason|gate|machines); boş\ndeğer alanı siler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "project note --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project note [options] <slug> [not]\n\nKarta `## Çalışma notları` altına tarihli not ekler (--file: çok satırlı, - =\nstdin)\n\nOptions:\n  --json       makine okunur çıktı\n  --file <md>  not dosyası (- = stdin)\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "project status --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project status [options] <slug>\n\nProje durum özeti: kayıtlardan üretilen sayılar/listeler + kartın `## Durum\nözeti` anlatısı (güncel/bayat/yok)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "project summary --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project summary [options] <slug>\n\nKartın `## Durum özeti` bölümünü yazar (/digest); ilk satıra 'Güncel' damgası\neklenir\n\nOptions:\n  --json       makine okunur çıktı\n  --file <md>  özet metni (- = stdin); en çok ~1000 token\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "project refresh --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project refresh [options] [slug]\n\nKartın koddan üretilen bloklarını (açık bulgular, Son aktivite) yeniden üretir;\nblok dışı metne dokunmaz\n\nOptions:\n  --json      makine okunur çıktı\n  --all       tüm kartlar\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "project list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad project list [options]\n\nKartları listeler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "finding --help": {
+      "code": 0,
+      "stdout": "Usage: vlad finding [options] [command]\n\nBulgu kaydı (ertelenen/açık noktalar)\n\nOptions:\n  -h, --help                  display help for command\n\nCommands:\n  add [options]               Bulgu kaydı oluşturur (varsayılan open)\n  list [options]              Bulguları listeler\n  set [options] <id> <state>  Bulgunun durumunu değiştirir\n  help [command]              display help for command\n",
+      "stderr": ""
+    },
+    "finding (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad finding [options] [command]\n\nBulgu kaydı (ertelenen/açık noktalar)\n\nOptions:\n  -h, --help                  display help for command\n\nCommands:\n  add [options]               Bulgu kaydı oluşturur (varsayılan open)\n  list [options]              Bulguları listeler\n  set [options] <id> <state>  Bulgunun durumunu değiştirir\n  help [command]              display help for command\n"
+    },
+    "finding add --help": {
+      "code": 0,
+      "stdout": "Usage: vlad finding add [options]\n\nBulgu kaydı oluşturur (varsayılan open)\n\nOptions:\n  --json              makine okunur çıktı\n  --project <slug>    proje slug'ı\n  --severity <önem>   kritik | yüksek | orta | düşük | bilgi\n  --source <görev>    bulguyu raporlayan görev ID'si\n  --title <başlık>    bulgu başlığı\n  --detail-file <md>  ayrıntı (- = stdin)\n  --state <durum>     open | deferred (default: \"open\")\n  -h, --help          display help for command\n",
+      "stderr": ""
+    },
+    "finding list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad finding list [options]\n\nBulguları listeler\n\nOptions:\n  --json                makine okunur çıktı\n  --project <slug>      proje slug'ı\n  --state <durumlar>    virgülle ayrılmış: open, deferred, fixed, wontfix\n  --severity <önemler>  virgülle ayrılmış: kritik, yüksek, orta, düşük, bilgi\n  -h, --help            display help for command\n",
+      "stderr": ""
+    },
+    "finding set --help": {
+      "code": 0,
+      "stdout": "Usage: vlad finding set [options] <id> <state>\n\nBulgunun durumunu değiştirir\n\nOptions:\n  --json        makine okunur çıktı\n  --by <görev>  düzelten görev (yalnızca fixed)\n  -h, --help    display help for command\n",
+      "stderr": ""
+    },
+    "role --help": {
+      "code": 0,
+      "stdout": "Usage: vlad role [options] [command]\n\nUzman roller\n\nOptions:\n  -h, --help      display help for command\n\nCommands:\n  list [options]  roles/ altındaki rolleri listeler\n  help [command]  display help for command\n",
+      "stderr": ""
+    },
+    "role (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad role [options] [command]\n\nUzman roller\n\nOptions:\n  -h, --help      display help for command\n\nCommands:\n  list [options]  roles/ altındaki rolleri listeler\n  help [command]  display help for command\n"
+    },
+    "role list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad role list [options]\n\nroles/ altındaki rolleri listeler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task [options] [command]\n\nGörevler\n\nOptions:\n  -h, --help                           display help for command\n\nCommands:\n  new [options]                        queued görev oluşturur\n  launch [options] <id>                Worktree + branch açar, running yapar,\n                                       Launcher'ı çağırır\n  release [options] <id>               Belirsiz uzak launch rezervasyonunu (ve\n                                       çatı makine pin'ini) bırakır; işçi\n                                       launch'ı görmediyse iptal işareti yazılır\n  ingest [options] <id>                Bulut çalışanının list_events\n                                       çıktısındaki [VLAD:*] işaretlerini görev\n                                       dosyasına işler (idempotent)\n  log [options] <id> <mesaj>           ## İlerleme'ye zaman damgalı satır ekler\n  ask [options] <id> <soru>            Soru ekler, blocked yapar\n  answer [options] <id> <cevap>        Cevabı ekler, running yapar\n  report [options] <id>                Kapanış raporunu yazar, awaiting_approval\n                                       yapar\n  set [options] <id> <state>           Durum makinesine uygun geçiş\n  deps [options] <id>                  queued pipeline fazının bağımlılıklarını\n                                       değiştirir (tam olarak bir mod)\n  resume [options] <id>                running/stalled görev için devam bilgisi\n                                       (yerel: worktree kontrolü + prompt;\n                                       bulut: send_message argümanları)\n  close-window [options] <id>          Görevin çalışan penceresini/süreç ağacını\n                                       kapatır; durum ve worktree değişmez\n  cleanup [options] <id>               done/cancelled görevin çalışan\n                                       penceresini kapatır ve worktree'sini\n                                       kaldırır\n  gate [options] <id>                  Uzak makinede kartın gate komutunu koşar\n                                       (--target integration: çatı worktree'si,\n                                       task: görevin kendisi); gate kırmızıysa\n                                       çıkış 1\n  merge-preview [options] <id>         Uzak makinede merge önizlemesi: log, diff\n                                       --stat, çakışmalar (yazmaz)\n  merge [options] <id>                 Uzak makinede görev dalını hedefe --no-ff\n                                       merge eder (push yok; çakışmada geri\n                                       alınır)\n  digested [options] <ids...>          done görevlerin kapanış raporunu\n                                       /digest'te işlenmiş olarak işaretler\n  session [options] <id> <session_id>  Görevin session_id alanını yazar (durum\n                                       değişmez)\n  list [options]                       Görevleri listeler\n  idle [options]                       Uzun süredir güncellenmeyen\n                                       running/blocked görevler (bekçi modu\n                                       dürtmesi için)\n  ready [options]                      Başlatılmaya hazır görevler (queued,\n                                       bağımlılıkları done)\n  help [command]                       display help for command\n",
+      "stderr": ""
+    },
+    "task (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad task [options] [command]\n\nGörevler\n\nOptions:\n  -h, --help                           display help for command\n\nCommands:\n  new [options]                        queued görev oluşturur\n  launch [options] <id>                Worktree + branch açar, running yapar,\n                                       Launcher'ı çağırır\n  release [options] <id>               Belirsiz uzak launch rezervasyonunu (ve\n                                       çatı makine pin'ini) bırakır; işçi\n                                       launch'ı görmediyse iptal işareti yazılır\n  ingest [options] <id>                Bulut çalışanının list_events\n                                       çıktısındaki [VLAD:*] işaretlerini görev\n                                       dosyasına işler (idempotent)\n  log [options] <id> <mesaj>           ## İlerleme'ye zaman damgalı satır ekler\n  ask [options] <id> <soru>            Soru ekler, blocked yapar\n  answer [options] <id> <cevap>        Cevabı ekler, running yapar\n  report [options] <id>                Kapanış raporunu yazar, awaiting_approval\n                                       yapar\n  set [options] <id> <state>           Durum makinesine uygun geçiş\n  deps [options] <id>                  queued pipeline fazının bağımlılıklarını\n                                       değiştirir (tam olarak bir mod)\n  resume [options] <id>                running/stalled görev için devam bilgisi\n                                       (yerel: worktree kontrolü + prompt;\n                                       bulut: send_message argümanları)\n  close-window [options] <id>          Görevin çalışan penceresini/süreç ağacını\n                                       kapatır; durum ve worktree değişmez\n  cleanup [options] <id>               done/cancelled görevin çalışan\n                                       penceresini kapatır ve worktree'sini\n                                       kaldırır\n  gate [options] <id>                  Uzak makinede kartın gate komutunu koşar\n                                       (--target integration: çatı worktree'si,\n                                       task: görevin kendisi); gate kırmızıysa\n                                       çıkış 1\n  merge-preview [options] <id>         Uzak makinede merge önizlemesi: log, diff\n                                       --stat, çakışmalar (yazmaz)\n  merge [options] <id>                 Uzak makinede görev dalını hedefe --no-ff\n                                       merge eder (push yok; çakışmada geri\n                                       alınır)\n  digested [options] <ids...>          done görevlerin kapanış raporunu\n                                       /digest'te işlenmiş olarak işaretler\n  session [options] <id> <session_id>  Görevin session_id alanını yazar (durum\n                                       değişmez)\n  list [options]                       Görevleri listeler\n  idle [options]                       Uzun süredir güncellenmeyen\n                                       running/blocked görevler (bekçi modu\n                                       dürtmesi için)\n  ready [options]                      Başlatılmaya hazır görevler (queued,\n                                       bağımlılıkları done)\n  help [command]                       display help for command\n"
+    },
+    "task new --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task new [options]\n\nqueued görev oluşturur\n\nOptions:\n  --json                    makine okunur çıktı\n  --role <slug>             roles/<slug>.md uzman rolü (advisory → research,\n                            executor → dev)\n  --model <m>               görev modeli: haiku | sonnet | opus (rolün modelini\n                            ezer)\n  --model-reason <gerekçe>  model gerekçesi; opus için zorunlu\n  --parent <id>             çatı (pipeline) görevi\n  --depends-on <ids>        virgülle ayrılmış, aynı pipeline'daki bağımlılıklar\n  --phase <ad>              faz adı (spec, tasarım, plan, sözleşme, kabul,\n                            karakterizasyon, uygulama, doğrulama, denetim,\n                            prova, danışma)\n  --project <slug>          proje slug'ı\n  --title <başlık>          görev başlığı\n  --kind <kind>             dev | research | pipeline (default: \"dev\")\n  --body-file <md>          görev gövdesi (- = stdin)\n  -h, --help                display help for command\n",
+      "stderr": ""
+    },
+    "task launch --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task launch [options] <id>\n\nWorktree + branch açar, running yapar, Launcher'ı çağırır\n\nOptions:\n  --json          makine okunur çıktı\n  --dry-run       terminal açmadan komutu göster\n  --machine <ad>  görevi kartın makinelerinden birine sabitle (yalnız config'te\n                  machines varken)\n  --external      terminal açma; betiği yaz, script/command/cwd döndür (gömülü\n                  kullanım)\n  -h, --help      display help for command\n",
+      "stderr": ""
+    },
+    "task release --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task release [options] <id>\n\nBelirsiz uzak launch rezervasyonunu (ve çatı makine pin'ini) bırakır; işçi\nlaunch'ı görmediyse iptal işareti yazılır\n\nOptions:\n  --json      makine okunur çıktı\n  --force     işçiye ulaşılamıyorsa da bırak (kalıcı ölü makine; launch\n              açılmışsa orada yetim kalır)\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task ingest --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task ingest [options] <id>\n\nBulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına\nişler (idempotent)\n\nOptions:\n  --json               makine okunur çıktı\n  --events-file <yol>  list_events çıktısı: JSON veya JSONL (- veya yok = stdin)\n  --file <json>        --events-file takma adı\n  --remote-head <sha>  vlad/<id> ucunun sha'sı (git ls-remote yerine; ör.\n                       GitHub'dan)\n  -h, --help           display help for command\n",
+      "stderr": ""
+    },
+    "task log --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task log [options] <id> <mesaj>\n\n## İlerleme'ye zaman damgalı satır ekler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task ask --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task ask [options] <id> <soru>\n\nSoru ekler, blocked yapar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task answer --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task answer [options] <id> <cevap>\n\nCevabı ekler, running yapar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task report --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task report [options] <id>\n\nKapanış raporunu yazar, awaiting_approval yapar\n\nOptions:\n  --json       makine okunur çıktı\n  --file <md>  rapor dosyası (- = stdin)\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "task set --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task set [options] <id> <state>\n\nDurum makinesine uygun geçiş\n\nOptions:\n  --json            makine okunur çıktı\n  --reason <metin>  iptal gerekçesi (cancelled için zorunlu; İlerleme'ye 'İptal:\n                    <metin>' yazılır)\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "task deps --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task deps [options] <id>\n\nqueued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod)\n\nOptions:\n  --json          makine okunur çıktı\n  --set <ids>     bağımlılıkları bu listeyle değiştir (virgülle ayrılmış)\n  --add <ids>     listeye ekle\n  --remove <ids>  listeden çıkar\n  --clear         tüm bağımlılıkları kaldır\n  -h, --help      display help for command\n",
+      "stderr": ""
+    },
+    "task resume --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task resume [options] <id>\n\nrunning/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt;\nbulut: send_message argümanları)\n\nOptions:\n  --json      makine okunur çıktı\n  --external  yerel çalışan için betik yaz (terminal açma); script/command/cwd\n              döner\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task close-window --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task close-window [options] <id>\n\nGörevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task cleanup --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task cleanup [options] <id>\n\ndone/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task gate --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task gate [options] <id>\n\nUzak makinede kartın gate komutunu koşar (--target integration: çatı\nworktree'si, task: görevin kendisi); gate kırmızıysa çıkış 1\n\nOptions:\n  --json            makine okunur çıktı\n  --target <hedef>  integration (çatı için varsayılan) | task (dev görevi için\n                    varsayılan)\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "task merge-preview --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task merge-preview [options] <id>\n\nUzak makinede merge önizlemesi: log, diff --stat, çakışmalar (yazmaz)\n\nOptions:\n  --json        makine okunur çıktı\n  --into <dal>  hedef dal (varsayılan: vlad/<çatı> ya da kartın\n                default_branch'i)\n  -h, --help    display help for command\n",
+      "stderr": ""
+    },
+    "task merge --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task merge [options] <id>\n\nUzak makinede görev dalını hedefe --no-ff merge eder (push yok; çakışmada geri\nalınır)\n\nOptions:\n  --json             makine okunur çıktı\n  --into <dal>       hedef dal (varsayılan: vlad/<çatı> ya da kartın\n                     default_branch'i)\n  --message <metin>  merge commit mesajı\n  -h, --help         display help for command\n",
+      "stderr": ""
+    },
+    "task digested --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task digested [options] <ids...>\n\ndone görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task session --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task session [options] <id> <session_id>\n\nGörevin session_id alanını yazar (durum değişmez)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "task list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task list [options]\n\nGörevleri listeler\n\nOptions:\n  --json              makine okunur çıktı\n  --state <states>    virgülle ayrılmış durumlar\n  --project <slug>    proje slug'ı\n  --undigested        yalnızca kapanış raporu /digest'te işlenmemiş done\n                      görevler\n  --parent <id>       yalnızca bu pipeline'ın fazları\n  --fields <alanlar>  --json çıktısını bu alanlarla sınırla (virgülle;\n                      role_model, effective_model, integration_worktrees yalnız\n                      istenirse hesaplanır)\n  --limit <n>         en yeni n görev\n  -h, --help          display help for command\n",
+      "stderr": ""
+    },
+    "task idle --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task idle [options]\n\nUzun süredir güncellenmeyen running/blocked görevler (bekçi modu dürtmesi için)\n\nOptions:\n  --json         makine okunur çıktı\n  --minutes <n>  en az bu kadar dakikadır sessiz (default: \"30\")\n  -h, --help     display help for command\n",
+      "stderr": ""
+    },
+    "task ready --help": {
+      "code": 0,
+      "stdout": "Usage: vlad task ready [options]\n\nBaşlatılmaya hazır görevler (queued, bağımlılıkları done)\n\nOptions:\n  --json         makine okunur çıktı\n  --parent <id>  yalnızca bu pipeline'ın fazları\n  -h, --help     display help for command\n",
+      "stderr": ""
+    },
+    "status --help": {
+      "code": 0,
+      "stdout": "Usage: vlad status [options]\n\nAktif görevler; eski running görevleri stalled yapar\n\nOptions:\n  --json      makine okunur çıktı\n  --summary   tek satır özet\n  --no-mark   yan etkisiz okuma: stalled işaretleme ve mod penceresi temizliği\n              yapılmaz (aynı JSON şekli)\n  --hook      --summary ile: SessionStart hook JSON'u (systemMessage +\n              additionalContext)\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "mode --help": {
+      "code": 0,
+      "stdout": "Usage: vlad mode [options] [command]\n\nGece / bekçi modu (yetki penceresi kb/mode.json)\n\nOptions:\n  -h, --help                display help for command\n\nCommands:\n  night [options]           Gece (yetki) modunu açar: pencere boyunca faz ve son\n                            kapı merge'ü sormadan\n  watch [options] <on|off>  Bekçi modu: gece modundan bağımsız aç/kapat\n  off [options]             Gece ve bekçi modunu kapatır\n  status [options]          Mod durumu (biten pencere bir kez bildirilir, sonra\n                            temizlenir)\n  help [command]            display help for command\n",
+      "stderr": ""
+    },
+    "mode (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad mode [options] [command]\n\nGece / bekçi modu (yetki penceresi kb/mode.json)\n\nOptions:\n  -h, --help                display help for command\n\nCommands:\n  night [options]           Gece (yetki) modunu açar: pencere boyunca faz ve son\n                            kapı merge'ü sormadan\n  watch [options] <on|off>  Bekçi modu: gece modundan bağımsız aç/kapat\n  off [options]             Gece ve bekçi modunu kapatır\n  status [options]          Mod durumu (biten pencere bir kez bildirilir, sonra\n                            temizlenir)\n  help [command]            display help for command\n"
+    },
+    "mode night --help": {
+      "code": 0,
+      "stdout": "Usage: vlad mode night [options]\n\nGece (yetki) modunu açar: pencere boyunca faz ve son kapı merge'ü sormadan\n\nOptions:\n  --json               makine okunur çıktı\n  --until <HH:MM|ISO>  bitiş: sıradaki HH:MM ya da ISO tarih-saat (en çok 24\n                       saat)\n  --projects <a,b>     yetkinin geçtiği projeler (boş = hepsi)\n  --note <metin>       kullanıcının verdiği kapsam notu\n  -h, --help           display help for command\n",
+      "stderr": ""
+    },
+    "mode watch --help": {
+      "code": 0,
+      "stdout": "Usage: vlad mode watch [options] <on|off>\n\nBekçi modu: gece modundan bağımsız aç/kapat\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "mode off --help": {
+      "code": 0,
+      "stdout": "Usage: vlad mode off [options]\n\nGece ve bekçi modunu kapatır\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "mode status --help": {
+      "code": 0,
+      "stdout": "Usage: vlad mode status [options]\n\nMod durumu (biten pencere bir kez bildirilir, sonra temizlenir)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "audit --help": {
+      "code": 0,
+      "stdout": "Usage: vlad audit [options] [command]\n\nDenetimler\n\nOptions:\n  -h, --help        display help for command\n\nCommands:\n  skills [options]  Görev oturum kayıtlarından beklenen/yüklenen/eksik skill\n                    denetimi\n  setup [options]   Kurulum denetimi verisi (salt okuma): biten görevler,\n                    ölçümler, sürtünme işaretleri, skill envanteri, yaşlı\n                    bulgular\n  help [command]    display help for command\n",
+      "stderr": ""
+    },
+    "audit (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad audit [options] [command]\n\nDenetimler\n\nOptions:\n  -h, --help        display help for command\n\nCommands:\n  skills [options]  Görev oturum kayıtlarından beklenen/yüklenen/eksik skill\n                    denetimi\n  setup [options]   Kurulum denetimi verisi (salt okuma): biten görevler,\n                    ölçümler, sürtünme işaretleri, skill envanteri, yaşlı\n                    bulgular\n  help [command]    display help for command\n"
+    },
+    "audit skills --help": {
+      "code": 0,
+      "stdout": "Usage: vlad audit skills [options]\n\nGörev oturum kayıtlarından beklenen/yüklenen/eksik skill denetimi\n\nOptions:\n  --json            makine okunur çıktı\n  --since <tarih>   bu tarihten sonra oluşturulan görevler\n  --project <slug>  yalnızca bu proje\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "audit setup --help": {
+      "code": 0,
+      "stdout": "Usage: vlad audit setup [options]\n\nKurulum denetimi verisi (salt okuma): biten görevler, ölçümler, sürtünme\nişaretleri, skill envanteri, yaşlı bulgular\n\nOptions:\n  --json           makine okunur çıktı\n  --since <tarih>  bu tarihten sonra biten görevler (YYYY-MM-DD; varsayılan: 14\n                   gün önce)\n  -h, --help       display help for command\n",
+      "stderr": ""
+    },
+    "inbox --help": {
+      "code": 0,
+      "stdout": "Usage: vlad inbox [options] [command]\n\nOturum raporları\n\nOptions:\n  -h, --help                    display help for command\n\nCommands:\n  list [options]                İşlenmemiş raporlar\n  count [options]               İşlenmemiş rapor sayısı\n  done [options] <dosyalar...>  Raporları processed/'a taşır\n  help [command]                display help for command\n",
+      "stderr": ""
+    },
+    "inbox (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad inbox [options] [command]\n\nOturum raporları\n\nOptions:\n  -h, --help                    display help for command\n\nCommands:\n  list [options]                İşlenmemiş raporlar\n  count [options]               İşlenmemiş rapor sayısı\n  done [options] <dosyalar...>  Raporları processed/'a taşır\n  help [command]                display help for command\n"
+    },
+    "inbox list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad inbox list [options]\n\nİşlenmemiş raporlar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "inbox count --help": {
+      "code": 0,
+      "stdout": "Usage: vlad inbox count [options]\n\nİşlenmemiş rapor sayısı\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "inbox done --help": {
+      "code": 0,
+      "stdout": "Usage: vlad inbox done [options] <dosyalar...>\n\nRaporları processed/'a taşır\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "digest --help": {
+      "code": 0,
+      "stdout": "Usage: vlad digest [options] [command]\n\nDigest yardımcıları\n\nOptions:\n  -h, --help      display help for command\n\nCommands:\n  pending         Onay bekleyen digest maddeleri (otomatik digest, D-vlad-061)\n  help [command]  display help for command\n",
+      "stderr": ""
+    },
+    "digest (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad digest [options] [command]\n\nDigest yardımcıları\n\nOptions:\n  -h, --help      display help for command\n\nCommands:\n  pending         Onay bekleyen digest maddeleri (otomatik digest, D-vlad-061)\n  help [command]  display help for command\n"
+    },
+    "digest pending --help": {
+      "code": 0,
+      "stdout": "Usage: vlad digest pending [options] [command]\n\nOnay bekleyen digest maddeleri (otomatik digest, D-vlad-061)\n\nOptions:\n  -h, --help           display help for command\n\nCommands:\n  add [options]        Kullanıcı onayı bekleyen digest maddesi ekler\n  list [options]       Açık maddeleri listeler (--all: kapalılar dahil)\n  done [options] <id>  Maddeyi kapatır (kullanıcı karar verdi / işlendi)\n  help [command]       display help for command\n",
+      "stderr": ""
+    },
+    "digest pending (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad digest pending [options] [command]\n\nOnay bekleyen digest maddeleri (otomatik digest, D-vlad-061)\n\nOptions:\n  -h, --help           display help for command\n\nCommands:\n  add [options]        Kullanıcı onayı bekleyen digest maddesi ekler\n  list [options]       Açık maddeleri listeler (--all: kapalılar dahil)\n  done [options] <id>  Maddeyi kapatır (kullanıcı karar verdi / işlendi)\n  help [command]       display help for command\n"
+    },
+    "digest pending add --help": {
+      "code": 0,
+      "stdout": "Usage: vlad digest pending add [options]\n\nKullanıcı onayı bekleyen digest maddesi ekler\n\nOptions:\n  --json            makine okunur çıktı\n  --text <metin>    madde metni\n  --task <id>       ilgili görev ID'si\n  --project <slug>  ilgili proje\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "digest pending list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad digest pending list [options]\n\nAçık maddeleri listeler (--all: kapalılar dahil)\n\nOptions:\n  --json      makine okunur çıktı\n  --all       kapalı maddeleri de göster\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "digest pending done --help": {
+      "code": 0,
+      "stdout": "Usage: vlad digest pending done [options] <id>\n\nMaddeyi kapatır (kullanıcı karar verdi / işlendi)\n\nOptions:\n  --json          makine okunur çıktı\n  --note <metin>  kapanış notu (karar/sonuç)\n  -h, --help      display help for command\n",
+      "stderr": ""
+    },
+    "decision --help": {
+      "code": 0,
+      "stdout": "Usage: vlad decision [options] [command]\n\nKarar günlüğü\n\nOptions:\n  -h, --help                  display help for command\n\nCommands:\n  add [options]               kb/decisions/<proje>.md'ye karar ekler;\n                              D-<proje>-NNN ID'si döner\n  list [options]              Kararları kısa listeler (varsayılan yalnız\n                              geçerli)\n  set [options] <id> <durum>  Kararın durumunu değiştirir (geçerli | geçersiz |\n                              yerine-geçti)\n  migrate [options]           ID'siz eski karar bloklarına D-<proje>-NNN ve\n                              durum 'geçerli' ekler (metin silinmez, idempotent)\n  help [command]              display help for command\n",
+      "stderr": ""
+    },
+    "decision (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad decision [options] [command]\n\nKarar günlüğü\n\nOptions:\n  -h, --help                  display help for command\n\nCommands:\n  add [options]               kb/decisions/<proje>.md'ye karar ekler;\n                              D-<proje>-NNN ID'si döner\n  list [options]              Kararları kısa listeler (varsayılan yalnız\n                              geçerli)\n  set [options] <id> <durum>  Kararın durumunu değiştirir (geçerli | geçersiz |\n                              yerine-geçti)\n  migrate [options]           ID'siz eski karar bloklarına D-<proje>-NNN ve\n                              durum 'geçerli' ekler (metin silinmez, idempotent)\n  help [command]              display help for command\n"
+    },
+    "decision add --help": {
+      "code": 0,
+      "stdout": "Usage: vlad decision add [options]\n\nkb/decisions/<proje>.md'ye karar ekler; D-<proje>-NNN ID'si döner\n\nOptions:\n  --json             makine okunur çıktı\n  --project <slug>   proje\n  --title <başlık>   başlık\n  --body-file <md>   gövde (- = stdin)\n  --source <kaynak>  session/görev kaynağı\n  --supersedes <id>  bu kararın yerine geçtiği karar (o yerine-geçti olur)\n  --until <tarih>    kararın son tarihi (YYYY-MM-DD ya da YYYY-MM-DDTHH:MM);\n                     geçince status/kb lint süresi dolmuş geçerli karar olarak\n                     işaretler\n  -h, --help         display help for command\n",
+      "stderr": ""
+    },
+    "decision list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad decision list [options]\n\nKararları kısa listeler (varsayılan yalnız geçerli)\n\nOptions:\n  --json            makine okunur çıktı\n  --project <slug>  yalnız bu proje (genel kararlar: genel)\n  --all             geçersiz ve yerine geçilmiş kararlar da\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "decision set --help": {
+      "code": 0,
+      "stdout": "Usage: vlad decision set [options] <id> <durum>\n\nKararın durumunu değiştirir (geçerli | geçersiz | yerine-geçti)\n\nOptions:\n  --json                makine okunur çıktı\n  --superseded-by <id>  yerine geçen karar (yerine-geçti için zorunlu)\n  -h, --help            display help for command\n",
+      "stderr": ""
+    },
+    "decision migrate --help": {
+      "code": 0,
+      "stdout": "Usage: vlad decision migrate [options]\n\nID'siz eski karar bloklarına D-<proje>-NNN ve durum 'geçerli' ekler (metin\nsilinmez, idempotent)\n\nOptions:\n  --json      makine okunur çıktı\n  --dry-run   hiçbir şeye dokunmadan göster\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "journal --help": {
+      "code": 0,
+      "stdout": "Usage: vlad journal [options] [command]\n\nGünlük\n\nOptions:\n  -h, --help                display help for command\n\nCommands:\n  append [options] <tarih>  kb/journal/<tarih>.md'ye ekler\n  get [options] <tarih>     kb/journal/<tarih>.md içeriğini proje bölümleriyle\n                            döner (salt okuma)\n  help [command]            display help for command\n",
+      "stderr": ""
+    },
+    "journal (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad journal [options] [command]\n\nGünlük\n\nOptions:\n  -h, --help                display help for command\n\nCommands:\n  append [options] <tarih>  kb/journal/<tarih>.md'ye ekler\n  get [options] <tarih>     kb/journal/<tarih>.md içeriğini proje bölümleriyle\n                            döner (salt okuma)\n  help [command]            display help for command\n"
+    },
+    "journal append --help": {
+      "code": 0,
+      "stdout": "Usage: vlad journal append [options] <tarih>\n\nkb/journal/<tarih>.md'ye ekler\n\nOptions:\n  --json       makine okunur çıktı\n  --file <md>  içerik (- = stdin)\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "journal get --help": {
+      "code": 0,
+      "stdout": "Usage: vlad journal get [options] <tarih>\n\nkb/journal/<tarih>.md içeriğini proje bölümleriyle döner (salt okuma)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "kb --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb [options] [command]\n\nHafıza deposu\n\nOptions:\n  -h, --help                display help for command\n\nCommands:\n  commit [options] <mesaj>  kb/ altındaki değişiklikleri `kb: <mesaj>` olarak\n                            commit'ler (kod dahil edilmez)\n  maintain [options]        kb bakımı: decisions.md'yi projelere böler, eski\n                            kapalı görev/bulguları archive/'e taşır (silme yok)\n  get [options] <id>        Görev (T…) ya da bulguyu (F-…) ID ile okur;\n                            arşivdekini de bulur, gerçek yolu verir\n  search [options] <sorgu>  Sınırlı kb araması (görev bölümü, bulgu, karar\n                            bloğu, günlük bölümü; arşiv dahil); tüm kelimeler\n                            geçmeli\n  refs [options] <id>       ID'ye (T…, F-…, D-…) atıf yapan kayıtları\n                            bölüm/durum/tarihle, ilgili commit'leri ve çelişki\n                            işaretlerini listeler\n  lint [options]            Salt okuma çelişki denetimi: kart/karar/hafıza\n                            metinlerindeki T…/F-…/D-… atıflarını gerçek kayıtla\n                            karşılaştırır (işaret varsa 0, --strict'te 1)\n  check [options]           kb remote'unda `kb:` öneki taşımayan (yabancı) ve\n                            CLAUDE.md/.claude/.github'a dokunan commit'leri\n                            listeler\n  help [command]            display help for command\n",
+      "stderr": ""
+    },
+    "kb (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad kb [options] [command]\n\nHafıza deposu\n\nOptions:\n  -h, --help                display help for command\n\nCommands:\n  commit [options] <mesaj>  kb/ altındaki değişiklikleri `kb: <mesaj>` olarak\n                            commit'ler (kod dahil edilmez)\n  maintain [options]        kb bakımı: decisions.md'yi projelere böler, eski\n                            kapalı görev/bulguları archive/'e taşır (silme yok)\n  get [options] <id>        Görev (T…) ya da bulguyu (F-…) ID ile okur;\n                            arşivdekini de bulur, gerçek yolu verir\n  search [options] <sorgu>  Sınırlı kb araması (görev bölümü, bulgu, karar\n                            bloğu, günlük bölümü; arşiv dahil); tüm kelimeler\n                            geçmeli\n  refs [options] <id>       ID'ye (T…, F-…, D-…) atıf yapan kayıtları\n                            bölüm/durum/tarihle, ilgili commit'leri ve çelişki\n                            işaretlerini listeler\n  lint [options]            Salt okuma çelişki denetimi: kart/karar/hafıza\n                            metinlerindeki T…/F-…/D-… atıflarını gerçek kayıtla\n                            karşılaştırır (işaret varsa 0, --strict'te 1)\n  check [options]           kb remote'unda `kb:` öneki taşımayan (yabancı) ve\n                            CLAUDE.md/.claude/.github'a dokunan commit'leri\n                            listeler\n  help [command]            display help for command\n"
+    },
+    "kb commit --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb commit [options] <mesaj>\n\nkb/ altındaki değişiklikleri `kb: <mesaj>` olarak commit'ler (kod dahil edilmez)\n\nOptions:\n  --json      makine okunur çıktı\n  --push      upstream'e push eder (yalnızca push edilmemiş commit'lerin hepsi\n              kb/ ise)\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "kb maintain --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb maintain [options]\n\nkb bakımı: decisions.md'yi projelere böler, eski kapalı görev/bulguları\narchive/'e taşır (silme yok)\n\nOptions:\n  --json      makine okunur çıktı\n  --days <n>  bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 30)\n  --dry-run   hiçbir şeye dokunmadan yapılacakları göster\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "kb get --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb get [options] <id>\n\nGörev (T…) ya da bulguyu (F-…) ID ile okur; arşivdekini de bulur, gerçek yolu\nverir\n\nOptions:\n  --json              makine okunur çıktı\n  --section <başlık>  yalnız bu `## ` bölümünü döndür (ör. \"## Kapanış raporu\")\n  -h, --help          display help for command\n",
+      "stderr": ""
+    },
+    "kb search --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb search [options] <sorgu>\n\nSınırlı kb araması (görev bölümü, bulgu, karar bloğu, günlük bölümü; arşiv\ndahil); tüm kelimeler geçmeli\n\nOptions:\n  --json            makine okunur çıktı\n  --project <slug>  yalnız bu proje\n  --type <tür>      task | finding | decision | journal\n  --limit <n>       en çok bu kadar sonuç (default: \"8\")\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "kb refs --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb refs [options] <id>\n\nID'ye (T…, F-…, D-…) atıf yapan kayıtları bölüm/durum/tarihle, ilgili\ncommit'leri ve çelişki işaretlerini listeler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "kb lint --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb lint [options]\n\nSalt okuma çelişki denetimi: kart/karar/hafıza metinlerindeki T…/F-…/D-…\natıflarını gerçek kayıtla karşılaştırır (işaret varsa 0, --strict'te 1)\n\nOptions:\n  --json            makine okunur çıktı\n  --project <slug>  yalnız bu proje\n  --strict          işaret varsa 1 ile çık\n  -h, --help        display help for command\n",
+      "stderr": ""
+    },
+    "kb check --help": {
+      "code": 0,
+      "stdout": "Usage: vlad kb check [options]\n\nkb remote'unda `kb:` öneki taşımayan (yabancı) ve CLAUDE.md/.claude/.github'a\ndokunan commit'leri listeler\n\nOptions:\n  --json       makine okunur çıktı\n  --ack <sha>  görüldü say: doğrulanan noktayı `check` çıktısındaki head'e\n               ilerletir (sonradan gelenler işaretlenmez)\n  --strict     yabancı/şüpheli commit varsa ya da kontrol yapılamadıysa 1 ile\n               çık\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "session --help": {
+      "code": 0,
+      "stdout": "Usage: vlad session [options] [command]\n\nVLAD oturum adı\n\nOptions:\n  -h, --help               display help for command\n\nCommands:\n  register [options] <ad>  Oturum adını kb/vlad-session.txt'ye yazar\n  name [options]           Kayıtlı oturum adını yazar\n  help [command]           display help for command\n",
+      "stderr": ""
+    },
+    "session (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad session [options] [command]\n\nVLAD oturum adı\n\nOptions:\n  -h, --help               display help for command\n\nCommands:\n  register [options] <ad>  Oturum adını kb/vlad-session.txt'ye yazar\n  name [options]           Kayıtlı oturum adını yazar\n  help [command]           display help for command\n"
+    },
+    "session register --help": {
+      "code": 0,
+      "stdout": "Usage: vlad session register [options] <ad>\n\nOturum adını kb/vlad-session.txt'ye yazar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "session name --help": {
+      "code": 0,
+      "stdout": "Usage: vlad session name [options]\n\nKayıtlı oturum adını yazar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "agent --help": {
+      "code": 0,
+      "stdout": "Usage: vlad agent [options] [command]\n\nVLAD Agent (çoklu makine; T20261101-19)\n\nOptions:\n  -h, --help                                display help for command\n\nCommands:\n  start [options]                           Agent'ı başlatır (tek örnek; kimlik VLAD_MACHINE/vlad.local.json)\n  status [options]                          Yerel Agent çalışıyor mu\n  keygen [options] <kimlik>                 Anahtar üretir, vlad.local.json'a yazar (anahtarı basmaz; --show ile basar). <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey <ad> -` çalıştır); <kendi-adın> = yerel çağrı anahtarı\n  setkey [options] <karsi-taraf> <anahtar>  Karşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>); <anahtar> `-` olmalı, anahtar stdin'den okunur\n  install [options]                         Agent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows: görev zamanlayıcı); --apply ile kurar\n  help [command]                            display help for command\n",
+      "stderr": ""
+    },
+    "agent (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad agent [options] [command]\n\nVLAD Agent (çoklu makine; T20261101-19)\n\nOptions:\n  -h, --help                                display help for command\n\nCommands:\n  start [options]                           Agent'ı başlatır (tek örnek; kimlik VLAD_MACHINE/vlad.local.json)\n  status [options]                          Yerel Agent çalışıyor mu\n  keygen [options] <kimlik>                 Anahtar üretir, vlad.local.json'a yazar (anahtarı basmaz; --show ile basar). <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey <ad> -` çalıştır); <kendi-adın> = yerel çağrı anahtarı\n  setkey [options] <karsi-taraf> <anahtar>  Karşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>); <anahtar> `-` olmalı, anahtar stdin'den okunur\n  install [options]                         Agent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows: görev zamanlayıcı); --apply ile kurar\n  help [command]                            display help for command\n"
+    },
+    "agent start --help": {
+      "code": 0,
+      "stdout": "Usage: vlad agent start [options]\n\nAgent'ı başlatır (tek örnek; kimlik VLAD_MACHINE/vlad.local.json)\n\nOptions:\n  --json        makine okunur çıktı\n  --port <n>    config portunu geçersiz kıl (0 = rastgele)\n  --print-port  ilk stdout satırı {\"listening\":{host,port}}\n  -h, --help    display help for command\n",
+      "stderr": ""
+    },
+    "agent status --help": {
+      "code": 0,
+      "stdout": "Usage: vlad agent status [options]\n\nYerel Agent çalışıyor mu\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "agent keygen --help": {
+      "code": 0,
+      "stdout": "Usage: vlad agent keygen [options] <kimlik>\n\nAnahtar üretir, vlad.local.json'a yazar (anahtarı basmaz; --show ile basar).\n<karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey\n<ad> -` çalıştır); <kendi-adın> = yerel çağrı anahtarı\n\nOptions:\n  --json      makine okunur çıktı\n  --show      anahtarı çıktıya bas (varsayılan basmaz)\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "agent setkey --help": {
+      "code": 0,
+      "stdout": "Usage: vlad agent setkey [options] <karsi-taraf> <anahtar>\n\nKarşı uçta üretilmiş çift anahtarı yazar (keys.<karşı-taraf>); <anahtar> `-`\nolmalı, anahtar stdin'den okunur\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "agent install --help": {
+      "code": 0,
+      "stdout": "Usage: vlad agent install [options]\n\nAgent'ı oturum açılışında başlatacak kaydı basar (Mac: launchd plist, Windows:\ngörev zamanlayıcı); --apply ile kurar\n\nOptions:\n  --json      makine okunur çıktı\n  --apply     kaydı gerçekten kur (yoksa yalnız basar)\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "queue --help": {
+      "code": 0,
+      "stdout": "Usage: vlad queue [options] [command]\n\nİşçi tarafı beyin-yazma kuyruğu (yerel Agent'a sorar)\n\nOptions:\n  -h, --help            display help for command\n\nCommands:\n  list [options]        Bekleyen ve başarısız yazmalar\n  flush [options]       Kuyruğu şimdi boşaltmayı dener\n  drop [options] <seq>  Kuyruktaki (ya da başarısız) girdiyi siler\n  help [command]        display help for command\n",
+      "stderr": ""
+    },
+    "queue (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad queue [options] [command]\n\nİşçi tarafı beyin-yazma kuyruğu (yerel Agent'a sorar)\n\nOptions:\n  -h, --help            display help for command\n\nCommands:\n  list [options]        Bekleyen ve başarısız yazmalar\n  flush [options]       Kuyruğu şimdi boşaltmayı dener\n  drop [options] <seq>  Kuyruktaki (ya da başarısız) girdiyi siler\n  help [command]        display help for command\n"
+    },
+    "queue list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad queue list [options]\n\nBekleyen ve başarısız yazmalar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "queue flush --help": {
+      "code": 0,
+      "stdout": "Usage: vlad queue flush [options]\n\nKuyruğu şimdi boşaltmayı dener\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "queue drop --help": {
+      "code": 0,
+      "stdout": "Usage: vlad queue drop [options] <seq>\n\nKuyruktaki (ya da başarısız) girdiyi siler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "remote --help": {
+      "code": 0,
+      "stdout": "Usage: vlad remote [options] [argv...]\n\nKonsol istemcisi: komutu beyin Agent'ında çalıştırır (vlad remote [--op-id id]\n[--stdin] -- <vlad argv…>)\n\nOptions:\n  --op-id <uuid>  yazma tekrarında ilk sonucu döndürmek için sabit opId\n  --stdin         stdin'i komuta ilet (--file - için)\n  -h, --help      display help for command\n",
+      "stderr": ""
+    },
+    "machine --help": {
+      "code": 0,
+      "stdout": "Usage: vlad machine [options] [command]\n\nMakine kaydı ve uzak denetim\n\nOptions:\n  -h, --help                   display help for command\n\nCommands:\n  list [options]               Config'teki makineler; brain'i ve yerel kimliği\n                               işaretler\n  ping [options] <ad>          Makinenin Agent'ına ping atar\n  probe-window [options] <ad>  İşçide kısa ömürlü bir pencere açtırır (pencere\n                               görünüyor mu denemesi; Windows)\n  help [command]               display help for command\n",
+      "stderr": ""
+    },
+    "machine (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad machine [options] [command]\n\nMakine kaydı ve uzak denetim\n\nOptions:\n  -h, --help                   display help for command\n\nCommands:\n  list [options]               Config'teki makineler; brain'i ve yerel kimliği\n                               işaretler\n  ping [options] <ad>          Makinenin Agent'ına ping atar\n  probe-window [options] <ad>  İşçide kısa ömürlü bir pencere açtırır (pencere\n                               görünüyor mu denemesi; Windows)\n  help [command]               display help for command\n"
+    },
+    "machine list --help": {
+      "code": 0,
+      "stdout": "Usage: vlad machine list [options]\n\nConfig'teki makineler; brain'i ve yerel kimliği işaretler\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "machine ping --help": {
+      "code": 0,
+      "stdout": "Usage: vlad machine ping [options] <ad>\n\nMakinenin Agent'ına ping atar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "machine probe-window --help": {
+      "code": 0,
+      "stdout": "Usage: vlad machine probe-window [options] <ad>\n\nİşçide kısa ömürlü bir pencere açtırır (pencere görünüyor mu denemesi; Windows)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "send --help": {
+      "code": 0,
+      "stdout": "Usage: vlad send [options] [yol...]\n\nDosya/klasörleri karşı makinenin İndirilenler klasörüne gönderir (--to: makine;\n2'den çok makinede zorunlu)\n\nOptions:\n  --json         makine okunur çıktı\n  --to <makine>  hedef makine\n  --notify       sonucu (başarı/hata) bildirimle de göster\n  --args-env     yolları VLAD_ARG_COUNT/VLAD_ARG_<n> ortam değişkenlerinden al\n                 (sağ tık başlatıcısı)\n  -h, --help     display help for command\n",
+      "stderr": ""
+    },
+    "clip --help": {
+      "code": 0,
+      "stdout": "Usage: vlad clip [options] [command]\n\nOrtak pano (Mac↔Windows)\n\nOptions:\n  -h, --help             display help for command\n\nCommands:\n  on [options]           Pano eşitlemeyi açar\n  off [options]          Pano eşitlemeyi kapatır\n  status [options]       Pano eşitleme durumu (enabled, agentRunning)\n  get [options]          Yerel panoyu okur (resim varsa --out <png>)\n  set [options] [metin]  Yerel panoya yazar (metin, --file <yol|->, ya da\n                         --image <png>)\n  help [command]         display help for command\n",
+      "stderr": ""
+    },
+    "clip (bare)": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "Usage: vlad clip [options] [command]\n\nOrtak pano (Mac↔Windows)\n\nOptions:\n  -h, --help             display help for command\n\nCommands:\n  on [options]           Pano eşitlemeyi açar\n  off [options]          Pano eşitlemeyi kapatır\n  status [options]       Pano eşitleme durumu (enabled, agentRunning)\n  get [options]          Yerel panoyu okur (resim varsa --out <png>)\n  set [options] [metin]  Yerel panoya yazar (metin, --file <yol|->, ya da\n                         --image <png>)\n  help [command]         display help for command\n"
+    },
+    "clip on --help": {
+      "code": 0,
+      "stdout": "Usage: vlad clip on [options]\n\nPano eşitlemeyi açar\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "clip off --help": {
+      "code": 0,
+      "stdout": "Usage: vlad clip off [options]\n\nPano eşitlemeyi kapatır\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "clip status --help": {
+      "code": 0,
+      "stdout": "Usage: vlad clip status [options]\n\nPano eşitleme durumu (enabled, agentRunning)\n\nOptions:\n  --json      makine okunur çıktı\n  -h, --help  display help for command\n",
+      "stderr": ""
+    },
+    "clip get --help": {
+      "code": 0,
+      "stdout": "Usage: vlad clip get [options]\n\nYerel panoyu okur (resim varsa --out <png>)\n\nOptions:\n  --json       makine okunur çıktı\n  --out <png>  resim panosunu bu PNG dosyasına yaz\n  -h, --help   display help for command\n",
+      "stderr": ""
+    },
+    "clip set --help": {
+      "code": 0,
+      "stdout": "Usage: vlad clip set [options] [metin]\n\nYerel panoya yazar (metin, --file <yol|->, ya da --image <png>)\n\nOptions:\n  --json         makine okunur çıktı\n  --file <yol>   metni dosyadan (- = stdin) oku\n  --image <png>  PNG dosyasını panoya yaz\n  -h, --help     display help for command\n",
+      "stderr": ""
+    },
+    "install --help": {
+      "code": 0,
+      "stdout": "Usage: vlad install [options]\n\nSessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar\n\nOptions:\n  --json         makine okunur çıktı\n  --dry-run      hiçbir şeye dokunmadan yapılacakları göster\n  --remove-menu  yalnız sağ tık \"gönder\" menüsünü kaldırır (geri alma)\n  -h, --help     display help for command\n",
+      "stderr": ""
+    }
+  }
+}

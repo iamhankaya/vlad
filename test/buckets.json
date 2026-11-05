@@ -67,6 +67,9 @@
     "test/acceptance/cloud-launch.test.ts",
     "test/acceptance/cloud-verify3.test.ts",
     "test/acceptance/model-roles-verify.test.ts",
+    "test/acceptance/restructure-golden.test.ts",
+    "test/acceptance/restructure-manifest.test.ts",
+    "test/acceptance/restructure-scope.test.ts",
     "test/acceptance/team-improvements-bugs.test.ts",
     "test/acceptance/team-improvements-e2e.test.ts",
     "test/acceptance/team-improvements-verify2.test.ts",
@@ -126,12 +129,18 @@
     "test/projects/refresh-cli.test.ts",
     "test/scan/**/*.test.ts",
     "test/scope/u2-scope-cli.test.ts",
+    "test/small/u4-F244-accept.test.ts",
+    "test/small/u4-F245-accept.test.ts",
+    "test/small/u4-F246-accept.test.ts",
+    "test/small/u4-F247-accept.test.ts",
+    "test/small/u4-F248-accept.test.ts",
     "test/support/**/*.test.ts",
     "test/tasks/experiment.test.ts",
     "test/tasks/launch.test.ts",
     "test/tasks/resume-window.test.ts",
     "test/tasks/resume.test.ts",
-    "test/tasks/trust.test.ts"
+    "test/tasks/trust.test.ts",
+    "test/tasks/u4b-F245-trust-lock.test.ts"
   ],
   "agent": [
     "test/acceptance/aktarim-dosya.test.ts",
@@ -188,6 +197,7 @@
     "test/machines/c2-probe-window.test.ts",
     "test/machines/s-config.test.ts",
     "test/machines/t51-fail-closed.test.ts",
-    "test/tasks/liveness.test.ts"
+    "test/tasks/liveness.test.ts",
+    "test/machines/u4b-F246-forward-parse.test.ts"
   ]
 }
