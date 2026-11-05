@@ -1,4 +1,4 @@
-import type { AgentOp } from "../machines/types.js";
+import type { AgentOp } from "../fleet/types.js";
 import type { Journal, JournalRecord } from "./journal.js";
 
 export type Verdict = "applied" | "not-applied" | "unknown";

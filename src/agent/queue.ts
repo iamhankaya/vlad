@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ensurePrivateDir } from "./state.js";
-import { RemoteError, type QueueEntry, type WriteArgs } from "../machines/types.js";
+import { ensurePrivateDir } from "../fleet/state.js";
+import { RemoteError, type QueueEntry, type WriteArgs } from "../fleet/types.js";
 
 export const QUEUE_MAX_ENTRIES = 1000;
 export const QUEUE_MAX_BYTES = 64 * 1024 * 1024;

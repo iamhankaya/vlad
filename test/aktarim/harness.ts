@@ -10,7 +10,7 @@ import { createClipReceiver } from "../../src/clip/receive.js";
 import type { ClipboardBackend, ClipContent, ClipDeps, ClipReceiver } from "../../src/clip/types.js";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { VladConfig } from "../../src/kb/types.js";
-import type { Os, RemoteTransport } from "../../src/machines/types.js";
+import type { Os, RemoteTransport } from "../../src/fleet/types.js";
 import type { Notifier } from "../../src/platform/notify.js";
 import { uploadBuffer } from "../../src/transfer/send.js";
 import type { AktarimDeps, XferFs, XferReceiver, XferTestHooks } from "../../src/transfer/types.js";

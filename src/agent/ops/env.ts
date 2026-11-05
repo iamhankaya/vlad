@@ -1,5 +1,5 @@
 import type { VladConfig } from "../../kb/types.js";
-import type { RemoteTransport } from "../../machines/types.js";
+import type { RemoteTransport } from "../../fleet/types.js";
 import type { Journal } from "../journal.js";
 import type { AgentQueue } from "../queue.js";
 import type { AgentKind } from "./index.js";

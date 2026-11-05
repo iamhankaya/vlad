@@ -8,7 +8,7 @@ import { startServer } from "../../src/agent/server.js";
 import { signRequest } from "../../src/agent/sign.js";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { VladConfig } from "../../src/kb/types.js";
-import { PROTO_VERSION } from "../../src/machines/types.js";
+import { PROTO_VERSION } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 
 // D-vlad-057: anahtar çifte özgüdür. Ele geçirilmiş bir işçi, beyinle paylaştığı anahtarla başka bir işçiye

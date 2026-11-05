@@ -1,5 +1,5 @@
 import { KbLockTimeout } from "../kb/lock.js";
-import { RemoteError } from "./types.js";
+import { RemoteError } from "../fleet/types.js";
 
 /** CLI çıkış kodu: geçici uzak hata ve kb kilidi zaman aşımı → 75 (EX_TEMPFAIL); diğerleri 1. */
 export function exitCodeFor(e: unknown): number {

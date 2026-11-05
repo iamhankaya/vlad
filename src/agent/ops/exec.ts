@@ -1,4 +1,4 @@
-import { RemoteError, type ExecResult } from "../../machines/types.js";
+import { RemoteError, type ExecResult } from "../../fleet/types.js";
 import { consoleExecTimeoutMs, validateConsoleArgv } from "../console-catalog.js";
 import { runCli } from "./run-cli.js";
 

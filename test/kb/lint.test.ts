@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDecision, setDecisionStatus } from "../../src/kb/decisions.js";
 import { DERIVED_CLOSE, derivedOpen } from "../../src/kb/derived.js";
-import { formatLint, lintExitCode, lintKb } from "../../src/kb/lint.js";
+import { formatLint, lintExitCode, lintKb } from "../../src/audit/lint.js";
 import { makeHome } from "../helpers.js";
 import { isolatedEnv } from "../isolate-env.js";
 

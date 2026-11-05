@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import type { AgentRequest, AgentResponse } from "../machines/types.js";
+import type { AgentRequest, AgentResponse } from "../fleet/types.js";
 
 export function canonicalJson(v: unknown): string {
   if (v === undefined) return "null";

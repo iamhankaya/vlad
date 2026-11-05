@@ -5,11 +5,11 @@ import { kbPaths } from "../../kb/home.js";
 import type { VladConfig } from "../../kb/types.js";
 import { NoopLauncher, PosixLauncher, TerminalLauncher, resolveLaunchMode } from "../../launcher/index.js";
 import type { Launcher } from "../../launcher/index.js";
-import { machineDef } from "../../machines/registry.js";
-import { pickRepoDir } from "../../machines/paths.js";
-import { RemoteError, type MachineDef } from "../../machines/types.js";
+import { machineDef } from "../../fleet/registry.js";
+import { pickRepoDir } from "../../fleet/paths.js";
+import { RemoteError, type MachineDef } from "../../fleet/types.js";
 import { worktreePath } from "../../git/git.js";
-import { selfName } from "../state.js";
+import { selfName } from "../../fleet/state.js";
 
 export const bad = (m: string) => new RemoteError("bad_request", `bad_request: ${m}`);
 const TASK_ID = /^T\d{8}-\d{2,}$/;

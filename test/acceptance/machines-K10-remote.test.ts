@@ -154,7 +154,7 @@ describe("machines:K — K15 yol sözleşmesi", () => {
     if (process.platform === "win32") expect(wp(cfg, "C:\\dev\\alpha", "T20261101-01")).toBe("C:\\dev\\alpha-wt\\T20261101-01");
   });
   it("repoNameOf: win→posix ve posix→win kart yolundan yalnız ad çıkar", async () => {
-    const mod: any = await import(["..", "..", "src", "machines", "paths.js"].join("/"));
+    const mod: any = await import(["..", "..", "src", "fleet", "paths.js"].join("/"));
     expect(mod.repoNameOf("C:\\dev\\alpha")).toBe("alpha");
     expect(mod.repoNameOf("C:/dev/alpha")).toBe("alpha");
     expect(mod.repoNameOf("/Users/m/dev/alpha")).toBe("alpha");

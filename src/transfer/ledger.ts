@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { RemoteError } from "../machines/types.js";
+import { RemoteError } from "../fleet/types.js";
 import type { Ledger, LedgerRecord } from "./types.js";
 
 // Teslim kaydı: <stateDir>/xfer/delivered/<sha256(anahtar)>.json; atomik temp+rename yazma (çökme yarım kayıt bırakmaz).

@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDecision } from "../../src/kb/decisions.js";
-import { lintKb } from "../../src/kb/lint.js";
+import { lintKb } from "../../src/audit/lint.js";
 import { makeHome } from "../helpers.js";
 
 let home: string;

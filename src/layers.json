@@ -1,5 +1,5 @@
 {
-  "_doc": "Layer per top-level src unit (lower number = lower layer; runtime imports go to the same or a lower layer, `import type` is exempt). L0 base, L1 domain + L1p policy data (commands), L2 infrastructure, L3 CLI. `pure` units import nothing outside themselves at runtime. Upward imports that exist today live in layers.baseline.json (goal: empty after U3).",
+  "_doc": "Layer per top-level src unit (lower number = lower layer; runtime imports go to the same or a lower layer, `import type` is exempt). L0 base (kb, git, platform, fleet = machine identity/types/placement primitives), L1 domain + L1p policy data (commands), L2 infrastructure, L3 CLI. `pure` units import nothing outside themselves at runtime. Upward imports that exist today live in layers.baseline.json, empty since U3.",
   "layers": {
     "kb": 0,
     "git": 0,
@@ -24,7 +24,8 @@
     "menu": 2,
     "install.ts": 2,
     "cli": 3,
-    "cli.ts": 3
+    "cli.ts": 3,
+    "fleet": 0
   },
   "pure": [
     "commands"

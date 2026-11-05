@@ -1,4 +1,4 @@
-import { readLocal, selfName } from "../agent/state.js";
+import { readLocal, selfName } from "./state.js";
 import type { VladConfig } from "../kb/types.js";
 import type { IdentityRole, MachineDef } from "./types.js";
 

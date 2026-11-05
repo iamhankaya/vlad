@@ -5,9 +5,9 @@ import { join } from "node:path";
 import { getSection, kbPaths, readDoc } from "../kb/index.js";
 import type { TaskState, VladConfig } from "../kb/index.js";
 import { existsSync } from "node:fs";
-import { repoNameOf } from "../machines/paths.js";
-import type { RemoteTransport } from "../machines/types.js";
-import { RemoteError } from "../machines/types.js";
+import { repoNameOf } from "../fleet/paths.js";
+import type { RemoteTransport } from "../fleet/types.js";
+import { RemoteError } from "../fleet/types.js";
 import { getTask, listTasks, setState } from "./store.js";
 import type { Task } from "./store.js";
 

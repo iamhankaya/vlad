@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { remoteErrorDetails } from "../../src/machines/exit.js";
-import { RemoteError, type RemoteTransport } from "../../src/machines/types.js";
+import { RemoteError, type RemoteTransport } from "../../src/fleet/types.js";
 import { checkEntryNames, sendPaths } from "../../src/transfer/send.js";
 import { rmTemp } from "../helpers.js";
 

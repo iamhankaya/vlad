@@ -1,4 +1,4 @@
-import type { WriteCmd } from "../machines/types.js";
+import type { WriteCmd } from "../fleet/types.js";
 
 /** Pure policy data for every CLI command (layer L1p: no handlers, no config reads). Design: T20261105-69 report, "Arayüzler". */
 export type LockClass = "none" | "outer" | "phased"; // phased: with `machines` the handler locks inner regions, otherwise outer

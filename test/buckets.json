@@ -8,6 +8,7 @@
     "test/cloud/report-keep-metrics.test.ts",
     "test/commands/s-types.test.ts",
     "test/commands/u1-manifest.test.ts",
+    "test/commands/u3-equiv-manifest.test.ts",
     "test/docs-kb-layout.test.ts",
     "test/findings/**/*.test.ts",
     "test/helpers-cleanup.test.ts",

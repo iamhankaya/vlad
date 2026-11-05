@@ -2,7 +2,7 @@ import { randomBytes, createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, lstat, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { RemoteError, type Os, type RemoteTransport } from "../machines/types.js";
+import { RemoteError, type Os, type RemoteTransport } from "../fleet/types.js";
 import { sanitizeEntryPath, uniqueName, XferPathError } from "./paths.js";
 import {
   XFER_MAX_ENTRIES, XFER_MAX_TOTAL_BYTES,

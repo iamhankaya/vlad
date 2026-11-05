@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { RemoteError, type ExecResult, type WriteArgs } from "../../machines/types.js";
+import { RemoteError, type ExecResult, type WriteArgs } from "../../fleet/types.js";
 import { agentEnv } from "./env.js";
 import { parseWriteArgs } from "./apply-write.js";
 

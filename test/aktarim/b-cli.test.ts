@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runClip } from "../../src/clip/cli.js";
 import { readClipState, writeClipState } from "../../src/clip/state.js";
-import { agentDir } from "../../src/agent/state.js";
+import { agentDir } from "../../src/fleet/state.js";
 import { rmTemp } from "../helpers.js";
 import { FakeClipboard } from "./harness.js";
 

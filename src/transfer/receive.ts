@@ -4,7 +4,7 @@ import { constants } from "node:fs";
 import path from "node:path";
 import type { OpHandler } from "../agent/ops/index.js";
 import { CLIP_MAX_IMAGE_BYTES, CLIP_MAX_PIXELS } from "../clip/types.js";
-import { RemoteError } from "../machines/types.js";
+import { RemoteError } from "../fleet/types.js";
 import { createLedger } from "./ledger.js";
 import { isXferId, sanitizeEntryPath, uniqueName } from "./paths.js";
 import {

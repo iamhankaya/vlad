@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createXferReceiver } from "../../src/transfer/receive.js";
 import type { ClipImageSink, XferBeginArgs, XferBeginResult, XferChunkResult, XferCommitResult, XferDeps, XferEntry, XferReceiver } from "../../src/transfer/types.js";
-import type { Os } from "../../src/machines/types.js";
+import type { Os } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 import { FakeNotifier } from "./harness.js";
 

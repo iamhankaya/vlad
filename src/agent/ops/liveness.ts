@@ -1,7 +1,7 @@
 import { scanRoots } from "../../scan/scan.js";
 import { worktreePath } from "../../git/git.js";
-import { machineDef } from "../../machines/registry.js";
-import { pickRepoDir, repoNameOf } from "../../machines/paths.js";
+import { machineDef } from "../../fleet/registry.js";
+import { pickRepoDir, repoNameOf } from "../../fleet/paths.js";
 import { commandLinesAsync, transcriptMtime, type LivenessProbe } from "../../tasks/liveness.js";
 import { agentEnv } from "./env.js";
 

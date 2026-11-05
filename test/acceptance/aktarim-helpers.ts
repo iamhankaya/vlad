@@ -7,7 +7,7 @@ import { join, relative } from "node:path";
 import { deflateSync } from "node:zlib";
 import { createClipReceiver } from "../../src/clip/receive.js";
 import type { ClipContent, ClipDeps, ClipPushArgs, ClipReceiver } from "../../src/clip/types.js";
-import { RemoteError, type Os, type RemoteTransport } from "../../src/machines/types.js";
+import { RemoteError, type Os, type RemoteTransport } from "../../src/fleet/types.js";
 import { createXferReceiver } from "../../src/transfer/receive.js";
 import {
   XFER_CHUNK_BYTES, XFER_STAGING_DIR,

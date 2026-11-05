@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { OP_TABLE, TRANSFER_OPS, allowedOps, buildOps, isAllowed } from "../../src/agent/ops/index.js";
 import { CLIP_MAX_IMAGE_BYTES, CLIP_MAX_PIXELS, CLIP_MAX_TEXT_BYTES, CLIP_POLL_MS } from "../../src/clip/types.js";
 import { createBackend } from "../../src/clip/backend.js";
-import { MAX_FRAME_BYTES, type AgentOp } from "../../src/machines/types.js";
+import { MAX_FRAME_BYTES, type AgentOp } from "../../src/fleet/types.js";
 import { NativeDisabledError, assertNative, nativeAllowed } from "../../src/platform/native.js";
 import { createNotifier } from "../../src/platform/notify.js";
 import {

@@ -1,0 +1,22 @@
+{
+  "_doc": "equiv.mjs'in koşmadığı komutlar ve nedeni. Anahtarlar manifest anahtarlarıdır; equiv.cases.json ile birleşimi manifeste eşit olmalıdır.",
+  "exempt": {
+    "agent start": "uzun ömürlü süreç, ağ portu dinler",
+    "agent keygen": "rastgele anahtar üretir, çıktı deterministik değil",
+    "agent setkey": "anahtarı stdin'den yazar; anahtar maddesi golden/küme testlerinde kapsanır",
+    "agent install": "işletim sistemi hizmeti kurar",
+    "queue list": "yerel Agent'a bağlanır (ağ)",
+    "queue flush": "yerel Agent'a bağlanır (ağ)",
+    "queue drop": "yerel Agent'a bağlanır (ağ)",
+    "vlad remote": "beyin Agent'ına bağlanır (ağ)",
+    "machine ping": "uzak Agent'a bağlanır (ağ)",
+    "machine probe-window": "işçide gerçek pencere açar",
+    "vlad send": "ağ ve karşı makineye dosya gönderir",
+    "clip on": "pano ve Agent durumu (kullanıcı makinesi)",
+    "clip off": "pano ve Agent durumu (kullanıcı makinesi)",
+    "clip status": "pano ve Agent durumu (kullanıcı makinesi)",
+    "clip get": "gerçek panoyu okur",
+    "clip set": "gerçek panoya yazar",
+    "kb commit": "git commit/push yapar (gerçek kb deposu)"
+  }
+}

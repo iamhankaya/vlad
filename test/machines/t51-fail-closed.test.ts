@@ -2,8 +2,8 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { forwardIfWorker, WORKER_LOCAL } from "../../src/agent/forward.js";
-import { readLocal } from "../../src/agent/state.js";
-import { readLocalSettings, resolveSelf } from "../../src/machines/registry.js";
+import { readLocal } from "../../src/fleet/state.js";
+import { readLocalSettings, resolveSelf } from "../../src/fleet/registry.js";
 import { defaultConfig } from "../../src/kb/index.js";
 import { makeHome } from "../helpers.js";
 

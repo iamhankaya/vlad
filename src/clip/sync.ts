@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { RemoteError } from "../machines/types.js";
+import { RemoteError } from "../fleet/types.js";
 import { CLIP_MAX_IMAGE_BYTES, CLIP_MAX_PIXELS, CLIP_MAX_TEXT_BYTES, CLIP_POLL_MS } from "./types.js";
 import type { ApplyResult, ClipboardBackend, ClipContent, ClipDeps, ClipKind, ClipSyncLike, OrderKey } from "./types.js";
 

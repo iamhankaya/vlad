@@ -1,4 +1,4 @@
-import type { AgentOp } from "../../machines/types.js";
+import type { AgentOp } from "../../fleet/types.js";
 import { applyWrite } from "./apply-write.js";
 import { exec } from "./exec.js";
 import { forwardWrite } from "./forward-write.js";

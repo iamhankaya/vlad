@@ -1,18 +1,18 @@
-import { agentDir } from "../agent/state.js";
+import { agentDir } from "../fleet/state.js";
 import { agentEnv } from "../agent/ops/env.js";
 import { readClipState } from "../clip/state.js";
 import { createBackend } from "../clip/backend.js";
 import { createClipSenders } from "../clip/senders.js";
 import { loadConfig } from "../kb/config.js";
-import { nowMs } from "../machines/clock.js";
-import type { Os } from "../machines/types.js";
+import { nowMs } from "../fleet/clock.js";
+import type { Os } from "../fleet/types.js";
 import { nativeAllowed } from "../platform/native.js";
 import { createNotifier, type Notifier } from "../platform/notify.js";
 import { createOriginMarker } from "../platform/origin.js";
 import type { ClipDeps } from "../clip/types.js";
 import { downloadsDir } from "./paths.js";
 import type { AktarimDeps } from "./types.js";
-import { selfName } from "../agent/state.js";
+import { selfName } from "../fleet/state.js";
 
 export type { AktarimDeps } from "./types.js";
 

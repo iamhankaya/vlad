@@ -10,10 +10,10 @@ import { setAgentEnv } from "../../src/agent/ops/env.js";
 import { OP_TABLE, type OpHandler } from "../../src/agent/ops/index.js";
 import { startServer, type RunningServer } from "../../src/agent/server.js";
 import { signRequest } from "../../src/agent/sign.js";
-import { assertPrivateBind } from "../../src/agent/state.js";
+import { assertPrivateBind } from "../../src/fleet/state.js";
 import { defaultConfig } from "../../src/kb/config.js";
 import type { VladConfig } from "../../src/kb/types.js";
-import { MAX_FRAME_BYTES, RemoteError, type AgentOp, type AgentRequest } from "../../src/machines/types.js";
+import { MAX_FRAME_BYTES, RemoteError, type AgentOp, type AgentRequest } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 
 // K: sunucunun (windows) anahtarları, KARŞI taraf adıyla (çift anahtar, D-vlad-057): K.mac = mac↔windows, K.desktop = desktop↔windows, K.windows = kendi.

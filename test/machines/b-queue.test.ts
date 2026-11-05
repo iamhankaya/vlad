@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { AgentQueue, QUEUE_MAX_ENTRIES } from "../../src/agent/queue.js";
-import { RemoteError } from "../../src/machines/types.js";
+import { RemoteError } from "../../src/fleet/types.js";
 import { rmTemp } from "../helpers.js";
 
 const dirs: string[] = [];

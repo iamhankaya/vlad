@@ -1,4 +1,4 @@
-import { RemoteError } from "../../machines/types.js";
+import { RemoteError } from "../../fleet/types.js";
 import { agentEnv } from "./env.js";
 import { resolveUncertainLaunch } from "./launch.js";
 

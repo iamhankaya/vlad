@@ -5,7 +5,7 @@ import { createServer } from "node:net";
 import { existsSync, lstatSync, mkdirSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { RemoteError } from "../../src/machines/types.js";
+import { RemoteError } from "../../src/fleet/types.js";
 import { sendPaths } from "../../src/transfer/send.js";
 import { XFER_CHUNK_BYTES, XFER_MAX_ENTRIES, XFER_MAX_TOTAL_BYTES, XFER_STAGING_DIR } from "../../src/transfer/types.js";
 import { makeFile, startAktarimPair, treeHash, type AktarimPair } from "../aktarim/harness.js";
