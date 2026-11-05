@@ -32,7 +32,7 @@ export function makeRig(o: { os?: Os; deps?: Partial<XferDeps>; clipImage?: Clip
   mkdirSync(downloads); mkdirSync(stateDir);
   const notifier = new FakeNotifier();
   const clock = { t: 1_800_000_000_000 };
-  const deps: XferDeps = { downloads: () => downloads, stateDir: () => stateDir, os: o.os ?? "darwin", notifier, now: () => clock.t, idleTimers: false, clipImage: o.clipImage, ...o.deps };
+  const deps: XferDeps = { downloads: () => downloads, stateDir: () => stateDir, os: o.os ?? (process.platform === "win32" ? "win32" : "darwin"), notifier, now: () => clock.t, idleTimers: false, clipImage: o.clipImage, ...o.deps };
   const rig: Rig = {
     base, downloads, stateDir, notifier, clock, deps, rx: createXferReceiver(deps),
     call: (op, args, from = FROM) => rig.rx.ops[op](args, { from, opId: "x" }) as Promise<never>,
