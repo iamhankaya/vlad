@@ -1,0 +1,1742 @@
+{
+  "base": "bbe6ccd",
+  "version": 1,
+  "contexts": [
+    "single",
+    "brain",
+    "worker",
+    "unknown",
+    "locked",
+    "forwarded"
+  ],
+  "matrix": {
+    "single :: project write": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: project note": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\",\"note\":\"- 2026-11-05: ders\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: finding add": {
+      "code": 0,
+      "stdout": "{\"id\":\"F-ghost-001\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: finding set": {
+      "code": 0,
+      "stdout": "{\"id\":\"F-ghost-001\",\"state\":\"fixed\",\"fixed_by\":null}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task new": {
+      "code": 0,
+      "stdout": "{\"id\":\"T<DATE>-01\",\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: decision add": {
+      "code": 0,
+      "stdout": "{\"ok\":true,\"id\":\"D-ghost-001\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: decision set": {
+      "code": 0,
+      "stdout": "{\"id\":\"D-ghost-001\",\"status\":\"geçersiz\",\"superseded_by\":null}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: inbox done": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"geçersiz inbox dosya adı: nope\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: journal append": {
+      "code": 0,
+      "stdout": "{\"date\":\"2026-01-01\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: session register": {
+      "code": 0,
+      "stdout": "{\"name\":\"ghost\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: mode off": {
+      "code": 0,
+      "stdout": "{\"night\":null,\"watch\":false,\"watching\":false,\"expired\":false}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: mode status": {
+      "code": 0,
+      "stdout": "{\"night\":null,\"watch\":false,\"watching\":false,\"expired\":false,\"line\":\"mod kapalı\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: kb maintain": {
+      "code": 0,
+      "stdout": "{\"dry_run\":true,\"days\":30,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task resume": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task cleanup": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task log": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task ask": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task session": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task list": {
+      "code": 0,
+      "stdout": "{\"tasks\":[{\"id\":\"T<DATE>-01\",\"project\":\"ghost\",\"title\":\"x\",\"kind\":\"dev\",\"state\":\"queued\",\"autonomy\":\"commit\",\"branch\":null,\"worktree\":null,\"session_id\":null,\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"error\":null,\"role\":null,\"parent\":null,\"depends_on\":[],\"phase\":null,\"role_model\":null,\"effective_model\":null}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: finding list": {
+      "code": 0,
+      "stdout": "{\"findings\":[{\"id\":\"F-ghost-001\",\"project\":\"ghost\",\"severity\":\"düşük\",\"state\":\"fixed\",\"source_task\":\"T<DATE>-01\",\"title\":\"x\",\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"fixed\":\"<ISO>\",\"detail\":\"\"}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: decision list": {
+      "code": 0,
+      "stdout": "{\"decisions\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: role list": {
+      "code": 0,
+      "stdout": "{\"roles\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: inbox count": {
+      "code": 0,
+      "stdout": "{\"count\":0}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: status --no-mark": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":1,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[{\"slug\":\"ghost\",\"state\":\"yok\",\"newer\":0}],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı), 1 bayat/eksik proje özeti: ghost (özet yok)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: status": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":1,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[{\"slug\":\"ghost\",\"state\":\"yok\",\"newer\":0}],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı), 1 bayat/eksik proje özeti: ghost (özet yok)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: status --hook": {
+      "code": 0,
+      "stdout": "inbox: 0\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: kb search": {
+      "code": 0,
+      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task launch": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: task gate": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: project list": {
+      "code": 0,
+      "stdout": "{\"projects\":[{\"slug\":\"ghost\",\"path\":\"<BASE>/ghost-repo\",\"status\":\"active\",\"last_activity\":null}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "single :: project status": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\",\"status\":\"active\",\"last_activity\":null,\"gate\":null,\"summary\":{\"state\":\"yok\",\"as_of\":null,\"newer\":[],\"text\":null,\"chars\":0},\"tasks\":{\"counts\":{\"queued\":1},\"active\":[{\"id\":\"T<DATE>-01\",\"state\":\"queued\",\"kind\":\"dev\",\"phase\":null,\"title\":\"x\",\"updated\":\"<ISO>\"}],\"last_done\":null},\"findings\":{\"counts\":{},\"open\":[]},\"decisions\":{\"total\":0,\"recent\":[],\"expired\":[]}}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: project write": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: project note": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\",\"note\":\"- 2026-11-05: ders\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: finding add": {
+      "code": 0,
+      "stdout": "{\"id\":\"F-ghost-001\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: finding set": {
+      "code": 0,
+      "stdout": "{\"id\":\"F-ghost-001\",\"state\":\"fixed\",\"fixed_by\":null}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task new": {
+      "code": 0,
+      "stdout": "{\"id\":\"T<DATE>-01\",\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: decision add": {
+      "code": 0,
+      "stdout": "{\"ok\":true,\"id\":\"D-ghost-001\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: decision set": {
+      "code": 0,
+      "stdout": "{\"id\":\"D-ghost-001\",\"status\":\"geçersiz\",\"superseded_by\":null}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: inbox done": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"geçersiz inbox dosya adı: nope\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: journal append": {
+      "code": 0,
+      "stdout": "{\"date\":\"2026-01-01\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: session register": {
+      "code": 0,
+      "stdout": "{\"name\":\"ghost\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: mode off": {
+      "code": 0,
+      "stdout": "{\"night\":null,\"watch\":false,\"watching\":false,\"expired\":false}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: mode status": {
+      "code": 0,
+      "stdout": "{\"night\":null,\"watch\":false,\"watching\":false,\"expired\":false,\"line\":\"mod kapalı\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: kb maintain": {
+      "code": 0,
+      "stdout": "{\"dry_run\":true,\"days\":30,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task resume": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task cleanup": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task log": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task ask": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task session": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task list": {
+      "code": 0,
+      "stdout": "{\"tasks\":[{\"id\":\"T<DATE>-01\",\"project\":\"ghost\",\"title\":\"x\",\"kind\":\"dev\",\"state\":\"queued\",\"autonomy\":\"commit\",\"branch\":null,\"worktree\":null,\"session_id\":null,\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"error\":null,\"role\":null,\"parent\":null,\"depends_on\":[],\"phase\":null,\"role_model\":null,\"effective_model\":null}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: finding list": {
+      "code": 0,
+      "stdout": "{\"findings\":[{\"id\":\"F-ghost-001\",\"project\":\"ghost\",\"severity\":\"düşük\",\"state\":\"fixed\",\"source_task\":\"T<DATE>-01\",\"title\":\"x\",\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"fixed\":\"<ISO>\",\"detail\":\"\"}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: decision list": {
+      "code": 0,
+      "stdout": "{\"decisions\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: role list": {
+      "code": 0,
+      "stdout": "{\"roles\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: inbox count": {
+      "code": 0,
+      "stdout": "{\"count\":0}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: status --no-mark": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":1,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[{\"slug\":\"ghost\",\"state\":\"yok\",\"newer\":0}],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı), 1 bayat/eksik proje özeti: ghost (özet yok)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: status": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":1,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[{\"slug\":\"ghost\",\"state\":\"yok\",\"newer\":0}],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı), 1 bayat/eksik proje özeti: ghost (özet yok)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: status --hook": {
+      "code": 0,
+      "stdout": "inbox: 0\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: kb search": {
+      "code": 0,
+      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task launch": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: task gate": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: project list": {
+      "code": 0,
+      "stdout": "{\"projects\":[{\"slug\":\"ghost\",\"path\":\"<BASE>/ghost-repo\",\"status\":\"active\",\"last_activity\":null}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: project status": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\",\"status\":\"active\",\"last_activity\":null,\"gate\":null,\"summary\":{\"state\":\"yok\",\"as_of\":null,\"newer\":[],\"text\":null,\"chars\":0},\"tasks\":{\"counts\":{\"queued\":1},\"active\":[{\"id\":\"T<DATE>-01\",\"state\":\"queued\",\"kind\":\"dev\",\"phase\":null,\"title\":\"x\",\"updated\":\"<ISO>\"}],\"last_done\":null},\"findings\":{\"counts\":{},\"open\":[]},\"decisions\":{\"total\":0,\"recent\":[],\"expired\":[]}}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: project write": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: project note": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: finding add": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: finding set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: task new": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: task set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: decision add": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: decision set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: inbox done": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: journal append": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: session register": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: mode off": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: mode status": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: kb maintain": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: task resume": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: task cleanup": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: task log": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"yerel VLAD Agent çalışmıyor (vlad agent status)\",\"details\":[\"code: unreachable\",\"machine: windows\"]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": true,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: task ask": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"yerel VLAD Agent çalışmıyor (vlad agent status)\",\"details\":[\"code: unreachable\",\"machine: windows\"]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": true,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: task session": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"yerel VLAD Agent çalışmıyor (vlad agent status)\",\"details\":[\"code: unreachable\",\"machine: windows\"]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": true,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: task list": {
+      "code": 0,
+      "stdout": "{\"tasks\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: finding list": {
+      "code": 0,
+      "stdout": "{\"findings\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: decision list": {
+      "code": 0,
+      "stdout": "{\"decisions\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: role list": {
+      "code": 0,
+      "stdout": "{\"roles\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: inbox count": {
+      "code": 0,
+      "stdout": "{\"count\":0}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: status --no-mark": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":0,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: status": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":0,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: status --hook": {
+      "code": 0,
+      "stdout": "inbox: 0\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: kb search": {
+      "code": 0,
+      "stdout": "{\"hits\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: task launch": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: task gate": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "worker :: project list": {
+      "code": 0,
+      "stdout": "{\"projects\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "worker :: project status": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"proje kartı bulunamadı: ghost\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: project write": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (project write): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: project note": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (project note): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: finding add": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (finding add): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: finding set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (finding set): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task new": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task new): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task set): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: decision add": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (decision add): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: decision set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (decision set): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: inbox done": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (inbox done): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: journal append": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (journal append): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: session register": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (session register): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: mode off": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (mode off): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: mode status": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (mode status): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: kb maintain": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (kb maintain): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task resume": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task resume): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task cleanup": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task cleanup): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task log": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task log): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task ask": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task ask): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task session": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task session): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task list": {
+      "code": 0,
+      "stdout": "{\"tasks\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: finding list": {
+      "code": 0,
+      "stdout": "{\"findings\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: decision list": {
+      "code": 0,
+      "stdout": "{\"decisions\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: role list": {
+      "code": 0,
+      "stdout": "{\"roles\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: inbox count": {
+      "code": 0,
+      "stdout": "{\"count\":0}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: status --no-mark": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":0,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: status": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":0,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: status --hook": {
+      "code": 0,
+      "stdout": "inbox: 0\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: kb search": {
+      "code": 0,
+      "stdout": "{\"hits\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: task launch": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task launch): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: task gate": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"çok makine kimliği doğrulanamadı, kb yazıcı komut reddedildi (task gate): bu makine config'te tanımlı değil: ghost-machine\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": true,
+      "timedOut": false
+    },
+    "unknown :: project list": {
+      "code": 0,
+      "stdout": "{\"projects\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: project status": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"proje kartı bulunamadı: ghost\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: project write": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: project note": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: finding add": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: finding set": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task new": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task set": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: decision add": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: decision set": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: inbox done": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: journal append": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: session register": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: mode off": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: mode status": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: kb maintain": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task resume": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task cleanup": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task log": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task ask": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task session": {
+      "code": 75,
+      "stdout": "",
+      "stderr": "{\"error\":\"kb kilidi alınamadı (0 sn beklendi; sahip pid <PID>, <N> sn önce başladı): <BASE>/home/kb/.vlad.lock\",\"details\":[]}\n",
+      "lockTimeout": true,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task list": {
+      "code": 0,
+      "stdout": "{\"tasks\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: finding list": {
+      "code": 0,
+      "stdout": "{\"findings\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: decision list": {
+      "code": 0,
+      "stdout": "{\"decisions\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: role list": {
+      "code": 0,
+      "stdout": "{\"roles\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: inbox count": {
+      "code": 0,
+      "stdout": "{\"count\":0}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: status --no-mark": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":0,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: status": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":0,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: status --hook": {
+      "code": 0,
+      "stdout": "inbox: 0\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: kb search": {
+      "code": 0,
+      "stdout": "{\"hits\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task launch": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: task gate": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: project list": {
+      "code": 0,
+      "stdout": "{\"projects\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "locked :: project status": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"proje kartı bulunamadı: ghost\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: project write": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: project note": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\",\"note\":\"- 2026-11-05: ders\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: finding add": {
+      "code": 0,
+      "stdout": "{\"id\":\"F-ghost-001\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: finding set": {
+      "code": 0,
+      "stdout": "{\"id\":\"F-ghost-001\",\"state\":\"fixed\",\"fixed_by\":null}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task new": {
+      "code": 0,
+      "stdout": "{\"id\":\"T<DATE>-01\",\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task set": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: decision add": {
+      "code": 0,
+      "stdout": "{\"ok\":true,\"id\":\"D-ghost-001\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: decision set": {
+      "code": 0,
+      "stdout": "{\"id\":\"D-ghost-001\",\"status\":\"geçersiz\",\"superseded_by\":null}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: inbox done": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"geçersiz inbox dosya adı: nope\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: journal append": {
+      "code": 0,
+      "stdout": "{\"date\":\"2026-01-01\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: session register": {
+      "code": 0,
+      "stdout": "{\"name\":\"ghost\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: mode off": {
+      "code": 0,
+      "stdout": "{\"night\":null,\"watch\":false,\"watching\":false,\"expired\":false}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: mode status": {
+      "code": 0,
+      "stdout": "{\"night\":null,\"watch\":false,\"watching\":false,\"expired\":false,\"line\":\"mod kapalı\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: kb maintain": {
+      "code": 0,
+      "stdout": "{\"dry_run\":true,\"days\":30,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task resume": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task cleanup": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task log": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task ask": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task session": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task list": {
+      "code": 0,
+      "stdout": "{\"tasks\":[{\"id\":\"T<DATE>-01\",\"project\":\"ghost\",\"title\":\"x\",\"kind\":\"dev\",\"state\":\"queued\",\"autonomy\":\"commit\",\"branch\":null,\"worktree\":null,\"session_id\":null,\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"error\":null,\"role\":null,\"parent\":null,\"depends_on\":[],\"phase\":null,\"role_model\":null,\"effective_model\":null}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: finding list": {
+      "code": 0,
+      "stdout": "{\"findings\":[{\"id\":\"F-ghost-001\",\"project\":\"ghost\",\"severity\":\"düşük\",\"state\":\"fixed\",\"source_task\":\"T<DATE>-01\",\"title\":\"x\",\"created\":\"<ISO>\",\"updated\":\"<ISO>\",\"fixed\":\"<ISO>\",\"detail\":\"\"}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: decision list": {
+      "code": 0,
+      "stdout": "{\"decisions\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: role list": {
+      "code": 0,
+      "stdout": "{\"roles\":[],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: inbox count": {
+      "code": 0,
+      "stdout": "{\"count\":0}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: status --no-mark": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":1,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[{\"slug\":\"ghost\",\"state\":\"yok\",\"newer\":0}],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı), 1 bayat/eksik proje özeti: ghost (özet yok)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: status": {
+      "code": 0,
+      "stdout": "{\"counts\":{\"queued\":1,\"running\":0,\"blocked\":0,\"stalled\":0,\"awaiting_approval\":0,\"done\":0,\"failed\":0,\"cancelled\":0},\"active\":[],\"failed\":[],\"newlyStalled\":[],\"inbox\":0,\"undigested\":0,\"openSevereFindings\":0,\"mode\":null,\"pendingDigest\":0,\"staleSummaries\":[{\"slug\":\"ghost\",\"state\":\"yok\",\"newer\":0}],\"kbLint\":{\"count\":0,\"byCode\":{},\"at\":null},\"summary\":\"İşlenmemiş 0 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı), 1 bayat/eksik proje özeti: ghost (özet yok)\"}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: status --hook": {
+      "code": 0,
+      "stdout": "inbox: 0\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: kb search": {
+      "code": 0,
+      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task launch": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: task gate": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "{\"error\":\"görev bulunamadı: T<DATE>-01\",\"details\":[]}\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: project list": {
+      "code": 0,
+      "stdout": "{\"projects\":[{\"slug\":\"ghost\",\"path\":\"<BASE>/ghost-repo\",\"status\":\"active\",\"last_activity\":null}],\"warnings\":[]}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: project status": {
+      "code": 0,
+      "stdout": "{\"slug\":\"ghost\",\"status\":\"active\",\"last_activity\":null,\"gate\":null,\"summary\":{\"state\":\"yok\",\"as_of\":null,\"newer\":[],\"text\":null,\"chars\":0},\"tasks\":{\"counts\":{\"queued\":1},\"active\":[{\"id\":\"T<DATE>-01\",\"state\":\"queued\",\"kind\":\"dev\",\"phase\":null,\"title\":\"x\",\"updated\":\"<ISO>\"}],\"last_done\":null},\"findings\":{\"counts\":{},\"open\":[]},\"decisions\":{\"total\":0,\"recent\":[],\"expired\":[]}}\n",
+      "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    }
+  }
+}
