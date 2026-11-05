@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM script without types (shared with scripts/test-scope.mjs)
-import { selectScope, matchGlob } from "../../scripts/scope-lib.mjs";
+import { selectScope, matchGlob, groupFilesByBucket } from "../../scripts/scope-lib.mjs";
 
 const root = join(import.meta.dirname, "..", "..");
 const scope = JSON.parse(readFileSync(join(root, "test", "scope.json"), "utf8"));
@@ -88,5 +88,17 @@ describe("u2 scope: scope.json stays complete", () => {
   });
   it("rule buckets and all-patterns only name real buckets", () => {
     for (const rule of scope.rules) for (const b of rule.buckets) expect(Object.keys(buckets)).toContain(b);
+  });
+});
+
+describe("u2 scope: explicit test files run in their owning bucket (F-vlad-256)", () => {
+  it("a unit test path is grouped under unit, a process test under process", () => {
+    expect(groupFilesByBucket(["test/kb/doc.test.ts", "test/acceptance/cloud-ingest.test.ts"], buckets)).toEqual({
+      unit: ["test/kb/doc.test.ts"],
+      process: ["test/acceptance/cloud-ingest.test.ts"],
+    });
+  });
+  it("a path no bucket claims is reported, never dropped", () => {
+    expect(groupFilesByBucket(["test/nowhere/x.test.ts"], buckets)).toEqual({ "": ["test/nowhere/x.test.ts"] });
   });
 });

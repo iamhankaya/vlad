@@ -19,6 +19,7 @@ KB="${VLAD_KB_DIR:-$HOME/dev/vlad-kb}"
 CI_USER="${VLAD_CI_USER:-vlad-ci}"
 PORT="${VLAD_AGENT_PORT:-7437}"
 LA="$HOME/Library/LaunchAgents"
+[[ "$CI_USER" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "hata: VLAD_CI_USER yalnız harf/rakam/._- içerebilir" >&2; exit 2; }
 
 ROWS=()
 row() { ROWS+=("$1|$2|$3"); }   # madde|durum|kanit  (durum: ok | eksik | uyarı | manuel)
@@ -45,7 +46,8 @@ if [ -d "$REPO" ] && git -C "$REPO" rev-parse >/dev/null 2>&1; then
 else row vlad-repo eksik "$REPO git klonu değil/yok"; fi
 
 if [ -d "$KB" ]; then
-  url="$(git -C "$KB" remote get-url origin 2>/dev/null | first || true)"
+  # F-vlad-250: https://user:TOKEN@host biçimindeki kimlik bilgisi asla basılmaz
+  url="$(git -C "$KB" remote get-url origin 2>/dev/null | first | sed -E 's#(://)[^/@]*@#\1#' || true)"
   case "$url" in
     *vlad-kb*) row vlad-kb ok "$KB -> $url" ;;
     *) row vlad-kb uyarı "$KB var ama origin vlad-kb değil/yok (${url:-origin yok})" ;;
@@ -82,6 +84,14 @@ if have pmset; then
   if [ "$ar" = "1" ]; then row autorestart ok "elektrik gidince kendiliğinden açılır"; else row autorestart uyarı "autorestart=${ar:-?} (sudo pmset -a autorestart 1)"; fi
 else row sleep uyarı "pmset yok (macOS değil mi?)"; row autorestart uyarı "pmset yok"; fi
 
+# --- ev dizini (F-vlad-249): CI hesabı (staff) beyin ev dizinini okuyabilmemeli ---
+if have stat; then
+  hm="$(stat -f %Lp "$HOME" 2>/dev/null || stat -c %a "$HOME" 2>/dev/null || true)"
+  if [[ "$hm" =~ ^[0-7]{3,4}$ ]] && [ $(( 8#$hm & 8#077 )) -ne 0 ]; then
+    row home-perms uyarı "$HOME modu $hm: group/other okuyabilir; CI hesabı kb ve ~/.claude'u okur (chmod 700 \"$HOME\")"
+  else row home-perms ok "$HOME modu ${hm:-?}"; fi
+else row home-perms uyarı "stat yok"; fi
+
 # --- elle doğrulanır ---
 row remote-control manuel "Claude Code Remote Control açık mı: ana oturumda /remote-control; betikle denetlenemez"
 
@@ -90,7 +100,9 @@ if id "$CI_USER" >/dev/null 2>&1; then
   if id -Gn "$CI_USER" 2>/dev/null | tr ' ' '\n' | grep -qx admin; then row ci-user uyarı "$CI_USER var ama admin grubunda (olmamalı)"; else row ci-user ok "$CI_USER var, admin değil"; fi
 else row ci-user eksik "$CI_USER hesabı yok (docs/mac-ci-runner.md §2, kullanıcı adımı)"; fi
 
-CI_HOME="${VLAD_CI_HOME:-$(eval echo "~$CI_USER" 2>/dev/null || true)}"
+# eval yok (F-vlad-251): ev dizini dscl'den, yoksa /Users/<ad>
+CI_HOME="${VLAD_CI_HOME:-$(dscl . -read "/Users/$CI_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2; exit}' || true)}"
+[ -n "$CI_HOME" ] || CI_HOME="/Users/$CI_USER"
 if [ -n "$CI_HOME" ] && [ -f "$CI_HOME/actions-runner/.runner" ]; then row ci-runner ok "$CI_HOME/actions-runner kayıtlı"; else row ci-runner eksik "runner kayıtlı değil (scripts/mac/ci-runner.sh)"; fi
 
 # --- çıktı ---

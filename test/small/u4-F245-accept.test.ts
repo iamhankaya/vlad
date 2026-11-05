@@ -34,8 +34,8 @@ describe("F-245 kilit protokolü", () => {
     expect(trusted()).toBe(true);
     expect(existsSync(lock)).toBe(false);
   });
-  it("yaşayan sahip hiç kırılmaz: çok eski mtime olsa bile bekler, deadline'da uyarıyla vazgeçer, dosyaya dokunmaz", () => {
-    makeLock({ pid: 4242, nonce: "n1", startedAt: Date.now() - 3_600_000 }, 3_600_000);
+  it("yaşayan sahip startedAt sınırı (2 dk) dolmadan kırılmaz: eski mtime olsa bile bekler, deadline'da uyarıyla vazgeçer, dosyaya dokunmaz", () => {
+    makeLock({ pid: 4242, nonce: "n1", startedAt: Date.now() - 60_000 }, 3_600_000);
     const r = trust({ lockWaitMs: 150, isAlive: () => true });
     expect(typeof r).toBe("string");
     expect(r).toMatch(/kilitli/);

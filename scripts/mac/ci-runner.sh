@@ -50,6 +50,10 @@ CI_USER="${VLAD_CI_USER:-vlad-ci}"
 if [ "$APPLY" = 1 ]; then
   [ "$(id -u)" != 0 ] || die "root ile çalıştırma; runner root olmamalı"
   [ "$(id -un)" = "$CI_USER" ] || die "yalnız CI hesabıyla ($CI_USER) çalıştırılır; şu an: $(id -un). Beyin kullanıcısında kurma"
+  # beyin hesabı işareti: VLAD_CI_USER=$(id -un) ile yukarıdaki denetim atlatılamaz
+  for m in "$HOME/.vlad-agent" "$HOME/dev/vlad-kb" "$HOME/.claude"; do
+    [ ! -e "$m" ] || die "$m var: bu beyin hesabı gibi görünüyor ($CI_USER); runner yalnız ayrı CI hesabında kurulur"
+  done
   if id -Gn | tr ' ' '\n' | grep -qx admin; then die "$CI_USER admin grubunda; runner admin olmayan hesapta çalışmalı"; fi
   [ "$TOKEN_STDIN" = 1 ] || [ -f "$DIR/.runner" ] || die "kayıt için --token-stdin gerekir" 2
 fi
@@ -71,10 +75,10 @@ else
     [ -n "$TOKEN" ] || die "stdin'de token yok"
     umask 077
     tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-    curl -fsSL -o "$tmp/$FILE" "$URL"
+    curl --proto '=https' --proto-redir '=https' -fsSL -o "$tmp/$FILE" "$URL"
     got="$(shasum -a 256 "$tmp/$FILE" | awk '{print $1}')"
     [ "$(printf '%s' "$got" | tr A-F a-f)" = "$(printf '%s' "$SHA" | tr A-F a-f)" ] || die "sha256 uyuşmuyor (beklenen $SHA, gelen $got); kurulum yapılmadı"
-    mkdir -p "$DIR"; tar xzf "$tmp/$FILE" -C "$DIR"
+    mkdir -p -m 700 "$DIR"; tar xzf "$tmp/$FILE" -C "$DIR"
     ( cd "$DIR" && ./config.sh --unattended --url "$REPO_URL" --token "$TOKEN" --name "$NAME" --labels "$LABELS" >/dev/null )
     TOKEN=""
   fi

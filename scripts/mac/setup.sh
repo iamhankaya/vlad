@@ -23,6 +23,7 @@ REPO="${VLAD_REPO_DIR:-$HOME/dev/vlad}"
 MAIN_CMD="${VLAD_MAIN_CMD:-claude}"
 case "$MAIN_CMD" in *$'\n'*|*$'\r'*) echo "hata: VLAD_MAIN_CMD satır sonu içeremez" >&2; exit 1 ;; esac
 
+umask 077   # F-vlad-251: yeni dosya/dizinler yalnız sahibine açık (yürütülebilir olanlar aşağıda açıkça chmod'lanır)
 LA="$HOME/Library/LaunchAgents"
 AGENT_DIR="$HOME/.vlad-agent"
 WRAP="$AGENT_DIR/main-session.sh"
@@ -33,7 +34,7 @@ xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/
 
 WRAP_CONTENT="#!/bin/bash
 # VLAD ana oturumu: yoksa tmux 'vlad' oturumunu arka planda açar (com.vlad.main LaunchAgent çağırır).
-export VLAD_HOME=\"$REPO\"
+export VLAD_HOME=$(printf '%q' "$REPO")
 export PATH=\"/opt/homebrew/bin:/usr/local/bin:\$HOME/.local/bin:/usr/bin:/bin\"
 tmux has-session -t vlad 2>/dev/null || tmux new-session -d -s vlad -c \"\$VLAD_HOME\" $MAIN_CMD
 "
@@ -57,6 +58,7 @@ write_if_changed() { # yol içerik mod
   if [ "$APPLY" = 1 ]; then mkdir -p "$(dirname "$1")"; printf '%s\n' "$2" > "$1"; chmod "$3" "$1"; fi
 }
 
+if [ "$APPLY" = 1 ]; then mkdir -p -m 700 "$AGENT_DIR"; chmod 700 "$AGENT_DIR"; fi
 write_if_changed "$WRAP" "$WRAP_CONTENT" 755
 write_if_changed "$PLIST" "$PLIST_CONTENT" 644
 

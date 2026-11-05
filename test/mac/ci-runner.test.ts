@@ -92,4 +92,19 @@ describe("mac/ci-runner.sh", () => {
     expect(r.status).toBe(1);
     expect(calls(s)).not.toMatch(/config\.sh/);
   });
+  // F-vlad-251
+  it("curl yalnız https'e izin verir (--proto / --proto-redir)", () => {
+    const s = sandbox(); const f = fixture(s);
+    run("ci-runner.sh", [...f.base, "--apply", "--token-stdin"], s, f.env, TOKEN + "\n");
+    const line = calls(s).split("\n").find((l) => l.startsWith("curl")) ?? "";
+    expect(line).toContain("--proto =https"); expect(line).toContain("--proto-redir =https");
+  });
+  it("--apply: VLAD_CI_USER=$(id -un) ile beyin hesabında kurulum atlatılamaz", () => {
+    const s = sandbox(); const f = fixture(s);
+    stub(s, "id", 'case "$1" in -un) echo tester;; -Gn) echo staff;; -u) echo 501;; *) echo tester;; esac');
+    mkdirSync(join(s.home, ".vlad-agent"));
+    const r = run("ci-runner.sh", [...f.base, "--apply", "--token-stdin"], s, { ...f.env, VLAD_CI_USER: "tester" }, TOKEN + "\n");
+    expect(r.status).toBe(1); expect(r.stderr).toContain("beyin");
+    expect(calls(s)).not.toMatch(/config\.sh|curl/);
+  });
 });
