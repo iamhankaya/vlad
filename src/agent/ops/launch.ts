@@ -136,6 +136,27 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   return result;
 }
 
+/**
+ * F-vlad-233: a launch the journal closed as "done + uncertain" (the Agent restarted mid-launch; no result) is resolved from what
+ * the worker really has. No record, or a record whose worktree/branch is gone -> nothing runs, the brain may retry (the orphan
+ * record would make a retry with a new opId conflict, so it is dropped). Worktree + branch present -> the launch effectively
+ * finished: the brain adopts it (a window that did not open shows up as stalled and `task resume` reopens it).
+ */
+export async function resolveUncertainLaunch(opId: string): Promise<{ state: "aborted" } | { state: "done"; result: LaunchResultW }> {
+  let found: LaunchRecord | null = null;
+  try {
+    for (const f of readdirSync(launchesDir())) {
+      try { const r = JSON.parse(readFileSync(join(launchesDir(), f), "utf8")) as LaunchRecord; if (r.opId === opId) { found = r; break; } } catch { /* bozuk kayıt: atla */ }
+    }
+  } catch { /* kayıt klasörü yok */ }
+  if (!found) return { state: "aborted" };
+  if (existsSync(found.worktree) && (await branchExistsAsync(found.repo, found.branch))) {
+    return { state: "done", result: { branch: found.branch, worktree: found.worktree, method: "recovered" } };
+  }
+  rmSync(recordFile(found.taskId), { force: true });
+  return { state: "aborted" };
+}
+
 /** Açılış uzlaştırması: sonuçlu kayıt → uygulandı (sonucuyla); sonuçsuz kayıt → başladı ama bitişi bilinmiyor (pencere açılmış olabilir: uncertain); kayıt yok → güvenle yeniden denenebilir. */
 export const reconcileLaunch: Reconciler = (rec) => {
   const dir = launchesDir();

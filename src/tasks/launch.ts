@@ -379,21 +379,30 @@ export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: 
   if (o.cfg.brain && machine === o.cfg.brain) throw new Error(`rezervasyon beyin-yerel launch'a ait (${machine}); sürüyor olabilir, serbest bırakılamaz; ölüyse rezervasyon süresi dolunca kendiliğinden düşer`);
   let verdict: string | null = null;
   let unreachable = false;
+  let hasResult = false;
   try {
     if (!o.transport) throw new Error("uzak taşıma bağlı değil");
-    verdict = (await o.transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result.state;
+    const st = (await o.transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result;
+    verdict = st.state;
+    hasResult = !!st.result;
   } catch (e) {
     unreachable = true;
     if (!o.force) throw new Error(`${machine} makinesine ulaşılamadı (${(e as Error).message}); makine kalıcı ölüyse --force ile bırak (launch açılmışsa orada yetim kalır)`);
   }
-  if (verdict === "done") throw new Error(`işçide launch tamamlanmış (op ${op}); serbest bırakma yerine \`task launch ${id}\` ile sahiplen`);
+  // F-vlad-233: "done" without a result is an unresolved outcome (older worker / truncated journal), not a finished launch: --force may release it
+  let forcedDone = false;
+  if (verdict === "done" && hasResult) throw new Error(`işçide launch tamamlanmış (op ${op}); serbest bırakma yerine \`task launch ${id}\` ile sahiplen`);
+  if (verdict === "done") {
+    if (!o.force) throw new Error(`işçide launch sonuçsuz bitti (op ${op}); worktree/dal yoksa --force ile bırak (varsa orada yetim kalır), varsa elle incele`);
+    forcedDone = true;
+  }
   if (verdict === "started") throw new Error(`işçide launch sürüyor (op ${op}); bitince tekrar dene`);
   return withKbLock(() => {
     const t = getTask(id);
     if (t.data.state !== "queued" || t.data.launch_op !== op) throw new Error(`rezervasyon bu arada değişti (${id}); tekrar dene`);
     Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
     // işçi sorulmadan bırakıldı: op orada başlamış olabilir; makine dönünce launch öncesi iptal edilir (F-vlad-150)
-    if (unreachable) t.data.released_ops = [...(t.data.released_ops ?? []), { machine, op }];
+    if (unreachable || forcedDone) t.data.released_ops = [...(t.data.released_ops ?? []), { machine, op }];
     saveTask(t);
     releasePin(t.data.parent, machine, id);
     return t;
@@ -434,7 +443,7 @@ async function cancelReleased(id: string, machine: string, transport: RemoteTran
 class LostRace extends Error {}
 
 interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
-interface OpStatus { state: string; result?: RemoteLaunched }
+interface OpStatus { state: string; result?: RemoteLaunched; truncated?: boolean }
 
 async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: RemoteDeps): Promise<Task> {
   const { cfg } = o;
@@ -486,7 +495,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     let st = (await transport.call<OpStatus>(machine, "op-status", { target: old })).result;
     if (st.state === "unknown") st = (await transport.call<OpStatus>(machine, "op-status", { target: old, cancel: true })).result; // tombstone: it can no longer start
     if (st.state === "done") {
-      if (!st.result) throw new Error(`önceki launch tamamlanmış ama sonuç yok (${machine}, op ${old}); elle incele`);
+      if (!st.result) throw new Error(`önceki launch tamamlanmış ama sonuç yok (${machine}, op ${old}${st.truncated ? ", sonuç günlükte kırpılmış" : ""}); işçide worktree/dal yoksa \`vlad task release ${id} --force\` ile rezervasyonu bırakıp tekrar launch et, varsa elle incele`);
       return commit(old, st.result);
     }
     if (st.state === "started") throw busy(old);
