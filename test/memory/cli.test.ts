@@ -1,16 +1,14 @@
-import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
-import { isolatedEnv } from "../isolate-env.js";
+import { spawnVlad } from "../support/spawn-vlad.js";
 
-const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 beforeEach(() => { home = makeHome(); });
 
 function vlad(args: string[], input?: string) {
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: home } });
+  const r = spawnVlad({ args, input, env: { VLAD_HOME: home } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 const json = (args: string[], input?: string) => {
