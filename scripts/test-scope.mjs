@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { selectScope } from "./scope-lib.mjs";
+import { groupFilesByBucket, selectScope } from "./scope-lib.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const argv = process.argv.slice(2);
@@ -28,8 +28,9 @@ const files = val("--files") !== undefined
 const scope = JSON.parse(readFileSync(resolve(existsSync(resolve(repo, "test/scope.json")) ? repo : root, "test/scope.json"), "utf8"));
 const buckets = JSON.parse(readFileSync(resolve(existsSync(resolve(repo, "test/buckets.json")) ? repo : root, "test/buckets.json"), "utf8"));
 const sel = selectScope(files, scope, buckets);
+const fileBuckets = groupFilesByBucket(sel.files, buckets);
 
-if (argv.includes("--json")) process.stdout.write(JSON.stringify({ since, changed: files, ...sel, buckets: ["unit", ...sel.buckets] }) + "\n");
+if (argv.includes("--json")) process.stdout.write(JSON.stringify({ since, changed: files, ...sel, fileBuckets, buckets: [...new Set(["unit", ...sel.buckets, ...Object.keys(fileBuckets).filter(Boolean)])] }) + "\n");
 else {
   process.stderr.write(`değişen dosya: ${files.length}; unit: ${sel.unit === "all" ? "tamamı" : `--changed ${since}`}; kovalar: ${sel.buckets.join(",") || "-"}; dosyalar: ${sel.files.length}\n`);
   if (sel.unmapped.length) process.stderr.write(`eşlenmeyen yol (tüm kovalar koşar): ${sel.unmapped.join(", ")}\n`);
@@ -43,6 +44,7 @@ if (argv.includes("--run")) {
   const step = (args) => { code = run(args) || code; };
   step(["--project", "unit", ...(sel.unit === "all" ? [] : ["--changed", since])]);
   if (sel.buckets.length) step(["--project", sel.buckets.join(",")]);
-  if (sel.files.length) step(["--project", "process,agent,platform", "--", ...sel.files]);
+  // an explicit test file runs in the bucket that owns it (unit included); one claimed by no bucket fails inside test-run instead of passing with zero tests
+  for (const [b, fs] of Object.entries(fileBuckets)) step(["--project", b || "unit", "--", ...fs]);
   process.exit(code);
 }

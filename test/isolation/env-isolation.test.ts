@@ -26,13 +26,19 @@ afterEach(() => { for (const d of dirs.splice(0)) rmTemp(d); delete process.env.
 
 describe("test env isolation (F-vlad-172)", () => {
   it("the worker process carries no user VLAD_* variables beyond the config-provided ones", () => {
-    const extra = Object.keys(process.env).filter((k) => k.startsWith("VLAD_") && !["VLAD_LAUNCHER", "VLAD_CLAUDE_JSON", "VLAD_NO_NATIVE"].includes(k) && !k.startsWith("VLAD_GOLDEN_"));
+    const extra = Object.keys(process.env).filter((k) => k.startsWith("VLAD_") && !["VLAD_LAUNCHER", "VLAD_CLAUDE_JSON", "VLAD_NO_NATIVE", "VLAD_REAL_KB"].includes(k) && !k.startsWith("VLAD_GOLDEN_"));
     expect(extra).toEqual([]);
   });
 
   it("isolatedEnv drops user VLAD_* keys, keeps unrelated and config-provided ones", () => {
     const e = isolatedEnv({ VLAD_KB_DIR: "x", VLAD_HOME: "y", VLAD_TASK_ID: "t", VLAD_LAUNCHER: "noop", PATH: "p" });
     expect(e).toEqual({ VLAD_LAUNCHER: "noop", PATH: "p" });
+  });
+
+  it("VLAD_REAL_KB opt-in survives isolation (F-vlad-256)", () => {
+    expect(isolatedEnv({ VLAD_REAL_KB: "1", VLAD_KB_DIR: "x" })).toEqual({ VLAD_REAL_KB: "1" });
+    process.env.VLAD_REAL_KB = "1";
+    try { scrubProcessEnv(); expect(process.env.VLAD_REAL_KB).toBe("1"); } finally { delete process.env.VLAD_REAL_KB; }
   });
 
   it("isolatedEnv/scrubProcessEnv match VLAD_ case-insensitively (Windows env keys; F-vlad-186)", () => {

@@ -1,10 +1,10 @@
 // F-vlad-172: VLAD_* variables of the developer's shell (VLAD_KB_DIR, VLAD_HOME, VLAD_TASK_ID...) must not reach tests or the CLI children they spawn.
-// Kept: what vitest.config.ts provides (VLAD_LAUNCHER, VLAD_CLAUDE_JSON, VLAD_NO_NATIVE) and the opt-in golden-update switches.
+// Kept: what vitest.config.ts provides (VLAD_LAUNCHER, VLAD_CLAUDE_JSON, VLAD_NO_NATIVE), VLAD_REAL_KB (opt-in real-kb check, F-vlad-256) and the opt-in golden-update switches.
 // Windows env keys are case-insensitive (`vlad_kb_dir` is VLAD_KB_DIR there), so every comparison upper-cases first (F-vlad-186)
 const isVlad = (k: string) => k.toUpperCase().startsWith("VLAD_");
 const KEEP = (k: string) => {
   const u = k.toUpperCase();
-  return u === "VLAD_LAUNCHER" || u === "VLAD_NO_NATIVE" || u === "VLAD_CLAUDE_JSON" || u.startsWith("VLAD_GOLDEN_");
+  return u === "VLAD_LAUNCHER" || u === "VLAD_NO_NATIVE" || u === "VLAD_REAL_KB" || u === "VLAD_CLAUDE_JSON" || u.startsWith("VLAD_GOLDEN_");
 };
 
 /** Copy of `base` without user VLAD_* variables; spawn helpers use it as their base env. */
