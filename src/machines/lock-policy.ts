@@ -1,7 +1,8 @@
 import type { VladConfig } from "../kb/types.js";
+import { innerLockKeys } from "../commands/accessors.js";
 
 /** Commands whose handler locks the kb itself, in phases, once workers can be remote (no network inside the lock). */
-export const INNER_LOCK = new Set(["task resume", "task cleanup"]);
+export const INNER_LOCK = innerLockKeys();
 
 /**
  * "outer": the whole callback runs under the kb lock (today's KB_WRITES); "inner": the handler locks its own
