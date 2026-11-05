@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeHomePair, spawnVlad } from "../machines/harness.js";
 import { rmTemp } from "../helpers.js";
-import { isolatedEnv } from "../isolate-env.js";
+import { isolatedEnv, scrubProcessEnv } from "../isolate-env.js";
 
 // F-vlad-172: the developer's own VLAD_* variables must never reach a test (VLAD_KB_DIR beats the test home's kbDir).
 const CARD = `---
@@ -33,6 +33,16 @@ describe("test env isolation (F-vlad-172)", () => {
   it("isolatedEnv drops user VLAD_* keys, keeps unrelated and config-provided ones", () => {
     const e = isolatedEnv({ VLAD_KB_DIR: "x", VLAD_HOME: "y", VLAD_TASK_ID: "t", VLAD_LAUNCHER: "noop", PATH: "p" });
     expect(e).toEqual({ VLAD_LAUNCHER: "noop", PATH: "p" });
+  });
+
+  it("isolatedEnv/scrubProcessEnv match VLAD_ case-insensitively (Windows env keys; F-vlad-186)", () => {
+    const e = isolatedEnv({ vlad_kb_dir: "x", Vlad_Home: "y", vlad_launcher: "noop", VLAD_GOLDEN_UPDATE: "1", Path: "p" });
+    expect(e).toEqual({ vlad_launcher: "noop", VLAD_GOLDEN_UPDATE: "1", Path: "p" });
+    process.env.vlad_leak_probe = "1"; // on POSIX keys are case-sensitive, so this really is a distinct lowercase key
+    try {
+      scrubProcessEnv();
+      expect(process.env.vlad_leak_probe).toBeUndefined();
+    } finally { delete process.env.vlad_leak_probe; }
   });
 
   it("spawnVlad does not write to a leaked VLAD_KB_DIR (trap stays empty)", () => {

@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
+/** Windows `path.relative` output uses backslashes; layer rules and `unitOf` work on slashes. */
+export const toPosix = (p: string): string => p.split("\\").join("/");
+
 export const SRC = resolve(import.meta.dirname, "../../src");
 
 export function walkTs(dir = SRC): string[] {
@@ -18,7 +21,7 @@ export function importsOf(file: string): Edge[] {
   const edges: Edge[] = [];
   const add = (spec: string, typeOnly: boolean) => {
     if (!spec.startsWith(".")) return;
-    edges.push({ from: relative(SRC, file), to: relative(SRC, resolve(dirname(file), spec)).replace(/\.js$/, ".ts"), spec, typeOnly });
+    edges.push({ from: toPosix(relative(SRC, file)), to: toPosix(relative(SRC, resolve(dirname(file), spec))).replace(/\.js$/, ".ts"), spec, typeOnly });
   };
   for (const m of text.matchAll(/\b(?:import|export)\s+(type\s+)?([^;"'`]*?)\s*from\s*"([^"]+)"/g)) {
     const braces = /^\{([\s\S]*)\}$/.exec(m[2]!.trim())?.[1];
