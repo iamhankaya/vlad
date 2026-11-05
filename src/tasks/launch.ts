@@ -161,6 +161,9 @@ export interface RemoteDeps {
   transport: RemoteTransport;
   /** Called (outside the kb lock) before the remote `launch`; throw to refuse (e.g. kb not pushed). */
   syncKb?: (machine: string) => Promise<void>;
+  /** F-vlad-231: after a `launch` timeout, how long to keep asking the worker for the op's outcome (default 180 s) and how often (default 3 s) */
+  statusPollMs?: number;
+  pollIntervalMs?: number;
 }
 
 /** A remote launch whose outcome is unknown keeps its reservation; anything else is a definite failure. */
@@ -379,21 +382,30 @@ export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: 
   if (o.cfg.brain && machine === o.cfg.brain) throw new Error(`rezervasyon beyin-yerel launch'a ait (${machine}); sürüyor olabilir, serbest bırakılamaz; ölüyse rezervasyon süresi dolunca kendiliğinden düşer`);
   let verdict: string | null = null;
   let unreachable = false;
+  let hasResult = false;
   try {
     if (!o.transport) throw new Error("uzak taşıma bağlı değil");
-    verdict = (await o.transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result.state;
+    const st = (await o.transport.call<OpStatus>(machine, "op-status", { target: op, cancel: true })).result;
+    verdict = st.state;
+    hasResult = !!st.result;
   } catch (e) {
     unreachable = true;
     if (!o.force) throw new Error(`${machine} makinesine ulaşılamadı (${(e as Error).message}); makine kalıcı ölüyse --force ile bırak (launch açılmışsa orada yetim kalır)`);
   }
-  if (verdict === "done") throw new Error(`işçide launch tamamlanmış (op ${op}); serbest bırakma yerine \`task launch ${id}\` ile sahiplen`);
+  // F-vlad-233: "done" without a result is an unresolved outcome (older worker / truncated journal), not a finished launch: --force may release it
+  let forcedDone = false;
+  if (verdict === "done" && hasResult) throw new Error(`işçide launch tamamlanmış (op ${op}); serbest bırakma yerine \`task launch ${id}\` ile sahiplen`);
+  if (verdict === "done") {
+    if (!o.force) throw new Error(`işçide launch sonuçsuz bitti (op ${op}); worktree/dal yoksa --force ile bırak (varsa orada yetim kalır), varsa elle incele`);
+    forcedDone = true;
+  }
   if (verdict === "started") throw new Error(`işçide launch sürüyor (op ${op}); bitince tekrar dene`);
   return withKbLock(() => {
     const t = getTask(id);
     if (t.data.state !== "queued" || t.data.launch_op !== op) throw new Error(`rezervasyon bu arada değişti (${id}); tekrar dene`);
     Object.assign(t.data, { machine: null, machine_reserved: null, launch_op: null });
     // işçi sorulmadan bırakıldı: op orada başlamış olabilir; makine dönünce launch öncesi iptal edilir (F-vlad-150)
-    if (unreachable) t.data.released_ops = [...(t.data.released_ops ?? []), { machine, op }];
+    if (unreachable || forcedDone) t.data.released_ops = [...(t.data.released_ops ?? []), { machine, op }];
     saveTask(t);
     releasePin(t.data.parent, machine, id);
     return t;
@@ -433,8 +445,22 @@ async function cancelReleased(id: string, machine: string, transport: RemoteTran
 
 class LostRace extends Error {}
 
+/** Polls `op-status` (no cancel) until the launch settled or the budget ran out; `pending`: still unknown/started, `error`: the worker could not be asked. */
+async function pollLaunch(transport: RemoteTransport, machine: string, op: string, d: RemoteDeps): Promise<OpStatus | { state: "pending" | "error" }> {
+  const deadline = Date.now() + (d.statusPollMs ?? 180_000);
+  const every = d.pollIntervalMs ?? 3000;
+  while (Date.now() < deadline) {
+    let st: OpStatus;
+    try { st = (await transport.call<OpStatus>(machine, "op-status", { target: op })).result; } catch { return { state: "error" }; }
+    if (st.state === "done" || (RETRY_STATES.has(st.state) && st.state !== "unknown")) return st;
+    if (st.state !== "started" && st.state !== "unknown") return { state: "error" };
+    await new Promise((r) => setTimeout(r, every));
+  }
+  return { state: "pending" };
+}
+
 interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
-interface OpStatus { state: string; result?: RemoteLaunched }
+interface OpStatus { state: string; result?: RemoteLaunched; truncated?: boolean }
 
 async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: RemoteDeps): Promise<Task> {
   const { cfg } = o;
@@ -486,7 +512,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     let st = (await transport.call<OpStatus>(machine, "op-status", { target: old })).result;
     if (st.state === "unknown") st = (await transport.call<OpStatus>(machine, "op-status", { target: old, cancel: true })).result; // tombstone: it can no longer start
     if (st.state === "done") {
-      if (!st.result) throw new Error(`önceki launch tamamlanmış ama sonuç yok (${machine}, op ${old}); elle incele`);
+      if (!st.result) throw new Error(`önceki launch tamamlanmış ama sonuç yok (${machine}, op ${old}${st.truncated ? ", sonuç günlükte kırpılmış" : ""}); işçide worktree/dal yoksa \`vlad task release ${id} --force\` ile rezervasyonu bırakıp tekrar launch et, varsa elle incele`);
       return commit(old, st.result);
     }
     if (st.state === "started") throw busy(old);
@@ -515,7 +541,13 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     res = await transport.call<RemoteLaunched>(machine, "launch", args, { opId: op });
   } catch (e) {
     // no answer: the worker may have launched anyway -> keep the reservation, the next `task launch` asks op-status
-    if (e instanceof RemoteError && UNCERTAIN.has(e.code)) throw e;
+    if (e instanceof RemoteError && UNCERTAIN.has(e.code)) {
+      // F-vlad-231: a slow worker keeps launching after our timeout; ask for the outcome before giving up
+      const polled = e.code === "timeout" ? await pollLaunch(transport, machine, op, remote) : null;
+      if (polled?.state === "done" && polled.result) return commit(op, polled.result);
+      if (polled && RETRY_STATES.has(polled.state) && polled.state !== "unknown") { await failReservation(id, op, e.message, claimedPin); }
+      throw e;
+    }
     await failReservation(id, op, (e as Error).message, claimedPin);
     throw e;
   }
@@ -569,6 +601,8 @@ export function cleanupTask(
       /* a window that could not be closed is reported by the removal below */
     }
     removeTaskWorktree(projectPath(t.data.project), wt, id);
+    // F-vlad-231: a cancelled task's branch without own commits would block a relaunch; `-d` keeps any branch with unmerged work
+    if (t.data.state === "cancelled") runGit(projectPath(t.data.project), ["branch", "-d", `vlad/${id}`]);
   }
   const trustWarning = untrustWorktree(wt);
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);

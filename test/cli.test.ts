@@ -468,7 +468,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         const r = vlad(["task", "resume", id, "--json"], undefined, e);
         expect(r.code, r.err).toBe(0);
         expect(r.err).toContain("VLAD_DESKTOP_QUEUE");
-        expect(JSON.parse(r.out).method).toBeUndefined();
+        expect(JSON.parse(r.out).method).toBe(process.platform === "win32" ? undefined : "noop"); // POSIX: the fallback resume opens the worker (F-vlad-202)
         expect(readdirSync(q)).toEqual([]);
       });
       it.skipIf(WIN)("loose (0755) queue folder: warns and falls back to the usual launch / resume output", () => {

@@ -541,6 +541,25 @@ describe("worktree trust (~/.claude.json)", () => {
   });
 });
 
+describe("cleanupTask: iptal edilen görevin dalı (F-vlad-231)", () => {
+  it("cancelled: hiç commit'i olmayan vlad/<id> dalı worktree ile birlikte silinir (yeniden launch engellenmez)", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    setState(t.data.id, "cancelled");
+    cleanupTask(t.data.id, { closeWorker: () => {} });
+    expect(git(repo, "branch", "--list", `vlad/${t.data.id}`).trim()).toBe("");
+  });
+  it("cancelled: işçinin commit'i olan dal korunur (iş kaybolmaz)", async () => {
+    const t = mk();
+    await launchTask(t.data.id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(t.data.id).data.worktree!;
+    writeFileSync(join(wt, "w.txt"), "x"); git(wt, "add", "."); git(wt, "commit", "-m", "iş");
+    setState(t.data.id, "cancelled");
+    cleanupTask(t.data.id, { closeWorker: () => {} });
+    expect(git(repo, "branch", "--list", `vlad/${t.data.id}`)).toContain(`vlad/${t.data.id}`);
+  });
+});
+
 describe("cleanupTask", () => {
   it("refuses a running task", async () => {
     const t = mk();

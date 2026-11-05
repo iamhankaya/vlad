@@ -471,7 +471,9 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
   if (trustWarn) process.stderr.write(`uyarı: ${trustWarn}\n`);
   const rq: { dir: string | null; warning?: string } = o.external || r.mode !== "local" ? { dir: null as string | null } : desktopQueueDir();
   if ("warning" in rq && rq.warning) process.stderr.write(`uyarı: ${rq.warning}\n`);
-  if (o.external || rq.dir) {
+  // POSIX: a plain resume opens the worker like `task launch` does (F-vlad-202: it used to only print the prompt)
+  const openWindow = !o.external && !rq.dir && r.mode === "local" && process.platform !== "win32" && resolveLaunchMode(cfg0.launcher) !== "cloud";
+  if (o.external || rq.dir || openWindow) {
     if (r.mode !== "local") throw new Error("--external yerel çalışan içindir; bulut görevi için --external kullanılamaz");
     const t = getTask(id);
     const model = modelInfo(t.data).effective_model;
@@ -484,13 +486,26 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
         rq.dir = null;
       }
     }
-    const ext = externalLaunch({
+    const req = {
       taskId: id, cwd: r.worktree, prompt: r.prompt, env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${t.data.title}`, ...(model ? { model } : {}),
       ...(autoCompact ? { autoCompact } : {}),
       // keep the worker's context. No recorded session: only the worktree's single transcript is safe to resume; `--continue` could pick any session (F-vlad-097), so otherwise start fresh (the prompt carries the log tail)
       ...(sid ? { resume: { sessionId: sid } } : {}),
-    });
+    };
+    if (openWindow) {
+      const mode = resolveLaunchMode(cfg0.launcher);
+      const launcher: Launcher = mode === "noop" ? new NoopLauncher() : new PosixLauncher({ mode: mode === "terminal" ? "terminal" : "tmux" });
+      try { closeTaskWindow(id); } catch (e) {
+        // the noop guard throws by design; a real survivor must not get a second worker beside it
+        if (mode !== "noop") throw new Error(`açık pencere kapatılamadı, ikinci çalışan açılmadı: ${(e as Error).message}`);
+      }
+      const res = await launcher.launch(req);
+      if (!res.ok) throw new Error(`launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`);
+      out(o, { ...r, method: res.method, detail: res.detail }, `${id} sürdürüldü (${res.method}) -> ${r.worktree}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`);
+      return;
+    }
+    const ext = externalLaunch(req);
     if (!ext.ok) throw new Error(`betik yazılamadı: ${ext.detail}`);
     if (o.external || !rq.dir) {
       out(o, { ...r, script: ext.script, command: ext.command, cwd: ext.cwd }, `${ext.script}\n${ext.command}`);
