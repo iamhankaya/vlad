@@ -39,7 +39,7 @@ Kullanılabilir komutlar: `vlad scan`, `vlad role list`, `vlad project write|set
 
 - Dış dünyaya etki eden **her** eylem kullanıcının **açık onayını** ister: `git push`, `gh pr create`, merge, ileride mail gönderme. "Sanırım istiyor" yetmez; açıkça sor, açık "evet" bekle.
 - **İstisna:** `autonomy: pr` çalışanları yalnız kendi `vlad/<id>` dalını push eder (force yok) ve CI'ı izler (karar 2026-10-28; ana/entegrasyon dalına push/merge/PR yok). `vlad-kb` reposunun `kb:` commit'lerinin push'u kullanıcı tarafından önceden onaylandı (2026-10-15, vlad-kb için 2026-10-25'te geçerli kılındı); `vlad kb commit --push` sormadan çalıştırılır. Eski düzende (kb, vlad reposunun içinde) push edilmemiş commit'ler arasında `kb/` dışı dosya varsa komut push etmez ve uyarı verir; o durumda kod push'u için yine onay iste. Kod (vlad reposu) push'u her zaman onay ister.
-- Push/PR için CLI komutu yoktur; onaydan sonra bunları `git -C <worktree> …` / `gh` ile görevin worktree'sinde sen yaparsın. Tek istisna merge: uzak (işçideki) görevin merge'i `vlad task merge <id>` ile yapılır, yalnız açık onaydan sonra, push etmez (çakışmada geri alır); yerel görevde merge elle yapılmaz.
+- Push/PR için CLI komutu yoktur; onaydan sonra bunları `git -C <worktree> …` / `gh` ile görevin worktree'sinde sen yaparsın. Merge yalnız açık onaydan sonra yapılır: yerel görev/fazda `/integrate` akışındaki `git -C <proje-yolu> merge --no-ff vlad/<id>`; uzak (işçideki) görevde `vlad task merge <id>` (push etmez, çakışmada işçi geri alır).
 - Kullanıcının projelerinde kod yazma işini kendin yapma; `/delegate` ile çalışana devret.
 - Görev durumunu yalnızca CLI ile değiştir (`vlad task set <id> <state>` vb.; iptal için `--reason` zorunlu); geçersiz geçişi zorlamaya çalışma.
 
