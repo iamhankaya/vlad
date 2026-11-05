@@ -155,6 +155,15 @@ describe("aktarim:C3 installSendMenu", () => {
     ]);
     expect(w.removed).toEqual(["C:\\dev\\vlad\\.vlad-agent\\send-mac.vbs"]);
   });
+  it("review: dry-run geçersiz peer'i reddeder; linux makinede atlanır; kısmi enjeksiyon native kapalıyken gerçek diske gitmez", async () => {
+    await expect(installSendMenu(ctx({ os: "win32", ...W, peer: "x y", dryRun: true }))).rejects.toThrow(/geçersiz/);
+    const f = fakeFs();
+    const r = await installSendMenu(ctx({ os: "linux" }), f.d);
+    expect(r.actions.join()).toMatch(/atlandı.*linux/); expect(f.writes).toEqual([]); expect(f.runs).toEqual([]);
+    const d = tmp(); const only = fakeFs();
+    const r2 = await installSendMenu(ctx({ servicesDir: d }), { run: only.d.run });
+    expect(r2.actions.join()).toMatch(/native devre dışı/); expect(existsSync(join(d, "windows makinesine gönder.workflow"))).toBe(false);
+  });
   it("native kapalıyken (VLAD_NO_NATIVE=1) enjeksiyonsuz çağrı gerçek diske/kayıt defterine dokunmaz", async () => {
     const d = tmp();
     for (const os of ["darwin", "win32"] as const) {

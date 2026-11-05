@@ -76,11 +76,13 @@ async function installMac(c: MenuCtx, d: Required<MenuDeps>): Promise<string[]> 
 /** Eylemleri döner (vlad install çıktısına eklenir). `dryRun` yazmaz/çalıştırmaz. Enjeksiyonsuz ve VLAD_NO_NATIVE=1 iken gerçek diske/kayıt defterine dokunmaz. */
 export async function installSendMenu(c: MenuCtx, d: MenuDeps = {}): Promise<{ actions: string[] }> {
   const win = c.os === "win32";
+  if (!win && c.os !== "darwin") return { actions: [`sağ tık menüsü atlandı: ${c.os} desteklenmiyor`] };
   if (c.dryRun) {
+    if (win) winMenuRegCommands(c); // girdi doğrulaması dry-run'da da çalışsın
     const what = c.uninstall ? "kaldırılacak" : "kurulacak";
     return { actions: [win ? `sağ tık menüsü ${what}: HKCU ${WIN_KEYS.join(", ")} ve ${winLauncherPath(c)}` : `sağ tık menüsü ${what}: ${join(c.servicesDir, macQuickAction(c).dir)}`] };
   }
-  if (!d.run && !d.write && !nativeAllowed()) return { actions: ["sağ tık menüsü atlandı: native devre dışı (VLAD_NO_NATIVE=1)"] };
+  if (!(d.run && d.write && d.read && d.exists && d.remove) && !nativeAllowed()) return { actions: ["sağ tık menüsü atlandı: native devre dışı (VLAD_NO_NATIVE=1)"] };
   const deps = { ...realDeps, ...d } as Required<MenuDeps>;
   return { actions: win ? await installWin(c, deps) : await installMac(c, deps) };
 }

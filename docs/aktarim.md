@@ -23,6 +23,7 @@
 - Gönderen, alıcının ad kurallarını önceden denetler (`:` `\`, Windows ayrılmış adları, sondaki nokta/boşluk, harf duyarsız çakışma); sorunlu yol hatada (`details: path: …`) ve bildirimde görünür, ağa çıkılmaz.
 - **Windows 11:** klasik menü "Diğer seçenekleri göster" (Shift+F10) altındadır.
 - **Çoklu seçim (Windows):** Gezgin seçili her öğe için ayrı süreç başlatır; 3 dosya = 3 ayrı aktarım ve 3 bildirim. Mac Hızlı Eylemi tüm seçimi tek `vlad send` ile yollar.
+- **Bilinen sınırlar:** (a) Windows'ta adında `%DEĞİŞKEN%` geçen dosya, `WshShell.Run` ortam değişkenlerini açabileceği için yanlış yola dönüşebilir (Windows'ta doğrulanmadı; elle denemede `100%USERPROFILE%.txt` ile bak). (b) Config'te karşı makine adı değişirse eski menü (Mac'te eski `.workflow`, Windows'ta eski `.vbs`) kendiliğinden silinmez; eski adla `vlad install --remove-menu` çalıştırıp yeniden kur.
 - **Mac gizlilik (TCC):** ilk kullanımda Masaüstü/Belgeler/İndirilenler erişimi için izin istenebilir; reddedilirse hata bildirimi gelir.
 
 ## Gelen dosya bildirimi
@@ -46,7 +47,7 @@ Mac'te üretilen dosyalar `plutil -lint` ve golden testlerle doğrulanır; Windo
 1. Agent'ı yeniden başlat; `vlad install --dry-run` çıktısında "sağ tık menüsü kurulacak" satırını gör, sonra `vlad install`.
 2. `reg query "HKCU\Software\Classes\*\shell\VladSend\command"`: değer `wscript.exe "…\.vlad-agent\send-<peer>.vbs" "%1"` olmalı. `…\Directory\shell\VladSend` için de.
 3. Gezgin'de bir dosyaya sağ tık → (Win 11: Diğer seçenekleri göster) → "<peer> makinesine gönder". Konsol penceresi çıkmamalı; Mac'te İndirilenler'e düşmeli, iki tarafta bildirim gelmeli.
-4. Aynısı bir klasör ve boşluk/Türkçe/emoji adlı dosya için; aynı dosyayı iki kez → `ad (1).ext`; `D:\` gibi kök sürücüye sağ tık gönder → anlaşılır hata.
+4. Aynısı bir klasör ve boşluk/Türkçe/emoji adlı dosya için; `%TEMP%x.txt` adlı dosyayla da dene; aynı dosyayı iki kez → `ad (1).ext`; `D:\` gibi kök sürücüye sağ tık gönder → anlaşılır hata.
 5. Karşı makineyi kapat → gönder → "gönderilemedi" bildirimi gelmeli (çıkış 75).
 6. Pano: Win+Shift+S ile ekran görüntüsü → Mac'te Cmd+V; Mac'te metin kopyala → Windows'ta Ctrl+V; `vlad clip off` kalıcılığı.
 7. Geri alma: `vlad install --remove-menu`; `reg query` artık anahtar bulamamalı, menü kaybolmalı (Gezgin'i yeniden başlatmak gerekebilir).
