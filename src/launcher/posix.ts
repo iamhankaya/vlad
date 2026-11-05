@@ -1,5 +1,5 @@
 import { execFile, execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { assertRealLauncherAllowed } from "./mode.js";
@@ -16,7 +16,8 @@ const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 export function buildPosixScript(req: LaunchRequest): string {
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);
-  const lines = ["#!/usr/bin/env bash"];
+  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
+  const lines = ["#!/usr/bin/env bash", "unset VLAD_DESKTOP_QUEUE"];
   for (const [k, v] of Object.entries(req.env)) {
     if (!ENV_NAME.test(k)) throw new Error(`geçersiz env adı: ${JSON.stringify(k)}`);
     lines.push(`export ${k}=${q(v)}`);
@@ -56,7 +57,8 @@ export function externalPosixLaunch(req: LaunchRequest, scriptDir?: string): Lau
   const script = join(dir, `${req.taskId}.sh`);
   try {
     mkdirSync(dir, { recursive: true });
-    writeFileSync(script, buildPosixScript(req), { encoding: "utf8", mode: 0o755 });
+    writeFileSync(script, buildPosixScript(req), { encoding: "utf8", mode: 0o700 });
+    chmodSync(script, 0o700); // mode only applies to new files; the desktop app requires no group/other bits
   } catch (e) {
     return { ok: false, method: "external", detail: (e as Error).message };
   }

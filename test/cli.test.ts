@@ -1,7 +1,7 @@
 import { isolatedEnv } from "./isolate-env.js";
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -415,7 +415,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
       expect(JSON.parse(cloud.err).error).toContain("--external");
       expect(JSON.parse(vlad(["task", "list", "--json"]).out).tasks[0].state).toBe("queued");
     });
-    describe.skipIf(process.platform !== "win32")("VLAD_DESKTOP_QUEUE", () => {
+    describe("VLAD_DESKTOP_QUEUE", () => {
       let q: string;
       beforeEach(() => { q = mkdtempSync(join(tmpdir(), "vlad-cli-queue-")); });
       const qenv = () => ({ ...env(), VLAD_DESKTOP_QUEUE: q, VLAD_TASK_ID: "" }); // empty = unset for the queue gate (a worker shell has it set)
@@ -426,15 +426,19 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         expect(j.method).toBe("desktop-queue");
         expect(j.state).toBe("running");
         expect(j.queued).toBe(join(q, `${id}.json`));
-        expect(j.script).toBe(join(tmp, "vlad", `${id}.ps1`));
+        expect(j.script).toBe(join(tmp, "vlad", `${id}.${SCRIPT_EXT}`));
         expect(j.cwd).toBe(j.worktree);
         expect(readdirSync(q)).toEqual([`${id}.json`]); // no leftover temp file
         const body = JSON.parse(readFileSync(j.queued, "utf8"));
         expect(body).toMatchObject({ v: 2, kind: "launch", taskId: id, script: j.script, cwd: j.worktree });
         expect(body.scriptSha256).toMatch(/^[0-9a-f]{64}$/);
         expect(body.scriptSha256).toBe(createHash("sha256").update(readFileSync(j.script)).digest("hex"));
-        expect(readFileSync(j.script, "utf8")).toContain("Remove-Item Env:VLAD_DESKTOP_QUEUE");
-        expect(execFileSync("icacls.exe", [join(tmp, "vlad")], { encoding: "utf8" })).not.toMatch(/BUILTIN\Users|Everyone/);
+        expect(readFileSync(j.script, "utf8")).toContain(WIN ? "Remove-Item Env:VLAD_DESKTOP_QUEUE" : "unset VLAD_DESKTOP_QUEUE");
+        if (WIN) expect(execFileSync("icacls.exe", [join(tmp, "vlad")], { encoding: "utf8" })).not.toMatch(/BUILTIN\Users|Everyone/);
+        else {
+          expect(statSync(join(tmp, "vlad")).mode & 0o777).toBe(0o700);
+          expect(statSync(j.script).mode & 0o077).toBe(0);
+        }
         expect(typeof body.pid).toBe("number");
         expect(Number.isNaN(Date.parse(body.createdAt))).toBe(false);
       });
@@ -467,6 +471,27 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         expect(JSON.parse(r.out).method).toBeUndefined();
         expect(readdirSync(q)).toEqual([]);
       });
+      it.skipIf(WIN)("loose (0755) queue folder: warns and falls back to the usual launch / resume output", () => {
+        chmodSync(q, 0o755);
+        const e = qenv();
+        const l = vlad(["task", "launch", id, "--json"], undefined, e);
+        expect(l.code, l.err).toBe(0);
+        expect(l.err).toContain("VLAD_DESKTOP_QUEUE güvensiz");
+        expect(JSON.parse(l.out)).toMatchObject({ method: "noop" });
+        expect(JSON.parse(l.out).queued).toBeUndefined();
+        const r = vlad(["task", "resume", id, "--json"], undefined, e);
+        expect(r.code, r.err).toBe(0);
+        expect(r.err).toContain("VLAD_DESKTOP_QUEUE güvensiz");
+        expect(readdirSync(q)).toEqual([]);
+      });
+      it.skipIf(WIN)("symlinked queue folder: warns and falls back", () => {
+        const link = join(tmp, "qlink");
+        symlinkSync(q, link);
+        const l = vlad(["task", "launch", id, "--json"], undefined, { ...qenv(), VLAD_DESKTOP_QUEUE: link });
+        expect(l.code, l.err).toBe(0);
+        expect(l.err).toContain("VLAD_DESKTOP_QUEUE güvensiz");
+        expect(readdirSync(q)).toEqual([]);
+      });
       it("unwritable queue file: warns and falls back to the window path", () => {
         mkdirSync(join(q, `${id}.json`)); // a directory where the file must go → rename fails
         const l = vlad(["task", "launch", id, "--json"], undefined, qenv());
@@ -478,7 +503,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
         const l = vlad(["task", "launch", id, "--external", "--json"], undefined, qenv());
         expect(JSON.parse(l.out).method).toBe("external");
         const r = vlad(["task", "resume", id, "--external", "--json"], undefined, qenv());
-        expect(JSON.parse(r.out).command).toContain(`${id}.ps1`);
+        expect(JSON.parse(r.out).command).toContain(`${id}.${SCRIPT_EXT}`);
         expect(readdirSync(q)).toEqual([]);
       });
       it("--dry-run and cloud mode are not affected", () => {
