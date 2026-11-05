@@ -162,10 +162,11 @@ export function clipPair(o: { a?: ConstructorParameters<typeof FakeClipboard>[0]
   const sides = {} as Record<"a" | "b", ClipSide>;
   const mk = (name: "a" | "b", opts: ConstructorParameters<typeof FakeClipboard>[0]): ClipSide => {
     const peer = name === "a" ? "b" : "a";
+    const peerName = name === "a" ? "mac" : "windows"; // karşı tarafın gerçek adı (alıcı clip-push'u yalnız ctx.from === peer ise kabul eder, F-vlad-213)
     const cb = new FakeClipboard(opts);
     const s = { name, cb, enabled: true, pushes: 0, imagePushes: 0 } as ClipSide;
     const deps: ClipDeps = {
-      backend: cb, now, sleep: async () => {}, isEnabled: () => s.enabled, log: () => {}, rank: name === "b" ? 1 : 0, peer, autoStart: false, settleMs: 0,
+      backend: cb, now, sleep: async () => {}, isEnabled: () => s.enabled, log: () => {}, rank: name === "b" ? 1 : 0, peer: peerName, autoStart: false, settleMs: 0,
       send: {
         pushText: async (args: ClipPushArgs) => { s.pushes++; return clipResult(await sides[peer].recv.ops["clip-push"](args, { from: name === "a" ? "windows" : "mac", opId: randomUUID() })) as "applied" | "stale" | "disabled"; },
         pushImage: async (png, meta) => { s.imagePushes++; s.pushes++; return sides[peer].recv.sink.apply(png, meta, name === "a" ? "windows" : "mac"); },

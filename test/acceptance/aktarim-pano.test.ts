@@ -179,6 +179,7 @@ describe("aktarim-kabul: son yazan kazanır, yerel kopya ezilmez", () => {
     let release!: () => void;
     lc.hold = new Promise<void>((r) => { release = r; });
     const entered = new Promise<void>((r) => { lc.onRead = r; });
+    await recv.sync.tick(); // kullanıcının görülmemiş kopyası uzak değerden önce yoklanır (F-vlad-212)
     t += 10;
     const pending = recv.ops["clip-push"](push({ s: "uzaktan", eventTs: t, rank: 0, counter: 1 }), { from: "windows", opId: randomUUID() });
     pending.catch(() => {});
