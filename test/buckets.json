@@ -185,6 +185,7 @@
     "test/machines/c2-probe-window.test.ts",
     "test/machines/s-config.test.ts",
     "test/machines/t51-fail-closed.test.ts",
-    "test/tasks/liveness.test.ts"
+    "test/tasks/liveness.test.ts",
+    "test/machines/u4b-F246-forward-parse.test.ts"
   ]
 }
