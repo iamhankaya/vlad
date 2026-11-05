@@ -107,23 +107,47 @@ export function defaultExec(file: string, args: string[], cwd?: string): Promise
 
 // Finds the worker by the `\vlad\<id>.ps1` script on its command line (the same in wt and powershell
 // mode) and kills it with its children (claude). The pattern travels in an env var so that this
-// query's own command line does not match.
+// query's own command line does not match. Output, one line each: `OK <pid>` taskkill succeeded,
+// `FAIL <pid> <why>` it did not (the process may just have died with its parent), `LEFT <pid>` a match that is still
+// alive after the kills: the only ground truth (T20261105-47: a failed taskkill used to be reported as closed).
 const KILL_WORKER =
   "$pat = $env:VLAD_WORKER_SCRIPT; " +
-  "Get-CimInstance Win32_Process | " +
-  "Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($pat) } | " +
-  "ForEach-Object { taskkill.exe /PID $_.ProcessId /T /F | Out-Null; $_.ProcessId }";
+  "$find = { Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -and $_.CommandLine.ToLower().Contains($pat) } }; " +
+  "foreach ($p in @(& $find)) { " +
+  "$o = (taskkill.exe /PID $p.ProcessId /T /F 2>&1 | Out-String).Trim() -replace '\\s+', ' '; " +
+  "if ($LASTEXITCODE -eq 0) { 'OK ' + $p.ProcessId } else { 'FAIL ' + $p.ProcessId + ' ' + $o } }; " +
+  "Start-Sleep -Milliseconds 300; " +
+  "foreach ($p in @(& $find)) { 'LEFT ' + $p.ProcessId }";
 
-/** Closes the terminal of a task's worker (Windows: process tree; macOS/Linux: tmux session + script processes). Returns the killed process IDs. */
-export function closeWorkerWindow(taskId: string, platform: NodeJS.Platform = process.platform): number[] {
+/** Parses the KILL_WORKER output; throws when a matching process survived. */
+export function parseKillOutput(out: string, taskId: string): number[] {
+  const killed: number[] = [];
+  const why = new Map<number, string>();
+  const left: number[] = [];
+  for (const line of out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    const m = /^(OK|FAIL|LEFT)\s+(\d+)\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const pid = Number(m[2]);
+    if (m[1] === "OK") killed.push(pid);
+    else if (m[1] === "FAIL") why.set(pid, m[3]!);
+    else left.push(pid);
+  }
+  if (left.length) throw new Error(`${taskId} penceresi kapanmadı: ${left.map((p) => `pid ${p}${why.get(p) ? ` (${why.get(p)})` : ""}`).join(", ")}`);
+  return killed;
+}
+
+type KillRunner = (file: string, args: string[], env: Record<string, string>) => string;
+const runKill: KillRunner = (file, args, env) => execFileSync(file, args, {
+  encoding: "utf8", windowsHide: true, timeout: 20000, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...env },
+});
+
+/** Closes the terminal of a task's worker (Windows: process tree; macOS/Linux: tmux session + script processes). Returns the killed process IDs; throws when a worker process survives. `run` is a test seam for the Windows branch. */
+export function closeWorkerWindow(taskId: string, platform: NodeJS.Platform = process.platform, run: KillRunner = runKill): number[] {
   if (platform === "darwin" || platform === "linux") return closePosixWorker(taskId);
   if (platform !== "win32") return [];
-  assertRealLauncherAllowed();
-  const out = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", KILL_WORKER], {
-    encoding: "utf8", windowsHide: true, timeout: 20000, stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, VLAD_WORKER_SCRIPT: `\\vlad\\${taskId}.ps1`.toLowerCase() },
-  });
-  return out.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map(Number);
+  if (run === runKill) assertRealLauncherAllowed();
+  const out = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", KILL_WORKER], { VLAD_WORKER_SCRIPT: `\\vlad\\${taskId}.ps1`.toLowerCase() });
+  return parseKillOutput(out, taskId);
 }
 
 /** Starts nothing; used while VLAD_LAUNCHER=noop so tests can drive the launch flow without a terminal. */

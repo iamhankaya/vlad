@@ -192,3 +192,26 @@ describe("closeWorkerWindow", () => {
     }
   });
 });
+
+// T20261105-47 (5): the Windows close path is driven through an injected runner, so its result handling is tested on any OS.
+describe("closeWorkerWindow (win32 sonuç işleme, sahte runner)", () => {
+  const run = (out: string) => (_f: string, _a: string[], _env: Record<string, string>) => out;
+  it("OK satırları kapatılan PID'lerdir", () => {
+    expect(closeWorkerWindow("T20261105-90", "win32", run("OK 111\nOK 222\n"))).toEqual([111, 222]);
+  });
+  it("taskkill başarısız ama süreç hâlâ duruyorsa sessiz geçmez: PID ve neden hatada", () => {
+    expect(() => closeWorkerWindow("T20261105-90", "win32", run("OK 111\nFAIL 222 ERROR: Access is denied.\nLEFT 222\n"))).toThrow(/222.*Access is denied/s);
+  });
+  it("taskkill başarısız ama süreç zaten gitmişse (çocuk, /T ile ölmüş) hata değildir", () => {
+    expect(closeWorkerWindow("T20261105-90", "win32", run("OK 111\nFAIL 222 ERROR: The process not found.\n"))).toEqual([111]);
+  });
+  it("betik: kapatmadan sonra aynı eşleşmeyi yeniden sorgular ve model yolu env ile gider (komut satırına gömülmez)", () => {
+    let seen: { file: string; args: string[]; env: Record<string, string> } | undefined;
+    closeWorkerWindow("T20261105-90", "win32", (file, args, env) => { seen = { file, args, env }; return ""; });
+    expect(seen!.env.VLAD_WORKER_SCRIPT).toBe("\\vlad\\t20261105-90.ps1");
+    const script = seen!.args.join(" ");
+    expect(script).toContain("LASTEXITCODE");
+    expect(script).toContain("LEFT");
+    expect(script).not.toContain("t20261105-90");
+  });
+});
