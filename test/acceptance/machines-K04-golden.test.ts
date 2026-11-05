@@ -85,11 +85,10 @@ describe("machines:K — K4 machines yokken çıktılar golden ile aynı", () =>
     const g = JSON.parse(readFileSync(GOLDEN, "utf8")) as Step[];
     const now = scenario(CLI);
     expect(now.map((s) => s.cmd)).toEqual(g.map((s) => s.cmd));
-    for (let i = 0; i < g.length; i++) {
-      // The golden was recorded on Windows: the launch dry-run prints the host launcher (powershell there, tmux on macOS/Linux).
-      // Off Windows only the launcher-independent parts (code, stderr) are compared for that step.
-      const hostLauncher = process.platform !== "win32" && g[i].cmd.includes("--dry-run");
-      expect(hostLauncher ? { ...now[i], out: "" } : now[i], `adım ${i}: ${g[i].cmd}`).toEqual(hostLauncher ? { ...g[i], out: "" } : g[i]);
-    }
+    // The golden was recorded on Windows: the launch dry-run names the host launcher (powershell there, tmux on macOS/Linux).
+    // Off Windows only that launcher name and the `(dry-run) {...}` command line are neutralised; the rest stays byte-exact.
+    const hostNorm = (st: Step, cmd: string): Step => process.platform === "win32" || !cmd.includes("--dry-run") ? st
+      : { ...st, out: st.out.replace(/\((powershell|tmux)\)/, "(<LAUNCHER>)").replace(/^\(dry-run\) .*\n?/m, "") };
+    for (let i = 0; i < g.length; i++) expect(hostNorm(now[i], g[i].cmd), `adım ${i}: ${g[i].cmd}`).toEqual(hostNorm(g[i], g[i].cmd));
   }, 120_000);
 });
