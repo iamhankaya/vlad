@@ -6,7 +6,8 @@ import { NO_CLOUD_ENV, newTask, vlad as run, writeCard } from "../acceptance/clo
 import { makeHome } from "../helpers.js";
 
 let home: string;
-beforeEach(() => { home = makeHome(); });
+// F-vlad-144: machines tanımlıyken kimlik belirsizse yazıcılar reddedilir; bu dosya beyin (mac) olarak koşar
+beforeEach(() => { home = makeHome(); writeFileSync(join(home, "vlad.local.json"), JSON.stringify({ self: "mac", keys: {} })); });
 const vlad = (args: string[]) => run(home, args, { env: NO_CLOUD_ENV });
 const json = (args: string[]) => {
   const r = vlad([...args, "--json"]);

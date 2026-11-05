@@ -62,7 +62,7 @@ export function lockDownFile(f: string, o: { platform?: NodeJS.Platform; systemR
 
 /** Bu makinenin kimliği: VLAD_MACHINE > vlad.local.json self. */
 export function selfName(): string {
-  const s = process.env.VLAD_MACHINE || readLocal().self;
+  const s = process.env.VLAD_MACHINE || readLocal().self; // tek kimlik çözümleyici: registry.resolveSelf de bunu çağırır
   if (!s) throw new Error("bu makinenin kimliği belirsiz: VLAD_MACHINE ya da vlad.local.json self");
   return s;
 }
