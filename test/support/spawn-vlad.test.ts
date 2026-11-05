@@ -68,12 +68,17 @@ describe("isolatedEnv", () => {
     expect(e.HOME).toBeTruthy();
     expect(e.HOME).not.toBe(process.env.HOME);
     expect(existsSync(e.HOME as string)).toBe(true);
-    expect((e.HOME as string).startsWith(tmpdir()) || (e.HOME as string).startsWith(join("/private", tmpdir()))).toBe(true);
+    expect((e.HOME as string).startsWith(tmpdir())).toBe(true);
   });
 
   it("keeps the test-provided guards and passes through what the test gives", () => {
     const e = isolatedEnv({ VLAD_HOME: "/x", FOO: "bar" });
     expect(e).toMatchObject({ VLAD_HOME: "/x", FOO: "bar", VLAD_LAUNCHER: "noop", VLAD_NO_NATIVE: "1" });
+  });
+
+  it("gives git a commit identity so spawned commits work without a global gitconfig", () => {
+    expect(isolatedEnv()).toMatchObject({ GIT_AUTHOR_NAME: expect.any(String), GIT_AUTHOR_EMAIL: expect.any(String), GIT_COMMITTER_NAME: expect.any(String), GIT_COMMITTER_EMAIL: expect.any(String) });
+    expect(isolatedEnv({ GIT_AUTHOR_NAME: "x" }).GIT_AUTHOR_NAME).toBe("x");
   });
 
   it("lets an explicit HOME win", () => {

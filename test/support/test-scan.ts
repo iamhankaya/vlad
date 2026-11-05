@@ -37,7 +37,7 @@ export function importClosure(root: string, file: string): Set<string> {
   while (stack.length) {
     const cur = stack.pop() as string;
     const src = readFileSync(join(root, cur), "utf8");
-    for (const m of src.matchAll(/from\s+"(\.[^"]+)"/g)) {
+    for (const m of src.matchAll(/(?:from|import|require|mock)\s*\(?\s*["'](\.[^"']+)["']/g)) {
       const abs = resolve(dirname(join(root, cur)), m[1].replace(/\.js$/, ".ts"));
       const rel = relative(root, abs).split("\\").join("/");
       if (rel.startsWith("test/") && existsSync(abs) && !seen.has(rel)) {

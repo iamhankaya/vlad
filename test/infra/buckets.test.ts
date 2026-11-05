@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { importClosure, listTestFiles, matchGlob, usesSpawnOrDist } from "../support/test-scan.js";
@@ -43,6 +44,19 @@ describe("test/buckets.json partition", () => {
       .filter((f) => buckets.unit.some((g) => matchGlob(f, g)))
       .filter((f) => [...importClosure(root, f)].some((p) => usesSpawnOrDist(readFileSync(join(root, p), "utf8"))));
     expect(offenders).toEqual([]);
+  });
+
+  it("follows static, side-effect, dynamic, single-quoted and mock imports", () => {
+    const dir = mkdtempSync(join(tmpdir(), "vlad-closure-"));
+    try {
+      mkdirSync(join(dir, "test"));
+      const w = (n: string, c: string) => writeFileSync(join(dir, "test", n), c);
+      w("t.test.ts", `import "./a.js";\nimport('./b.js');\nimport { x } from './c.js';\nvi.mock("./d.js");\nconst e = require("./e.js");`);
+      for (const n of ["a", "b", "c", "d", "e"]) w(`${n}.ts`, "export {};");
+      expect([...importClosure(dir, "test/t.test.ts")].sort()).toEqual(["test/a.ts", "test/b.ts", "test/c.ts", "test/d.ts", "test/e.ts", "test/t.test.ts"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("detects a spawn/dist use (scanner sanity)", () => {

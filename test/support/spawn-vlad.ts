@@ -54,6 +54,8 @@ export function isolatedEnv(base: Record<string, string> = {}): Record<string, s
   const home = defaultHome();
   env.HOME = home;
   env.USERPROFILE = home;
+  // HOME is empty, so spawned `git commit` has no global identity; give it one
+  Object.assign(env, { GIT_AUTHOR_NAME: "vlad-test", GIT_AUTHOR_EMAIL: "vlad-test@example.invalid", GIT_COMMITTER_NAME: "vlad-test", GIT_COMMITTER_EMAIL: "vlad-test@example.invalid" });
   const { Path: _p, ...rest } = base;
   return { ...env, ...rest };
 }
