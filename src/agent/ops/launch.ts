@@ -126,7 +126,8 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   try {
     if (parent) {
       integration = await ensureIntegrationGitWith(ASYNC_GIT, repo, parent, wcfg, defaultBranch);
-      writeRecord({ ...readRecord(id)!, parent, integration });
+      const cur = readRecord(id);
+      if (cur) writeRecord({ ...cur, parent, integration });
     }
     res = await launchCore({
       taskId: id, repo, worktree, branch: `vlad/${id}`, ...(a.retry === true ? { adopt: true } : {}),
@@ -158,7 +159,7 @@ function recordParent(parent: string, repo: string, integration: { branch: strin
  * record would make a retry with a new opId conflict, so it is dropped). Worktree + branch present -> the launch effectively
  * finished: the brain adopts it (a window that did not open shows up as stalled and `task resume` reopens it).
  */
-export async function resolveUncertainLaunch(opId: string): Promise<{ state: "aborted" } | { state: "done"; result: LaunchResultW }> {
+export async function resolveUncertainLaunch(opId: string): Promise<{ state: "aborted" } | { state: "done"; result?: LaunchResultW }> {
   let found: LaunchRecord | null = null;
   try {
     for (const f of readdirSync(launchesDir())) {
@@ -172,11 +173,15 @@ export async function resolveUncertainLaunch(opId: string): Promise<{ state: "ab
     if (found.parent && found.integration) recordParent(found.parent, found.repo, found.integration);
     return { state: "done", result: { branch: found.branch, worktree: found.worktree, method: "recovered", ...(found.integration ? { integration: found.integration } : {}) } };
   }
-  // F-vlad-243: a branch left without its worktree blocks every relaunch; only a branch with no commits of its own may go
+  // F-vlad-243: a branch left without its worktree blocks every relaunch; only a branch with no commits of its own may go.
+  // The base falls back to HEAD like launchCore does when the card's default branch is missing.
   if (branchThere) {
-    const own = found.base ? await runGitAsync(found.repo, ["rev-list", "--count", found.branch, "--not", found.base]) : null;
-    if (own !== "0") throw failed(`launch yarım kaldı: dal ${found.branch} kaldı, worktree yok ve dalda kendi commit'leri var (ya da taban bilinmiyor); kayıt korundu, silmeden önce dalı incele, sonra cleanup ile temizle`);
-    if ((await runGitAsync(found.repo, ["branch", "-d", found.branch])) === null) throw failed(`launch yarım kaldı: kalan dal ${found.branch} silinemedi; kayıt korundu`);
+    const base = found.base && (await branchExistsAsync(found.repo, found.base)) ? found.base : "HEAD";
+    const own = await runGitAsync(found.repo, ["rev-list", "--count", found.branch, "--not", base], 30_000);
+    // not "done + result": the brain must not adopt a worktree-less launch; "done" without a result sends it to `task release --force` (record stays for cleanup)
+    if (own !== "0") return { state: "done" };
+    // -D: `-d` checks against HEAD, not the base (an integration branch ahead of HEAD would refuse); rev-list proved nothing is lost
+    if ((await runGitAsync(found.repo, ["branch", "-D", found.branch])) === null) return { state: "done" };
   }
   rmSync(recordFile(found.taskId), { force: true });
   return { state: "aborted" };

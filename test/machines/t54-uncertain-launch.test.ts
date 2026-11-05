@@ -61,13 +61,16 @@ describe("worker: belirsiz launch kurtarması", () => {
     expect(readRecord(PARENT)).toMatchObject({ branch: `vlad/${PARENT}`, worktree: r.result!.integration!.worktree });
   });
 
-  const stranded = async (withCommit: boolean) => {
+  const stranded = async (withCommit: boolean, integ = false) => {
     const crash: Launcher = { async launch() { throw new Error("çöktü"); } };
     let mid: ReturnType<typeof readRecord> = null;
     const spy: Launcher = { async launch(r) { mid = readRecord(ID); return crash.launch(r); } };
-    await expect(launchOp(args(), { from: "mac", opId: "op-u" }, { launcher: spy })).rejects.toThrow();
+    await expect(launchOp(args(integ ? PARENT : undefined), { from: "mac", opId: "op-u" }, { launcher: spy })).rejects.toThrow();
     // dal kaldı, worktree yok (yarım kalmış launch)
-    git(repo, "branch", `vlad/${ID}`, "main");
+    if (integ) { // entegrasyon dalı ana daldan ilerde: `branch -d` (HEAD'e göre) bunu reddederdi
+      const iw = mid!.integration!.worktree; writeFileSync(join(iw, "i.txt"), "i"); git(iw, "add", "-A"); git(iw, "commit", "-q", "-m", "i");
+    }
+    git(repo, "branch", `vlad/${ID}`, integ ? `vlad/${PARENT}` : "main");
     if (withCommit) { const t = join(base, "tmp-wt"); git(repo, "worktree", "add", "-q", t, `vlad/${ID}`); writeFileSync(join(t, "n.txt"), "x"); git(t, "add", "-A"); git(t, "commit", "-q", "-m", "w"); git(repo, "worktree", "remove", "--force", t); }
     mkdirSync(join(home, ".vlad-agent", "launches"), { recursive: true });
     writeFileSync(join(home, ".vlad-agent", "launches", `${ID}.json`), JSON.stringify({ ...mid!, worktree: join(base, "yok") }));
@@ -80,9 +83,18 @@ describe("worker: belirsiz launch kurtarması", () => {
     expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
   });
 
-  it("F-243: dalda commit varsa kayıt ve dal korunur, anlaşılır hata (cleanup yolu açık)", async () => {
+  it("F-243: pipeline fazı — dal entegrasyon dalından kesilmiş, kendi commit'i yok → silinir (HEAD'e göre birleşmemiş olsa da)", async () => {
+    await stranded(false, true);
+    expect((await opStatus({ target: "op-u" }, { from: "mac" })).state).toBe("aborted");
+    expect(readRecord(ID)).toBeNull();
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
+  });
+
+  it("F-243: dalda commit varsa kayıt ve dal korunur; beyin 'sonuçsuz done' görür (release --force yolu), ağ hatası gibi görünmez", async () => {
     await stranded(true);
-    await expect(opStatus({ target: "op-u" }, { from: "mac" })).rejects.toThrow(/commit|cleanup/);
+    const r = await opStatus({ target: "op-u" }, { from: "mac" });
+    expect(r).toMatchObject({ state: "done" });
+    expect((r as { result?: unknown }).result).toBeUndefined();
     expect(readRecord(ID)).not.toBeNull();
     expect(git(repo, "branch", "--list", `vlad/${ID}`)).toContain(`vlad/${ID}`);
   });
