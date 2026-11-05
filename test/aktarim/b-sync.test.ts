@@ -147,13 +147,22 @@ describe("aktarim:B ClipSync.applyRemote", () => {
     expect(await r.sync.applyRemote({ kind: "image", bytes: pngBytes(), key: k(), from: "x" })).toBe("applied");
     expect(r.cb.writes).toHaveLength(1);
   });
-  it("görülmemiş yerel değişiklik varsa 'local_changed' ve yazma yok; sonraki yoklama yerel değeri yollar", async () => {
+  it("okuma ile yazma arasında kullanıcı kopyalarsa 'local_changed', yazma olmaz; sonraki yoklama yerel değeri yollar", async () => {
     const r = rig(); await r.sync.tick();
-    adv(r); r.cb.setLocal(text("kullanıcı"));
+    const orig = r.cb.read.bind(r.cb);
+    r.cb.read = async () => { const x = await orig(); r.cb.setLocal(text("kullanıcı")); return x; }; // anlık görüntüden hemen sonra kopyalar
+    adv(r);
     expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [r.clock.t + 1, 1, 1], from: "x" })).toBe("local_changed");
     expect(r.cb.writes).toEqual([]);
-    adv(r, 20); await r.sync.tick();
+    r.cb.read = orig; adv(r, 20); await r.sync.tick();
     expect(Buffer.from(r.pushed[0]!.data, "base64").toString()).toBe("kullanıcı");
+  });
+  it("okumadan önceki (yoklamanın görmediği) yerel kopyayı daha yeni uzak değer ezer", async () => {
+    const r = rig(); await r.sync.tick();
+    adv(r); r.cb.setLocal(text("görülmemiş yerel"));
+    expect(await r.sync.applyRemote({ kind: "text", bytes: Buffer.from("uzak"), key: [r.clock.t + 1, 1, 1], from: "x" })).toBe("applied");
+    adv(r, 20); await r.sync.tick();
+    expect(r.pushed).toEqual([]); // ezilen yerel kopya gönderilmez
   });
   it("yazma yarışı: backend 'written:false' dönerse 'local_changed'", async () => {
     const r = rig(); vi.spyOn(r.cb, "write").mockResolvedValueOnce({ written: false, seqAfter: 99, reason: "local_changed" });

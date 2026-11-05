@@ -50,9 +50,9 @@ describe("aktarim:B clip-push", () => {
     expect(cb.writes).toEqual([]);
     expect(await r.ops["clip-push"](arg({ eventTs: st.now + CLOCK_SKEW_MS }), ctx)).toBe("applied");
   });
-  it("görülmemiş yerel kopya varken uzak itme 'stale' döner (gönderen yeniden denemez)", async () => {
+  it("okuma ile yazma arasında yerel kopya olursa 'stale' döner (gönderen yeniden denemez), pano yerelde kalır", async () => {
     const { r, cb } = unit();
-    cb.setLocal({ kind: "text", bytes: Buffer.from("yerel") });
+    const orig = cb.read.bind(cb); cb.read = async () => { const x = await orig(); cb.setLocal({ kind: "text", bytes: Buffer.from("yerel") }); return x; };
     expect(await r.ops["clip-push"](arg(), ctx)).toBe("stale");
     expect(cb.writes).toEqual([]);
   });

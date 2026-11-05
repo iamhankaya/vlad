@@ -37,7 +37,7 @@ class HelperBackend implements ClipboardBackend {
   private async reset(): Promise<void> { const h = this.h; this.h = null; await h?.close().catch(() => {}); }
   private t(ms: number): number { return this.o.timeoutMs ?? ms; }
 
-  async changeCount(): Promise<number> { return (await this.call(["count"], this.t(5000))).n!; }
+  async changeCount(): Promise<number> { return (await this.call(["count"], this.t(20_000))).n!; }
 
   async read(): Promise<{ seq: number; content: ClipContent | null }> {
     let r = await this.call(["read"], this.t(20_000));

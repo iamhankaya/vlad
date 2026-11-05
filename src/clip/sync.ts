@@ -85,10 +85,10 @@ export class ClipSync implements ClipSyncLike {
         if (!validPng(m.bytes)) return "bad_image";
       }
       if (compareKeys(m.key, this.lastWinner) <= 0) return "stale";
-      const seq = await d.backend.changeCount();
-      if (this.lastSeq === null) this.lastSeq = seq;
-      if (seq !== this.lastSeq) return "local_changed"; // henüz görülmemiş yerel kopya: onu ezme (sonraki yoklama gönderir)
-      const w = await d.backend.write({ kind: m.kind, bytes: m.bytes }, seq);
+      // Okuma anındaki sürüm (seq) yazmanın koşuludur: okuma ile yazma arasında kullanıcı kopyalarsa yazma reddedilir (local_changed),
+      // yerel değer ezilmez ve sonraki yoklama onu gönderir. Okumadan ÖNCEKİ görülmemiş yerel kopyayı uzak değer ezer (daha yeni olay kazanır).
+      const snap = await d.backend.read();
+      const w = await d.backend.write({ kind: m.kind, bytes: m.bytes }, snap.seq);
       if (!w.written) return "local_changed";
       let after = w.seqAfter;
       if ((d.settleMs ?? 0) > 0) {
@@ -141,8 +141,13 @@ export class ClipSync implements ClipSyncLike {
     if (this.lastSeq === null) { this.lastSeq = seq; return; }
     if (!d.isEnabled() || d.peer === null) { this.lastSeq = seq; this.pending = null; return; } // kapalıyken yalnız sayaç ilerler: içerik okunmaz
     if (seq === this.lastSeq) return;
-    const eventTs = d.now();
-    if (eventTs <= this.t0) { this.lastSeq = seq; return; } // kuruluş anıyla aynı anda olan içerik taban çizgisidir
+    let eventTs = d.now();
+    if (eventTs <= this.t0) {
+      // Kuruluşla aynı ms: gerçek saat çözünürlüğü olabilir, kısa bekleyip yeniden bak. Hâlâ ilerlemediyse (donmuş saat) içerik taban çizgisidir.
+      await new Promise<void>((r) => setTimeout(r, 3));
+      eventTs = d.now();
+      if (eventTs <= this.t0) { this.lastSeq = seq; return; }
+    }
     const r = await d.backend.read();
     this.lastSeq = r.seq;
     const key = this.nextKey(eventTs);

@@ -10,9 +10,11 @@ const out = $.NSFileHandle.fileHandleWithStandardOutput, inp = $.NSFileHandle.fi
 function reply(o) { out.writeData($(JSON.stringify(o) + '\\n').dataUsingEncoding(4)); }
 let buf = '';
 function readLine() {
+  let from = 0; // yalnız yeni parçada ara (20 MiB resim satırında O(n^2) olmasın)
   for (;;) {
-    const i = buf.indexOf('\\n');
+    const i = buf.indexOf('\\n', from);
     if (i >= 0) { const l = buf.slice(0, i); buf = buf.slice(i + 1); return l; }
+    from = buf.length;
     const d = inp.availableData;
     if (Number(d.length) === 0) return null;
     buf += ObjC.unwrap($.NSString.alloc.initWithDataEncoding(d, 4));
@@ -35,7 +37,7 @@ for (let l; (l = readLine()) !== null;) {
       reply({ id, ok: true, n, after: seq(), text: t ? b64(t) : null, png: g ? b64(g) : null });
     } else if (p[1] === 'write') {
       const n = seq();
-      if (n !== Number(p[3])) { reply({ id, ok: true, written: false, n }); continue; }
+      if (n !== Number(p[3]) || p[4].length === 0) { reply({ id, ok: true, written: false, n }); continue; } // boş veri: panoyu silmeden reddet
       const data = $.NSData.alloc.initWithBase64EncodedStringOptions(p[4], 0);
       pb.clearContents;
       const ok = pb.setDataForType(data, p[2] === 'text' ? 'public.utf8-plain-text' : 'public.png');

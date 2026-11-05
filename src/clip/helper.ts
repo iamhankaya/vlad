@@ -12,6 +12,7 @@ export function spawnLineHelper(file: string, args: string[], o: { maxFailures?:
   let waiter: { resolve(l: string): void; reject(e: Error): void; timer: NodeJS.Timeout; c: ChildProcess } | null = null;
   let failures = 0;
   let closed = false;
+  let lastFail = 0;
   let queue: Promise<unknown> = Promise.resolve();
 
   const kill = (c: ChildProcess) => { try { c.stdin?.destroy(); } catch { /* kapalı */ } try { c.kill("SIGKILL"); } catch { /* zaten çıktı */ } };
@@ -32,6 +33,7 @@ export function spawnLineHelper(file: string, args: string[], o: { maxFailures?:
 
   const once = async (line: string, timeoutMs: number): Promise<string> => {
     if (closed) throw new Error("pano yardımcısı kapalı");
+    if (failures >= maxFailures && Date.now() - lastFail > 60_000) failures = 0; // geçici sorun (soğuk açılış, AV) kalıcı ölüm olmasın
     if (failures >= maxFailures) throw new Error(`pano yardımcısı ${maxFailures} kez çöktü/yanıtsız kaldı; yeniden denenmiyor`);
     const c = (child ??= start());
     const p = new Promise<string>((resolve, reject) => {
@@ -40,7 +42,7 @@ export function spawnLineHelper(file: string, args: string[], o: { maxFailures?:
     });
     try { c.stdin!.write(line + "\n"); } catch (e) { fail(c, e as Error); }
     try { const r = await p; failures = 0; return r; } catch (e) {
-      failures++; if (child === c) child = null; kill(c);
+      failures++; lastFail = Date.now(); if (child === c) child = null; kill(c);
       throw e;
     }
   };
