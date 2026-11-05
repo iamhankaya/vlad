@@ -1,0 +1,11 @@
+{
+  "_doc": "Known upward runtime imports (file -> unit). Fix them, then remove the entry; the test also fails on stale entries. Target after U3: empty.",
+  "violations": [
+    "kb/lint.ts -> projects",
+    "kb/worker-dirty.ts -> agent",
+    "tasks/launch.ts -> launcher",
+    "tasks/launch.ts -> machines",
+    "tasks/liveness.ts -> machines",
+    "tasks/store.ts -> machines"
+  ]
+}

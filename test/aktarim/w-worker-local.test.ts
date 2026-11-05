@@ -86,7 +86,7 @@ const BRAIN_ONLY = new Set([
 ]);
 
 function defKeys(): string[] {
-  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../src/cli.ts"), "utf8");
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../src/cli/program.ts"), "utf8");
   const names: Record<string, string> = { program: "vlad" };
   for (const m of src.matchAll(/const (\w+) = (\w+)\.command\("([^"]+)"\)/g)) names[m[1]!] = m[3]!;
   const keys: string[] = [];
