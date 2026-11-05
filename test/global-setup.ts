@@ -1,8 +1,7 @@
-import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { ensureBuild } from "./support/build.js";
 
-/** Builds dist/ once for all test files (parallel per-file `tsc` runs raced on the shared dist/). */
+/** Builds dist/ once for all test files (parallel per-file `tsc` runs raced on the shared dist/); VLAD_SKIP_BUILD=1 reuses a fresh build. */
 export default function setup(): void {
-  const r = spawnSync("npx", ["tsc"], { cwd: resolve(import.meta.dirname, ".."), shell: true, encoding: "utf8" });
-  if (r.status !== 0) throw new Error(`tsc failed:\n${r.stdout}${r.stderr}`);
+  ensureBuild(resolve(import.meta.dirname, ".."));
 }
