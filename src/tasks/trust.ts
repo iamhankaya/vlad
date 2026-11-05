@@ -22,7 +22,9 @@ function withFileLock<T>(file: string, waitMs: number, fn: () => T): T | { locke
   for (;;) {
     try { mkdirSync(lock); break; } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      try { if (Date.now() - statSync(lock).mtimeMs > STALE_LOCK_MS) { rmSync(lock, { recursive: true, force: true }); continue; } } catch { continue; } // vanished: retry
+      let broke = false;
+      try { if (Date.now() - statSync(lock).mtimeMs > STALE_LOCK_MS) { rmSync(lock, { recursive: true, force: true }); broke = true; } } catch { /* vanished or not removable: wait below, the deadline still applies */ }
+      if (broke) continue;
       if (Date.now() >= deadline) return { locked: false };
       sleepMs(10 + Math.floor(Math.random() * 20));
     }

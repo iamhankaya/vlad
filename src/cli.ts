@@ -496,7 +496,10 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
     if (openWindow) {
       const mode = resolveLaunchMode(cfg0.launcher);
       const launcher: Launcher = mode === "noop" ? new NoopLauncher() : new PosixLauncher({ mode: mode === "terminal" ? "terminal" : "tmux" });
-      try { closeTaskWindow(id); } catch { /* no window to close (or the noop guard): the launcher reports real failures */ } // no second window beside a live one
+      try { closeTaskWindow(id); } catch (e) {
+        // the noop guard throws by design; a real survivor must not get a second worker beside it
+        if (mode !== "noop") throw new Error(`açık pencere kapatılamadı, ikinci çalışan açılmadı: ${(e as Error).message}`);
+      }
       const res = await launcher.launch(req);
       if (!res.ok) throw new Error(`launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`);
       out(o, { ...r, method: res.method, detail: res.detail }, `${id} sürdürüldü (${res.method}) -> ${r.worktree}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`);
