@@ -2,8 +2,8 @@ import { randomBytes, createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open, lstat, readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { RemoteError, type RemoteTransport } from "../machines/types.js";
-import { uniqueName } from "./paths.js";
+import { RemoteError, type Os, type RemoteTransport } from "../machines/types.js";
+import { sanitizeEntryPath, uniqueName, XferPathError } from "./paths.js";
 import {
   XFER_MAX_ENTRIES, XFER_MAX_TOTAL_BYTES,
   type XferBeginResult, type XferCommitResult, type XferEntry, type XferItem, type XferPurpose,
@@ -14,8 +14,14 @@ import {
 export class XferUncertainError extends RemoteError {
   constructor(message: string, public details: { planned?: string[]; published?: string[] } = {}) { super("uncertain", message); this.name = "XferUncertainError"; }
 }
+/** Alıcının ad kurallarına uymayan yol(lar); `paths` hata `details`'ına ve bildirime girer. */
+export class XferNameError extends RemoteError {
+  constructor(public paths: string[], message: string) { super("bad_request", message); this.name = "XferNameError"; }
+}
 export interface SendOptions {
   to: string; paths: string[];
+  /** Alıcının işletim sistemi (ad kuralları için); bilinmiyorsa en katı kural (win32). */
+  peerOs?: Os;
   onProgress?(p: { sentBytes: number; totalBytes: number; file: string }): void;
   chunkBytes?: number;
   /** shortcut: şimdilik yok sayılır (hep 1 uçuşta parça); alıcı offset sırası ister, paralel parça için aynı dosyada sıra garantisi gerekir. */
@@ -31,6 +37,20 @@ const RETRY_DELAYS_MS = [200, 800]; // 3 deneme
 const realSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const fail = (msg: string) => new RemoteError("failed", `failed: ${msg}`);
 const changed = () => fail("dosya gönderim sırasında değişti");
+
+/** Alıcıyla aynı `sanitizeEntryPath` + harf duyarsız (NFC) çakışma; boş dizi = sorun yok. Alıcı tüm manifest'i düşürmeden önce gönderici söyler. */
+export function checkEntryNames(paths: string[], os: Os): { path: string; reason: string }[] {
+  const out: { path: string; reason: string }[] = [], seen = new Set<string>();
+  for (const p of paths) {
+    try { sanitizeEntryPath(p, os); } catch (e) {
+      if (!(e instanceof XferPathError)) throw e;
+      out.push({ path: p, reason: e.message.replace(/^bad_request: yol geçersiz: /, "") }); continue;
+    }
+    const k = p.normalize("NFC").toLowerCase();
+    if (seen.has(k)) out.push({ path: p, reason: "harf duyarsız ad çakışması" }); else seen.add(k);
+  }
+  return out;
+}
 
 /** Parçaları sırayla `emit`'e verir (offset artan), dosyanın SHA-256'sını döner; dizin için null. */
 type Feed = (i: number, chunkBytes: number, emit: (offset: number, data: Buffer) => Promise<void>) => Promise<string | null>;
@@ -158,6 +178,8 @@ async function plan(paths: string[]): Promise<{ entries: Planned[]; skipped: Sen
 export async function sendPaths(t: RemoteTransport, o: SendOptions): Promise<SendResult> {
   const sleep = o.sleep ?? realSleep;
   const { entries, skipped } = await plan(o.paths);
+  const problems = checkEntryNames(entries.map((e) => e.path), o.peerOs ?? "win32");
+  if (problems.length) throw new XferNameError(problems.map((x) => x.path), `bad_request: yol geçersiz: ${problems.slice(0, 3).map((x) => `${x.path} (${x.reason})`).join("; ")}${problems.length > 3 ? ` (+${problems.length - 3})` : ""}`);
   const totalBytes = entries.reduce((s, e) => s + e.size, 0);
   if (totalBytes > XFER_MAX_TOTAL_BYTES) throw new RemoteError("too_large", "too_large: aktarım 4 GiB sınırını aşıyor");
   if (entries.length > XFER_MAX_ENTRIES) throw new RemoteError("too_large", `too_large: aktarım ${XFER_MAX_ENTRIES} öğe sınırını aşıyor`);
