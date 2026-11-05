@@ -16,6 +16,8 @@ export interface LaunchResult {
   script?: string;
   command?: string;
   cwd?: string;
+  /** POSIX external mode: SHA-256 (hex) of the bytes written to `script`. */
+  scriptSha256?: string;
   /** Desktop-queue mode only: the queue file written for vlad-desktop. */
   queued?: string;
 }

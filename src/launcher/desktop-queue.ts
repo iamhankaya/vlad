@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, lstatSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { writeFileAtomic } from "../kb/atomic.js";
+import { posixDirProblem, securePosixDir } from "./posix-dir.js";
 import { externalLaunch } from "./terminal.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 
@@ -43,21 +44,11 @@ export function desktopQueueDir(env: NodeJS.ProcessEnv = process.env, platform: 
   return { dir: raw };
 }
 
-/** Why `dir` is not a private directory of the current user ("symlink", "sahibi başka", "izinler gevşek: 755"), or null when it is. */
-function posixDirProblem(dir: string, ignoreMode: boolean): string | null {
-  let st;
-  try { st = lstatSync(dir); } catch (e) { return (e as Error).message; }
-  if (st.isSymbolicLink()) return "symlink";
-  if (!st.isDirectory()) return "klasör değil";
-  if (process.getuid && st.uid !== process.getuid()) return "sahibi başka kullanıcı";
-  if (!ignoreMode && (st.mode & 0o077) !== 0) return `izinler gevşek: ${(st.mode & 0o777).toString(8)}`;
-  return null;
-}
-
 /** Atomically (temp name + rename) writes `<dir>/<taskId>.json`. Throws when the folder is not writable. */
-export function enqueueDesktop(dir: string, req: Omit<DesktopQueueRequest, "v" | "createdAt" | "pid" | "scriptSha256"> & { createdAt?: string; pid?: number }): string {
-  const scriptSha256 = createHash("sha256").update(readFileSync(req.script)).digest("hex");
-  const body: DesktopQueueRequest = { v: 2, scriptSha256, createdAt: new Date().toISOString(), pid: process.pid, ...req };
+export function enqueueDesktop(dir: string, req: Omit<DesktopQueueRequest, "v" | "createdAt" | "pid" | "scriptSha256"> & { createdAt?: string; pid?: number; scriptSha256?: string }): string {
+  // prefer the hash of the bytes the launcher wrote; re-reading the path would hash whatever is there now
+  const scriptSha256 = req.scriptSha256 ?? createHash("sha256").update(readFileSync(req.script)).digest("hex");
+  const body: DesktopQueueRequest = { v: 2, createdAt: new Date().toISOString(), pid: process.pid, ...req, scriptSha256 };
   const file = join(dir, `${req.taskId}.json`);
   writeFileAtomic(file, JSON.stringify(body));
   return file;
@@ -71,10 +62,7 @@ export function enqueueDesktop(dir: string, req: Omit<DesktopQueueRequest, "v" |
 export function secureDir(dir: string): void {
   if (process.platform !== "win32") {
     // POSIX: our own folder, so tighten it to 0700 after refusing symlinks / foreign owners (chmod would follow a symlink)
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const bad = posixDirProblem(dir, true);
-    if (bad) throw new Error(`${dir}: ${bad}`);
-    chmodSync(dir, 0o700);
+    securePosixDir(dir);
     return;
   }
   mkdirSync(dir, { recursive: true });
@@ -118,7 +106,7 @@ export function queueLauncher(dir: string, kind: DesktopQueueRequest["kind"], fa
       const ext = externalLaunch(req, scriptDir);
       if (!ext.ok || !ext.script || !ext.cwd) return ext;
       try {
-        const queued = enqueueDesktop(dir, { kind, taskId: req.taskId, script: ext.script, cwd: ext.cwd });
+        const queued = enqueueDesktop(dir, { kind, taskId: req.taskId, script: ext.script, cwd: ext.cwd, ...(ext.scriptSha256 ? { scriptSha256: ext.scriptSha256 } : {}) });
         return { ...ext, method: "desktop-queue", queued };
       } catch (e) {
         process.stderr.write(`uyarı: kuyruk yazılamadı (${(e as Error).message}); dış pencere açılıyor\n`);

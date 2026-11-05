@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { desktopQueueDir, queueLauncher, secureDir } from "../../src/launcher/desktop-queue.js";
-import { buildPosixScript } from "../../src/launcher/posix.js";
+import { buildPosixScript, externalPosixLaunch } from "../../src/launcher/posix.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/types.js";
 
 // Real temp dirs only (realpath-checked); POSIX permissions have no meaning on Windows (ACL tests cover it).
@@ -111,5 +111,95 @@ describe.skipIf(process.platform === "win32")("desktop queue on POSIX (T20261105
       expect(calls).toEqual(["fallback"]);
       expect(r.queued).toBeUndefined();
     });
+  });
+
+  // F-vlad-223: an attacker-writable ancestor lets someone swap the (private) folder for a symlink/own copy
+  describe("ancestor chain", () => {
+    const nested = (ancestorMode: number): { ancestor: string; leaf: string } => {
+      const ancestor = join(base, "anc");
+      mkdirSync(ancestor);
+      const leaf = join(ancestor, "queue");
+      mkdirSync(leaf, { mode: 0o700 });
+      chmodSync(leaf, 0o700);
+      chmodSync(ancestor, ancestorMode);
+      return { ancestor, leaf };
+    };
+    it("group/other-writable ancestor without sticky bit → queue folder and script folder refused", () => {
+      for (const mode of [0o777, 0o775, 0o757]) {
+        const { leaf, ancestor } = nested(mode);
+        const r = desktopQueueDir(env(leaf), "darwin");
+        expect(r.dir, mode.toString(8)).toBeNull();
+        expect((r as { warning?: string }).warning).toMatch(/VLAD_DESKTOP_QUEUE güvensiz.*(yazılabilir|ata)/);
+        expect(() => secureDir(join(ancestor, "vlad"))).toThrow(/ata/);
+        rmSync(ancestor, { recursive: true, force: true });
+      }
+    });
+    it("writable ancestor WITH sticky bit (like /tmp) is accepted", () => {
+      const { leaf, ancestor } = nested(0o1777);
+      expect(desktopQueueDir(env(leaf), "darwin")).toEqual({ dir: leaf });
+      expect(() => secureDir(join(ancestor, "vlad"))).not.toThrow();
+    });
+    it("ancestor owned by neither the current user nor root → refused", () => {
+      const { leaf } = nested(0o755);
+      const uid = process.getuid!();
+      const spy = vi.spyOn(process, "getuid").mockReturnValue(uid + 12345);
+      try {
+        // leaf and ancestors are all owned by the real uid, which now looks foreign
+        expect(desktopQueueDir(env(leaf), "darwin").dir).toBeNull();
+      } finally { spy.mockRestore(); }
+    });
+    it("a symlink in the ancestor chain is resolved first: real chain is what gets checked", () => {
+      const { leaf, ancestor } = nested(0o777);
+      const link = join(base, "alias");
+      symlinkSync(ancestor, link);
+      expect(desktopQueueDir(env(join(link, "queue")), "darwin").dir).toBeNull(); // resolves to the unsafe real chain
+      void leaf;
+    });
+    it("the OS temp chain (/var/folders/…, /tmp) passes", () => {
+      expect(() => secureDir(join(base, "vlad"))).not.toThrow();
+    });
+  });
+
+  // F-vlad-224: --external (no queue) must use the same private-folder check
+  describe("externalPosixLaunch script folder", () => {
+    it("tightens a loose own folder to 0700 and writes a 0700 script", () => {
+      const sd = join(base, "vlad");
+      mkdirSync(sd, { mode: 0o755 });
+      chmodSync(sd, 0o755);
+      const r = externalPosixLaunch(req(), sd);
+      expect(r.ok, r.detail).toBe(true);
+      expect(statSync(sd).mode & 0o777).toBe(0o700);
+      expect(statSync(r.script!).mode & 0o077).toBe(0);
+    });
+    it("symlinked folder → ok:false, nothing written through the link", () => {
+      const real = join(base, "real");
+      mkdirSync(real);
+      const sd = join(base, "vlad");
+      symlinkSync(real, sd);
+      const r = externalPosixLaunch(req(), sd);
+      expect(r.ok).toBe(false);
+      expect(r.detail).toMatch(/symlink/);
+      expect(readdirSync(real)).toEqual([]);
+    });
+    it("folder under a writable non-sticky ancestor → ok:false", () => {
+      const anc = join(base, "anc");
+      mkdirSync(anc);
+      chmodSync(anc, 0o777);
+      const r = externalPosixLaunch(req(), join(anc, "vlad"));
+      expect(r.ok).toBe(false);
+      expect(r.detail).toMatch(/ata/);
+    });
+    it("folder owned by someone else → ok:false (no silent fallback: the pgrep pattern needs /vlad/<id>.sh)", () => {
+      const sd = join(base, "vlad");
+      mkdirSync(sd, { mode: 0o700 });
+      const spy = vi.spyOn(process, "getuid").mockReturnValue(process.getuid!() + 12345);
+      try { expect(externalPosixLaunch(req(), sd).ok).toBe(false); } finally { spy.mockRestore(); }
+    });
+  });
+
+  // F-vlad-225: hash the bytes that were written, not a second read of the path
+  it("externalPosixLaunch returns scriptSha256 of the written bytes", () => {
+    const r = externalPosixLaunch(req(), join(base, "vlad"));
+    expect(r.scriptSha256).toBe(createHash("sha256").update(readFileSync(r.script!)).digest("hex"));
   });
 });

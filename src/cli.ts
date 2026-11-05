@@ -480,7 +480,7 @@ def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: wor
       return;
     }
     try {
-      const queued = enqueueDesktop(rq.dir, { kind: "resume", taskId: id, script: ext.script!, cwd: ext.cwd! });
+      const queued = enqueueDesktop(rq.dir, { kind: "resume", taskId: id, script: ext.script!, cwd: ext.cwd!, ...(ext.scriptSha256 ? { scriptSha256: ext.scriptSha256 } : {}) });
       out(o, { ...r, method: "desktop-queue", queued, script: ext.script, cwd: ext.cwd }, `${id} vlad-desktop kuyruğuna yazıldı: ${queued}`);
       return;
     } catch (e) {
