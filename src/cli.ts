@@ -205,6 +205,7 @@ function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => v
       } else if (await before(key, args)) return;
       else await (lockPolicy(key) === "outer" ? withKbLock(() => runAndRefresh(key, args, fn)) : fn(...args));
     } catch (e) {
+      if (key === "vlad send") await (await import("./transfer/cli.js")).notifySendFailure(e, { notify: !!(args[args.length - 2] as Opts).notify }).catch(() => {}); // F-vlad-237: forward/yol doğrulama hataları da bildirilsin
       fail(e);
     }
   });

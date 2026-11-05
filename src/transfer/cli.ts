@@ -40,6 +40,20 @@ export function argsFromEnv(env: NodeJS.ProcessEnv = process.env): string[] {
   });
 }
 
+/** runSendCommand'in bildirdiği hatalar: kabuk (src/cli.ts) aynı hatayı ikinci kez bildirmesin. */
+const notified = new WeakSet<object>();
+
+/**
+ * `--notify` ile `vlad send` hatası runSendCommand'e hiç varmadan atılmışsa (işçi forward reddi, `--args-env`/yol doğrulaması)
+ * kabuk bunu çağırır; sağ tıktan gönderen (gizli VBS) hatayı yine görür (F-vlad-237). Bildirim hatası yutulur.
+ */
+export async function notifySendFailure(e: unknown, o: { notify?: boolean }, io: { notifier?: Notifier; os?: Os } = {}): Promise<void> {
+  if (!o.notify || (typeof e === "object" && e !== null && notified.has(e))) return;
+  try {
+    await (io.notifier ?? createNotifier(io.os ?? (process.platform as Os))).notify("Gönderilemedi", `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
+  } catch { /* bildirim hatası asıl hatayı değiştirmez */ }
+}
+
 export async function runSendCommand(paths: string[], o: SendCommandOpts, io: SendCommandIo = {}): Promise<void> {
   const write = io.write ?? ((s: string) => { process.stdout.write(s); });
   const writeErr = io.writeErr ?? ((s: string) => { process.stderr.write(s); });
@@ -69,6 +83,7 @@ export async function runSendCommand(paths: string[], o: SendCommandOpts, io: Se
     if (to === undefined) await tell("Gönderilemedi", `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
     else if (e instanceof RemoteError && e.code === "uncertain") await tell(`${to}: teslim belirsiz`, `sonuç belirsiz, ${to} makinesinde İndirilenler'e bak`);
     else await tell(`${to}'a gönderilemedi`, `gönderilemedi: ${e instanceof Error ? e.message : String(e)}`);
+    if (typeof e === "object" && e !== null) notified.add(e);
     throw e;
   }
   if (showProgress) writeErr("\n");
@@ -80,7 +95,9 @@ export async function runSendCommand(paths: string[], o: SendCommandOpts, io: Se
   }
   if (r.failed) {
     await tell(`${to}'a gönderilemedi`, `gönderilemedi: ${r.failed.name}: ${r.failed.error}`);
-    throw new RemoteError("failed", `failed: kısmi teslim: ${r.failed.name}: ${r.failed.error}`, to);
+    const err = new RemoteError("failed", `failed: kısmi teslim: ${r.failed.name}: ${r.failed.error}`, to);
+    notified.add(err);
+    throw err;
   }
   await tell(`${to}'a gönderildi`, r.items.map((i) => i.name).join(", "));
 }

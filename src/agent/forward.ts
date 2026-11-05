@@ -24,7 +24,7 @@ export function workerContext(): { cfg: VladConfig; self: string } | null {
   return self === cfg.brain ? null : { cfg, self };
 }
 
-const FORWARD: Record<string, WriteArgs["cmd"]> = { "task log": "task.log", "task ask": "task.ask", "task report": "task.report", "task session": "task.session" };
+export const FORWARD: Record<string, WriteArgs["cmd"]> = { "task log": "task.log", "task ask": "task.ask", "task report": "task.report", "task session": "task.session" };
 
 const localClient = (cfg: VladConfig, self: string) => new AgentClient({ self, keys: readLocal().keys, config: () => cfg, defaultTimeoutMs: 70_000 });
 
@@ -41,7 +41,7 @@ export async function callLocal<T>(cfg: VladConfig, self: string, op: AgentOp, a
  * Liste dışı her komut ya iletilir (FORWARD) ya reddedilir; yeni komut varsayılan olarak reddedilir (fail-closed).
  * `task launch`/`kb commit` gibi iç kilitli yazıcılar KB_WRITES'ta olmadığı için burada olmamaları gerekir.
  */
-const WORKER_LOCAL = new Set([
+export const WORKER_LOCAL = new Set([
   "vlad scan", "vlad status", "vlad install", "role list",
   "project status", "project list", "finding list",
   "task list", "task idle", "task ready", "task close-window",
@@ -49,6 +49,8 @@ const WORKER_LOCAL = new Set([
   "kb get", "kb search", "kb check", "kb refs", "pending list", "session name",
   "agent start", "agent status", "agent keygen", "agent setkey", "agent install",
   "queue list", "queue flush", "queue drop", "machine list", "machine ping", "machine probe-window",
+  // aktarım (F-vlad-236): kb'ye yazmaz; yerel Agent'la / karşı makineyle ya da yerel panoyla konuşur (işçide sağ tık menüsü bunları çağırır)
+  "vlad send", "clip on", "clip off", "clip status", "clip get", "clip set",
 ]);
 
 /**
