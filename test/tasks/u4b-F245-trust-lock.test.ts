@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { trustWorktree, withFileLock } from "../../src/tasks/trust.js";
 
@@ -87,7 +87,7 @@ describe("withFileLock owner.json", () => {
     const now = (): number => (calls++ === 0 ? Date.now() + 20_000 : Date.now()); // 1st: judged stale; re-check: fresh
     expect(withFileLock(file, 60, () => "ok", { now })).toEqual({ locked: false });
     expect(existsSync(lock)).toBe(true);
-    expect(readdirSync(dir)).toEqual([`${file.split("/").pop()}.vlad-lock`]); // no .stale-* leftover
+    expect(readdirSync(dir)).toEqual([`${basename(file)}.vlad-lock`]); // no .stale-* leftover
   });
 
   it("missing owner.json, fresh dir (between mkdir and write): waits, does not break", () => {
@@ -158,7 +158,8 @@ describe("withFileLock owner.json", () => {
     expect(readdirSync(dir)).toEqual(["claude.json"]);
   });
 
-  describe("F-vlad-255: editOnce tmp file mode", () => {
+  // Windows'ta POSIX izin bitleri yok (chmod 0600 etkisiz, mode 0666 döner): gerçek platform kısıtı
+  describe.skipIf(process.platform === "win32")("F-vlad-255: editOnce tmp file mode", () => {
     const mode = (): number => statSync(file).mode & 0o777;
     const withUmask0 = (fn: () => void): void => { const u = process.umask(0); try { fn(); } finally { process.umask(u); } };
     it("keeps the original mode of an existing file (0600 stays 0600 even under umask 0)", () => {

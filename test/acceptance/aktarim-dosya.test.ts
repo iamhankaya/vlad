@@ -9,7 +9,7 @@ import { RemoteError } from "../../src/fleet/types.js";
 import { sendPaths } from "../../src/transfer/send.js";
 import { XFER_CHUNK_BYTES, XFER_MAX_ENTRIES, XFER_MAX_TOTAL_BYTES, XFER_STAGING_DIR } from "../../src/transfer/types.js";
 import { makeFile, startAktarimPair, treeHash, type AktarimPair } from "../aktarim/harness.js";
-import { rmTemp } from "../helpers.js";
+import { canSymlink, rmTemp } from "../helpers.js";
 import { makeHomePair, spawnVlad } from "../machines/harness.js";
 import { b64, bytes, codeOf, entriesOf, hashesOf, listAll, messageOf, mkTemp, newId, rawUpload, read, sha256, visible, wire, type RawItem } from "./aktarim-helpers.js";
 
@@ -64,7 +64,7 @@ describe("aktarim-kabul: iki yönde dosya", () => {
     await sendPaths(p.mac.transport, { to: "windows", paths: [file] });
     expect(sha256(read(p.windows.downloads, "x.bin"))).toBe(sha256(read(file)));
   }, 60_000);
-  it("sembolik bağ gönderilmez (izlenmez): skipped'a düşer, hedefte iz yok", async () => {
+  it.skipIf(!canSymlink())("sembolik bağ gönderilmez (izlenmez): skipped'a düşer, hedefte iz yok", async () => {
     const p = await pair();
     const src = tmp(), outside = tmp();
     writeFileSync(join(outside, "gizli.txt"), "gizli");
@@ -111,7 +111,7 @@ describe("aktarim-kabul: üzerine yazma yok, çakışmada 'ad (1).ext'", () => {
     expect(read(p.windows.downloads, "A.txt").toString()).toBe("ESKİ");
     expect(visible(p.windows.downloads).map((n) => n.toLowerCase()).sort()).toEqual(["a (1).txt", "a.txt"]);
   });
-  it("hedef ad sembolik bağsa (kırık dahil) bağın gösterdiği dosya ezilmez", async () => {
+  it.skipIf(!canSymlink())("hedef ad sembolik bağsa (kırık dahil) bağın gösterdiği dosya ezilmez", async () => {
     const p = await pair();
     const outside = tmp();
     writeFileSync(join(outside, "hedef.txt"), "DIŞARIDA");
@@ -252,7 +252,7 @@ describe("aktarim-kabul: yol kaçışı reddedilir", () => {
     expect(await codeOf(wire(p.mac.transport, "windows", "xfer-chunk", { id, entry: 0, offset: 0, data: b64("a") }))).toBe("bad_request");
     outsideUntouched(p, before);
   });
-  it("sembolik bağ olan üst ada yazılmaz: İndirilenler içindeki 'ln → dışarı' izlenmez; gelen 'ln (1)' olarak içeride teslim edilir", async () => {
+  it.skipIf(!canSymlink())("sembolik bağ olan üst ada yazılmaz: İndirilenler içindeki 'ln → dışarı' izlenmez; gelen 'ln (1)' olarak içeride teslim edilir", async () => {
     const p = await pair();
     const outside = tmp();
     symlinkSync(outside, join(p.windows.downloads, "ln"));

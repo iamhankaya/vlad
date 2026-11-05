@@ -1,4 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync, statSync } from "node:fs";
+import { canSymlink } from "../helpers.js";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { XFER_CHUNK_BYTES, XFER_MAX_ACTIVE } from "../../src/transfer/types.js";
@@ -217,7 +218,7 @@ describe("A1.5 commit: teslim", () => {
     expect(readdirSync(join(r.downloads, "d"))).toEqual([]);
     expect(readFileSync(join(r.downloads, "d (1)", "x"), "utf8")).toBe("x");
   });
-  it("hedef ad önceden (kırık) symlink ise ezilmez", async () => {
+  it.skipIf(!canSymlink())("hedef ad önceden (kırık) symlink ise ezilmez", async () => {
     const r = rig(); symlinkSync("/nonexistent/hedef", join(r.downloads, "a.txt"));
     const res = await r.put(newId(), "a.txt", hello);
     expect(res.items[0]!.name).toBe("a (1).txt");
@@ -403,7 +404,7 @@ describe("A1.6 abort / sweep / idle", () => {
     expect(r.staging().sort()).toEqual([id, "0".repeat(32), young, "kullanici-klasoru"].sort());
     expect(readFileSync(join(r.downloads, "benim.txt"), "utf8")).toBe("kullanıcı");
   });
-  it("sweep sembolik bağı izlemez", async () => {
+  it.skipIf(!canSymlink())("sweep sembolik bağı izlemez", async () => {
     const r = rig(); const inc = join(r.downloads, ".vlad-incoming"); mkdirSync(inc);
     const victim = join(r.base, "victim"); mkdirSync(victim); writeFileSync(join(victim, "meta.json"), JSON.stringify({ from: "x", id: "3".repeat(32), manifestHash: "h", state: "receiving", createdAt: 0 })); writeFileSync(join(victim, "dokunma"), "x");
     symlinkSync(victim, join(inc, "3".repeat(32)));

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { RemoteError, type RemoteTransport } from "../../src/fleet/types.js";
 import { sendPaths, uploadBuffer } from "../../src/transfer/send.js";
 import { XFER_STAGING_DIR } from "../../src/transfer/types.js";
-import { rmTemp } from "../helpers.js";
+import { canSymlink, rmTemp } from "../helpers.js";
 import { makeFile, startAktarimPair, treeHash, type AktarimPair } from "./harness.js";
 
 const pairs: AktarimPair[] = [];
@@ -54,7 +54,7 @@ describe("aktarim:A2 sendPaths", () => {
     await sendPaths(p.mac.transport, { to: "windows", paths: [f] });
     expect(readFileSync(join(p.windows.downloads, "big.bin")).equals(readFileSync(f))).toBe(true);
   }, 60_000);
-  it("symlink skipped'a düşer, hedefte iz yok; özel dosya (fifo) da", async () => {
+  it.skipIf(!canSymlink())("symlink skipped'a düşer, hedefte iz yok; özel dosya (fifo) da", async () => {
     const p = await pair(); const src = tmp(), out = tmp();
     writeFileSync(join(out, "gizli"), "g"); makeFile(src, "d/a.txt", 10, 1);
     symlinkSync(join(out, "gizli"), join(src, "d", "link"));
@@ -63,7 +63,7 @@ describe("aktarim:A2 sendPaths", () => {
     expect(r.skipped.map((s) => s.reason).sort()).toEqual(process.platform === "win32" ? ["symlink"] : ["special", "symlink"]);
     expect(names(join(p.windows.downloads, "d"))).toEqual(["a.txt"]);
   });
-  it("üst düzey sembolik bağ tek başına verilirse gönderilecek bir şey kalmaz → hata", async () => {
+  it.skipIf(!canSymlink())("üst düzey sembolik bağ tek başına verilirse gönderilecek bir şey kalmaz → hata", async () => {
     const p = await pair(); const src = tmp();
     makeFile(src, "a", 1, 1); symlinkSync(join(src, "a"), join(src, "l"));
     const { w, calls } = spy(p.mac.transport);

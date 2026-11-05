@@ -26,7 +26,8 @@ function fixture(s: Sandbox) {
 }
 const calls = (s: Sandbox) => readFileSync(s.log, "utf8");
 
-describe("mac/ci-runner.sh", () => {
+// bash betikleri (/bin/bash, GNU tar): Windows'ta çalışmaz, gerçek platform kısıtı
+describe.skipIf(process.platform === "win32")("mac/ci-runner.sh", () => {
   it("varsayılan --dry-run: ağ/kurulum/token yok, adımları ve kullanıcı adımlarını basar", () => {
     const s = sandbox(); const f = fixture(s);
     const r = run("ci-runner.sh", f.base, s, f.env);

@@ -26,7 +26,8 @@ describe("aktarim:C F-vlad-221 gönderici ad denetimi", () => {
     expect(r).toHaveLength(1); expect(r[0]).toMatchObject({ path: "d/A.TXT" }); expect(r[0]!.reason).toMatch(/çakış/);
     expect(checkEntryNames(["é", "é"], "darwin")).toHaveLength(1);
   });
-  it("sendPaths: sorunlu ad ağa çıkmadan bad_request; details'ta yol", async () => {
+  // Windows'ta "kötü:ad.txt" fixture'ı oluşturulamaz (":" NTFS alternatif veri akışı olur, dosya "kötü" yaratılır); yasak-ad denetimi checkEntryNames testlerinde platformdan bağımsız sınanır
+  it.skipIf(process.platform === "win32")("sendPaths: sorunlu ad ağa çıkmadan bad_request; details'ta yol", async () => {
     const d = join(tmp(), "proje"); mkdirSync(d); writeFileSync(join(d, "iyi.txt"), "x"); writeFileSync(join(d, "kötü:ad.txt"), "x");
     const e = await sendPaths(dead, { to: "windows", paths: [d], peerOs: "win32" }).then(() => null, (x) => x);
     expect(e).toBeInstanceOf(RemoteError); expect(e.code).toBe("bad_request");

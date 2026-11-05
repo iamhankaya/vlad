@@ -164,7 +164,10 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
     const other = join(dirname(r.worktree), "baska-yer");
     git(repo, "worktree", "move", r.worktree, other);
     const l = fake();
-    await expect(launchCore({ ...r, adopt: true }, l)).rejects.toThrow(new RegExp(`başka worktree'de.*${other.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}`));
+    const err = await launchCore({ ...r, adopt: true }, l).then(() => null, (e: Error) => e);
+    expect(err?.message).toMatch(/başka worktree'de/);
+    // git yolu eğik çizgiyle verir; Windows'ta join ters eğik çizgi üretir
+    expect(err?.message.split("\\").join("/")).toContain(other.split("\\").join("/"));
     expect(l.reqs).toHaveLength(0);
   });
 
