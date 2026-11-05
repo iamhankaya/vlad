@@ -71,11 +71,17 @@ describe.skipIf(!win)("prompt reaches claude byte for byte (real powershell.exe)
     expect(argv).toHaveLength(5);
   });
   it("--external launch and resume scripts written to disk", () => {
-    for (const r of [req(), req({ resume: {} })]) {
+    // F-vlad-247: resume artık kayıtlı oturum kimliği ister (--continue kullanılmaz)
+    for (const r of [req(), req({ resume: { sessionId: "s-123" } })]) {
       const out = externalLaunch(r, join(root, "ext"), "win32");
       expect(out.ok).toBe(true);
       const argv = run(readFileSync(out.script!, "utf8").replace(/^﻿/, ""), "ext-" + (r.resume ? "resume" : "launch"));
       expect(norm(argv[argv.length - 1])).toBe(norm(NASTY));
     }
+  });
+  it("--external resume without a session id is rejected (no --continue fallback)", () => {
+    const out = externalLaunch(req({ resume: {} }), join(root, "ext"), "win32");
+    expect(out.ok).toBe(false);
+    expect(out.detail).toMatch(/oturum kimliği yok/);
   });
 });

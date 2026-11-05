@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { adsPath, createOriginMarker, quarantineCommand, quarantineValue, zoneIdentifier } from "../../src/platform/origin.js";
 import { NativeDisabledError } from "../../src/platform/native.js";
 import { makeRig, newId, sha, type Rig } from "./a1-recv-helpers.js";
@@ -37,7 +37,7 @@ describe("F-vlad-204 alıcı: yayımlanan her dosyaya işaret", () => {
   it("tek dosya ve dizin içi dosyalar işaretlenir; işaret yayımlamadan önce (hazırlıktaki dosyada) yazılır", async () => {
     const seen: { rel: string; from: string; visible: boolean }[] = [];
     let r!: Rig;
-    r = rig({ deps: { markOrigin: async (p, from) => { seen.push({ rel: p.split("/").pop()!, from, visible: existsSync(join(r.downloads, p.split("/").pop()!)) }); } } });
+    r = rig({ deps: { markOrigin: async (p, from) => { seen.push({ rel: basename(p), from, visible: existsSync(join(r.downloads, basename(p))) }); } } });
     const id = newId();
     await r.begin(id, [{ path: "solo.txt", kind: "file", size: 1 }, { path: "d/a.txt", kind: "file", size: 1 }, { path: "d/s/b.txt", kind: "file", size: 1 }, { path: "d/empty", kind: "dir", size: 0 }]);
     for (const i of [0, 1, 2]) await r.chunk(id, i, 0, body);

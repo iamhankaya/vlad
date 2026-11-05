@@ -14,7 +14,8 @@ function fake(s: Sandbox) {
 }
 const calls = (s: Sandbox) => readFileSync(s.log, "utf8");
 
-describe("mac/setup.sh", () => {
+// bash betikleri (/bin/bash, GNU tar): Windows'ta çalışmaz, gerçek platform kısıtı
+describe.skipIf(process.platform === "win32")("mac/setup.sh", () => {
   it("varsayılan --dry-run: planı basar, hiçbir şey yazmaz ya da çağırmaz", () => {
     const s = sandbox(); const { env } = fake(s);
     const r = run("setup.sh", [], s, env);

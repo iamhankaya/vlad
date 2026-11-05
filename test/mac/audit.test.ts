@@ -27,7 +27,8 @@ function fullMac(s: Sandbox) {
   writeFileSync(join(la, "com.vlad.agent.plist"), "x"); writeFileSync(join(la, "com.vlad.main.plist"), "x");
 }
 
-describe("mac/audit.sh", () => {
+// bash betikleri (/bin/bash, GNU tar): Windows'ta çalışmaz, gerçek platform kısıtı
+describe.skipIf(process.platform === "win32")("mac/audit.sh", () => {
   it("her madde için durum ve kanıt satırı üretir, tam kurulu Mac'te eksik yok", () => {
     const s = sandbox(); fullMac(s);
     const r = run("audit.sh", ["--json"], s);
