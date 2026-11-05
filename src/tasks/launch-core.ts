@@ -48,6 +48,16 @@ export interface LaunchCoreReq extends Omit<LaunchRequest, "cwd"> {
 }
 export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string; reused?: boolean };
 
+/** The worktree path that has `branch` checked out, from `git worktree list --porcelain` output; null when none. */
+function checkedOutAt(porcelain: string | null, branch: string): string | null {
+  let path: string | null = null;
+  for (const l of (porcelain ?? "").split("\n")) {
+    if (l.startsWith("worktree ")) path = l.slice(9);
+    else if (l === `branch refs/heads/${branch}`) return path;
+  }
+  return null;
+}
+
 /** Throws with the same messages the pre-split `launchTask` recorded; the caller records the error. */
 export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitApi = SYNC_GIT): Promise<LaunchCoreResult> {
   const { repo, worktree: wt, branch, base, branchOf, adopt, ...lr } = req;
@@ -59,8 +69,16 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
   else if (existsSync(wt)) {
     reused = (await g.isWorktree(repo, wt)) && (await (branchOf ?? g.worktreeBranch)(wt)) === branch;
   } else if (await g.branchExists(repo, branch)) {
+    // F-vlad-248: git refuses a branch that another worktree holds with a raw error; name the holder instead
+    await g.runGit(repo, ["worktree", "prune"]); // a hand-deleted folder leaves a stale record that would look like another holder
+    const holder = checkedOutAt(await g.runGit(repo, ["worktree", "list", "--porcelain"]), branch);
+    if (holder) throw new Error(`${branch} dalı başka worktree'de checkout'lu: ${holder}; orayı kaldırıp ya da dalı bırakıp tekrar dene`);
     await g.attachWorktree(repo, wt, branch);
     reused = true;
+  }
+  // F-vlad-248: a late retry may sit behind the base (integration moved on); the worker's commits stay, the brain is told
+  if (reused && base && (await g.branchExists(repo, base)) && (await g.runGit(repo, ["merge-base", "--is-ancestor", base, branch])) === null) {
+    console.error(`uyarı: ${branch}, ${base} dalının geride kalmış (yeniden bağlandı); işçi ${base} dalını kendi dalına almalı`);
   }
   if (!reused) await g.addWorktree(repo, wt, branch, base);
   // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate

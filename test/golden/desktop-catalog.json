@@ -1,0 +1,854 @@
+{
+ "version": 1,
+ "commands": [
+  {
+   "path": [
+    "scan"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "project",
+    "write"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "project",
+    "set"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "project",
+    "note"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "project",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "project",
+    "summary"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "project",
+    "refresh"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "project",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "finding",
+    "add"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--detail-file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "finding",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "finding",
+    "set"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "role",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "new"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--body-file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "task",
+    "launch"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "release"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "konsol kataloğunda yoktu (U1 öncesi de); konsolda açmak ayrı karar"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "ingest"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--events-file",
+     "--file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "task",
+    "log"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "ask"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "answer"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "report"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "task",
+    "set"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "deps"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "resume"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "close-window"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "cleanup"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "gate"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "timeoutMs": 1860000
+   }
+  },
+  {
+   "path": [
+    "task",
+    "merge-preview"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "merge"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "timeoutMs": 360000
+   }
+  },
+  {
+   "path": [
+    "task",
+    "digested"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "session"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "idle"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "task",
+    "ready"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "mode",
+    "night"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "mode",
+    "watch"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "mode",
+    "off"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "mode",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "audit",
+    "skills"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "audit",
+    "setup"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "konsol kataloğunda yoktu (U1 öncesi de); konsolda açmak ayrı karar"
+   }
+  },
+  {
+   "path": [
+    "inbox",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "inbox",
+    "count"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "inbox",
+    "done"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "digest",
+    "pending",
+    "add"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "digest",
+    "pending",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "digest",
+    "pending",
+    "done"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "decision",
+    "add"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--body-file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "decision",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "decision",
+    "set"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "decision",
+    "migrate"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "journal",
+    "append"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "journal",
+    "get"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "commit"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "maintain"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "get"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "search"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "refs"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "lint"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "kb",
+    "check"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "session",
+    "register"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "session",
+    "name"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "agent",
+    "start"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "agent",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "agent",
+    "keygen"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "agent",
+    "setkey"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "agent",
+    "install"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "queue",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "queue",
+    "flush"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "queue",
+    "drop"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "remote"
+   ],
+   "json": false,
+   "console": {
+    "kind": "none",
+    "reason": "konsolun kendi komutu; beyinde yeniden çalıştırılmaz"
+   }
+  },
+  {
+   "path": [
+    "machine",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "machine",
+    "ping"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "machine",
+    "probe-window"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "send"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel pano/dosya aktarımı; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "clip",
+    "on"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel pano/dosya aktarımı; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "clip",
+    "off"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel pano/dosya aktarımı; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "clip",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel pano/dosya aktarımı; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "clip",
+    "get"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel pano/dosya aktarımı; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "clip",
+    "set"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel pano/dosya aktarımı; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "install"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel kurulum; konsol kataloğundan hariç"
+   }
+  }
+ ]
+}

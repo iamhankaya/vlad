@@ -8,7 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:desktop": "node scripts/check-desktop-catalog.mjs"
   },
   "engines": {
     "node": ">=22"
