@@ -2,13 +2,13 @@ import { agentDir } from "../agent/state.js";
 import { agentEnv } from "../agent/ops/env.js";
 import { readClipState } from "../clip/state.js";
 import { createBackend } from "../clip/backend.js";
+import { createClipSenders } from "../clip/senders.js";
 import { loadConfig } from "../kb/config.js";
 import { nowMs } from "../machines/clock.js";
 import type { Os } from "../machines/types.js";
 import { nativeAllowed } from "../platform/native.js";
 import { createNotifier, type Notifier } from "../platform/notify.js";
 import { createOriginMarker } from "../platform/origin.js";
-import { notImplemented } from "../platform/not-implemented.js";
 import type { ClipDeps } from "../clip/types.js";
 import { downloadsDir } from "./paths.js";
 import type { AktarimDeps } from "./types.js";
@@ -31,7 +31,7 @@ export function createProdDeps(): AktarimDeps {
   const others = (cfg.machines ?? []).filter((m) => m.name !== self);
   const clip: ClipDeps = {
     backend: createBackend(process.platform),
-    send: { pushText: async () => notImplemented("ClipSenders.pushText"), pushImage: async () => notImplemented("ClipSenders.pushImage") },
+    send: createClipSenders(() => agentEnv().transport, () => clip.peer),
     now: nowMs,
     isEnabled: () => { if (!native) return false; try { return readClipState().enabled; } catch { return false; } },
     log: (m) => process.stderr.write(`clip: ${m}\n`),

@@ -111,7 +111,8 @@ describe("buildScript resume", () => {
   });
 });
 
-describe("TerminalLauncher external", () => {
+// PowerShell .ps1 script + `powershell -File` command are the Windows form; the POSIX form is covered in posix.test.ts (externalLaunch on darwin).
+describe.runIf(process.platform === "win32")("TerminalLauncher external", () => {
   it("writes the script but opens no terminal, and returns script/command/cwd", async () => {
     const dir = sd();
     const exec = vi.fn();
