@@ -64,6 +64,7 @@
     "test/acceptance/cloud-verify3.test.ts",
     "test/acceptance/model-roles-verify.test.ts",
     "test/acceptance/restructure-golden.test.ts",
+    "test/acceptance/restructure-manifest.test.ts",
     "test/acceptance/team-improvements-bugs.test.ts",
     "test/acceptance/team-improvements-e2e.test.ts",
     "test/acceptance/team-improvements-verify2.test.ts",
