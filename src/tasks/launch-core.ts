@@ -54,23 +54,35 @@ export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string
  */
 export function unmergedCommits(repo: string, branch: string, base: string): number | null {
   const args = countArgs(branch, base);
+  if (args && base === "HEAD" && !runGit(repo, DETACHED_PROBE)) return null;
   return parseCount(args && runGit(repo, args, 30_000));
 }
 /** `unmergedCommits` over a `GitApi` (a worker Agent's async git). */
 export async function unmergedCommitsWith(g: GitApi, repo: string, branch: string, base: string): Promise<number | null> {
   const args = countArgs(branch, base);
+  if (args && base === "HEAD" && !(await g.runGit(repo, DETACHED_PROBE))) return null;
   return parseCount(args && (await g.runGit(repo, args, 30_000)));
 }
-const countArgs = (branch: string, base: string): string[] | null =>
-  base === branch || base === `refs/heads/${branch}` ? null : ["rev-list", "--count", `refs/heads/${branch}`, "--not", base, "--"];
+/** F-vlad-257: a detached HEAD is no base (the commits would survive only in the reflog) ⇒ no proof. */
+const DETACHED_PROBE = ["symbolic-ref", "-q", "HEAD"];
+/** F-vlad-257: the base comes from the kb/launch record; only plain ref-name characters, never an option or `..`. */
+const SAFE_BASE = /^[\w./-]+$/;
+const countArgs = (branch: string, base: string): string[] | null => {
+  if (base === branch || base === `refs/heads/${branch}`) return null;
+  if (base !== "HEAD" && (!SAFE_BASE.test(base) || base.includes("..") || base.startsWith("-"))) return null;
+  // refs/heads/ pins the base too: a same-named tag must not answer for it (it could hide the branch's own commits)
+  const ref = base === "HEAD" || base.startsWith("refs/heads/") ? base : `refs/heads/${base}`;
+  return ["rev-list", "--count", `refs/heads/${branch}`, "--not", ref, "--"];
+};
 const parseCount = (out: string | null): number | null => (out !== null && /^\d+$/.test(out) ? Number(out) : null);
 
-/** The worktree path that has `branch` checked out, from `git worktree list --porcelain` output; null when none. */
-function checkedOutAt(porcelain: string | null, branch: string): string | null {
-  let path: string | null = null;
-  for (const l of (porcelain ?? "").split("\n")) {
-    if (l.startsWith("worktree ")) path = l.slice(9);
-    else if (l === `branch refs/heads/${branch}`) return path;
+/** The worktree entry that has `branch` checked out, from `git worktree list --porcelain -z` output (NUL-separated fields, empty field between entries). */
+function checkedOutAt(porcelain: string | null, branch: string): { path: string; prunable: boolean } | null {
+  let cur: { path: string; prunable: boolean } | null = null;
+  for (const l of (porcelain ?? "").split("\0")) {
+    if (l.startsWith("worktree ")) cur = { path: l.slice(9), prunable: false };
+    else if (l.startsWith("prunable") && cur) cur.prunable = true;
+    else if (l === `branch refs/heads/${branch}` && cur) return cur;
   }
   return null;
 }
@@ -87,9 +99,15 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
     reused = (await g.isWorktree(repo, wt)) && (await (branchOf ?? g.worktreeBranch)(wt)) === branch;
   } else if (await g.branchExists(repo, branch)) {
     // F-vlad-248: git refuses a branch that another worktree holds with a raw error; name the holder instead
-    await g.runGit(repo, ["worktree", "prune"]); // a hand-deleted folder leaves a stale record that would look like another holder
-    const holder = checkedOutAt(await g.runGit(repo, ["worktree", "list", "--porcelain"]), branch);
-    if (holder) throw new Error(`${branch} dalı başka worktree'de checkout'lu: ${holder}; orayı kaldırıp ya da dalı bırakıp tekrar dene`);
+    const list = () => g.runGit(repo, ["worktree", "list", "--porcelain", "-z"]);
+    let holder = checkedOutAt(await list(), branch);
+    // F-vlad-253: a hand-deleted folder leaves a stale record that would look like another holder; prune only when the holder is that
+    // stale entry (never repo-wide), and fail closed if git could not clear it
+    if (holder && (holder.prunable || !existsSync(holder.path))) {
+      await g.runGit(repo, ["worktree", "prune"]);
+      holder = checkedOutAt(await list(), branch);
+    }
+    if (holder) throw new Error(`${branch} dalı başka worktree'de checkout'lu: ${holder.path}; orayı kaldırıp ya da dalı bırakıp tekrar dene`);
     await g.attachWorktree(repo, wt, branch);
     reused = true;
   }
