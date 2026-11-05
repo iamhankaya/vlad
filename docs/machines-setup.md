@@ -10,20 +10,22 @@ Tek beyin (Mac, kb'nin tek yazarı), bir ya da daha çok işçi (Windows). İş�
   "machines": [
     { "name": "mac", "os": "darwin", "agent": { "port": 7437 } },
     { "name": "windows", "os": "win32", "agent": { "host": "<işçi-IP>", "port": 7437 },
-      "roots": ["C:\\dev"], "worktreeDir": "C:\\dev\\{repo}-wt", "kbDir": "C:\\dev\\vlad-kb" }
+      "roots": ["C:\\dev"], "worktreeDir": "{repo}-wt", "kbDir": "C:\\dev\\vlad-kb" }
   ]
 }
 ```
 
 - `roots`: işçide repoların aranacağı kökler. Görev başlarken `<root>/<repoName>` (içinde `.git`) tek bulunmalı; yoksa `not_found: repo yok`, iki kökte varsa `conflict: belirsiz repo adı`. Yol beyinden gelmez, yalnız ad gelir.
 - `kbDir`: işçideki kb klonu (beyin push eder, işçi `kb-sync` ile alır; aynı `vlad-kb` upstream'i).
+- `worktreeDir` (makine düzeyi): `{repo}` tam repo yoludur; önüne yol yazılmaz (`C:\dev\{repo}-wt` reddedilir, `src/kb/config.ts:42-43`). Yerel `worktreeDir` (kök düzeyi) için de aynı kural geçerli; varsayılan `{repo}-wt`.
+- İsteğe bağlı alanlar (şema `schemas/config.schema.json`): makine başına `maxParallel` (en fazla `running` dev çalışanı; yoksa sınırsız) ve `agent.bind` (Agent'ın dinleyeceği adres; yoksa `agent.host`, o da yoksa `127.0.0.1`). Kök düzeyde `consoles` (`[{ "name": "desktop" }]`; konsol kimlikleri, konsoldan `vlad remote` için gerekli) ve `workerSilentMinutes` (sayı > 0: sessizlik eşiği; yoksa varsayılan).
 
 ## 2. Anahtarlar (çift anahtar, D-vlad-057)
 
 Her makinede `vlad.local.json` (git'e girmez): `{ "self": "<makine>", "keys": { "<karşı-taraf>": "<64 hex>" } }`. Anahtar **iki makine arasındadır** ve karşı tarafın adıyla tutulur; işçi yalnız beyinle paylaştığı anahtarı bilir (bir işçi ele geçse bile başka işçiye ya da beyin gibi davranan istek imzalayamaz).
 
 1. Her makinede yerel çağrı anahtarı: `vlad agent keygen <kendi-adın>` (kopyalanmaz).
-2. Her işçi için beyinde: `vlad agent keygen windows` → anahtarı üretir, `keys.windows` olarak yazar ve işçide çalıştırılacak komutu basar: `vlad agent setkey mac <anahtar>` (anahtarı **güvenli kanaldan elle** taşı). Konsol için de aynı: `keygen desktop` → konsolda `setkey mac <anahtar>`.
+2. Her işçi için beyinde: `vlad agent keygen windows --show` → anahtarı üretir, `keys.windows` olarak yazar ve çıktıda `windows: <64 hex>` satırını basar (`--show` olmadan anahtar basılmaz; yeniden üretmek eskisini değiştirir). Anahtarın 64 hex kısmını **güvenli kanaldan elle** işçiye taşı; işçide `vlad agent setkey mac -` çalıştırıp anahtarı **stdin'den** ver (ör. PowerShell'de `'<anahtar>' | vlad agent setkey mac -`). Anahtar argv'ye yazılmaz: `setkey` argv'de anahtar alırsa reddeder (`src/cli.ts:914`). Konsol için de aynı, ancak konsol kimliği önce kök `consoles`'ta tanımlı olmalı (yoksa `keygen` "kimlik config'te tanımlı değil" der): beyinde `keygen desktop --show`, konsolda `vlad agent setkey mac -`.
 3. Agent'ları (yeniden) başlat: `vlad agent start`; durum: `vlad agent status`.
 4. Oturum açılışında otomatik başlatma: `vlad agent install` kaydı basar, `--apply` ile kurar (Windows görev zamanlayıcı, Mac launchd). Kayıt kalıcılık oluşturur; kullanıcı kendisi çalıştırır.
 
@@ -40,7 +42,8 @@ vlad machine probe-window windows
 ## 4. Kullanım
 
 - `vlad task launch <id> [--machine windows]`: kartın `machines` sırası, kapasite ve ulaşılabilirliğe göre yerleştirir; uzak makinedeyse önce beyin kb'yi commit+push eder, işçi `kb-sync` (fetch + ff-only + sha atalık denetimi) yapar, sonra `launch`.
-- `vlad task resume <id>`: uzak görevde işçi kendi worktree/dalını denetler (kirli yolları listeler) ve `claude --resume <session>` (yoksa `--continue`) ile yeniden başlatır.
+- `vlad task resume <id>`: uzak görevde işçi kendi worktree/dalını denetler (kirli yolları listeler) ve `claude --resume <session>` ile yeniden başlatır; kayıtlı session yoksa worktree'deki tek transcript kullanılır, o da yoksa taze oturum (prompt log kuyruğunu taşır; F-vlad-097 gereği `--continue` yerel yolda üretilmez). Not: uzak launch yolu (`src/agent/ops/launch.ts:199`) session kimliği yokken hâlâ `--continue` üretir; bu bir ürün kararıdır ve henüz yerel yolla eşitlenmedi.
+- Kesilen (`stalled`) bir çalışan `task report`/`task ask` çağıramaz (`stalled → running|cancelled`, `src/tasks/state.ts:9`). Önce `vlad task set <id> running` (yerelde); uzak görevde `task set` işçiden iletilmez: `/status` (beyinde) `task set <id> running` ile geri alır.
 - `vlad task close-window <id>`: işçide pencere/süreç ağacını kapatır; durum ve worktree değişmez.
 - `vlad task cleanup <id>`: yalnız done/cancelled; işçi worktree'yi kendi başlatma kaydından doğrulayıp siler, güven kaydını kaldırır (kaldıramazsa silmez). Ağ çağrısı kb kilidi dışında yapılır.
 - Makine kapalı/ulaşılamazken komutlar çıkış kodu **75** (geçici hata) ile biter; sonra tekrar dene. Belirsiz bir launch (yanıt gelmedi) rezervasyonunu korur; bir sonraki `task launch` `op-status` ile işçiye sorar.
