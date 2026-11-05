@@ -30,7 +30,9 @@ export interface ServerOpts {
 }
 
 const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "merge-preview", "forward-write", "queue-drop"]);
-const defaultJournaled = (op: AgentOp): boolean => !READ_ONLY.has(op);
+/** Günlüğe girmeyenler: salt okunurlar + aktarım/pano (4 MiB args günlüğe girmesin; dayanıklılık op'ların kendi durumundan ve teslim kaydından gelir). MUTATING/KEEP_ARGS'a eklenmez. */
+const UNJOURNALED: ReadonlySet<AgentOp> = new Set<AgentOp>([...READ_ONLY, "xfer-begin", "xfer-chunk", "xfer-commit", "xfer-abort", "clip-push"]);
+const defaultJournaled = (op: AgentOp): boolean => !UNJOURNALED.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
 const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
