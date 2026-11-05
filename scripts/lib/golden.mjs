@@ -155,6 +155,7 @@ export const BEHAVIOR_CASES = [
   ["status", ["status", "--summary", "--json"]],
   ["status --hook", ["status", "--hook"]],
   ["kb search", ["kb", "search", "ghost", "--json"]],
+  ["remote", ["remote", "--", "task", "list"]],
   // kilitsiz ama işçide yerel değil → reject
   ["task launch", ["task", "launch", "T20260101-01", "--dry-run", "--json"]],
   ["task gate", ["task", "gate", "T20260101-01", "--json"]],

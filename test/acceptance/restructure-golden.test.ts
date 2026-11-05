@@ -95,3 +95,67 @@ describe("restructure: davranış matrisinin kendisi sınıfları kanıtlar (gol
     for (const k of ["task log", "task ask", "task new"]) expect(m[`forwarded :: ${k}`], k).toMatchObject({ forwardAttempt: false, rejected: false });
   });
 });
+
+// ---- konsol kataloğu (negatif golden), zaman aşımı, bozuk config, üretim koruması ----
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { isolatedEnv, spawnVlad } from "../support/spawn-vlad.js";
+
+describe("restructure: konsol doğrulaması (validateConsoleArgv / consoleExecTimeoutMs) tabanla aynı", () => {
+  const load = async () => (await import(pathToFileURL(resolve(root, "dist/agent/console-catalog.js")).href)) as {
+    validateConsoleArgv: (a: string[], stdin?: string) => { entry: { path: string[] } };
+    consoleExecTimeoutMs: (a: string[]) => number;
+  };
+  const code = (f: () => unknown): string => { try { f(); return "ok"; } catch (e) { return (e as { code?: string }).code ?? "error"; } };
+  it("katalogdaki her yol kabul edilir; katalog dışı gruplar (agent, machine, queue, remote, install) ve bilinmeyen komut forbidden", async () => {
+    const c = await load();
+    const classes = readJson("command-classes.json");
+    for (const e of classes.CONSOLE_CATALOG as Array<{ path: string[] }>) expect(code(() => c.validateConsoleArgv(e.path)), e.path.join(" ")).toBe("ok");
+    for (const a of [["agent", "start"], ["machine", "list"], ["queue", "list"], ["remote", "--", "x"], ["install"], ["bilinmeyen"], []]) expect(code(() => c.validateConsoleArgv(a)), a.join(" ")).toBe("forbidden");
+  });
+  it("dosya bayrağı: yalnız '-' (stdin) kabul; gerçek yol, =yol ve katalog dışı --*-file forbidden; NUL ve dev argüman bad_request", async () => {
+    const c = await load();
+    expect(code(() => c.validateConsoleArgv(["project", "write", "p", "--file", "-"], "içerik"))).toBe("ok");
+    expect(code(() => c.validateConsoleArgv(["project", "write", "p", "--file", "/etc/passwd"], "x"))).toBe("forbidden");
+    expect(code(() => c.validateConsoleArgv(["project", "write", "p", "--file=/etc/passwd"], "x"))).toBe("forbidden");
+    expect(code(() => c.validateConsoleArgv(["task", "log", "T1", "n", "--events-file", "-"], "x"))).toBe("forbidden");
+    expect(code(() => c.validateConsoleArgv(["project", "write", "p", "--file", "-"]))).toBe("bad_request"); // stdin eksik
+    expect(code(() => c.validateConsoleArgv(["task", "log", "T1", "a\0b"]))).toBe("bad_request");
+    expect(code(() => c.validateConsoleArgv(["task", "log", "T1", "x".repeat(65 * 1024)]))).toBe("bad_request");
+  });
+  it("timeoutMs: gate 31 dk, merge 6 dk, diğerleri 110 sn", async () => {
+    const c = await load();
+    expect(c.consoleExecTimeoutMs(["task", "gate", "T1"])).toBe(31 * 60_000);
+    expect(c.consoleExecTimeoutMs(["task", "merge", "T1"])).toBe(6 * 60_000);
+    expect(c.consoleExecTimeoutMs(["task", "list"])).toBe(110_000);
+  });
+});
+
+describe("restructure: config bozukken kilitsiz/yerel komutlar çalışmaya devam eder (tembel config)", () => {
+  it("bozuk vlad.config.json ile role list, task list, finding list, kb search çıkış 0", () => {
+    const base = realpathSync.native(mkdtempSync(join(tmpdir(), "vlad-badcfg-")));
+    try {
+      const home = join(base, "home");
+      for (const d of ["projects", "tasks", "inbox", "inbox/processed", "logs", "journal", "findings"]) mkdirSync(join(home, "kb", d), { recursive: true });
+      cpSync(resolve(root, "schemas"), join(home, "schemas"), { recursive: true });
+      writeFileSync(join(home, "vlad.config.json"), '{ "machines": [ ');
+      writeFileSync(join(home, "vlad.local.json"), JSON.stringify({ self: "mac", keys: {} }));
+      const env = isolatedEnv({ VLAD_HOME: home, VLAD_LOCAL_FILE: join(home, "vlad.local.json"), VLAD_CLAUDE_JSON: join(base, "c.json") });
+      for (const args of [["role", "list", "--json"], ["task", "list", "--json"], ["finding", "list", "--json"], ["kb", "search", "x", "--json"]]) {
+        const r = spawnVlad({ args, env, timeoutMs: 30_000 });
+        expect(r.status, `${args.join(" ")}: ${r.stderr}`).toBe(0);
+      }
+    } finally { rmSync(base, { recursive: true, force: true }); }
+  }, 60_000);
+});
+
+describe("restructure: golden-capture üretim koruması", () => {
+  it("VLAD_GOLDEN_UPDATE=1 olmadan golden'ı ezmeden çıkış 2 ile durur", () => {
+    const r = spawnSync(process.execPath, [resolve(root, "scripts/golden-capture.mjs"), "--base", "bbe6ccd"], { encoding: "utf8", env: { PATH: process.env.PATH ?? "" }, timeout: 20_000 });
+    expect(r.status).toBe(2);
+    expect(r.stderr).toMatch(/VLAD_GOLDEN_UPDATE/);
+  });
+});

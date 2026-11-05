@@ -262,6 +262,15 @@
       "rejected": false,
       "timedOut": false
     },
+    "single :: remote": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "hata: remote: config'te machines tanımlı değil\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
     "single :: task launch": {
       "code": 1,
       "stdout": "",
@@ -545,6 +554,15 @@
       "code": 0,
       "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
       "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "brain :: remote": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "hata: remote: mac bir konsol kimliği değil (config consoles)\n",
       "lockTimeout": false,
       "forwardAttempt": false,
       "rejected": false,
@@ -838,6 +856,15 @@
       "rejected": false,
       "timedOut": false
     },
+    "worker :: remote": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "hata: remote: windows bir konsol kimliği değil (config consoles)\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
     "worker :: task launch": {
       "code": 1,
       "stdout": "",
@@ -1121,6 +1148,15 @@
       "code": 0,
       "stdout": "{\"hits\":[]}\n",
       "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "unknown :: remote": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "hata: remote: ghost-machine bir konsol kimliği değil (config consoles)\n",
       "lockTimeout": false,
       "forwardAttempt": false,
       "rejected": false,
@@ -1414,6 +1450,15 @@
       "rejected": false,
       "timedOut": false
     },
+    "locked :: remote": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "hata: remote: config'te machines tanımlı değil\n",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
     "locked :: task launch": {
       "code": 1,
       "stdout": "",
@@ -1697,6 +1742,15 @@
       "code": 0,
       "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
       "stderr": "",
+      "lockTimeout": false,
+      "forwardAttempt": false,
+      "rejected": false,
+      "timedOut": false
+    },
+    "forwarded :: remote": {
+      "code": 1,
+      "stdout": "",
+      "stderr": "hata: remote: windows bir konsol kimliği değil (config consoles)\n",
       "lockTimeout": false,
       "forwardAttempt": false,
       "rejected": false,
