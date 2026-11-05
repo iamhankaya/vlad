@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 let home: string;
@@ -10,7 +11,7 @@ beforeEach(() => { home = makeHome(); });
 
 function vlad(args: string[], input = "", env: Record<string, string> = {}): Promise<{ code: number | null; out: string; err: string }> {
   return new Promise((done) => {
-    const p = spawn("node", [cli, ...args], { env: { ...process.env, VLAD_HOME: home, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+    const p = spawn("node", [cli, ...args], { env: { ...isolatedEnv(), VLAD_HOME: home, ...env }, stdio: ["pipe", "pipe", "pipe"] });
     let out = "", err = "";
     p.stdout.on("data", (d) => (out += d));
     p.stderr.on("data", (d) => (err += d));

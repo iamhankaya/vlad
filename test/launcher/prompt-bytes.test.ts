@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { buildScript, externalLaunch } from "../../src/launcher/terminal.js";
 import type { LaunchRequest } from "../../src/launcher/types.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 // T20261103-26: Windows PowerShell 5.1 does not escape embedded double quotes when passing a native argument,
 // so the prompt was cut at the first `"`. Real powershell.exe, fake claude = a copy of node.exe named claude.exe
@@ -40,7 +41,7 @@ function run(script: string, name: string): string[] {
   const ps1 = join(dir, "run.ps1");
   writeFileSync(ps1, "﻿" + script, "utf8");
   execFileSync("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps1], {
-    env: { ...process.env, PATH: dir + ";" + process.env.PATH, VLAD_ARGV_OUT: out },
+    env: { ...isolatedEnv(), PATH: dir + ";" + process.env.PATH, VLAD_ARGV_OUT: out },
     stdio: "ignore", windowsHide: true, timeout: 60000,
   });
   return readFileSync(out, "utf8").split("\n").map((l) => l.trim()).filter(Boolean).map((l) => Buffer.from(l, "base64").toString("utf8"));

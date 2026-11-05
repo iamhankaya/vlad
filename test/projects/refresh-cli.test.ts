@@ -1,14 +1,13 @@
-import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
+import { spawnVlad } from "../support/spawn-vlad.js";
 
-const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 const card = `---\nslug: alpha\nname: Alpha\npath: C:\dev\alpha\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n\n## Açık konular\n- elle\n\n## Son aktivite\n- eski\n`;
 function vlad(args: string[], input?: string) {
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: { ...process.env, VLAD_HOME: home } });
+  const r = spawnVlad({ args, input, env: { VLAD_HOME: home } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 const cardText = () => readFileSync(join(home, "kb", "projects", "alpha.md"), "utf8");

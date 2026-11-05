@@ -1,17 +1,16 @@
-import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { claudeProjectDir } from "../../src/tasks/liveness.js";
 import { makeHome } from "../helpers.js";
+import { spawnVlad } from "../support/spawn-vlad.js";
 
-const cli = join(resolve(import.meta.dirname, "..", ".."), "dist", "cli.js");
 let home: string;
 beforeEach(() => { home = makeHome(); });
 
 function vlad(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env: { ...process.env, VLAD_HOME: home, ...env } });
+  const r = spawnVlad({ args, env: { VLAD_HOME: home, ...env } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 

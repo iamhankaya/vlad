@@ -12,6 +12,7 @@ import { createTask } from "../../src/tasks/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { makeHome } from "../helpers.js";
 import { CLOUD_ENV, NO_CLOUD_ENV, build, forceRunning, newTask, readTask, taskState, tmp, vlad, writeCard, writeRoles } from "./cloud-helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 let home: string;
 beforeAll(build, 120000);
@@ -161,7 +162,7 @@ describe.runIf(onLinux)("senaryo 6: pipeline fazı", { timeout: 30_000 }, () => 
     const work = join(tmp(), "work");
     const git = (cwd: string, ...a: string[]) => execFileSync("git", a, {
       cwd, stdio: "pipe",
-      env: { ...process.env, GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" },
+      env: { ...isolatedEnv(), GIT_AUTHOR_NAME: "T", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "T", GIT_COMMITTER_EMAIL: "t@t" },
     });
     mkdirSync(bare, { recursive: true });
     git(bare, "init", "--bare", "-q");

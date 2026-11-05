@@ -6,11 +6,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { makeHome } from "../helpers.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 let home: string;
 let repo: string;
-const env = (extra: Record<string, string> = {}) => ({ ...process.env, VLAD_HOME: home, VLAD_LAUNCHER: "noop", ...extra });
+const env = (extra: Record<string, string> = {}) => ({ ...isolatedEnv(), VLAD_HOME: home, VLAD_LAUNCHER: "noop", ...extra });
 const vlad = (args: string[], input = "", extra: Record<string, string> = {}) =>
   spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: env(extra) });
 const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd: repo, stdio: "pipe" });

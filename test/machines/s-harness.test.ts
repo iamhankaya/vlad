@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { rmTemp } from "../helpers.js";
 import { RECORD_CLI, makeHomePair, spawnVlad, startProxy, type Proxy } from "./harness.js";
+import { isolatedEnv } from "../isolate-env.js";
 
 const bases: string[] = [];
 afterEach(() => { for (const b of bases.splice(0)) rmTemp(b); });
@@ -46,7 +47,7 @@ describe("machines:S harness", () => {
     const file = join(p.brain.home, "rec.jsonl");
     const r = spawnSync(process.execPath, [RECORD_CLI, "task", "log", "T1", "a b"], {
       input: "içerik", encoding: "utf8",
-      env: { ...process.env, VLAD_RECORD_FILE: file, VLAD_RECORD_STDOUT: "tamam", VLAD_RECORD_EXIT: "3", VLAD_FORWARDED: "windows" },
+      env: { ...isolatedEnv(), VLAD_RECORD_FILE: file, VLAD_RECORD_STDOUT: "tamam", VLAD_RECORD_EXIT: "3", VLAD_FORWARDED: "windows" },
     });
     expect(r.status).toBe(3);
     expect(r.stdout).toBe("tamam");
