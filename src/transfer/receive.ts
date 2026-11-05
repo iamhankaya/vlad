@@ -1,4 +1,4 @@
-import { createHash, type Hash } from "node:crypto";
+import { createHash, randomBytes, type Hash } from "node:crypto";
 import * as fsp from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
@@ -330,7 +330,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
     for (const t of tops) {
       try {
         await d.hooks?.beforePublish?.(t.name);
-        const target = await publish(path.join(x.tree, t.name), t.name, t.kind);
+        const target = await publish(path.join(x.tree, t.name), t.name, t.kind, from, x.stage);
         items.push({ name: path.basename(target), kind: t.kind, size: t.size, path: target });
         await ledger.put(x.key, { state: "committing", planned: tops.map((o) => o.name), published: items.map((i) => i.path) });
       } catch (e) {
@@ -349,8 +349,30 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
     return failed ? { items, failed } : { items };
   }
 
+  /** Köken işareti yazar; hata teslimi bozmaz (stderr uyarısı). */
+  const mark = async (file: string, from: string) => {
+    if (!d.markOrigin) return;
+    try { await d.markOrigin(file, from); } catch (e) { process.stderr.write(`xfer: köken işareti yazılamadı: ${file}: ${(e as Error).message}\n`); }
+  };
+  const markTree = async (p: string, from: string): Promise<void> => {
+    const st = await fsp.lstat(p);
+    if (st.isDirectory()) { for (const n of await fsp.readdir(p)) await markTree(path.join(p, n), from); } else if (st.isFile()) await mark(p, from);
+  };
+
+  /** link yoksa (FAT/exFAT/OneDrive): kopya önce hazırlıkta özel geçici hedefe, nihai ad `wx` ile rezerve edilip atomik rename ile yayımlanır (yarım içerik görünmez, mevcut dosya ezilmez). */
+  async function publishCopy(staged: string, target: string, stage: string, from: string): Promise<void> {
+    const tmp = path.join(stage, `pub-${randomBytes(6).toString("hex")}`);
+    try {
+      await fs.copyFile(staged, tmp, constants.COPYFILE_EXCL);
+      await mark(tmp, from);
+      await (await fsp.open(target, "wx")).close(); // rezervasyon: EEXIST → sonraki ad
+      try { await fs.rename(tmp, target); } catch (e) { await fsp.unlink(target).catch(() => {}); throw e; }
+    } finally { await fsp.unlink(tmp).catch(() => {}); }
+  }
+
   /** Öğeyi İndirilenler'e atomik yayımlar; ad çakışmasında sonraki adı dener, hiçbir şeyi ezmez. */
-  async function publish(staged: string, name: string, kind: "file" | "dir"): Promise<string> {
+  async function publish(staged: string, name: string, kind: "file" | "dir", from: string, stage: string): Promise<string> {
+    await markTree(staged, from); // işaret yayımlamadan önce hazırlıktaki dosyada (inode ile taşınır)
     const taken = new Set<string>();
     for (let attempt = 0; attempt < 200; attempt++) {
       const lc = new Set((await fsp.readdir(d.downloads())).map((n) => n.toLowerCase()));
@@ -360,7 +382,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
         if (kind === "file") {
           try { await fs.link(staged, target); } catch (e) {
             if (!["EXDEV", "ENOTSUP", "EPERM", "ENOSYS", "EOPNOTSUPP"].includes(errno(e) ?? "")) throw e;
-            await fs.copyFile(staged, target, constants.COPYFILE_EXCL);
+            await publishCopy(staged, target, stage, from);
           }
           await fsp.unlink(staged).catch(() => {});
         } else if (d.os === "win32") {

@@ -23,7 +23,7 @@ export function sanitizeEntryPath(raw: string, os: Os): string[] {
     if (p === "") throw bad("boş bileşen veya mutlak yol");
     if (p === "." || p === "..") throw bad("nokta bileşeni");
     if (/[\\:]/.test(p)) throw bad("ters eğik çizgi veya iki nokta");
-    if (/[\u0000-\u001f\u007f-\u009f\u200e\u200f‪-‮⁦-⁩]/.test(p)) throw bad("denetim karakteri");
+    if (/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2060\ufeff‪-‮⁦-⁩]/.test(p)) throw bad("denetim karakteri");
     if (p.length > MAX_COMPONENT || Buffer.byteLength(p, "utf8") > MAX_COMPONENT) throw bad("bileşen çok uzun");
     if (os === "win32") {
       if (/[<>"|?*]/.test(p)) throw bad("Windows'ta yasak karakter");
@@ -37,13 +37,25 @@ export function sanitizeEntryPath(raw: string, os: Os): string[] {
 
 export function isXferId(s: unknown): s is string { return typeof s === "string" && XFER_ID_RE.test(s); }
 
-/** "ad (1).ext"; ".env" -> ".env (1)"; "a.tar.gz" -> "a.tar (1).gz". Harf duyarsız karşılaştırma çağıranın sorumluluğu (küçük harfli küme verir). */
+const SEG = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+const bytes = (s: string) => Buffer.byteLength(s, "utf8");
+/** Gövdeyi grafem sınırında kısaltır; ek+uzantı ile toplam bileşen ≤ 255 bayt. */
+function fit(base: string, tail: string): string {
+  const room = MAX_COMPONENT - bytes(tail);
+  if (bytes(base) <= room) return base + tail;
+  let out = "";
+  for (const { segment } of SEG.segment(base)) { if (bytes(out + segment) > room) break; out += segment; }
+  if (!out) throw new RemoteError("failed", "failed: ad çok uzun, benzersiz ad üretilemedi");
+  return out + tail;
+}
+
+/** "ad (1).ext"; ".env" -> ".env (1)"; "a.tar.gz" -> "a.tar (1).gz". Aday ≤ 255 bayt kalır. Harf duyarsız karşılaştırma çağıranın sorumluluğu (küçük harfli küme verir). */
 export async function uniqueName(name: string, exists: (candidate: string) => Promise<boolean>, kind: "file" | "dir" = "file"): Promise<string> {
   if (!(await exists(name))) return name;
   const dot = kind === "file" ? name.lastIndexOf(".") : -1;
   const [base, ext] = dot > 0 && dot < name.length - 1 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
   for (let n = 1; n <= 10_000; n++) {
-    const c = `${base} (${n})${ext}`;
+    const c = fit(base, ` (${n})${ext}`);
     if (!(await exists(c))) return c;
   }
   throw new RemoteError("failed", `failed: boş ad bulunamadı: ${name}`);

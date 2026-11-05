@@ -83,3 +83,34 @@ describe("A1 inceleme: ek ret kuralları", () => {
   for (const [raw, os] of [["CONIN$", "win32"], ["conout$.txt", "win32"], ["NUL .txt", "win32"], ["a‎b", "darwin"], ["a‏b", "darwin"]] as const)
     it(`reddeder ${JSON.stringify(raw)} (${os})`, () => { expect(() => sanitizeEntryPath(raw, os)).toThrow(XferPathError); });
 });
+
+describe("F-vlad-209 uniqueName bileşen bayt sınırı ve görünmez karakterler", () => {
+  const taken = (s: Set<string>) => async (c: string) => s.has(c);
+  it("(n) eki 255 bayt sınırını aşmaz; gövde kod noktası/grafem bölmeden kısalır", async () => {
+    const name = "é".repeat(125) + ".txt"; // 250 + 4 = 254 bayt
+    const r = await uniqueName(name, taken(new Set([name])));
+    expect(Buffer.byteLength(r, "utf8")).toBeLessThanOrEqual(255);
+    expect(r.endsWith(" (1).txt")).toBe(true);
+    expect(r).toMatch(/^(é)+ \(1\)\.txt$/); // bölünmüş bayt yok
+    expect(r.includes("\ufffd")).toBe(false);
+  });
+  it("grafem kümesi (e + birleşik işaret, emoji bileşimi) ortadan bölünmez", async () => {
+    const name = "e\u0301".repeat(100) + ".bin"; // NFD, 100 grafem × 3 bayt
+    const r = await uniqueName(name, taken(new Set([name])));
+    expect(Buffer.byteLength(r, "utf8")).toBeLessThanOrEqual(255);
+    const base = r.slice(0, r.indexOf(" (1)"));
+    expect(base).toMatch(/^(e\u0301)+$/);
+  });
+  it("dizin adı da sınırlanır; çoklu çakışmada her aday sınır içinde", async () => {
+    const name = "ş".repeat(127); // 254 bayt
+    const set = new Set([name]);
+    for (let i = 1; i < 12; i++) set.add((await uniqueName(name, taken(set), "dir")));
+    for (const n of set) expect(Buffer.byteLength(n, "utf8")).toBeLessThanOrEqual(255);
+    expect(set.size).toBe(12);
+  });
+  it("uzantı tek başına sığmıyorsa güvenle başarısız", async () => {
+    await expect(uniqueName("a." + "x".repeat(300), async () => true)).rejects.toThrow(/failed/);
+  });
+  for (const raw of ["a\u200bb", "a\u200cb", "a\u200db", "a\u2060b", "a\ufeffb"])
+    it(`görünmez karakter reddedilir ${JSON.stringify(raw)}`, () => { expect(() => sanitizeEntryPath(raw, "darwin")).toThrow(XferPathError); });
+});

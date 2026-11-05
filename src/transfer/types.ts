@@ -4,6 +4,7 @@ import type { ClipDeps } from "../clip/types.js";
 import type { VladConfig } from "../kb/types.js";
 import type { Os } from "../machines/types.js";
 import type { Notifier } from "../platform/notify.js";
+import type { OriginMarker } from "../platform/origin.js";
 
 // Sözleşme (T20261105-05, plan T20261105-04): dosya aktarımı tipleri. Çalışma zamanı kodu yalnız sabitlerdir.
 // Değişiklik gerekirse `vlad task ask` ile sor.
@@ -48,6 +49,8 @@ export interface XferFs {
 export interface XferDeps {
   downloads(): string; stateDir(): string; os: Os; notifier: Notifier; now(): number; sleep?(ms: number): Promise<void>;
   clipImage?: ClipImageSink; fs?: Partial<XferFs>; hooks?: XferTestHooks;
+  /** Yayımlanan her dosyaya köken işareti (MotW/quarantine); yoksa işaret yazılmaz. Hata teslimi bozmaz. */
+  markOrigin?: OriginMarker;
   /** false: testte zamanlayıcı kurulmaz. */
   idleTimers?: boolean;
 }

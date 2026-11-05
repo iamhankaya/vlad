@@ -7,6 +7,7 @@ import { nowMs } from "../machines/clock.js";
 import type { Os } from "../machines/types.js";
 import { nativeAllowed } from "../platform/native.js";
 import { createNotifier, type Notifier } from "../platform/notify.js";
+import { createOriginMarker } from "../platform/origin.js";
 import { notImplemented } from "../platform/not-implemented.js";
 import type { ClipDeps } from "../clip/types.js";
 import { downloadsDir } from "./paths.js";
@@ -39,7 +40,7 @@ export function createProdDeps(): AktarimDeps {
   };
   return {
     self, kind, cfg: () => loadConfig(), now: nowMs, env: () => agentEnv(),
-    xfer: { downloads: () => downloadsDir(), stateDir: () => agentDir(), os, notifier: native ? createNotifier(os) : silentNotifier, now: nowMs },
+    xfer: { downloads: () => downloadsDir(), stateDir: () => agentDir(), os, notifier: native ? createNotifier(os) : silentNotifier, now: nowMs, ...(native ? { markOrigin: createOriginMarker(os) } : {}) },
     clip,
   };
 }
