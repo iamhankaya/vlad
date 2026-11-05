@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -166,6 +166,13 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
     const l = fake();
     await expect(launchCore({ ...r, adopt: true }, l)).rejects.toThrow(new RegExp(`başka worktree'de.*${other.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}`));
     expect(l.reqs).toHaveLength(0);
+  });
+
+  it("klasör elle silinmiş (git kaydı yetim) ise retry yine bağlanır, 'başka worktree' hatası vermez", async () => {
+    const r = req();
+    await launchCore({ ...r, adopt: true }, fake());
+    rmSync(r.worktree, { recursive: true, force: true });
+    expect((await launchCore({ ...r, adopt: true }, fake())).reused).toBe(true);
   });
 
   it("base verilmiş ve dal ondan geride kalmışsa uyarır (yine bağlanır, iş silinmez)", async () => {

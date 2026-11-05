@@ -70,6 +70,7 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
     reused = (await g.isWorktree(repo, wt)) && (await (branchOf ?? g.worktreeBranch)(wt)) === branch;
   } else if (await g.branchExists(repo, branch)) {
     // F-vlad-248: git refuses a branch that another worktree holds with a raw error; name the holder instead
+    await g.runGit(repo, ["worktree", "prune"]); // a hand-deleted folder leaves a stale record that would look like another holder
     const holder = checkedOutAt(await g.runGit(repo, ["worktree", "list", "--porcelain"]), branch);
     if (holder) throw new Error(`${branch} dalı başka worktree'de checkout'lu: ${holder}; orayı kaldırıp ya da dalı bırakıp tekrar dene`);
     await g.attachWorktree(repo, wt, branch);
