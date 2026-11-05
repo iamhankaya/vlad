@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Command, CommanderError } from "commander";
 import { addFinding, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "./findings/store.js";
@@ -64,6 +65,20 @@ function fail(e: unknown): never {
     process.stderr.write([error, ...details.map((d) => `  ${d}`)].join("\n") + "\n");
   }
   process.exit(exitCodeFor(e));
+}
+
+/** vlad install: sağ tık "Gönder" menüsü (aktarım). Tek karşı makine yoksa atlanır; --dry-run hiçbir şeye dokunmaz. */
+async function sendMenuActions(dryRun: boolean): Promise<string[]> {
+  let cfg: ReturnType<typeof loadConfig>;
+  try { cfg = loadConfig(); } catch { return ["sağ tık menüsü atlandı: yapılandırma okunamadı"]; }
+  if (!cfg.machines) return ["sağ tık menüsü atlandı: machines yok"];
+  const self = selfName();
+  const others = cfg.machines.filter((m) => m.name !== self);
+  const me = cfg.machines.find((m) => m.name === self);
+  if (!me || others.length !== 1) return ["sağ tık menüsü atlandı: karşı makine tek değil"];
+  const { installSendMenu } = await import("./menu/index.js");
+  const servicesDir = process.env.VLAD_SERVICES_DIR || join(homedir(), "Library", "Services");
+  return (await installSendMenu({ os: me.os, node: process.execPath, cli: fileURLToPath(import.meta.url), home: getVladHome(), peer: others[0]!.name, servicesDir, dryRun })).actions;
 }
 
 function out(o: Opts, data: unknown, text: string): void {
@@ -961,9 +976,27 @@ def(machine, "probe-window <ad>", "İşçide kısa ömürlü bir pencere açtır
 });
 // --- /machines:C2 ---
 
-def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", (o: Opts) => {
+// --- aktarim:S --- vlad send / vlad clip (ince kabuk; gövde src/transfer/cli.ts ve src/clip/cli.ts)
+def(program, "send <yol...>", "Dosya/klasörleri karşı makinenin İndirilenler klasörüne gönderir (--to: makine; 2'den çok makinede zorunlu)", async (paths: string[], o: Opts) => {
+  const { runSendCommand } = await import("./transfer/cli.js");
+  await runSendCommand(paths, { to: o.to as string | undefined, json: !!o.json, notify: !!o.notify, isTTY: !!process.stderr.isTTY });
+}).option("--to <makine>", "hedef makine").option("--notify", "sonucu (başarı/hata) bildirimle de göster");
+const clip = program.command("clip").description("Ortak pano (Mac↔Windows)");
+def(clip, "on", "Pano eşitlemeyi açar", async (o: Opts) => { await (await import("./clip/cli.js")).runClip("on", { json: !!o.json }); });
+def(clip, "off", "Pano eşitlemeyi kapatır", async (o: Opts) => { await (await import("./clip/cli.js")).runClip("off", { json: !!o.json }); });
+def(clip, "status", "Pano eşitleme durumu (enabled, agentRunning)", async (o: Opts) => { await (await import("./clip/cli.js")).runClip("status", { json: !!o.json }); });
+def(clip, "get", "Yerel panoyu okur (resim varsa --out <png>)", async (o: Opts) => {
+  await (await import("./clip/cli.js")).runClip("get", { json: !!o.json, out: o.out as string | undefined });
+}).option("--out <png>", "resim panosunu bu PNG dosyasına yaz");
+def(clip, "set [metin]", "Yerel panoya yazar (metin, --file <yol|->, ya da --image <png>)", async (text: string | undefined, o: Opts) => {
+  await (await import("./clip/cli.js")).runClip("set", { json: !!o.json, text, file: o.file as string | undefined, image: o.image as string | undefined });
+}).option("--file <yol>", "metni dosyadan (- = stdin) oku").option("--image <png>", "PNG dosyasını panoya yaz");
+// --- /aktarim:S ---
+
+def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", async (o: Opts) => {
   const claudeDir = process.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");
   const { actions } = installGlobal({ home: getVladHome(), claudeDir, dryRun: !!o.dryRun });
+  actions.push(...(await sendMenuActions(!!o.dryRun)));
   out(o, { actions }, actions.join("\n"));
 }).option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster");
 

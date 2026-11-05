@@ -43,7 +43,8 @@ export type AgentOp =
   | "ping" | "op-status" | "kb-sync" | "launch" | "resume" | "close" | "cleanup" | "liveness" | "probe-window"
   | "gate-run" | "merge-preview" | "merge"
   | "apply-write" | "exec" | "kb-head"
-  | "forward-write" | "queue-list" | "queue-flush" | "queue-drop";
+  | "forward-write" | "queue-list" | "queue-flush" | "queue-drop"
+  | "xfer-begin" | "xfer-chunk" | "xfer-commit" | "xfer-abort" | "clip-push"; // aktarım (T20261105-03 sözleşmesi)
 
 export type AgentCode =
   | "ok" | "bad_request" | "auth" | "clock_skew" | "proto_mismatch" | "forbidden" | "not_found" | "conflict"

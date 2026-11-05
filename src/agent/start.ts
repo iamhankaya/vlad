@@ -11,7 +11,9 @@ import { setAgentEnv } from "./ops/env.js";
 import { reconcileApplyWrite } from "./ops/apply-write.js";
 import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
-import { OP_TABLE } from "./ops/index.js";
+import { buildAktarim } from "./ops/index.js";
+import { createProdDeps } from "../transfer/deps.js";
+import { startClipSync } from "../clip/index.js";
 import { reconcileLaunch } from "./ops/launch.js";
 import { reconcileMerge } from "./ops/merge-reconcile.js";
 import { AgentQueue } from "./queue.js";
@@ -85,10 +87,14 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });
   reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
 
+  const deps = createProdDeps();
+  const aktarim = buildAktarim(deps);
+  await aktarim.sweep().catch((e) => process.stderr.write(`aktarım süpürme atlandı: ${(e as Error).message}\n`));
+
   let srv;
   try {
     srv = await startServer({
-      self, kind, cfg: () => loadConfig(), keys, ops: OP_TABLE, journal, build, bind: bindIp, port,
+      self, kind, cfg: () => loadConfig(), keys, ops: aktarim.ops, journal, build, bind: bindIp, port,
       journaled: (op, args) => (op === "exec" ? execIsWrite(args) : undefined),
       ...(test ? { crashAt: process.env.VLAD_TEST_CRASH_AT, readTimeoutMs: Number(process.env.VLAD_AGENT_READ_TIMEOUT_MS) || undefined } : {}),
     });
@@ -100,7 +106,8 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
     return;
   }
   writeFileSync(pidFile(), String(process.pid));
-  const stop = () => { void srv.close().finally(() => { rmSync(pidFile(), { force: true }); process.exit(0); }); };
+  const clip = startClipSync(deps);
+  const stop = () => { void Promise.allSettled([clip.stop(), aktarim.close()]).then(() => srv.close()).finally(() => { rmSync(pidFile(), { force: true }); process.exit(0); }); };
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   if (queue) {
