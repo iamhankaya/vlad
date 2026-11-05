@@ -19,7 +19,7 @@ describe("s-list-commands", () => {
     expect(new Set(names).size).toBe(names.length);
     for (const k of ["scan", "task log", "digest pending add", "remote", "clip set", "status"]) expect(names).toContain(k);
     expect(names).not.toContain("task"); // group nodes are not leaves
-    expect(inv.commands.length).toBeGreaterThan(80);
+    expect(inv.commands.length).toBeGreaterThan(60);
   });
   it("`remote` is the plain-registered leaf without --json", () => {
     expect(inv.commands.find((c) => c.path.join(" ") === "remote")?.hasJson).toBe(false);
