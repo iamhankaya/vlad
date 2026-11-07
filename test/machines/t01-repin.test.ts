@@ -77,6 +77,21 @@ describe("task repin", () => {
     expect(getTask(id).data.machine).toBe("mac");
     expect(r.warnings.join(" ")).toMatch(/running/);
   });
+  it("eski makinede onay bekleyen faz da engeller", async () => {
+    const id = pipeline("windows");
+    phase(id, { state: "awaiting_approval", machine: "windows" });
+    await expect(repinPipeline(id, "mac", { cfg })).rejects.toThrow(/awaiting_approval/);
+  });
+  it("--force queued rezervasyonu released_ops'a yazıp temizler", async () => {
+    const id = pipeline("windows");
+    const ph = phase(id, { state: "queued", machine: "windows", launch_op: "op1" });
+    await expect(repinPipeline(id, "mac", { cfg })).rejects.toThrow(/windows/);
+    await repinPipeline(id, "mac", { cfg, force: true });
+    const t = getTask(ph);
+    expect(t.data.launch_op).toBeNull();
+    expect(t.data.machine).toBeNull();
+    expect(t.data.released_ops).toEqual([{ machine: "windows", op: "op1" }]);
+  });
   it("aynı makineye taşımayı reddeder", async () => {
     const id = pipeline("mac");
     await expect(repinPipeline(id, "mac", { cfg })).rejects.toThrow(/zaten/);

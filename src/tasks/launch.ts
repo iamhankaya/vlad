@@ -439,11 +439,18 @@ export async function repinPipeline(id: string, to: string, o: { cfg: VladConfig
     const from = t.data.machine ?? null;
     if (from === to) throw new Error(`çatı zaten ${to} makinesine sabit`);
     const warnings: string[] = [];
-    const active = from ? listTasks({ parent: id }).filter((x) => x.data.machine === from && (x.data.launch_op || ["running", "blocked", "stalled"].includes(x.data.state))) : [];
+    const active = from ? listTasks({ parent: id }).filter((x) => x.data.machine === from && (x.data.launch_op || ["running", "blocked", "stalled", "awaiting_approval"].includes(x.data.state))) : [];
     if (active.length) {
       const names = active.map((x) => `${x.data.id} (${x.data.state})`).join(", ");
       if (!o.force) throw new Error(`${from} makinesinde running faz var: ${names}; bitmesini bekle ya da --force`);
-      warnings.push(`${from} makinesinde running faz bırakıldı: ${names}; orada yetim kalabilir`);
+      warnings.push(`${from} makinesinde faz bırakıldı: ${names}; orada yetim kalabilir, işi ${from}'de kalır`);
+      for (const x of active) {
+        if (!x.data.launch_op) continue;
+        const ph = getTask(x.data.id);
+        ph.data.released_ops = [...(ph.data.released_ops ?? []), { machine: from!, op: x.data.launch_op }]; // F-vlad-150: makine dönünce launch öncesi iptal
+        Object.assign(ph.data, { machine: null, machine_reserved: null, launch_op: null });
+        saveTask(ph);
+      }
     }
     warnings.push(`entegrasyon dalı vlad/${id} ${to} makinesinde olmayabilir; launch origin'den kurar`);
     t.data.machine = to;
