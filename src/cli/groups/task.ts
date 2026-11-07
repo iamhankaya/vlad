@@ -9,7 +9,7 @@ import { brainTransport, makeRemote } from "../../machines/remote.js";
 import { selfName } from "../../fleet/state.js";
 import { AgentClient } from "../../agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js";
-import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
+import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskList } from "./task-list.js";
@@ -94,6 +94,11 @@ export function registerTask(program: Command, k: Kit): void {
     const warn = releaseWarning(t);
     out(o, { id, state: t.data.state, ...(warn ? { warning: warn } : {}) }, `${id} rezervasyonu bırakıldı (${t.data.state})${warn ? `\n${warn}` : ""}`);
   }).option("--force", "işçiye ulaşılamıyorsa da bırak (kalıcı ölü makine; launch açılmışsa orada yetim kalır)");
+
+  def(task, "repin <id> <makine>", "Pipeline çatısının makine pin'ini başka makineye taşır (eski makine erişilemezken)", async (id: string, machine: string, o: Opts) => {
+    const r = await repinPipeline(id, machine, { cfg: loadConfig(), ...(o.force ? { force: true } : {}) });
+    out(o, { id, from: r.from, to: machine, warnings: r.warnings }, [`${id} pin: ${r.from ?? "-"} → ${machine}`, ...r.warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+  }).option("--force", "eski makinede running faz varken de taşı (orada yetim kalabilir)");
 
   def(task, "ingest <id>", "Bulut çalışanının list_events çıktısındaki [VLAD:*] işaretlerini görev dosyasına işler (idempotent)", (id: string, o: Opts) => {
     const parsed = parseEvents(readInput(((o.eventsFile ?? o.file) as string | undefined) ?? "-"));

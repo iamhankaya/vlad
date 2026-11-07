@@ -122,6 +122,7 @@
     "test/machines/f1-b-release.test.ts",
     "test/machines/g-slice-a.test.ts",
     "test/machines/s-cli.test.ts",
+    "test/machines/t01-repin.test.ts",
     "test/machines/t47-launch-recovery.test.ts",
     "test/machines/t54-uncertain-launch.test.ts",
     "test/memory/cli.test.ts",

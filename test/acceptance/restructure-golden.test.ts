@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error düz JS yardımcı (scripts/lib), tür bildirimi yok
-import { BEHAVIOR_CASES, CONTEXTS, captureBehavior, captureClasses, captureHelp } from "../../scripts/lib/golden.mjs";
+import { BEHAVIOR_CASES, CONTEXTS, captureBehavior, captureClasses, captureHelp, normalizer } from "../../scripts/lib/golden.mjs";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const CLI = resolve(root, "dist", "cli.js");
@@ -41,6 +41,14 @@ describe("restructure: golden dosyaları sağlam (boş küme ya da eksik sayı �
     expect(b.contexts).toEqual(CONTEXTS);
     expect(Object.keys(b.matrix)).toHaveLength(CONTEXTS.length * BEHAVIOR_CASES.length);
     expect(Object.values(b.matrix as Record<string, { timedOut: boolean }>).filter((c) => c.timedOut)).toEqual([]);
+  });
+});
+
+describe("restructure: normalizer takvim tarihinden bağımsız (T20261107-01)", () => {
+  it("YYYY-MM-DD <DATE> olur; ISO zaman damgası ve görev ID'si kendi yer tutucusunu korur", () => {
+    const n = normalizer({ base: "/b" }, 1234);
+    expect(n("- 2026-11-05: ders / 2031-01-09")).toBe("- <DATE>: ders / <DATE>");
+    expect(n("at 2026-11-05T10:00:00Z T20261105-53")).toBe("at <ISO> T<DATE>-53");
   });
 });
 

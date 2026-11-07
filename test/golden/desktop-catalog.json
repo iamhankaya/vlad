@@ -169,6 +169,17 @@
   {
    "path": [
     "task",
+    "repin"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "çatı pin'ini taşımak konsoldan açılmadı; ayrı karar"
+   }
+  },
+  {
+   "path": [
+    "task",
     "ingest"
    ],
    "json": true,

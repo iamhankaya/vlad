@@ -17,6 +17,7 @@
     "clip status": "pano ve Agent durumu (kullanıcı makinesi)",
     "clip get": "gerçek panoyu okur",
     "clip set": "gerçek panoya yazar",
+    "task repin": "config'te machines ve kartta makine listesi ister; davranış t01-repin testinde",
     "kb commit": "git commit/push yapar (gerçek kb deposu)"
   }
 }

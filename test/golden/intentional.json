@@ -1,1 +1,6 @@
-{ "version": 1, "entries": [] }
+{
+  "version": 1,
+  "entries": [
+    { "id": "T20261107-01", "keys": ["task repin --help", "task --help", "task (bare)"] }
+  ]
+}

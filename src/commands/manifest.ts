@@ -33,6 +33,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["task", "new"], { lock: "outer", console: { kind: "write", fileFlags: ["--body-file"] } }),
   c(["task", "launch"], { console: { kind: "write" } }),
   c(["task", "release"], { console: none("konsol kataloğunda yoktu (U1 öncesi de); konsolda açmak ayrı karar") }),
+  c(["task", "repin"], { console: none("çatı pin'ini taşımak konsoldan açılmadı; ayrı karar") }),
   c(["task", "ingest"], { lock: "outer", console: { kind: "write", fileFlags: ["--events-file","--file"] } }),
   c(["task", "log"], { lock: "outer", worker: { kind: "forward", op: "task.log" }, console: { kind: "write" } }),
   c(["task", "ask"], { lock: "outer", worker: { kind: "forward", op: "task.ask" }, console: { kind: "write" } }),
