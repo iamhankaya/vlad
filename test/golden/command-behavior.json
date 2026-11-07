@@ -21,7 +21,7 @@
     },
     "single :: project note": {
       "code": 0,
-      "stdout": "{\"slug\":\"ghost\",\"note\":\"- 2026-11-05: ders\"}\n",
+      "stdout": "{\"slug\":\"ghost\",\"note\":\"- <DATE>: ders\"}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -93,7 +93,7 @@
     },
     "single :: journal append": {
       "code": 0,
-      "stdout": "{\"date\":\"2026-01-01\"}\n",
+      "stdout": "{\"date\":\"<DATE>\"}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -255,7 +255,7 @@
     },
     "single :: kb search": {
       "code": 0,
-      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
+      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"<DATE>\",\"snippet\":\"### <DATE> — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -318,7 +318,7 @@
     },
     "brain :: project note": {
       "code": 0,
-      "stdout": "{\"slug\":\"ghost\",\"note\":\"- 2026-11-05: ders\"}\n",
+      "stdout": "{\"slug\":\"ghost\",\"note\":\"- <DATE>: ders\"}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -390,7 +390,7 @@
     },
     "brain :: journal append": {
       "code": 0,
-      "stdout": "{\"date\":\"2026-01-01\"}\n",
+      "stdout": "{\"date\":\"<DATE>\"}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -552,7 +552,7 @@
     },
     "brain :: kb search": {
       "code": 0,
-      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
+      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"<DATE>\",\"snippet\":\"### <DATE> — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -1506,7 +1506,7 @@
     },
     "forwarded :: project note": {
       "code": 0,
-      "stdout": "{\"slug\":\"ghost\",\"note\":\"- 2026-11-05: ders\"}\n",
+      "stdout": "{\"slug\":\"ghost\",\"note\":\"- <DATE>: ders\"}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -1578,7 +1578,7 @@
     },
     "forwarded :: journal append": {
       "code": 0,
-      "stdout": "{\"date\":\"2026-01-01\"}\n",
+      "stdout": "{\"date\":\"<DATE>\"}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -1740,7 +1740,7 @@
     },
     "forwarded :: kb search": {
       "code": 0,
-      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"2026-11-05\",\"snippet\":\"### 2026-11-05 — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
+      "stdout": "{\"hits\":[{\"id\":\"D-ghost-001\",\"type\":\"decision\",\"project\":\"ghost\",\"status\":\"geçersiz\",\"date\":\"<DATE>\",\"snippet\":\"### <DATE> — ghost — x - **ID:** D-ghost-001 - **Durum:** geçersiz ## Tanım x\",\"path\":\"<BASE>/home/kb/decisions/ghost.md\",\"relative\":\"decisions/ghost.md\"}]}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,

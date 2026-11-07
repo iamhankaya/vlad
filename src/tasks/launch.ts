@@ -15,7 +15,7 @@ import type { Role } from "../roles/store.js";
 import { applyRemoteStalls, markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe, RemoteStallPlan } from "./liveness.js";
 import {
-  effectiveModel, getTask, listTasks, markStale, roleFor, saveTask, saveTaskQuiet, setState, syncAutonomy, unmetDependencies,
+  effectiveModel, getTask, listTasks, logTask, markStale, roleFor, saveTask, saveTaskQuiet, setState, syncAutonomy, unmetDependencies,
 } from "./store.js";
 import type { Task } from "./store.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
@@ -34,7 +34,7 @@ import type { PonytailArm } from "./experiment.js";
 import { ensureIntegrationGit, launchCore, unmergedCommits } from "./launch-core.js";
 import { nowMs } from "../fleet/clock.js";
 import { capsOf, machineLoad, pickMachine } from "../fleet/placement.js";
-import { machinesOf } from "../fleet/registry.js";
+import { machineDef, machinesOf } from "../fleet/registry.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
 import type { AgentCode, RemoteTransport } from "../fleet/types.js";
@@ -422,6 +422,34 @@ export async function releaseTask(id: string, o: { cfg: VladConfig; transport?: 
     saveTask(t);
     releasePin(t.data.parent, machine, id);
     return t;
+  });
+}
+
+/**
+ * Moves a pipeline's machine pin to another machine (the old one is dead/unreachable, D-genel-009). Only pipelines; the
+ * target must be in the config and on the project card. A phase still active on the old machine blocks it unless `force`.
+ */
+export async function repinPipeline(id: string, to: string, o: { cfg: VladConfig; force?: boolean }): Promise<{ task: Task; from: string | null; warnings: string[] }> {
+  if (!o.cfg.machines) throw new Error("repin yalnız config'te machines tanımlıyken kullanılır");
+  return withKbLock(() => {
+    const t = getTask(id);
+    if (t.data.kind !== "pipeline") throw new Error(`repin yalnız pipeline çatısında (${id}: ${t.data.kind})`);
+    if (!machineDef(o.cfg, to)) throw new Error(`makine config'te yok: ${to}`);
+    if (!machinesOf(o.cfg, projectCard(t.data.project)).names.includes(to)) throw new Error(`makine kartın listesinde yok: ${to} (${t.data.project})`);
+    const from = t.data.machine ?? null;
+    if (from === to) throw new Error(`çatı zaten ${to} makinesine sabit`);
+    const warnings: string[] = [];
+    const active = from ? listTasks({ parent: id }).filter((x) => x.data.machine === from && (x.data.launch_op || ["running", "blocked", "stalled"].includes(x.data.state))) : [];
+    if (active.length) {
+      const names = active.map((x) => `${x.data.id} (${x.data.state})`).join(", ");
+      if (!o.force) throw new Error(`${from} makinesinde running faz var: ${names}; bitmesini bekle ya da --force`);
+      warnings.push(`${from} makinesinde running faz bırakıldı: ${names}; orada yetim kalabilir`);
+    }
+    warnings.push(`entegrasyon dalı vlad/${id} ${to} makinesinde olmayabilir; launch origin'den kurar`);
+    t.data.machine = to;
+    saveTask(t);
+    logTask(id, `Repin: ${from ?? "-"} → ${to}`);
+    return { task: getTask(id), from, warnings };
   });
 }
 

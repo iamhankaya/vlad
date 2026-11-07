@@ -207,6 +207,7 @@ export const normalizer = (w, port) => (s) => lf(s)
   .replace(/<BASE>[\w.\-\\/]*/g, (m) => w.base.includes("\\") ? (m.includes("\\\\") ? m.split("\\\\").join("/") : m.split("\\").join("/")) : m)
   .replace(new RegExp(String(port), "g"), "<PORT>")
   .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})/g, "<ISO>")
+  .replace(/\b\d{4}-\d{2}-\d{2}\b/g, "<DATE>") // yürütme günü: golden takvime bağlı kalmasın (T20261107-01)
   .replace(/pid \d+/g, "pid <PID>")
   .replace(/\d+ sn önce/g, "<N> sn önce")
   .replace(/\bT\d{8}-(\d+)/g, "T<DATE>-$1");
