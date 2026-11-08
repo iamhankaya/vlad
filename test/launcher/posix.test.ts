@@ -36,6 +36,14 @@ describe("resolveLaunchMode (darwin/linux)", () => {
 });
 
 describe("buildPosixScript", () => {
+  it("re-asserts the worktree trust record right before claude starts (F-vlad-261)", () => {
+    const s = buildPosixScript(req());
+    const at = s.indexOf("trust.js");
+    expect(at).toBeGreaterThan(s.indexOf("cd '/Users/me/vlad wt/T20261101-18'"));
+    expect(at).toBeLessThan(s.indexOf("\nclaude "));
+    expect(s).toContain("trustWorktree");
+    expect(s).toContain("'/Users/me/vlad wt/T20261101-18'"); // cwd is passed quoted
+  });
   it("exports env, cds quoted, passes the prompt via a quoted heredoc and calls claude", () => {
     const s = buildPosixScript(req({ env: { K: "it's" } }));
     expect(s.startsWith("#!/usr/bin/env bash\n")).toBe(true);
