@@ -151,6 +151,17 @@ export function trustWorktree(dir: string, file = claudeJsonPath(), o: TrustOpts
   }, o);
 }
 
+/** Is the record there right now? (live Claude processes rewrite ~/.claude.json from memory and can drop it, F-vlad-261) */
+export function trustRecorded(dir: string, file = claudeJsonPath()): boolean {
+  try { return (JSON.parse(readFileSync(file, "utf8")) as Json).projects?.[trustKey(dir)]?.hasTrustDialogAccepted === true; } catch { return false; }
+}
+
+/** After a launch: the record must stand; a dropped one is written again, a warning (or null) comes back. */
+export function verifyTrustAfterLaunch(dir: string, file = claudeJsonPath(), o: TrustOpts = {}): string | null {
+  if (trustRecorded(dir, file)) return null;
+  return trustWorktree(dir, file, o) ?? (trustRecorded(dir, file) ? null : `${file}: güven kaydı doğrulanamadı (${trustKey(dir)}); çalışan güven ekranında takılabilir`);
+}
+
 /** Drops the trust record of a removed worktree so the file does not grow. */
 export function untrustWorktree(dir: string, file = claudeJsonPath(), o: TrustOpts = {}): string | null {
   const key = trustKey(dir);

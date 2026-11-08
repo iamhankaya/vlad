@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { join } from "node:path";
 import { probeIntegrationBranch } from "../../tasks/cloud.js";
+import { verifyTrustAfterLaunch } from "../../tasks/trust.js";
 import { readInput } from "../../kb/input.js";
 import { loadConfig, withKbLock } from "../../kb/index.js";
 import type { TaskKind, TaskState } from "../../kb/index.js";
@@ -74,14 +75,23 @@ export function registerTask(program: Command, k: Kit): void {
     const real: Launcher = o.external
       ? new TerminalLauncher({ mode: "auto", external: true })
       : q.dir ? queueLauncher(q.dir, "launch", normal) : normal;
-    const launcher: Launcher = { launch: async (req) => (last = await real.launch(req)) };
+    const warnings: string[] = [];
+    // F-vlad-261: the trust record written before the window opens can be dropped by a live Claude; check after, repair or warn
+    const launcher: Launcher = { launch: async (req) => {
+      last = await real.launch(req);
+      if (last.ok && !o.dryRun && !o.external && !q.dir && mode !== "noop" && process.platform !== "win32") {
+        const w = verifyTrustAfterLaunch(req.cwd);
+        if (w) { warnings.push(w); ctx.stderr.write(`uyarı: ${w}\n`); }
+      }
+      return last;
+    } };
     // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
     if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
     const t = await launchTask(id, { launcher, cfg, closeWorker: closeWorkerWindow, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
     // --- /machines:C1 ---
     out(
       o,
-      { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}), ...(last?.queued ? { queued: last.queued, script: last.script, cwd: last.cwd } : {}) },
+      { id, state: t.data.state, branch: t.data.branch, worktree: t.data.worktree, method: last?.method, detail: last?.detail, ...(warnings.length ? { warnings } : {}), ...(o.external ? { script: last?.script, command: last?.command, cwd: last?.cwd } : {}), ...(last?.queued ? { queued: last.queued, script: last.script, cwd: last.cwd } : {}) },
       `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}${last?.queued ? `\nkuyruk: ${last.queued}` : ""}`,
     );
   }).option("--dry-run", "terminal açmadan komutu göster")

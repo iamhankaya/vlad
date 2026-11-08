@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, nowIso, writeDoc } from "../../src/kb/index.js";
 import { createTask, getTask, setState } from "../../src/tasks/index.js";
-import { markSilentWorkers, transcriptMtime, type LivenessProbe } from "../../src/tasks/liveness.js";
+import { markSilentWorkers, transcriptMtime, trustScreenShown, type LivenessProbe } from "../../src/tasks/liveness.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { makeHome } from "../helpers.js";
 
@@ -31,6 +31,32 @@ function runningLocal(ageMin: number, worktree = "C:\\x\\wt\\T1") {
 }
 const probe = (o: Partial<LivenessProbe>): LivenessProbe => ({ alive: () => true, transcriptMtime: () => null, ...o });
 const stalledIds = (p: LivenessProbe, cfg = defaultConfig()) => markSilentWorkers(now, cfg, p, "win32").map((t) => t.data.id);
+
+describe("trust screen (F-vlad-261)", () => {
+  it("stalls a worker parked on the trust screen after a short grace and logs why; detection only", () => {
+    const id = runningLocal(4);
+    expect(stalledIds(probe({ trustScreen: () => true }))).toEqual([id]);
+    const t = getTask(id);
+    expect(t.data.state).toBe("stalled");
+    expect(t.data.error).toMatch(/güven ekranı/);
+    expect(t.body).toMatch(/güven ekranında/);
+  });
+  it("leaves a just-launched worker (screen is normal for a moment), one with a transcript, or no screen alone", () => {
+    runningLocal(1);
+    expect(stalledIds(probe({ trustScreen: () => true }))).toEqual([]);
+    const id = runningLocal(4);
+    expect(stalledIds(probe({ trustScreen: () => true, transcriptMtime: () => now.getTime() - MIN }))).toEqual([]);
+    expect(stalledIds(probe({ trustScreen: () => false }))).toEqual([]);
+    expect(getTask(id).data.state).toBe("running");
+  });
+});
+describe("trustScreenShown", () => {
+  it("recognizes Claude Code's trust prompt text in a pane capture", () => {
+    expect(trustScreenShown("Quick safety check: Is this a project you created or one you trust?\n 1. Yes, I trust this folder")).toBe(true);
+    expect(trustScreenShown("Accessing workspace:\n/x\nDo you trust the files in this folder?")).toBe(true);
+    expect(trustScreenShown("> working on tests\nEsc to interrupt")).toBe(false);
+  });
+});
 
 describe("markSilentWorkers", () => {
   it("stalls a task whose worker process is gone and which has been silent past the grace", () => {

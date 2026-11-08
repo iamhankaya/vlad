@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { repoNameOf } from "../fleet/paths.js";
 import type { RemoteTransport } from "../fleet/types.js";
 import { RemoteError } from "../fleet/types.js";
-import { getTask, listTasks, setState } from "./store.js";
+import { getTask, listTasks, logTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
 const MIN = 60_000;
@@ -22,7 +22,17 @@ export interface LivenessProbe {
   alive(taskId: string): boolean | null;
   /** Newest transcript write (ms) of the worktree's Claude project dir; null → none. */
   transcriptMtime(worktree: string): number | null;
+  /** Does the worker's tmux pane show Claude Code's "trust this folder" screen? (F-vlad-261; detection only, never answers it) */
+  trustScreen?(taskId: string): boolean;
 }
+
+/** Claude Code's folder trust prompt ("Quick safety check" / "Do you trust the files in this folder?"). */
+export const trustScreenShown = (pane: string): boolean => /quick safety check|trust (the files in )?this folder/i.test(pane);
+// the screen is normal for a moment after launch; a worker still parked there after this is stuck
+const TRUST_GRACE_MIN = 3;
+const tmuxPane = (taskId: string): string => {
+  try { return execFileSync("tmux", ["capture-pane", "-p", "-t", `vlad-${taskId}`], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }); } catch { return ""; }
+};
 
 /** Claude names a project dir after its path with every non-alphanumeric char mapped to `-`. */
 export const claudeProjectDir = (path: string): string => path.replace(/[^A-Za-z0-9]/g, "-");
@@ -84,6 +94,7 @@ export function defaultProbe(): LivenessProbe {
       return lines ? lines.some((l) => l.includes(taskId.toLowerCase())) : null;
     },
     transcriptMtime,
+    trustScreen: (taskId) => process.platform !== "win32" && trustScreenShown(tmuxPane(taskId)),
   };
 }
 
@@ -122,7 +133,14 @@ export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessPr
     const updated = Date.parse(t.data.updated);
     if (Number.isNaN(updated)) continue;
     probe ??= defaultProbe();
-    const idleMs = now.getTime() - Math.max(updated, probe.transcriptMtime(wt) ?? 0);
+    const transcript = probe.transcriptMtime(wt);
+    const idleMs = now.getTime() - Math.max(updated, transcript ?? 0);
+    // F-vlad-261: no transcript yet + parked on the trust screen = stuck for good (nothing answers it); flag it, never auto-approve
+    if (transcript === null && idleMs >= TRUST_GRACE_MIN * MIN && probe.trustScreen?.(t.data.id)) {
+      logTask(t.data.id, "güven ekranında takıldı (Quick safety check): ~/.claude.json güven kaydı yok; pencerede onayla ya da `vlad task resume`");
+      out.push(setState(t.data.id, "stalled", { error: "çalışan güven ekranında takıldı (hasTrustDialogAccepted kaydı yok)" }));
+      continue;
+    }
     if (idleMs < Math.min(silentMs, NO_PROCESS_GRACE_MIN * MIN)) continue; // skip the process listing while clearly fresh
     if (decideSilent({ idleMs, alive: probe.alive(t.data.id), silentMs })) out.push(setState(t.data.id, "stalled"));
   }

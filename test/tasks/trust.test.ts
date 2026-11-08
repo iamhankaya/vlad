@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { claudeJsonPath, trustKey, trustWorktree, untrustWorktree } from "../../src/tasks/trust.js";
+import { claudeJsonPath, trustKey, trustRecorded, trustWorktree, verifyTrustAfterLaunch, untrustWorktree } from "../../src/tasks/trust.js";
 
 let dir: string;
 let file: string;
@@ -117,5 +117,29 @@ describe("F-vlad-202: eşzamanlı yazım güven kaydını kaybetmez", () => {
     expect(trustWorktree("/wt/a", file, { lockWaitMs: 100 })).toBeNull();
     expect(read().projects["/wt/a"].hasTrustDialogAccepted).toBe(true);
     expect(existsSync(`${file}.vlad-lock`)).toBe(false);
+  });
+});
+
+describe("trustRecorded (F-vlad-261)", () => {
+  it("is true only while the record exists; a live Claude rewriting the file from memory drops it", () => {
+    expect(trustRecorded("/wt/a", file)).toBe(false); // no file
+    trustWorktree("/wt/a", file);
+    expect(trustRecorded("/wt/a", file)).toBe(true);
+    writeFileSync(file, JSON.stringify({ projects: {} })); // another process rewrote ~/.claude.json from a stale copy
+    expect(trustRecorded("/wt/a", file)).toBe(false);
+    writeFileSync(file, "{broken");
+    expect(trustRecorded("/wt/a", file)).toBe(false);
+  });
+});
+
+describe("verifyTrustAfterLaunch (F-vlad-261)", () => {
+  it("is silent when the record stands, repairs a dropped one, warns when it cannot be kept", () => {
+    trustWorktree("/wt/a", file);
+    expect(verifyTrustAfterLaunch("/wt/a", file)).toBeNull();
+    writeFileSync(file, JSON.stringify({ projects: {} }));
+    expect(verifyTrustAfterLaunch("/wt/a", file)).toBeNull();
+    expect(trustRecorded("/wt/a", file)).toBe(true);
+    writeFileSync(file, "{broken");
+    expect(verifyTrustAfterLaunch("/wt/a", file)).toMatch(/güven kaydı/);
   });
 });
