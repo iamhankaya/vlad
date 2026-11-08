@@ -137,8 +137,8 @@ export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessPr
     const idleMs = now.getTime() - Math.max(updated, transcript ?? 0);
     // F-vlad-261: no transcript yet + parked on the trust screen = stuck for good (nothing answers it); flag it, never auto-approve
     if (transcript === null && idleMs >= TRUST_GRACE_MIN * MIN && probe.trustScreen?.(t.data.id)) {
-      logTask(t.data.id, "güven ekranında takıldı (Quick safety check): ~/.claude.json güven kaydı yok; pencerede onayla ya da `vlad task resume`");
       out.push(setState(t.data.id, "stalled", { error: "çalışan güven ekranında takıldı (hasTrustDialogAccepted kaydı yok)" }));
+      logTask(t.data.id, "güven ekranında takıldı (Quick safety check): ~/.claude.json güven kaydı yok; pencerede onayla ya da `vlad task resume`");
       continue;
     }
     if (idleMs < Math.min(silentMs, NO_PROCESS_GRACE_MIN * MIN)) continue; // skip the process listing while clearly fresh
