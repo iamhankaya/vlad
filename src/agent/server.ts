@@ -29,14 +29,14 @@ export interface ServerOpts {
   crashAt?: string;
 }
 
-const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "merge-preview", "forward-write", "queue-drop"]);
+const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "merge-preview", "forward-write", "queue-drop", "script-list"]);
 /** Günlüğe girmeyenler: salt okunurlar + aktarım/pano (4 MiB args günlüğe girmesin; dayanıklılık op'ların kendi durumundan ve teslim kaydından gelir). MUTATING/KEEP_ARGS'a eklenmez. */
 const UNJOURNALED: ReadonlySet<AgentOp> = new Set<AgentOp>([...READ_ONLY, "xfer-begin", "xfer-chunk", "xfer-commit", "xfer-abort", "clip-push"]);
 const defaultJournaled = (op: AgentOp): boolean => !UNJOURNALED.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
-const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
-const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge"]);
+const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write", "script-run"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
+const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge", "script-run"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
 const MAX_REPLY_BYTES = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (imza/meta payı); sınır bayt, karakter değil (F-vlad-126)
 const OPID_RE = /^[A-Za-z0-9._:-]{1,64}$/;

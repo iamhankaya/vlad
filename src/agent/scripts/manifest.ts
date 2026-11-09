@@ -15,6 +15,8 @@ export interface ScriptPlanInput { machine: string; name: string; platform: Scri
 /**
  * Write onayı için plan-id: `hex(sha256("VLAD-PLAN1\n"+machine+"\n"+name+"\n"+platform+"\n"+sha256+"\n"+canonicalJson(params)))[:16]`
  * (`canonicalJson`: agent/sign.ts). CLI (`--plan`) ve Agent (`approval.planId` denetimi) aynı işlevi kullanır.
+ * `params`: istemcinin gönderdiği ham değerler, doğrulanmış ve manifest `default`'ları uygulanmış hâliyle; `root` değeri çözülmemiş ad olarak kalır.
+ * `class`/`file`/`timeoutSec` hash'te yoktur: değişimleri `sha256` (betik) ve manifest satırı değişimiyle (incelemede görünür) yakalanır.
  */
 export function scriptPlanId(_i: ScriptPlanInput): string {
   throw new NotImplementedOp("script-run");

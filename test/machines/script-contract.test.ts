@@ -1,11 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { Journal } from "../../src/agent/journal.js";
+import { rmTemp } from "../helpers.js";
 import { Command } from "commander";
 import {
   OP_TABLE, NotImplementedOp, allowedOps, isAllowed,
 } from "../../src/agent/ops/index.js";
 import {
   SCRIPT_FILE_RE, SCRIPT_LIMITS, SCRIPT_NAME_RE, SCRIPT_PARAM_TYPES, SCRIPT_REASONS, SCRIPT_RESULT_SENTINEL,
-  type AgentCode, type AgentOp, type ScriptInfo, type ScriptManifest, type ScriptRunArgs, type ScriptRunResult,
+  type AgentOp, type ScriptInfo, type ScriptManifest, type ScriptRunArgs, type ScriptRunResult,
 } from "../../src/fleet/types.js";
 import { scriptPlanId, validateScriptManifest } from "../../src/agent/scripts/manifest.js";
 import { COMMANDS } from "../../src/commands/manifest.js";
@@ -38,8 +43,6 @@ describe("scripts contract: constants", () => {
       "approval", "bad_manifest", "bad_name", "bad_param", "dirty", "hash_mismatch", "no_repo", "no_upstream",
       "no_variant", "not_in_head", "not_regular", "unpushed", "unregistered",
     ]);
-    const codes: AgentCode[] = ["bad_request", "not_found", "forbidden", "failed", "busy", "conflict"]; // reasons ride on existing codes
-    expect(codes).toHaveLength(6);
   });
   it("name regex: lowercase slug, no path chars, max 48", () => {
     for (const ok of ["repo-guncelle", "vlad-guncelle", "a", "a1-b2"]) expect(SCRIPT_NAME_RE.test(ok), ok).toBe(true);
@@ -113,6 +116,27 @@ describe("scripts contract: CLI skeleton", () => {
     expect(run.registeredArguments.map((a) => a.name())).toEqual(["ad", "betik"]);
     expect(scripts.options.map((o) => o.long).sort()).toEqual(["--json"]);
     expect(run.options.map((o) => o.long).sort()).toEqual(["--confirmed", "--json", "--op-id", "--param", "--plan"]);
-    expect(run.options.find((o) => o.long === "--param")!.variadic, "--param tekrarlanabilir").toBe(true);
+    expect(run.options.find((o) => o.long === "--param")!.variadic, "variadic değil: konumsal argümanları yutar").toBeFalsy();
+    const parsed = buildProgram(ctx);
+    parsed.exitOverride();
+    const r = parsed.commands.find((c) => c.name() === "machine")!.commands.find((c) => c.name() === "run")!;
+    r.action((_a, _b, o) => { seen = o.param; });
+    let seen: unknown;
+    parsed.parse(["node", "vlad", "machine", "run", "--param", "a=1", "m", "s", "--param", "b=2"]);
+    expect(seen).toEqual(["a=1", "b=2"]);
+  });
+});
+
+describe("scripts contract: journal rules", () => {
+  const dirs: string[] = [];
+  afterEach(() => { for (const d of dirs.splice(0)) rmTemp(d); });
+  it("script-run result over the journal cap keeps scalar fields (summarized), never just a truncation marker", () => {
+    const d = mkdtempSync(join(tmpdir(), "vlad-sj-")); dirs.push(d);
+    const j = new Journal(join(d, "journal.jsonl"), () => 1_800_000_000_000);
+    j.start("o1", "mac", "script-run", "h");
+    j.finish("o1", "done", { name: "x", exit: 3, timedOut: false, durationMs: 5, stdout: "y".repeat(100_000) });
+    const r = j.get("o1")!.result as Record<string, unknown>;
+    expect(r).toMatchObject({ __journalSummary: true, exit: 3, timedOut: false, durationMs: 5 });
+    expect(r).not.toHaveProperty("__journalTruncated");
   });
 });

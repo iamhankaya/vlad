@@ -159,13 +159,22 @@ export const SCRIPT_NAME_RE = /^[a-z][a-z0-9-]{0,47}$/;
 export const SCRIPT_FILE_RE = /^agent-scripts\/[a-z0-9][a-z0-9._-]{0,63}\.(ps1|sh)$/;
 /** Yapılandırılmış sonuç satırı: stdout'un son 20 satırında, sondan ilk eşleşme `@@VLAD-RESULT@@ {json}`. */
 export const SCRIPT_RESULT_SENTINEL = "@@VLAD-RESULT@@";
-/** Toplam sonuç journal tavanının (64 KiB, journal.ts) altında kalır: stdout 32 + stderr 16 + sonuç JSON'u 16. */
+/**
+ * Ham metin tavanları (KiB). JSON serileştirme (kaçışlar) bayt boyutunu şişirebilir ve `data` stdout'ta da yer alır, bu yüzden 64 KiB
+ * journal tavanı GARANTİ değildir: `script-run` journal'da SUMMARIZED_OPS'tadır (tavan aşılırsa exit/timedOut/durationMs/truncated/dataError
+ * gibi skaler alanlar korunur, replay `__journalSummary` görür) ve ayrıca MUTATING + KEEP_ARGS'tadır; `script-list` READ_ONLY (günlüksüz).
+ */
 export const SCRIPT_LIMITS = {
   manifestMaxBytes: 64 * 1024, stdoutKb: 32, stderrKb: 16, resultJsonKb: 16, timeoutSecMax: 3600, outputMaxKbMax: 32, paramMaxLen: 256,
 } as const;
 
 export type ScriptParamSpec =
-  | { name: string; type: "string"; required?: boolean; default?: string; /** zorunlu; varsayılan ^[A-Za-z0-9._-]+$ */ pattern?: string; maxLen?: number }
+  /**
+   * pattern: isteğe bağlı, tam eşleşme (^…$), ReDoS'a karşı basit tutulur; yoksa varsayılan ^[A-Za-z0-9._-]+$ (baştaki "-" ve ".." YASAK:
+   * betik yazarı değeri `--` ve tırnakla kullanır; değer env'den (VLAD_PARAM_<AD>) gelir, argv/komut metnine enjekte edilmez).
+   * maxLen ≤ SCRIPT_LIMITS.paramMaxLen (yoksa o). `default` verilmişse `required` anlamsızdır (varsayılan uygulanır).
+   */
+  | { name: string; type: "string"; required?: boolean; default?: string; pattern?: string; maxLen?: number }
   | { name: string; type: "enum"; required?: boolean; default?: string; values: string[] }
   | { name: string; type: "int"; required?: boolean; default?: number; min?: number; max?: number }
   | { name: string; type: "bool"; required?: boolean; default?: boolean }
@@ -184,11 +193,12 @@ export interface ScriptEntry {
   class: ScriptClass;
   /** 1..SCRIPT_LIMITS.timeoutSecMax */
   timeoutSec: number;
-  /** 1..SCRIPT_LIMITS.outputMaxKbMax */
+  /** stdout tavanı (KiB), 1..SCRIPT_LIMITS.outputMaxKbMax; stderr tavanı sabit SCRIPT_LIMITS.stderrKb. */
   outputMaxKb: number;
   selfUpdate: boolean;
   params: ScriptParamSpec[];
 }
+/** Doğrulayıcı (validateScriptManifest) ayrıca `.ps1` ⇒ platform win32, `.sh` ⇒ darwin|linux denetler; ihlal `failed [bad_manifest]`. */
 export interface ScriptManifest { version: 1; scripts: ScriptEntry[] }
 
 export type ScriptIntegrity = "ok" | "hash_mismatch" | "dirty" | "not_regular" | "not_in_head";
