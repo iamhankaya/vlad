@@ -182,7 +182,10 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
         return { id, chunkBytes: XFER_CHUNK_BYTES, state: "receiving", received: m.entries.map((_, i) => ex.files.get(i)?.received ?? 0) };
       }
       const rec = await ledger.get(key);
-      if (rec?.state === "committed") return { id, chunkBytes: XFER_CHUNK_BYTES, state: "committed", items: rec.items };
+      if (rec?.state === "committed") {
+        if (rec.manifestHash && rec.manifestHash !== manifestHash) throw err("conflict", "aktarım kimliği başka bir istekle kullanılmış");
+        return { id, chunkBytes: XFER_CHUNK_BYTES, state: "committed", items: rec.items };
+      }
       if (rec?.state === "committing") throw UNCERTAIN();
       if ([...active.values()].filter((o) => o.state === "receiving" || o.state === "committing").length >= XFER_MAX_ACTIVE) throw err("busy", "çok fazla etkin aktarım");
 
@@ -312,7 +315,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
       if (!dims || dims[0] < 1 || dims[1] < 1 || dims[0] * dims[1] > CLIP_MAX_PIXELS) throw err("bad_request", "resim geçersiz");
       await ledger.put(x.key, { state: "committing", planned: ["clip.png"], published: [] }); // apply∥çökme: tekrar begin uncertain
       const clip = await d.clipImage!.apply(png, { eventTs: x.meta!.eventTs as number, rank: x.meta!.rank as 0 | 1 }, from);
-      await ledger.put(x.key, { state: "committed", items: [] });
+      await ledger.put(x.key, { state: "committed", items: [], manifestHash: x.manifestHash });
       await forget(x);
       return { items: [], clip };
     }
@@ -339,7 +342,7 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
       }
     }
     if (failed && !items.length) { await ledger.put(x.key, { state: "aborted" }); throw err("failed", failed.error.replace(/^\w+: /, "")); }
-    if (!failed) await ledger.put(x.key, { state: "committed", items }); // kısmi başarıda kayıt "committing" kalır: tekrar commit uncertain döner
+    if (!failed) await ledger.put(x.key, { state: "committed", items, manifestHash: x.manifestHash }); // kısmi başarıda kayıt "committing" kalır: tekrar commit uncertain döner
     await forget(x);
     try {
       await d.notifier.notify(`${from}'den dosya geldi`, items.length === 1 ? items[0]!.name : `${items[0]!.name} ve ${items.length - 1} öğe daha (${items.length} öğe)`);
@@ -418,7 +421,13 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
       const run = beginChain.then(async () => { // begin ile yarışmasın: silmeden hemen önce yeniden kontrol
         if ([...active.values()].some((x) => x.id === e.name)) return false;
         const meta = await readMeta(stage);
-        if (!meta || typeof meta.createdAt !== "number" || d.now() - meta.createdAt <= XFER_STALE_MS) return false;
+        if (!meta) { // meta.json yazılmadan çökme: yalnız boş/`tree`'li aşama, mtime eskiyse süpürülür (yabancı içeriğe dokunulmaz)
+          const names = await fsp.readdir(stage).catch(() => ["?"]);
+          const st = await fsp.lstat(stage).catch(() => null);
+          if (!st || !names.every((n) => n === "tree") || d.now() - st.mtimeMs <= XFER_STALE_MS) return false;
+          await rmStage(stage); return true;
+        }
+        if (typeof meta.createdAt !== "number" || d.now() - meta.createdAt <= XFER_STALE_MS) return false;
         await rmStage(stage); return true;
       });
       beginChain = run.catch(() => {});

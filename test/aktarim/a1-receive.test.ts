@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync, statSync, utimesSync } from "node:fs";
 import { canSymlink } from "../helpers.js";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -505,5 +505,23 @@ describe("A1 inceleme düzeltmeleri", () => {
     await r.commit(id, [sha(png)]);
     expect(during).toBe("committing");
     expect(await r.begin(id, e, { purpose: "clip-image", meta: { eventTs: 1, rank: 0 } })).toMatchObject({ state: "committed" });
+  });
+});
+
+describe("T20261109-26 sertleştirme", () => {
+  it("F-vlad-205: committed kaydı varken aynı id farklı manifestle begin → conflict", async () => {
+    const r = rig(); const id = newId();
+    await r.put(id, "a.txt", hello);
+    expect(await r.begin(id, [{ path: "a.txt", kind: "file", size: hello.length }])).toMatchObject({ state: "committed" });
+    expect(await code(r.begin(id, [{ path: "baska.txt", kind: "file", size: 3 }]))).toMatch(/^conflict\|/);
+  });
+  it("F-vlad-206: meta.json yazılmadan çöken eski aşama dizini (yalnız boş tree) sweep'te silinir; id yeniden kullanılabilir", async () => {
+    const r = rig(); const inc = join(r.downloads, ".vlad-incoming"); const id = "3".repeat(32);
+    mkdirSync(join(inc, id, "tree"), { recursive: true });
+    const old = new Date(r.clock.t - 25 * 3600_000);
+    utimesSync(join(inc, id), old, old);
+    expect(await r.rx.sweep()).toBe(1);
+    expect(r.staging()).toEqual([]);
+    expect(await code(r.begin(id, [{ path: "a", kind: "file", size: 1 }]))).toBe("ok");
   });
 });
