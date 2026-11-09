@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { loadConfig } from "../../kb/index.js";
 import type { VladConfig } from "../../kb/index.js";
 import { brainTransport } from "../../machines/remote.js";
+import { formatPlan, formatRun, formatScripts, listScripts, parseParamFlags, runRemoteScript } from "../../machines/script-cli.js";
 import { selfName } from "../../fleet/state.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -33,13 +34,24 @@ export function registerMachine(program: Command, k: Kit): void {
     out(o, r, `pencere açıldı (${r.method}); işçinin ekranında "VLAD probe-window" başlıklı pencere ~45 sn görünmeli`);
   });
   // --- /machines:C2 ---
-  // --- scripts: kayıtlı bakım betikleri (T20261109-03; sözleşme T20261109-05, gövdeler uygulama fazında) ---
-  def(machine, "scripts <ad>", "İşçinin kayıtlı bakım betikleri ve bütünlük durumu (yalnız beyin)", async (_name: string, _o: Opts) => {
-    throw new Error("henüz gerçeklenmedi: machine scripts");
+  // --- scripts: kayıtlı bakım betikleri (T20261109-03; mantık machines/script-cli.ts) ---
+  def(machine, "scripts <ad>", "İşçinin kayıtlı bakım betikleri ve bütünlük durumu (yalnız beyin)", async (name: string, o: Opts) => {
+    const { cfg, self } = machineCfg();
+    const r = await listScripts(brainTransport(cfg, self), name);
+    out(o, r, formatScripts(r));
   });
   const collect = (v: string, prev: string[] = []): string[] => [...prev, v];
-  def(machine, "run <ad> <betik>", "İşçide kayıtlı bakım betiğini çalıştırır (yalnız beyin; write sınıfı önce --plan, sonra --confirmed)", async (_name: string, _script: string, _o: Opts) => {
-    throw new Error("henüz gerçeklenmedi: machine run");
+  def(machine, "run <ad> <betik>", "İşçide kayıtlı bakım betiğini çalıştırır (yalnız beyin; write sınıfı önce --plan, sonra --confirmed)", async (name: string, script: string, o: Opts) => {
+    const { cfg, self } = machineCfg();
+    const r = await runRemoteScript(brainTransport(cfg, self), name, script, {
+      params: parseParamFlags(o.param as string[] | undefined), plan: !!o.plan, confirmed: o.confirmed as string | undefined, opId: o.opId as string | undefined,
+    });
+    if (r.kind === "plan") return out(o, r, formatPlan(r));
+    out(o, { ...r.result, opId: r.opId, meta: { replayed: r.replayed, uncertain: r.uncertain } }, formatRun(r));
+    if (r.result.exit !== 0) {
+      if (!o.json && r.result.stderr.trim()) k.ctx.stderr.write(r.result.stderr.trim() + "\n");
+      k.ctx.exit(1); // betik hatası: çıkış kodu 1 (geçici RemoteError'lar 75 ile zaten failWith'ten çıkar)
+    }
   })
     .option("--param <k=v>", "betik parametresi (tekrarlanabilir; ilk '=' böler, kopya anahtar reddedilir)", collect)
     .option("--plan", "çağırmadan betik/sürüm/sınıf/parametreleri ve plan-id'yi yazar")

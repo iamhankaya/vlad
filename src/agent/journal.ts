@@ -17,6 +17,7 @@ function summarize(result: unknown, bytes: number): Record<string, unknown> {
       if (typeof v === "string") out[k] = v.length > SUMMARY_STR_MAX ? v.slice(0, SUMMARY_STR_MAX) + "…" : v;
       else if (typeof v === "number" || typeof v === "boolean" || v === null) out[k] = v;
       else if (k === "integration" && v && typeof v === "object") out[k] = summarize(v, 0); // launch'ın pipeline entegrasyon worktree'si commit'te gerekir
+      else if (k === "truncated" && v && typeof v === "object" && Object.values(v).every((x) => typeof x === "boolean")) out[k] = v; // script-run: {stdout, stderr} kırpıldı bayrakları (iki bool)
     }
   }
   return out;

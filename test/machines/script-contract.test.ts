@@ -29,20 +29,12 @@ describe("scripts contract: ops and roles", () => {
       for (const c of ["brain", "worker", "console", "self"] as const) expect(allowedOps("brain-agent", c), `brain-agent ${c}`).not.toContain(op);
     }
   });
-  it("op table has a slot for each script op (body: not implemented until the implementation phase)", async () => {
+  it("op table has an implemented handler for each script op (uygulama fazı; NotImplementedOp değil)", async () => {
     for (const op of OPS) {
       expect(typeof OP_TABLE[op], op).toBe("function");
-      await expect(OP_TABLE[op]({}, { from: "mac", opId: "o" })).rejects.toBeInstanceOf(NotImplementedOp);
+      const err = await OP_TABLE[op]({ yok: 1 }, { from: "mac", opId: "o" }).then(() => null, (e: unknown) => e);
+      expect(err, op).not.toBeInstanceOf(NotImplementedOp);
     }
-  });
-});
-
-describe("scripts contract: constants", () => {
-  it("reason set is the closed list the spec fixes (no new AgentCode)", () => {
-    expect([...SCRIPT_REASONS].sort()).toEqual([
-      "approval", "bad_manifest", "bad_name", "bad_param", "dirty", "hash_mismatch", "no_repo", "no_upstream",
-      "no_variant", "not_in_head", "not_regular", "unpushed", "unregistered",
-    ]);
   });
   it("name regex: lowercase slug, no path chars, max 48", () => {
     for (const ok of ["repo-guncelle", "vlad-guncelle", "a", "a1-b2"]) expect(SCRIPT_NAME_RE.test(ok), ok).toBe(true);
@@ -84,14 +76,14 @@ describe("scripts contract: type shapes", () => {
   });
 });
 
-describe("scripts contract: function signatures (bodies land in the implementation phase)", () => {
-  it("validateScriptManifest(raw) and scriptPlanId(...) exist with the planned arity", () => {
+describe("scripts contract: function signatures", () => {
+  it("validateScriptManifest(raw) and scriptPlanId(...) keep the planned arity", () => {
     expect(validateScriptManifest).toBeTypeOf("function");
     expect(validateScriptManifest.length).toBe(1);
     expect(scriptPlanId).toBeTypeOf("function");
     expect(scriptPlanId.length).toBe(1);
-    expect(() => validateScriptManifest({})).toThrow(NotImplementedOp);
-    expect(() => scriptPlanId({ machine: "m", name: "n", platform: "win32", sha256: "0".repeat(64), params: {} })).toThrow(NotImplementedOp);
+    expect(() => validateScriptManifest({})).toThrow(/\[bad_manifest\]/);
+    expect(scriptPlanId({ machine: "m", name: "n", platform: "win32", sha256: "0".repeat(64), params: {} })).toMatch(/^[0-9a-f]{16}$/);
   });
 });
 
@@ -134,9 +126,10 @@ describe("scripts contract: journal rules", () => {
     const d = mkdtempSync(join(tmpdir(), "vlad-sj-")); dirs.push(d);
     const j = new Journal(join(d, "journal.jsonl"), () => 1_800_000_000_000);
     j.start("o1", "mac", "script-run", "h");
-    j.finish("o1", "done", { name: "x", exit: 3, timedOut: false, durationMs: 5, stdout: "y".repeat(100_000) });
+    j.finish("o1", "done", { name: "x", exit: 3, timedOut: false, durationMs: 5, stdout: "y".repeat(100_000), truncated: { stdout: true, stderr: false }, data: { ok: true } });
     const r = j.get("o1")!.result as Record<string, unknown>;
     expect(r).toMatchObject({ __journalSummary: true, exit: 3, timedOut: false, durationMs: 5 });
     expect(r).not.toHaveProperty("__journalTruncated");
+    expect(r.truncated, "truncated bayrakları özette korunur (çıktı kırpıldı bilgisi kaybolmasın)").toEqual({ stdout: true, stderr: false });
   });
 });

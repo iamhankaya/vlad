@@ -1,1 +1,2 @@
 * text=auto eol=lf
+agent-scripts/* -text
