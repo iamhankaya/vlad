@@ -15,8 +15,11 @@ describe("docs teach the new memory reading order", () => {
     expect(at("vlad decision list")).toBeGreaterThan(at("vlad project status"));
     expect(at("vlad kb search")).toBeGreaterThan(at("vlad decision list"));
     expect(at("vlad kb get")).toBeGreaterThan(at("vlad kb search"));
-    for (const cmd of ["decision add|list|set|migrate", "project write|set|note|summary|status|refresh|list", "kb commit|check|maintain|get|search"]) {
-      expect(t, cmd).toContain(cmd);
+    // the full command list moved to the generated docs/commands.md (T20261110-09)
+    expect(t).toContain("docs/commands.md");
+    const docs = read("docs/commands.md");
+    for (const cmd of ["decision add", "decision list", "decision set", "decision migrate", "project write", "project note", "project summary", "project refresh", "kb commit", "kb check", "kb maintain", "kb get", "kb search"]) {
+      expect(docs, cmd).toContain(`\`vlad ${cmd}\``);
     }
     expect(t).toMatch(/bayat/); // a stale summary is never presented as current
   });

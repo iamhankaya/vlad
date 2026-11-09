@@ -41,7 +41,8 @@ describe("skills/ references and de-duplication", () => {
     const c = read("CLAUDE.md");
     for (const n of [...NEW_VLAD_SKILLS, "ci-triage"]) expect(c, n).toContain(n);
     expect(c).toContain("security-reviewer");
-    expect(c).toMatch(/task new\|launch[^\n]*deps/);
+    expect(c).toContain("docs/commands.md"); // full command list is the generated reference (T20261110-09)
+    expect(read("docs/commands.md")).toContain("`vlad task deps`");
   });
 
   it("setup-audit keeps its verification contract: optional items, mandatory check against later fixes, time coherence, doğrulandı column", () => {

@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:fast": "node scripts/test-run.mjs",
     "gate:changed": "node scripts/test-scope.mjs --run",
-    "check:desktop": "node scripts/check-desktop-catalog.mjs"
+    "check:desktop": "node scripts/check-desktop-catalog.mjs",
+    "docs:commands": "node scripts/gen-commands-doc.mjs"
   },
   "engines": {
     "node": ">=22"

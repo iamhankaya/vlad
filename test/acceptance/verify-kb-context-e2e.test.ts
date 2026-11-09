@@ -179,7 +179,8 @@ describe("iki özellik birlikte: bayat özetli projede refs çalışır ve skill
     expect(status).toMatch(/sabah raporu/i);
     const claude = readFileSync(join(root, "CLAUDE.md"), "utf8");
     expect(claude).toMatch(/bayat\/eksik proje özeti/);
-    expect(claude).toMatch(/kb commit\|check\|maintain\|get\|search\|refs/);
+    expect(claude).toContain("docs/commands.md");
+    expect(readFileSync(join(root, "docs/commands.md"), "utf8")).toContain("`vlad kb refs`");
   });
 });
 
