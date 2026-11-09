@@ -1,8 +1,12 @@
 node_modules/
 dist/
+dist-next/
+dist-old/
 .superpowers/
 .remember/
 .claude/worktrees/
 /kb/
 /vlad.local.json
 /.vlad-agent/
+node_modules-old/
+.vlad-npm-ci-running

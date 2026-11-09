@@ -1,21 +1,31 @@
 import { randomBytes } from "node:crypto";
 import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync, truncateSync } from "node:fs";
 import { createServer } from "node:net";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
+import { getVladHome } from "../kb/home.js";
+import { defaultExec } from "../launcher/terminal.js";
 import { nowMs } from "../fleet/clock.js";
 import { RemoteError } from "../fleet/types.js";
 import { AgentClient } from "./client.js";
 import { Journal } from "./journal.js";
-import { setAgentEnv } from "./ops/env.js";
+import { winStartCmd } from "./install.js";
+import { maint } from "./maintenance.js";
+import { gracefulStop, scheduleRestart, winRestartHelper, type RestartDeps } from "./restart.js";
+import { WATCHDOG_JS } from "./watchdog.js";
+import { spawn } from "node:child_process";
+import { agentEnv, setAgentEnv } from "./ops/env.js";
 import { reconcileApplyWrite } from "./ops/apply-write.js";
 import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
+import { reconcileScriptRun } from "./ops/script.js";
 import { buildAktarim } from "./ops/index.js";
 import { createProdDeps } from "../transfer/deps.js";
 import { startClipSync } from "../clip/index.js";
 import { reconcileLaunch } from "./ops/launch.js";
 import { reconcileMerge } from "./ops/merge-reconcile.js";
+import { sweepScriptDir } from "./scripts/run.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
@@ -85,7 +95,9 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const queue = kind === "worker-agent" ? new AgentQueue(join(dir, "queue"), nowMs) : undefined;
   const build = buildId();
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });
-  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
+  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge, "script-run": reconcileScriptRun }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
+
+  sweepScriptDir(join(dir, "scripts-run")); // çökmüş çalışmadan kalan geçici betikler
 
   const deps = createProdDeps();
   const aktarim = buildAktarim(deps);
@@ -107,7 +119,34 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   }
   writeFileSync(pidFile(), String(process.pid));
   const clip = startClipSync(deps);
-  const stop = () => { void Promise.allSettled([clip.stop(), aktarim.close()]).then(() => srv.close()).finally(() => { rmSync(pidFile(), { force: true }); process.exit(0); }); };
+  try { agentEnv().runningBuildHead = readFileSync(join(getVladHome(), "dist", ".build-head"), "utf8").trim() || undefined; } catch { /* damga yok: bilinmiyor */ }
+  // takılan clip/aktarım kapanışı bakım bayrağını sonsuza açık tutmasın: 10 sn sonra yine çıkılır
+  const stop = () => gracefulStop({
+    close: async () => { await Promise.allSettled([clip.stop(), aktarim.close()]); await srv.close(); },
+    cleanup: () => rmSync(pidFile(), { force: true }), exit: (c) => process.exit(c), timeoutMs: 10_000,
+  });
+  // selfUpdate başarısında yeniden başlatma (spec S23/S24): Mac'te çıkış (launchd KeepAlive), Windows'ta WMI yardımcısı agent-start.cmd'yi açar
+  const wdHost = bind === "0.0.0.0" || bind === "::" ? "127.0.0.1" : bind;
+  const restartDeps: RestartDeps = {
+    platform: process.platform, delayMs: 2000, pollMs: 250, maxWaitMs: 5 * 60_000, inflight: () => maint.inflight(), stop,
+    helper: async () => {
+      if (process.platform !== "win32") {
+        // Mac: yalnız launchd KeepAlive geri getirir; elle başlatılmış Agent çıkarsa kimse başlatmaz
+        const plist = join(homedir(), "Library", "LaunchAgents", "com.vlad.agent.plist");
+        if (process.platform === "darwin" && !existsSync(plist)) throw new Error(`${plist} yok (launchd kurulu değil); Agent'ı elle yeniden başlat`);
+        // sağlık bekçisi: yeni dist dinlemezse dist/node_modules yedekten geri yüklenir ve launchd yeniden tetiklenir
+        const kick = process.platform === "darwin" && process.getuid ? JSON.stringify(["launchctl", "kickstart", "-k", `gui/${process.getuid()}/com.vlad.agent`]) : "";
+        spawn(process.execPath, ["-e", WATCHDOG_JS], { detached: true, stdio: "ignore", env: { PATH: process.env.PATH ?? "", WD_HOST: wdHost, WD_PORT: String(port), WD_REPO: getVladHome(), WD_PID: String(process.pid), ...(kick ? { WD_KICK: kick } : {}) } }).unref();
+        return;
+      }
+      const startCmd = winStartCmd(getVladHome());
+      if (!existsSync(startCmd)) throw new Error(`${startCmd} yok (vlad agent install --apply ile kurulmamış); Agent'ı elle yeniden başlat`);
+      const h = winRestartHelper({ pidFile: pidFile(), startCmd, systemRoot: process.env.SystemRoot, watch: { host: wdHost, port, repo: getVladHome() } });
+      await defaultExec(h.file, h.args);
+    },
+    onFail: (m) => { maint.leave(); process.stderr.write(`yeniden başlatma yapılamadı, Agent eski süreçle sürüyor: ${m}\n`); },
+  };
+  agentEnv().requestRestart = () => scheduleRestart(restartDeps);
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   if (queue) {

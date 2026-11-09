@@ -4,6 +4,7 @@ import type { VladConfig } from "../kb/types.js";
 import { nowMs } from "../fleet/clock.js";
 import { CLOCK_SKEW_MS, MAX_CONNECTIONS, PROTO_VERSION, RemoteError, type AgentCode, type AgentOp, type AgentRequest, type AgentResponse, type OpMeta, type WireCode } from "../fleet/types.js";
 import { FrameDecoder, encodeFrame } from "./frame.js";
+import { MAINT_FREE_OPS, maint } from "./maintenance.js";
 import type { Journal } from "./journal.js";
 import { isAllowed, type AgentKind, type CallerRole, type OpHandler } from "./ops/index.js";
 import { canonicalJson, signResponse, verifyRequest } from "./sign.js";
@@ -29,14 +30,14 @@ export interface ServerOpts {
   crashAt?: string;
 }
 
-const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "merge-preview", "forward-write", "queue-drop"]);
+const READ_ONLY: ReadonlySet<AgentOp> = new Set<AgentOp>(["ping", "op-status", "kb-head", "queue-list", "queue-flush", "liveness", "merge-preview", "forward-write", "queue-drop", "script-list"]);
 /** Günlüğe girmeyenler: salt okunurlar + aktarım/pano (4 MiB args günlüğe girmesin; dayanıklılık op'ların kendi durumundan ve teslim kaydından gelir). MUTATING/KEEP_ARGS'a eklenmez. */
 const UNJOURNALED: ReadonlySet<AgentOp> = new Set<AgentOp>([...READ_ONLY, "xfer-begin", "xfer-chunk", "xfer-commit", "xfer-abort", "clip-push"]);
 const defaultJournaled = (op: AgentOp): boolean => !UNJOURNALED.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
-const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
-const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge"]);
+const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write", "script-run"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
+const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge", "script-run"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
 const MAX_REPLY_BYTES = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (imza/meta payı); sınır bayt, karakter değil (F-vlad-126)
 const OPID_RE = /^[A-Za-z0-9._:-]{1,64}$/;
@@ -68,6 +69,8 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
   const key = Object.hasOwn(o.keys, req.from) ? o.keys[req.from] : undefined;
   if (!key || req.to !== o.self || !verifyRequest(key, req)) return reply(req.opId, "auth", { error: "auth: imza geçersiz" });
   const sign = (code: WireCode, x: { result?: unknown; error?: string; meta?: OpMeta } = {}) => reply(req.opId, code, { ...x, key });
+  const counted = !MAINT_FREE_OPS.has(req.op);
+  let began = false;
   try {
     if (Math.abs(serverTs - req.ts) > CLOCK_SKEW_MS) throw new Fail("clock_skew", `clock_skew: saat farkı çok büyük (sunucu ${iso(serverTs)}, istemci ${iso(req.ts)})`);
     if (req.v !== PROTO_VERSION && req.op !== "ping") throw new Fail("proto_mismatch", `proto_mismatch: protokol ${req.v} ≠ ${PROTO_VERSION}`);
@@ -75,13 +78,18 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
     if (!role || !isAllowed(o.kind, role, req.op)) throw new Fail("forbidden", `forbidden: ${req.op} bu kimlikten çalıştırılamaz`);
     const handler = o.ops[req.op];
     if (!handler) throw new Fail("bad_request", `bad_request: bilinmeyen işlem: ${req.op}`);
+    // bakım (selfUpdate sürerken/yeniden başlatma beklenirken): yalnız ping/op-status/script-list; uçuşta sayılanlar selfUpdate başlamadan önce denetlenir
+    if (counted) {
+      if (maint.on) throw new Fail("busy", "busy: [maintenance] Agent kendini güncelliyor; kısa süre sonra tekrar dene");
+      maint.begin(req.opId); began = true;
+    }
     const ctx = { from: req.from, opId: req.opId };
     if (!(o.journaled?.(req.op, req.args) ?? defaultJournaled(req.op))) return sign("ok", { result: await handler(req.args, ctx) });
     return await runJournaled(o, req, handler, sign);
   } catch (e) {
     const f = toFail(e);
     return f.signed ? sign(f.code, { error: f.message }) : reply(req.opId, f.code, { error: f.message });
-  }
+  } finally { if (began) maint.end(req.opId); }
 }
 
 function toFail(e: unknown): Fail {

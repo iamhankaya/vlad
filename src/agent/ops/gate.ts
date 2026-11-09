@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { readDoc } from "../../kb/doc.js";
 import { RemoteError, type GateRunResult, type MergePreviewResult, type MergeResult } from "../../fleet/types.js";
+import { killTree } from "../proc.js";
 import { entriesOf, readRecord, verifiedRecord } from "./launch.js";
 import { argObject, bad, projectArg, repoNameArg, taskIdArg, workerCtx, workerKbDir, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";
@@ -66,8 +67,8 @@ function integrationWorktree(ctx: WorkerCtx, repo: string, integId: string): str
   return wt;
 }
 
-interface Run { code: number | null; stdout: string; stderr: string }
-function runGit(cwd: string, args: string[], timeoutMs = 120_000): Promise<Run> {
+export interface Run { code: number | null; stdout: string; stderr: string }
+export function runGit(cwd: string, args: string[], timeoutMs = 120_000): Promise<Run> {
   return new Promise((resolve) => {
     execFile("git", args, { cwd, timeout: timeoutMs, encoding: "utf8", windowsHide: true, maxBuffer: 16 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } },
       (err, stdout, stderr) => resolve({ code: err ? (typeof (err as { code?: unknown }).code === "number" ? (err as unknown as { code: number }).code : null) : 0, stdout, stderr }));
@@ -110,13 +111,6 @@ function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
   chains.set(key, tail);
   void tail.then(() => { if (chains.get(key) === tail) chains.delete(key); });
   return run;
-}
-
-function killTree(p: ReturnType<typeof spawn>): void {
-  // Windows'ta p.kill() yalnız cmd.exe'yi öldürür; torunlar (npm test…) boruları tutar
-  if (process.platform === "win32" && p.pid) spawn("taskkill", ["/PID", String(p.pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" }).on("error", () => p.kill());
-  else if (p.pid) { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } } // detached: süreç grubu lideri; torunlar da gider
-  else p.kill();
 }
 
 export async function runGate(cmd: string, cwd: string, timeoutMs = GATE_TIMEOUT_MS): Promise<GateRunResult> {

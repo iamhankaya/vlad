@@ -82,7 +82,7 @@ const BRAIN_ONLY = new Set([
   "mode night", "mode watch", "mode off", "mode status",
   "audit setup",
   "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append",
-  "kb commit", "kb maintain", "kb lint", "session register",
+  "kb commit", "kb maintain", "kb lint", "session register", "machine scripts", "machine run",
 ]);
 
 function defKeys(): string[] {

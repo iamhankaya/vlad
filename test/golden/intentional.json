@@ -1,6 +1,7 @@
 {
   "version": 1,
   "entries": [
-    { "id": "T20261107-01", "keys": ["task repin --help", "task --help", "task (bare)"] }
+    { "id": "T20261107-01", "keys": ["task repin --help", "task --help", "task (bare)"] },
+    { "id": "T20261109-05", "keys": ["machine scripts --help", "machine run --help", "machine --help", "machine (bare)"] }
   ]
 }

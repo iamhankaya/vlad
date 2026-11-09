@@ -1,0 +1,142 @@
+import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { readdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, win32 } from "node:path";
+import { ensurePrivateDir, lockDownFile } from "../../fleet/state.js";
+import { RemoteError, SCRIPT_LIMITS, SCRIPT_RESULT_SENTINEL, type ScriptRunResult } from "../../fleet/types.js";
+import { killTreeWait } from "../proc.js";
+
+// Betik çalıştırma: bayt'lar özel geçici dosyaya yazılır (TOCTOU/çalışırken `git pull`/autocrlf), allowlist ortamı, parametre env'den
+// (argv/kabuk yok), çıktı tavanı, zaman aşımında süreç ağacı öldürülür. Başladıktan sonra hiçbir yol fırlatmaz.
+
+/** Betiğe geçen sistem değişkenleri (büyük/küçük harf duyarsız; Windows adları). `PROGRAMFILES*` önek eşleşmesi. */
+const SYS_ENV = new Set([
+  "PATH", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "USERPROFILE", "HOME", "APPDATA", "LOCALAPPDATA",
+  "USERNAME", "LANG", "SSH_AUTH_SOCK", "PROGRAMDATA",
+]);
+const isSysVar = (k: string): boolean => { const u = k.toUpperCase(); return SYS_ENV.has(u) || u.startsWith("PROGRAMFILES"); };
+
+export interface ScriptEnvOpts { home: string; repo: string; machine: string; opId: string; script: string; params: Record<string, string>; roots: string[] }
+/** `process.env` kopyalanmaz: sırlar (GH_TOKEN, ANTHROPIC_API_KEY…), VLAD_LOCAL_FILE/FORWARDED/AGENT_* ve NODE_OPTIONS geçmez. */
+export function scriptEnv(src: NodeJS.ProcessEnv, o: ScriptEnvOpts): NodeJS.ProcessEnv {
+  const e: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(src)) if (v !== undefined && isSysVar(k)) e[k] = v;
+  Object.assign(e, { VLAD_HOME: o.home, VLAD_REPO: o.repo, VLAD_MACHINE: o.machine, VLAD_OP_ID: o.opId, VLAD_SCRIPT: o.script, VLAD_ROOTS: o.roots.join(";"), GIT_TERMINAL_PROMPT: "0" });
+  for (const [k, v] of Object.entries(o.params)) e[`VLAD_PARAM_${k.toUpperCase().replace(/-/g, "_")}`] = v;
+  return e;
+}
+
+/** Yorumlayıcı dosya uzantısından türer, manifest belirtemez. PS 5.1: mutlak System32 yolu; parametre argv'de değil env'de. */
+export function interpreterFor(ext: "ps1" | "sh", platform: NodeJS.Platform, systemRoot: string | undefined): { file: string; args: (script: string) => string[] } {
+  if ((ext === "ps1") !== (platform === "win32")) throw new RemoteError("failed", `failed: [bad_manifest] .${ext} uzantısı ${platform} ile uyumsuz`);
+  if (ext === "ps1") {
+    return {
+      file: win32.join(systemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+      args: (s) => ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", s],
+    };
+  }
+  return { file: "/bin/bash", args: (s) => ["--noprofile", "--norc", s] };
+}
+
+/** Yapılandırılmış sonuç: stdout'un son 20 satırında, sondan ilk `@@VLAD-RESULT@@ {json}`. `restart` yalnız Agent'ındır, betikteki atılır. */
+export function parseResultLine(stdout: string): { data: Record<string, unknown> | null; dataError?: "no_result_line" | "bad_json" | "too_large" } {
+  const lines = stdout.split("\n").map((l) => l.replace(/\r$/, "")).slice(-20);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i]!.replace(/^\uFEFF/, ""); // PS 5.1 yönlendirilmiş stdout'a BOM ekleyebilir
+    if (!l.startsWith(`${SCRIPT_RESULT_SENTINEL} `)) continue;
+    const json = l.slice(SCRIPT_RESULT_SENTINEL.length + 1);
+    if (Buffer.byteLength(json) > SCRIPT_LIMITS.resultJsonKb * 1024) return { data: null, dataError: "too_large" };
+    try {
+      const v = JSON.parse(json) as unknown;
+      if (!v || typeof v !== "object" || Array.isArray(v)) return { data: null, dataError: "bad_json" };
+      const { restart: _r, ...rest } = v as Record<string, unknown>;
+      return { data: rest };
+    } catch { return { data: null, dataError: "bad_json" }; }
+  }
+  return { data: null, dataError: "no_result_line" };
+}
+
+export interface RunSpec {
+  bytes: Buffer; name: string; ext: "ps1" | "sh"; opId: string; cwd: string;
+  /** geçici betiklerin özel dizini (`<agentDir>/scripts-run`) */
+  dir: string;
+  env: NodeJS.ProcessEnv; timeoutMs: number; stdoutCapKb: number; platform?: NodeJS.Platform;
+  /** zaman aşımında ağacı öldürür; true = bittiği doğrulandı (varsayılan killTreeWait; testler değiştirir) */
+  killTree?: (p: ReturnType<typeof spawn>) => Promise<boolean>;
+}
+export type RunOut = Pick<ScriptRunResult, "exit" | "timedOut" | "durationMs" | "stdout" | "stderr" | "truncated" | "data" | "dataError" | "recovery"> & {
+  /** yalnız recovery:"pending" iken: öldürmeyi yeniden dener (iç kullanım; sonuca girmez) */
+  retryKill?: () => Promise<boolean>;
+};
+
+/** Açılışta (ve çökme sonrası) kalan geçici betikleri siler. */
+export function sweepScriptDir(dir: string): void {
+  try { for (const f of readdirSync(dir)) rmSync(join(dir, f), { force: true, recursive: false }); } catch { /* dizin yok */ }
+}
+
+/** Başlamadan önceki hatalar (yorumlayıcı yok, dosya yazılamadı) `failed` fırlatır; başladıktan sonra her şey sonuç alanıdır. */
+export async function runScript(s: RunSpec): Promise<RunOut> {
+  const interp = interpreterFor(s.ext, s.platform ?? process.platform, s.env.SystemRoot ?? process.env.SystemRoot);
+  ensurePrivateDir(s.dir);
+  const file = join(s.dir, `${s.opId.replace(/[^A-Za-z0-9._-]/g, "_")}-${s.name}-${randomBytes(4).toString("hex")}.${s.ext}`);
+  try {
+    lockDownFile(s.dir, { strict: true, dir: true }); // kilitlenemezse betik çalışmaz (fail-closed); dosya yazılmadan önce
+  } catch (e) { throw new RemoteError("failed", `failed: betik dizini kilitlenemedi, çalıştırılmadı: ${(e as Error).message}`); }
+  try {
+    writeFileSync(file, s.bytes, { flag: "wx", mode: 0o600 });
+    try { lockDownFile(file, { strict: true }); } catch (e) { throw new RemoteError("failed", `failed: betik dosyası kilitlenemedi, çalıştırılmadı: ${(e as Error).message}`); }
+    return await spawnScript(interp.file, interp.args(file), s);
+  } finally { try { rmSync(file, { force: true }); } catch { /* Windows: süreç dosyayı tutuyorsa; açılışta süpürülür */ } }
+}
+
+/** Son `max` bayt, UTF-8 karakter sınırından başlayarak (devam baytları 10xxxxxx atılır; çok baytlı karakter ortadan kesilmez). */
+export function tailUtf8(b: Buffer, max: number): string {
+  if (b.length <= max) return b.toString("utf8");
+  let i = b.length - max;
+  while (i < b.length && (b[i]! & 0xc0) === 0x80) i++;
+  return b.subarray(i).toString("utf8");
+}
+/** Tavan BAYT cinsindendir (marker dahil ≤ cap); kırpılınca başa kaç baytın atıldığı yazılır. */
+export function capUtf8(b: Buffer, total: number, cap: number): string {
+  if (total <= cap) return b.toString("utf8");
+  const mark = (n: number) => `[…ilk ${n} bayt kırpıldı]\n`;
+  const room = cap - Buffer.byteLength(mark(total));
+  const body = tailUtf8(b, Math.max(0, room));
+  return mark(total - Buffer.byteLength(body)) + body;
+}
+
+function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
+  const outCap = s.stdoutCapKb * 1024, errCap = SCRIPT_LIMITS.stderrKb * 1024;
+  // stdout kuyruk tamponu gösterim tavanından bağımsız en az 64 KiB: 16 KiB'lik sonuç satırı küçük outputMaxKb'de kaybolmasın (Codex P2); gösterim yine capUtf8 ile outCap'e iner
+  const outKeep = Math.max(2 * outCap, 4 * SCRIPT_LIMITS.resultJsonKb * 1024);
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const p = spawn(cmd, args, { cwd: s.cwd, env: s.env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    let outBuf = Buffer.alloc(0), errBuf = Buffer.alloc(0), outTotal = 0, errTotal = 0, started = false, finished = false;
+    p.once("spawn", () => { started = true; });
+    p.stdout.on("data", (d: Buffer) => { outTotal += d.length; outBuf = Buffer.concat([outBuf, d]).subarray(-outKeep); }); // bellek sınırı (bayt)
+    p.stderr.on("data", (d: Buffer) => { errTotal += d.length; errBuf = Buffer.concat([errBuf, d]).subarray(-2 * errCap); });
+    const done = (exit: number, timedOut: boolean, extraErr = "", unkilled = false) => {
+      if (finished) return;
+      finished = true; clearTimeout(timer);
+      const parsed = parseResultLine(tailUtf8(outBuf, outBuf.length));
+      resolve({
+        exit, timedOut, durationMs: Date.now() - t0,
+        stdout: capUtf8(outBuf, outTotal, outCap), stderr: capUtf8(extraErr ? Buffer.concat([errBuf, Buffer.from(extraErr)]) : errBuf, errTotal + Buffer.byteLength(extraErr), errCap),
+        truncated: { stdout: outTotal > outCap, stderr: errTotal > errCap }, ...parsed,
+        ...(unkilled ? { recovery: "pending" as const, retryKill: () => (s.killTree ? kill(p) : killTreeWait(p, { recheck: true })) } : {}),
+      });
+    };
+    // sonucu 'close'u beklemeden ver: torun borulara tutunsa da op asılı kalmaz
+    // ağacın gerçekten bittiği beklenir (F-vlad-270): doğrulanamazsa recovery:"pending" (çağıran geri yükleme yapmaz)
+    const kill = s.killTree ?? ((x) => killTreeWait(x));
+    let timing = false; // öldürme sürerken gelen 'close' sonucu zaman aşımı olarak raporlanır
+    const timer = setTimeout(() => { timing = true; void kill(p).catch(() => false).then((ok) => done(124, true, "\nbetik zaman aşımına uğradı" + (ok ? "" : "; süreç ağacı sonlandırılamadı, geri yükleme ertelendi"), !ok)); }, s.timeoutMs);
+    p.on("error", (e) => {
+      if (started) return done(1, false, `\n${e.message}`);
+      finished = true; clearTimeout(timer);
+      reject(new RemoteError("failed", `failed: betik başlatılamadı: ${e.message}`));
+    });
+    p.on("close", (code) => { if (!timing) done(code ?? 1, false); });
+  });
+}
