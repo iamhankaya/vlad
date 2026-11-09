@@ -193,7 +193,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     const ok = vlad(["task", "new", "--project", "alpha", "--title", "T", "--role", "tester", "--model", "opus", "--model-reason", "kritik", "--json"]);
     expect(ok.code).toBe(0);
     const plain = vlad(["task", "new", "--project", "alpha", "--title", "T2", "--role", "tester", "--json"]);
-    const { tasks } = JSON.parse(vlad(["task", "list", "--json"]).out);
+    const { tasks } = JSON.parse(vlad(["task", "list", "--json", "--full"]).out);
     expect(tasks.find((t: { id: string }) => t.id === JSON.parse(ok.out).id)).toMatchObject({ model: "opus", model_reason: "kritik", effective_model: "opus", role_model: "sonnet" });
     expect(tasks.find((t: { id: string }) => t.id === JSON.parse(plain.out).id)).toMatchObject({ effective_model: "sonnet", role_model: "sonnet" });
     for (const r of [ok, plain]) expect(vlad(["task", "set", JSON.parse(r.out).id, "running"]).code).toBe(0);

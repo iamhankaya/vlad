@@ -78,7 +78,7 @@ describe("model dağıtımı: uçtan uca", { timeout: 30_000 }, () => {
     const tester = read("roles/tester.md").match(/^model: (\w+)$/m)![1];
     const a = JSON.parse(newTask("--role", "tester", "--model", "haiku").out).id;
     const b = JSON.parse(newTask("--role", "tester").out).id;
-    const list = (JSON.parse(vlad(["task", "list", "--json"]).out) as { tasks: Array<Record<string, unknown>> }).tasks;
+    const list = (JSON.parse(vlad(["task", "list", "--json", "--full"]).out) as { tasks: Array<Record<string, unknown>> }).tasks;
     const byId = (id: string) => list.find((t) => t.id === id)!;
     expect(byId(a)).toMatchObject({ model: "haiku", effective_model: "haiku", role_model: tester });
     expect(byId(b)).toMatchObject({ effective_model: tester, role_model: tester });
@@ -104,7 +104,7 @@ describe("model dağıtımı: uçtan uca", { timeout: 30_000 }, () => {
     const file = join(home, "kb", "tasks", `${id}.md`);
     writeFileSync(file, readFileSync(file, "utf8").replace(/^model: .*\r?\n/m, ""));
     expect(readFileSync(file, "utf8")).not.toMatch(/^model:/m);
-    const list = (JSON.parse(vlad(["task", "list", "--json"]).out) as { tasks: Array<Record<string, unknown>> }).tasks;
+    const list = (JSON.parse(vlad(["task", "list", "--json", "--full"]).out) as { tasks: Array<Record<string, unknown>> }).tasks;
     expect(list.find((t) => t.id === id)).toMatchObject({ effective_model: "sonnet", role_model: "sonnet" });
     expect(vlad(["status", "--json"]).code).toBe(0);
   });
