@@ -38,6 +38,12 @@
         "finding list --help",
         "finding set --help"
       ]
+    },
+    {
+      "id": "T20261110-11",
+      "keys": [
+        "task gate --help"
+      ]
     }
   ]
 }

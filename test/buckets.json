@@ -64,6 +64,7 @@
     "test/tasks/transitions-consistency.test.ts"
   ],
   "process": [
+    "test/tasks/gate-compare.test.ts",
     "test/acceptance/cloud-ingest-real-shape.test.ts",
     "test/acceptance/cloud-ingest-verify2.test.ts",
     "test/acceptance/cloud-ingest.test.ts",
