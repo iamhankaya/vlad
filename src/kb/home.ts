@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { readConfigLayers } from "./config-layer.js";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,16 +18,11 @@ export function getVladHome(): string {
 export function resolveKbDir(home: string = getVladHome()): { dir: string; explicit: boolean } {
   const env = process.env.VLAD_KB_DIR;
   if (env) return { dir: resolve(home, env), explicit: true };
-  const file = join(home, "vlad.config.json");
-  if (existsSync(file)) {
-    try {
-      const kbDir = (JSON.parse(readFileSync(file, "utf8")) as { kbDir?: unknown }).kbDir;
-      if (typeof kbDir === "string" && kbDir) {
-        return { dir: isAbsolute(kbDir) ? kbDir : resolve(home, kbDir), explicit: true };
-      }
-    } catch {
-      /* unreadable config is reported by loadConfig; fall back to the legacy location */
-    }
+  try {
+    const kbDir = readConfigLayers(home).kbDir;
+    if (typeof kbDir === "string" && kbDir) return { dir: isAbsolute(kbDir) ? kbDir : resolve(home, kbDir), explicit: true };
+  } catch {
+    /* unreadable config is reported by loadConfig; fall back to the legacy location */
   }
   return { dir: join(home, "kb"), explicit: false };
 }

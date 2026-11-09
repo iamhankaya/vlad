@@ -10,3 +10,4 @@ dist-old/
 /.vlad-agent/
 node_modules-old/
 .vlad-npm-ci-running
+/vlad.config.local.json

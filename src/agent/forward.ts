@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { readInput } from "../kb/input.js";
 import { getVladHome } from "../kb/home.js";
 import { loadConfig } from "../kb/config.js";
+import { readConfigLayers } from "../kb/config-layer.js";
 import type { VladConfig } from "../kb/types.js";
 import { RemoteError, type AgentOp, type ExecResult, type WriteArgs } from "../fleet/types.js";
 import { readStdinSync } from "../kb/input.js";
@@ -18,13 +17,8 @@ type WorkerState = { kind: "off" } | { kind: "brain" } | { kind: "worker"; ctx: 
 /** machines tanımlıyken kimlik/config okunamıyorsa "unknown" (fail-closed, F-vlad-144); machines yoksa "off". */
 export function workerState(): WorkerState {
   if (process.env.VLAD_FORWARDED) return { kind: "off" }; // iletilmiş çağrı yeniden iletilmez
-  const f = join(getVladHome(), "vlad.config.json");
-  if (!existsSync(f)) return { kind: "off" };
-  let raw: string;
-  try { raw = readFileSync(f, "utf8"); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch (e) { return { kind: "unknown", reason: `config ayrıştırılamadı: ${(e as Error).message}` }; } // fail-closed (F-vlad-246): metin araması değil
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return { kind: "unknown", reason: "config bir nesne değil" };
+  let parsed: Record<string, unknown>;
+  try { parsed = readConfigLayers(getVladHome()); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; } // fail-closed (F-vlad-246): metin araması değil; tracked + yerel katman
   if (!("machines" in parsed)) return { kind: "off" }; // machines yok → tek makine davranışı
   let cfg: VladConfig;
   try { cfg = loadConfig(); } catch (e) { return { kind: "unknown", reason: `config okunamadı: ${(e as Error).message}` }; }
