@@ -37,10 +37,13 @@
   ],
   "REFRESH_KEYS": [
     "decision add",
+    "decision migrate",
     "decision set",
     "finding add",
     "finding set",
+    "kb maintain",
     "project write",
+    "task digested",
     "task set"
   ],
   "WORKER_LOCAL": [
