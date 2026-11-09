@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { findMdFile, kbPaths, listMdFiles, nowIso, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
 import type { IdeaData, IdeaState } from "../kb/index.js";
@@ -154,6 +154,14 @@ export function fromFindings(ids: string[], now: Date = new Date()): { finding: 
     for (const i of created) unlinkSync(i.file);
     throw e;
   }
-  for (const m of moved) setFindingStates([m.finding], "wontfix", { reason: `fikir deposuna taşındı: ${m.idea.data.id}` }, now);
+  // one call (validates all before writing); a failed write restores the finding files and drops the ideas this run opened
+  const before = fs.map((f) => ({ file: f.file, text: readFileSync(f.file, "utf8") }));
+  try {
+    setFindingStates(moved.map((m) => m.finding), "wontfix", { reason: `fikir deposuna taşındı: ${moved.map((m) => m.idea.data.id).join(", ")}` }, now);
+  } catch (e) {
+    for (const b of before) if (readFileSync(b.file, "utf8") !== b.text) writeFileAtomic(b.file, b.text);
+    for (const i of created) unlinkSync(i.file);
+    throw e;
+  }
   return moved;
 }
