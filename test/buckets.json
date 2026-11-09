@@ -6,6 +6,7 @@
     "test/audit/skills.test.ts",
     "test/cloud/prepare.test.ts",
     "test/cloud/report-keep-metrics.test.ts",
+    "test/commands/docs-commands.test.ts",
     "test/commands/s-types.test.ts",
     "test/commands/u1-manifest.test.ts",
     "test/commands/u3-equiv-manifest.test.ts",

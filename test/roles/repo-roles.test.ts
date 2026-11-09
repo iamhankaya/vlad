@@ -118,7 +118,8 @@ describe("work notes (## Çalışma notları) wiring", () => {
       expect(read(p), p).toContain("vlad finding");
       expect(read(p), p).toContain("Çalışma notları");
     }
-    expect(read("CLAUDE.md")).toContain("vlad project write|set|note|summary|status|refresh|list");
+    expect(read("CLAUDE.md")).toContain("docs/commands.md"); // full command list is the generated reference
+    for (const cmd of ["project note", "finding add", "finding set"]) expect(read("docs/commands.md")).toContain(`\`vlad ${cmd}\``);
     expect(read("docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md")).toContain("## 15. Bulgu kaydı ve retro");
   });
 });
