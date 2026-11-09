@@ -16,7 +16,7 @@ export interface NightMode {
 /** Irreversible classes: always excepted, `--except` can only add to them. */
 export const DEFAULT_EXCEPT = ["deploy", "backfill", "keychain"];
 const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
-const TERMINAL = ["done", "cancelled"];
+const TERMINAL = ["done", "cancelled", "failed"]; // failed will not finish by itself: it must not hold authority open
 /** Unknown/unreadable task counts as finished: a dangling ID must not keep authority open. */
 const taskOpen = (id: string): boolean => { try { return !TERMINAL.includes(getTask(id).data.state); } catch { return false; } };
 interface ModeFile { night: NightMode | null; watch: boolean }
@@ -41,6 +41,11 @@ function write(m: ModeFile): void {
   else writeFileAtomic(file(), JSON.stringify(m, null, 2) + "\n");
 }
 
+/** A running worker (VLAD_TASK_ID set) must not open or change its own authority window. */
+export function assertNotWorker(env: Record<string, string | undefined> = process.env): void {
+  if (env.VLAD_TASK_ID?.trim()) throw new Error("çalışan oturumu mod yazamaz (VLAD_TASK_ID tanımlı); yetki penceresini yalnız VLAD/kullanıcı açar");
+}
+
 /** `HH:MM` = the next such local time (today if still ahead, else tomorrow); otherwise an ISO date-time in the future. */
 export function parseUntil(s: string, now: Date): Date {
   const hm = /^(\d{1,2}):(\d{2})$/.exec(s.trim());
@@ -52,7 +57,8 @@ export function parseUntil(s: string, now: Date): Date {
     if (d <= now) d.setDate(d.getDate() + 1);
     return d;
   }
-  const d = new Date(s);
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s.trim()); // bare date = local midnight (new Date(s) would read it as UTC)
+  const d = dateOnly ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])) : new Date(s);
   if (Number.isNaN(d.getTime()) || !/^\d{4}-\d{2}-\d{2}/.test(s.trim())) throw new Error(`geçersiz bitiş: ${s} (HH:MM veya ISO tarih-saat)`);
   if (d <= now) throw new Error(`bitiş geçmişte: ${s}`);
   if (d.getTime() - now.getTime() > 24 * 3_600_000) throw new Error(`bitiş 24 saatten uzak: ${s} (pencere en çok 24 saat)`);
@@ -65,16 +71,21 @@ export function setNight(
 ): NightMode {
   const untilTasks = o.untilTasks ?? [];
   if (!o.until && !untilTasks.length) throw new Error("--until ya da --until-task ver");
-  for (const id of untilTasks) getTask(id); // throws "görev bulunamadı"
+  for (const id of untilTasks) { if (!/^T\d{8}-\d+$/.test(id)) throw new Error(`geçersiz görev ID'si: ${id}`); getTask(id); } // getTask throws "görev bulunamadı"
   const until = o.until ? parseUntil(o.until, now) : new Date(now.getTime() + 24 * 3_600_000); // task-bound window keeps the 24 h ceiling
-  const except = [...new Set([...DEFAULT_EXCEPT, ...(o.except ?? []).map((x) => x.trim()).filter(Boolean)])];
+  const added = (o.except ?? []).map((x) => x.trim().toLowerCase()).filter(Boolean);
+  for (const x of added) if (!/^[\p{L}\p{N}_-]+$/u.test(x)) throw new Error(`geçersiz istisna sınıfı: ${x}`);
+  const except = [...new Set([...DEFAULT_EXCEPT, ...added])];
   const night: NightMode = { until: nowIso(until), started: nowIso(now), projects: o.projects ?? [], note: o.note ?? null, push: o.push === true, except, untilTasks };
   write({ ...read(), night });
   return night;
 }
 
-export function setWatch(on: boolean, now: Date = new Date()): void {
-  write({ night: modeStatus(now).night, watch: on }); // an elapsed window is dropped here, not announced a second time
+/** Returns true when an elapsed night window was dropped by this write (caller announces it). */
+export function setWatch(on: boolean, now: Date = new Date()): boolean {
+  const s = modeStatus(now);
+  write({ night: s.night, watch: on });
+  return s.expired;
 }
 
 export function setOff(): void {
