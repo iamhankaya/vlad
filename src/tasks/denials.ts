@@ -7,7 +7,7 @@ export interface Denial { tool: string; pattern: string; reason?: string }
 
 /** One line, single spaces: a multi-line value must not forge extra İlerleme entries, and spacing must not split one pattern in two. */
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
-// " — " separates pattern and reason; one inside the pattern is written as " \\— " (the parser splits on the first real separator and unescapes)
+// " — " separates pattern and reason; one inside the pattern is written as " \— " (the parser splits on the first real separator and unescapes)
 const SEP = " — ", ESCAPED_SEP = " \\— ";
 const DENY_LINE = /^- \S+ \[İZİN\] ([^:\n]+): (.+?)(?: — (.+))?$/;
 

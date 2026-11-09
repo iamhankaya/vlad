@@ -120,6 +120,13 @@ describe("compareBase", () => {
     expect(r.exit).toBe(1);
   });
 
+  it("testler geçti ama gate kırmızı (sonraki adım: tsc/lint/build): ad yok → yeşil sayılmaz", async () => {
+    const h = harness(res(1, " Tests  120 passed (120)\n error TS2322", H1), () => res(0, "", H2));
+    const r = await compareBase(h.deps);
+    expect(r.newRed).toEqual([UNPARSED_RED]);
+    expect(r.exit).toBe(1);
+  });
+
   it("işçi tabanda head vermezse (ör. HEAD değişti) hata", async () => {
     const h = harness(res(1, red("x"), H1), () => res(1, red("x")));
     await expect(compareBase(h.deps)).rejects.toThrow(/taban/);

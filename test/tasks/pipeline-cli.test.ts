@@ -37,7 +37,7 @@ describe("task new --pipeline", { timeout: 30_000 }, () => {
     const r = vlad([...base, "--cycle", "kısa", "--phase-model", "uygulama=opus:kritik iş", "--phase-model", "doğrulama=haiku", "--json"], BODY);
     expect(r.code, r.err).toBe(0);
     const [u, d] = JSON.parse(r.out).phases.map((p: { id: string }) => vlad(["kb", "get", p.id, "--json"]).out);
-    expect(u).toMatch(/model: opus/); expect(u).toContain("kritik iş"); expect(d).toMatch(/model: haiku/);
+    expect(u).toContain('"model":"opus"'); expect(u).toContain("kritik iş"); expect(d).toContain('"model":"haiku"');
     const before = files().length;
     expect(vlad([...base, "--cycle", "kısa", "--phase-model", "uygulama=opus"], BODY).code).toBe(1);
     expect(vlad([...base, "--cycle", "kısa", "--phase-model", "uygulama"], BODY).code).toBe(1);

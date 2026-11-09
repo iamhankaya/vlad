@@ -79,7 +79,7 @@ export async function compareBase(d: CompareDeps): Promise<CompareResult> {
   }
   const baseSet = new Set(entry.red);
   const newRed = taskRed.filter((t) => !baseSet.has(t));
-  if (!redNamesComplete(taskOut)) newRed.push(UNPARSED_RED);
+  if (!taskRed.length || !redNamesComplete(taskOut)) newRed.push(UNPARSED_RED);
   return { exit: newRed.length ? 1 : 0, gateExit: task.exit, task, newRed, baselineRed: entry.red, baselineSha: entry.head, baselineCached: cached };
 }
 

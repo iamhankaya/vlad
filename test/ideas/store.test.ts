@@ -80,6 +80,7 @@ describe("ideas store", () => {
     const body = readFileSync(join(kbPaths().findings, `${f1.data.id}.md`), "utf8");
     expect(body).toContain("state: wontfix");
     expect(body).toContain("fikir deposuna taşındı: I-alpha-001");
+    expect(readFileSync(join(kbPaths().findings, `${f2.data.id}.md`), "utf8")).toContain("fikir deposuna taşındı: I-alpha-002"); // each finding names its own idea
     // closed finding cannot be moved again; nothing is written when any id fails
     const f3 = addFinding({ project: "alpha", severity: "bilgi", source: "T20261109-01", title: "Üçüncü" });
     expect(() => fromFindings([f3.data.id, f1.data.id])).toThrow(/açık değil/);
