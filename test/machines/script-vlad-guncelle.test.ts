@@ -32,6 +32,7 @@ function world() {
   const stub = (name: string, body: string) => { writeFileSync(join(bin, name), `#!/bin/bash\n${body}\n`); chmodSync(join(bin, name), 0o755); };
   stub("npm", `echo "npm $*" >> "${log}"\n[ -n "\${STUB_FAIL_NPM:-}" ] && { rm -rf node_modules; mkdir node_modules; echo half > node_modules/half; exit 1; }\nrm -rf node_modules; mkdir node_modules; echo fresh > node_modules/marker`);
   stub("npx", `echo "npx $*" >> "${log}"\nmkdir -p dist-next\n[ -n "\${STUB_FAIL_TSC:-}" ] && { echo half > dist-next/half.js; exit 2; }\necho NEW > dist-next/cli.js`);
+  stub("mv", `[ -n "\${STUB_FAIL_MV:-}" ] && [ "$1" = "dist-next" ] && exit 1\nexec /bin/mv "$@"`);
   const other = join(base, "other");
   const remoteCommit = () => {
     if (!existsSync(other)) execFileSync("git", ["clone", "-q", remote, other], { stdio: "ignore" });
@@ -155,6 +156,33 @@ describe("vlad-guncelle.sh", () => {
     w.git("checkout", "-q", "main"); w.git("branch", "-q", "-u", "origin/feat");
     expect(w.run().data).toMatchObject({ ok: false, step: "branch" });
     expect(w.dist("cli.js")).toBe("OLD");
+  });
+  posix("npm ci başarılı ama tsc başarısız: eski node_modules geri gelir, yedek ve işaret kalmaz, eski dist korunur (Codex P1)", () => {
+    const w = world(); w.remoteCommit();
+    const r = w.run({ STUB_FAIL_TSC: "1" });
+    expect(r.data).toMatchObject({ ok: false, step: "build" });
+    expect(readFileSync(join(w.repo, "node_modules", "marker"), "utf8")).toBe("m");
+    expect(existsSync(join(w.repo, "node_modules-old"))).toBe(false);
+    expect(existsSync(join(w.repo, ".vlad-npm-ci-running"))).toBe(false);
+    expect(w.dist("cli.js")).toBe("OLD");
+  });
+  posix("swap başarısız (dist-next dist'e taşınamadı): eski dist ve eski node_modules geri gelir (Codex P1)", () => {
+    const w = world(); w.remoteCommit();
+    const r = w.run({ STUB_FAIL_MV: "1" });
+    expect(r.data).toMatchObject({ ok: false, step: "swap" });
+    expect(w.dist("cli.js")).toBe("OLD");
+    expect(readFileSync(join(w.repo, "node_modules", "marker"), "utf8")).toBe("m");
+    expect(existsSync(join(w.repo, "node_modules-old"))).toBe(false);
+    expect(existsSync(join(w.repo, ".vlad-npm-ci-running"))).toBe(false);
+  });
+  posix("önceki güncellemenin node_modules-old yedeği varsa üstüne yazılmaz: step:install, hiçbir şey çalışmaz (Codex P1)", () => {
+    const w = world(); w.remoteCommit();
+    mkdirSync(join(w.repo, "node_modules-old")); writeFileSync(join(w.repo, "node_modules-old", "marker"), "yedek");
+    const r = w.run();
+    expect(r.data).toMatchObject({ ok: false, step: "install" });
+    expect(r.calls).toBe("");
+    expect(readFileSync(join(w.repo, "node_modules-old", "marker"), "utf8")).toBe("yedek");
+    expect(readFileSync(join(w.repo, "node_modules", "marker"), "utf8")).toBe("m");
   });
   posix("dist hiç yoksa (ilk kurulum) swap yine çalışır", () => {
     const w = world(); w.remoteCommit();

@@ -47,29 +47,32 @@ if [ "$from" = "$to" ] && [ -f dist/.build-head ] && [ "$(cat dist/.build-head)"
   exit 0
 fi
 
-rm -rf node_modules-old
+# onceki guncellemenin yedegi duruyorsa (yeni surec henuz dogrulanmadi / temizlenmedi) ustune yazilmaz
+[ ! -e node_modules-old ] || fail install "node_modules-old zaten var (onceki guncellemenin yedegi); yeni surec dogrulanip temizlenene ya da elle silinene kadar guncellenmez"
 if [ -d node_modules ]; then mv node_modules node_modules-old || fail install "node_modules yedeklenemedi; hicbir sey degismedi"; fi
 : > .vlad-npm-ci-running
+# npm ci SONRASI her hata yolunda eski node_modules geri gelir (eski dist + yeni node_modules ile surmesin)
+restore_nm() { rm -rf node_modules; [ -d node_modules-old ] && mv node_modules-old node_modules; rm -f .vlad-npm-ci-running; }
 if ! npm ci --ignore-scripts --no-audit --no-fund >&2; then
-  rm -rf node_modules
-  [ -d node_modules-old ] && mv node_modules-old node_modules
-  rm -f .vlad-npm-ci-running
+  restore_nm
   fail install "npm ci basarisiz; eski node_modules geri yuklendi"
 fi
-rm -f .vlad-npm-ci-running
 
 rm -rf dist-next
 if ! npx --no-install tsc --outDir dist-next >&2 || [ ! -f dist-next/cli.js ]; then
   rm -rf dist-next
-  fail build "tsc derlemesi basarisiz; eski dist korundu"
+  restore_nm
+  fail build "tsc derlemesi basarisiz; eski dist ve eski node_modules korundu"
 fi
 printf '%s' "$full" > dist-next/.build-head
 
 rm -rf dist-old
-if [ -d dist ]; then mv dist dist-old || { rm -rf dist-next; fail swap "dist dist-old'a tasinamadi; eski dist korundu"; }; fi
+if [ -d dist ]; then mv dist dist-old || { rm -rf dist-next; restore_nm; fail swap "dist dist-old'a tasinamadi; eski dist ve node_modules korundu"; }; fi
 if ! mv dist-next dist; then
   [ -d dist-old ] && mv dist-old dist
+  restore_nm
   fail swap "dist-next dist'e tasinamadi; eski dist geri yuklendi"
 fi
 
+rm -f .vlad-npm-ci-running
 printf '@@VLAD-RESULT@@ {"ok":true,"changed":true,"from":"%s","to":"%s","summary":"vlad guncellendi: %s -> %s, dist yenilendi"}\n' "$from" "$to" "$from" "$to"

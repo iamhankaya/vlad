@@ -55,40 +55,43 @@ if (($from -eq $to) -and (Test-Path -LiteralPath $stamp) -and ((Get-Content -Lit
     Emit ([ordered]@{ ok = $true; changed = $false; from = $from; to = $to; summary = "vlad zaten guncel ($to)" }); exit 0
 }
 
-if (Test-Path -LiteralPath 'node_modules-old') { Remove-Item -LiteralPath 'node_modules-old' -Recurse -Force -ErrorAction SilentlyContinue }
-if (Test-Path -LiteralPath 'node_modules-old') { Fail 'install' 'eski node_modules-old silinemedi (dosya kilidi?); hicbir sey degismedi' }
+# onceki guncellemenin yedegi duruyorsa (yeni surec henuz dogrulanmadi / temizlenmedi) ustune yazilmaz
+if (Test-Path -LiteralPath 'node_modules-old') { Fail 'install' 'node_modules-old zaten var (onceki guncellemenin yedegi); yeni surec dogrulanip temizlenene ya da elle silinene kadar guncellenmez' }
 if (Test-Path -LiteralPath 'node_modules') {
     try { Rename-Item -LiteralPath 'node_modules' -NewName 'node_modules-old' -ErrorAction Stop }
     catch { Fail 'install' 'node_modules yedeklenemedi (kilit?); hicbir sey degismedi' }
 }
 [System.IO.File]::WriteAllText((Join-Path $repo '.vlad-npm-ci-running'), '')
-& npm.cmd ci --ignore-scripts --no-audit --no-fund 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
-if ($LASTEXITCODE -ne 0) {
+# npm ci SONRASI her hata yolunda eski node_modules geri gelir (eski dist + yeni node_modules ile surmesin)
+function Restore-Nm {
     if (Test-Path -LiteralPath 'node_modules') { Remove-Item -LiteralPath 'node_modules' -Recurse -Force -ErrorAction SilentlyContinue }
     if (Test-Path -LiteralPath 'node_modules-old') { Rename-Item -LiteralPath 'node_modules-old' -NewName 'node_modules' -ErrorAction SilentlyContinue }
     Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
-    Fail 'install' 'npm ci basarisiz; eski node_modules geri yuklendi'
 }
-Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
+& npm.cmd ci --ignore-scripts --no-audit --no-fund 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+if ($LASTEXITCODE -ne 0) { Restore-Nm; Fail 'install' 'npm ci basarisiz; eski node_modules geri yuklendi' }
 
 if (Test-Path -LiteralPath 'dist-next') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force }
 & npx.cmd --no-install tsc --outDir dist-next 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
 if (($LASTEXITCODE -ne 0) -or -not (Test-Path -LiteralPath 'dist-next\cli.js')) {
     if (Test-Path -LiteralPath 'dist-next') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue }
-    Fail 'build' 'tsc derlemesi basarisiz; eski dist korundu'
+    Restore-Nm
+    Fail 'build' 'tsc derlemesi basarisiz; eski dist ve eski node_modules korundu'
 }
 [System.IO.File]::WriteAllText((Join-Path $repo 'dist-next\.build-head'), $full)
 
 if (Test-Path -LiteralPath 'dist-old') { Remove-Item -LiteralPath 'dist-old' -Recurse -Force -ErrorAction SilentlyContinue }
-if (Test-Path -LiteralPath 'dist-old') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue; Fail 'swap' 'eski dist-old silinemedi (dosya kilidi?); eski dist korundu' }
+if (Test-Path -LiteralPath 'dist-old') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue; Restore-Nm; Fail 'swap' 'eski dist-old silinemedi (dosya kilidi?); eski dist ve node_modules korundu' }
 if (Test-Path -LiteralPath 'dist') {
     try { Rename-Item -LiteralPath 'dist' -NewName 'dist-old' -ErrorAction Stop }
-    catch { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue; Fail 'swap' "dist dist-old'a tasinamadi (EPERM/kilit?); eski dist korundu" }
+    catch { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue; Restore-Nm; Fail 'swap' "dist dist-old'a tasinamadi (EPERM/kilit?); eski dist ve node_modules korundu" }
 }
 try { Rename-Item -LiteralPath 'dist-next' -NewName 'dist' -ErrorAction Stop }
 catch {
     if (Test-Path -LiteralPath 'dist-old') { Rename-Item -LiteralPath 'dist-old' -NewName 'dist' -ErrorAction SilentlyContinue }
+    Restore-Nm
     Fail 'swap' "dist-next dist'e tasinamadi; eski dist geri yuklendi"
 }
 
+Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
 Emit ([ordered]@{ ok = $true; changed = $true; from = $from; to = $to; summary = "vlad guncellendi: $from -> $to, dist yenilendi" })
