@@ -101,4 +101,5 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["clip", "get"], { worker: LOCAL, console: none("yerel pano/dosya aktarımı; konsol kataloğunda yok") }),
   c(["clip", "set"], { worker: LOCAL, console: none("yerel pano/dosya aktarımı; konsol kataloğunda yok") }),
   c(["install"], { worker: LOCAL, console: none("yerel kurulum; konsol kataloğundan hariç") }),
+  c(["setup"], { worker: LOCAL, console: none("yerel kurulum sihirbazı; konsol kataloğundan hariç") }),
 ];

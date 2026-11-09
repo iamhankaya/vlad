@@ -29,6 +29,35 @@ Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterH
 
 `vlad task ready --parent <id>` sınıra uyan fazları `tasks`, sınır yüzünden bekleyenleri `held_by_limit` olarak verir. `vlad task resume <id>` kesilmiş (`running`/`stalled`) bir çalışan için devam bilgisi üretir: yerelde worktree/branch/kirli ağaç kontrolü ve devam prompt'u, bulutta `send_message` argümanları.
 
+## Yeni makine / arkadaş kurulumu (`vlad setup`)
+
+`vlad setup` bir makineyi sıfırdan hazırlar; `vlad setup --check` salt okuma doktordur (hangi parça eksik/eski/çakışan, düzeltme komutu). Kişisel veriler tracked `vlad.config.json`'a değil gitignored `vlad.config.local.json`'a yazılır (tracked dosyanın üstüne sığ birleşir, `null` anahtarı siler); sırlar (`vlad.local.json` anahtarları) git'e ve çıktıya girmez. Arkadaş kurulumu **boş kb** ile başlar; sizin kartlarınız/kararlarınız taşınmaz.
+
+Ön koşul: Node 22+, git 2.38+, `claude`, macOS/Windows için tmux (Mac) / PowerShell (Windows). Linux: işçi deneysel, beyin desteklenmez.
+
+**1. Tek makine (Mac ya da Windows)**
+```
+git clone <vlad-repo-url> ~/dev/vlad && cd ~/dev/vlad     # Windows: C:\dev\vlad
+npm i && npm run build
+node dist/cli.js setup --answers cevaplar.json --yes      # Windows: node dist\cli.js setup ...
+node dist/cli.js setup --check
+```
+`cevaplar.json` örneği (anahtarlar `vlad setup --help` ve `src/setup/questions.ts`; sır konmaz):
+```
+{"role":"brain","machines":"single","kb":{"mode":"local","dir":"~/dev/vlad-kb"},"roots":["~/dev"]}
+```
+TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yerel git), `path` (var olan klasör), `existing` (var olan repoyu klonla; `kb.remote`), `github-new` (gh ile yeni **private** repo; yalnız `"confirm":["kb-repo-create"]` ile, ilk push ayrıdır).
+
+**2. İkinci makine (beyin + işçi)**
+- Beyinde: `vlad setup --answers beyin.json` (`"machines":"multi","machine":{"name":"mac","agent":{"host":"<özel LAN IP>"}},"keys":"generate","confirm":["keygen"]`), sonra `vlad setup --add-worker windows --host <işçi IP> --os win32`, anahtarı `vlad agent keygen windows --show` ile alın.
+- İşçide: `vlad setup --answers isci.json --join mac --brain-host <beyin IP> --brain-os darwin` ve anahtarı stdin'den verin (`printf %s "$ANAHTAR" | vlad setup --answers isci.json --join mac ...`; `--answers` dosya yolu olmalı, `-` stdin'i anahtara bırakın). Agent adresleri yalnız özel ağ (RFC1918/loopback) olabilir.
+- Doğrulama: iki uçta `vlad setup --check`, beyinde `vlad machine list` / `vlad machine ping <ad>`.
+
+**3. Sonradan**
+- `git pull` sonrası: `npm i && npm run build && vlad setup --upgrade` (global skill farkı gösterilir; yerel değişiklik `.bak-` olarak yedeklenir).
+- Geri alma: `vlad setup --uninstall hooks|global-skills|config` (yalnız VLAD'ın yazdığı girdiler; kb, anahtarlar ve kendi izinleriniz dokunulmaz).
+- `--dry-run` hiçbir şeye dokunmaz; yeniden koşu idempotenttir (zaten güncel ise hiçbir şey yazılmaz). `~/.claude/settings.json` değişiminden önce `settings.json.bak-<zaman>` alınır; mevcut ayarlarınız (model, hook, izin, autoMode) silinmez. Çalışan push/CI izinleri ve `additionalDirectories` yalnız `"perms":true`/`"claudedirs":true` **ve** `"confirm":["permissions-write"]` ile yazılır; geniş kalıp (`Bash(*)`) yazılmaz. `vlad install` geri uyum için durur.
+
 ## Günlük kullanım
 
 ```
