@@ -106,8 +106,12 @@ Kapanış raporlarının `### Açık noktalar` bölümündeki (danışman roller
    vlad finding add --project <slug> --severity <kritik|yüksek|orta|düşük|bilgi> --source <görev-id> --title "<başlık>" [--detail-file <md>] [--state deferred] --json
    ```
    Kullanıcı bilerek ertelediyse `--state deferred`, aksi halde `open`.
-3. Rapor bir bulgunun düzeltildiğini söylüyorsa (ör. "F-alpha-003 giderildi"): `vlad finding set <id> fixed --by <görev-id> --json`; "yapmayacağız" kararı için `wontfix`.
+3. Rapor bir bulgunun düzeltildiğini söylüyorsa (ör. "F-alpha-003 giderildi"): `vlad finding set <id> fixed --by <görev-id> --json`; "yapmayacağız" kararı için `wontfix` (`--reason "<gerekçe>"` zorunlu; bulgu dosyasına `## Kapanış` olarak yazılır). Birden çok bulgu aynı durumdaysa tek komut: `vlad finding set <id1> <id2> … <durum> [--reason …] [--by …]` (hepsi ya da hiçbiri). Uzun süredir açık bulgu yığınını toplu taramak için `/bulgu-tarama`.
 4. Kritik/yüksek bulguları kullanıcıya ayrıca belirt.
+
+**Düzeltme fazı (D-genel-008):** düzeltme fazının raporundan çıkan yeni bulgu yalnız kritik/yüksekse değişiklik turu gerektirir; orta/düşük bulgu `vlad finding add` ile kaydedilir ama tur açmaz, son kapı listesine girer.
+
+**Bulgu çözen görev:** görevin amacı bulgu çözmekse (`## Tanım`/`## Bağlam` bir `F-…`'yi kapatıyor) raporundaki `### Açık noktalar` maddelerinden yalnız şunlar bulgu olur: (i) `[regresyon]` — görevin getirdiği regresyon, (ii) kritik/yüksek önemli madde, (iii) çözülen bulgunun kalan kısmı (`[kalan F-…]`). (iii)'te **yeni bulgu açılmaz**: mevcut bulgu açık kalır (ya da `vlad finding set <id> open`) ve kalan kısım o bulgunun ayrıntısına/günlüğe not edilir. Diğer maddeler raporda kalır, günlükte tek satır anılır; bulgu açılmaz. Çalışan etiketlemediyse raporu okuyup sınıfla; emin olmadığını `vlad digest pending add` ile ekle. Gerekçe: bulgu çözen görev yeni bulgu zinciri üretip hijyeni bozuyordu (kullanıcı, 2026-11-09).
 
 ## 5. Kararlar
 

@@ -11,6 +11,7 @@ export const STATES: readonly FindingState[] = ["open", "deferred", "fixed", "wo
 export const UNRESOLVED: readonly FindingState[] = ["open", "deferred"];
 
 const DETAIL = "## Ayrıntı";
+const CLOSING = "## Kapanış";
 
 /** Where the finding lives: its archive file if archived, else the live path (which may not exist yet). */
 function findingFile(id: string): string {
@@ -81,10 +82,11 @@ export function getFinding(id: string): Finding {
 
 /** Valid findings in id order; unreadable or invalid files are skipped and reported as warnings. */
 export function listFindingsWithWarnings(
-  f: { project?: string; state?: FindingState[]; severity?: FindingSeverity[] } = {},
+  f: { project?: string; state?: FindingState[]; severity?: FindingSeverity[]; olderThanDays?: number; source?: string; now?: Date } = {},
 ): { findings: Finding[]; warnings: string[] } {
   const findings: Finding[] = [];
   const warnings: string[] = [];
+  const cutoff = (f.now ?? new Date()).getTime() - (f.olderThanDays ?? 0) * 86_400_000;
   for (const file of listMdFiles(kbPaths().findings)) {
     const name = basename(file);
     // file names are `F-<project>-<n>.md`: other projects' files are skipped unread (a project card refresh must not parse every finding)
@@ -95,6 +97,8 @@ export function listFindingsWithWarnings(
       if (f.project && data.project !== f.project) continue;
       if (f.state && !f.state.includes(data.state)) continue;
       if (f.severity && !f.severity.includes(data.severity)) continue;
+      if (f.source && data.source_task !== f.source) continue;
+      if (f.olderThanDays !== undefined && Date.parse(data.created) > cutoff) continue;
       findings.push({ data, body, file });
     } catch (e) {
       warnings.push(`${name}: ${(e as Error).message}`);
@@ -116,13 +120,12 @@ export function countOpenSevere(): number {
   return listFindingsWithWarnings({ state: [...UNRESOLVED], severity: ["kritik", "yüksek"] }).findings.length;
 }
 
-/** Changes the state; `by` (the fixing task) is allowed only with `fixed` and is cleared on any other state. */
-export function setFindingState(id: string, state: string, by?: string, now: Date = new Date()): Finding {
+/** Next state of a finding: `by` only with `fixed`, fixed/fixed_by cleared otherwise; a closing note is appended to `## Kapanış` (history is kept). */
+function applyState(f: Finding, state: string, by: string | undefined, reason: string | undefined, now: Date): { data: FindingData; body: string } {
   if (!(STATES as readonly string[]).includes(state)) {
     throw new Error(`geçersiz durum: "${state}" (geçerli: ${STATES.join(", ")})`);
   }
   if (by && state !== "fixed") throw new Error("--by yalnızca fixed durumunda kullanılır");
-  const f = getFinding(id);
   const ts = nowIso(now);
   const next: Record<string, unknown> = { ...f.data, state, updated: ts };
   delete next.fixed_by;
@@ -132,6 +135,36 @@ export function setFindingState(id: string, state: string, by?: string, now: Dat
     if (by) next.fixed_by = by;
   }
   validate("finding", next);
-  writeDoc(f.file, next, f.body);
-  return { data: next as unknown as FindingData, body: f.body, file: f.file };
+  let body = f.body;
+  const note = reason?.trim();
+  if (note) {
+    const line = `- ${ts} ${state} — ${note.replace(/\s*\n\s*/g, " ")}${by ? ` (kaynak: ${by})` : ""}\n`;
+    body = /^## Kapanış\s*$/m.test(body) ? body.replace(/\n*$/, "\n") + line : `${body.replace(/\n*$/, "")}\n\n${CLOSING}\n${line}`;
+  }
+  return { data: next as unknown as FindingData, body };
+}
+
+/** Changes the state; `by` (the fixing task) is allowed only with `fixed` and is cleared on any other state. */
+export function setFindingState(id: string, state: string, by?: string, now: Date = new Date(), reason?: string): Finding {
+  const f = getFinding(id);
+  const n = applyState(f, state, by, reason, now);
+  writeDoc(f.file, n.data, n.body);
+  return { ...n, file: f.file };
+}
+
+/** Bulk state change, all-or-nothing: every id and the state/reason are validated before the first write. `wontfix` needs a reason. */
+export function setFindingStates(
+  ids: string[], state: string, o: { by?: string; reason?: string } = {}, now: Date = new Date(),
+): Finding[] {
+  const uniq = [...new Set(ids)];
+  if (!uniq.length) throw new Error("en az bir bulgu ID'si gerekli");
+  if (state === "wontfix" && !o.reason?.trim()) throw new Error("wontfix için --reason zorunlu");
+  const planned = uniq.map((id) => {
+    const f = getFinding(id);
+    return { f, n: applyState(f, state, o.by, o.reason, now) };
+  });
+  return planned.map(({ f, n }) => {
+    writeDoc(f.file, n.data, n.body);
+    return { ...n, file: f.file };
+  });
 }

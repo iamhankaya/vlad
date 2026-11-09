@@ -29,6 +29,15 @@
         "forwarded :: mode off",
         "forwarded :: mode status"
       ]
+    },
+    {
+      "id": "T20261109-24",
+      "keys": [
+        "finding --help",
+        "finding (bare)",
+        "finding list --help",
+        "finding set --help"
+      ]
     }
   ]
 }
