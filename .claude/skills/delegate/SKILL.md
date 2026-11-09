@@ -63,6 +63,7 @@ vlad project list --json
 - **Varsayılan:** rolün modeli; sütuna rolün modelini yaz, `--model` geçirme.
 - **Haiku:** mekanik/basit fazlarda (belge, eşitleme, arama, özet) seçebilirsin; **kod yazan fazda (developer `sözleşme`/`uygulama`, düzeltme) seçme**.
 - **Opus:** yalnızca en kritik işlerde (ör. güvenlik etkili tasarım, geri alınamaz veri işlemi). Gerekçesini taslakta yaz ve kullanıcının **açık onayını** al; gerekçesiz `--model opus` CLI'da reddedilir (`--model-reason` zorunlu). Onay yoksa Opus seçme.
+- Pipeline'da faz başına model sapması `--phase-model <faz>=<haiku|sonnet|opus>[:<gerekçe>]` ile verilir (opus için gerekçe zorunlu; modeli rolünkiyle aynı olan faza yazma).
 - Seçilen model rolün modelinden farklıysa `vlad task new` komutuna `--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]` ekle; aynıysa ekleme.
 
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
@@ -150,7 +151,7 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
 **Pipeline:** çatı ve fazlar **tek komutla**, hepsi-ya-hiç oluşturulur (hata olursa oluşanlar geri alınır; tek tek `task new` döngüsü kurma):
 1. Çatı gövdesini (taslağın `## Tanım`/`## Kabul kriterleri`/`## Bağlam`'ı; faz tablosu ve kapılar `### Fazlar`/`### Kapılar` altında) geçici dosyaya yaz; özel faz gövdeleri varsa ayrı dosyalara:
    ```
-   vlad task new --pipeline --project <slug> --title "<başlık>" --cycle <tam|özellik|kısa> [--ui] [--prova] [--skip sözleşme --skip-reason "<gerekçe>"] --body-file <çatı.md> [--phase-body <faz>=<dosya>]... --json
+   vlad task new --pipeline --project <slug> --title "<başlık>" --cycle <tam|özellik|kısa> [--ui] [--prova] [--skip sözleşme --skip-reason "<gerekçe>"] --body-file <çatı.md> [--phase-body <faz>=<dosya>]... [--phase-model <faz>=<model>[:<gerekçe>]]... --json
    ```
    Döngü şablonundaki fazlar (rol, tür, bağımlılık, faz adı) §2 tablosundan gelir: `--ui` designer fazlarını (`tasarım`, `denetim`), `--prova` devops `prova` fazını ekler, `--skip sözleşme` sözleşme fazını atlar (gerekçe çatı gövdesine yazılır; bağımlılıklar yeniden bağlanır). Gövdesi verilmeyen faza çatı `## Tanım`'ından türetilmiş standart gövde girer (UI'lı `uygulama`'ya tarayıcı öz-kontrolü satırı dahil); ek yönerge gereken faz için `--phase-body`. Çıktı: `{"id": <çatı>, "cycle", "phases": [{id, phase, role, kind, depends_on}], ...}`. Şablonun dışına çıkan faz (ara denetim, dilim fazları, `danışma`, model sapması) için ya komutu şablonla çalıştırıp eksiği ayrıca `vlad task new --kind <dev|research> --role <slug> [--model …] --parent <çatı-id> [--depends-on …] --phase <faz> --body-file <faz.md> --json` ile ekle ya da fazı sonradan `vlad task deps` ile bağla.
    Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`). Faz `## Tanım`'ına taslaktaki özel notları (güvenlik incelemesi, ara Codex kapısı, dış API fixture'ı) `--phase-body` ile ver. Komut hata verirse hiçbir görev oluşmamıştır; hatayı göster.

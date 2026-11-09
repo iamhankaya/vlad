@@ -25,8 +25,8 @@ export function registerTask(program: Command, k: Kit): void {
   def(task, "new", "queued görev oluşturur", (o: Opts) => {
     const body = o.bodyFile ? readInput(o.bodyFile as string) : "";
     if (!o.pipeline) {
-      const stray = ["cycle", "ui", "prova", "skip", "skipReason", "phaseBody"].filter((k) => o[k] !== undefined);
-      if (stray.length) throw new Error("--cycle/--ui/--prova/--skip/--phase-body yalnız --pipeline ile kullanılır");
+      const stray = ["cycle", "ui", "prova", "skip", "skipReason", "phaseBody", "phaseModel"].filter((k) => o[k] !== undefined);
+      if (stray.length) throw new Error("--cycle/--ui/--prova/--skip/--phase-body/--phase-model yalnız --pipeline ile kullanılır");
     } else {
       if (!o.cycle) throw new Error("--pipeline için --cycle gerekli (tam | özellik | kısa)");
       const ignored = ["role", "model", "modelReason", "parent", "dependsOn", "phase"].filter((k) => o[k] !== undefined);
@@ -40,9 +40,16 @@ export function registerTask(program: Command, k: Kit): void {
         if (src === "-" && o.bodyFile === "-") throw new Error("stdin (-) hem --body-file hem --phase-body için verilemez");
         phaseBodies[name] = readInput(src);
       }
+      const phaseModels: Record<string, { model: string; reason?: string }> = {};
+      for (const spec of (o.phaseModel as string[] | undefined) ?? []) {
+        const m = /^([^=]+)=([^:]+)(?::(.*))?$/s.exec(spec);
+        if (!m) throw new Error(`--phase-model <faz>=<model>[:<gerekçe>] biçiminde olmalı: ${spec}`);
+        if (m[1]! in phaseModels) throw new Error(`--phase-model ${m[1]} birden fazla verildi`);
+        phaseModels[m[1]!] = { model: m[2]!, ...(m[3] ? { reason: m[3] } : {}) };
+      }
       const r = createPipeline({
         project: o.project as string, title: o.title as string, cycle: o.cycle as string, body, ui: !!o.ui, prova: !!o.prova,
-        skip: o.skip as string[] | undefined, skipReason: o.skipReason as string | undefined, phaseBodies,
+        skip: o.skip as string[] | undefined, skipReason: o.skipReason as string | undefined, phaseBodies, phaseModels,
       });
       const warnings = unknownTaskRefs(body).map((id) => `gövdede kb'de olmayan görev ID'si: ${id}`);
       out(o, { id: r.id, cycle: r.cycle, phases: r.phases, warnings },
@@ -75,6 +82,7 @@ export function registerTask(program: Command, k: Kit): void {
     .option("--prova", "--pipeline ile: devops prova fazı")
     .option("--skip <faz>", "--pipeline ile: fazı atla (yalnız sözleşme; --skip-reason zorunlu)", (v: string, a: string[] = []) => [...a, v])
     .option("--skip-reason <gerekçe>", "--skip gerekçesi (çatı gövdesine yazılır)")
+    .option("--phase-model <faz=model[:gerekçe]>", "--pipeline ile: o fazın modeli (haiku | sonnet | opus; opus için :gerekçe zorunlu); verilmeyen faz rolün modelini kullanır", (v: string, a: string[] = []) => [...a, v])
     .option("--phase-body <faz=dosya>", "--pipeline ile: o fazın gövdesi (- = stdin); verilmeyen faza çatı Tanım'ından türetilir", (v: string, a: string[] = []) => [...a, v]);
 
   def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {

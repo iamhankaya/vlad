@@ -97,8 +97,8 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 (yalnız bu görev bir bulguyu kapattıysa, görevin amacı o olmasa da; launch prompt'undaki "Projenin açık bulguları" listesine bak: dokunduğun alanda düzelttiğin bulgu varsa yaz. Her satır: `- F-<proje>-NNN — fixed|zaten düzelmiş — kanıt (commit <sha> ya da dosya:satır)`. **Tam ID zorunlu**: aralık/kısaltma (`F-014,017-024`, `F-024`, `#24`) yasak; commit mesajlarında da tam ID kullan. Bölüm yoksa digest eski yoldan (rapor metninde ID arama) kapatır; kısaltılmış ID'yi digest kapatmaz, onaya taşır)
 ### Test itirazı (hızlı yol)
 (yalnız developer rolünde ve yalnız hızlı yolla mekanik test düzeltmesi yaptıysan: `- <test yol:satır> — ne değişti, gerekçe, commit`; yoksa bölümü yazma)
-### CLAUDE.md komut satırı önerisi
-(yalnız yeni CLI komutu/alt komutu/bayrağı eklediysen: `CLAUDE.md` "Kullanılabilir komutlar" satırına girecek tam metin; yoksa bölümü yazma. `CLAUDE.md`'yi görev istemedikçe kendin düzenleme)
+### Komut açıklaması
+(yalnız yeni CLI komutu/alt komutu/bayrağı eklediysen: açıklamayı `src/commands/docs-data.ts`'e (gerekirse manifeste) ekle, `npm run build && npm run docs:commands` ile `docs/commands.md`'yi üret; test eksiği yakalar. Raporda yalnız hangi komutların eklendiğini tek satırla yaz; `CLAUDE.md`'yi görev istemedikçe kendin düzenleme)
 ```
 ve:
 ```

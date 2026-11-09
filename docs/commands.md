@@ -38,7 +38,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 
 ## task
 
-- `vlad task new` — queued görev oluşturur (pipeline için `--kind pipeline`, faz için `--parent`, `--depends-on`, `--phase`, `--role`; `--model`: Opus için `--model-reason` zorunlu). Pipeline iskeleti tek komutta: `--pipeline --cycle tam|özellik|kısa [--ui] [--prova] [--skip <faz> --skip-reason <r>] [--phase-body <faz>=<dosya>]` çatı + döngü fazlarını hepsi-ya-hiç oluşturur. _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad task new` — queued görev oluşturur (pipeline için `--kind pipeline`, faz için `--parent`, `--depends-on`, `--phase`, `--role`; `--model`: Opus için `--model-reason` zorunlu). Pipeline iskeleti tek komutta: `--pipeline --cycle tam|özellik|kısa [--ui] [--prova] [--skip <faz> --skip-reason <r>] [--phase-body <faz>=<dosya>] [--phase-model <faz>=<model>[:<gerekçe>]]` (opus için gerekçe zorunlu) çatı + döngü fazlarını hepsi-ya-hiç oluşturur. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task launch` — Worktree + branch açar, `running` yapar, Launcher'ı çağırır (güven kaydı dahil). `--external`: terminal AÇMAZ, betik yazar ve JSON'da `script`, `command`, `cwd` döner; bulut modunda reddedilir. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task release` — `task release <id> [--force]`: belirsiz uzak launch rezervasyonunu (ve çatı makine pin'ini) bırakır; işçi launch'ı görmediyse iptal işareti yazılır; ölü makinedeki rezervasyon için de kullanılır. `--force` işçi ulaşılamazken kullanılır; yetim pencere riski var. _(işçide reddedilir; konsolda yok; --json)_
 - `vlad task repin` — `task repin <çatı-id> <makine> [--force] [--json]`: pipeline çatısının makine pin'ini başka makineye taşır (yalnız `pipeline`; hedef config'te ve kartın `machines` listesinde olmalı; eski makinede running faz varsa `--force` ister). `warnings`: entegrasyon dalı hedefte olmayabilir. İlerlemeye `Repin: <eski> → <yeni>` yazılır. _(işçide reddedilir; konsolda yok; --json)_
@@ -58,13 +58,13 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad task merge` — Uzak (işçideki) görevde merge (`--no-ff`); push etmez, çakışmada işçi geri alır. Yalnız açık onaydan sonra. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task digested` — Görevin kapanış raporunun `/digest` tarafından işlendiğini işaretler. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task session` — Görevin Claude `session_id`'sini kaydeder. İşçide beyne iletilir. _(beyne iletilir; konsol: yazma; --json)_
-- `vlad task list` — Görevleri listeler. `list --json --fields id,state,title --limit 20` yavaş tam çıktı yerine kısa çıktı verir (`effective_model`/`role_model` tam çıktıda). _(yerel; konsol: okuma; --json)_
+- `vlad task list` — Görevleri listeler. `list --json --fields id,state,title --limit 20` yavaş tam çıktı yerine kısa çıktı verir (`effective_model` kısa kümede de var; `role_model` yalnız `--fields` ya da tam çıktıda). _(yerel; konsol: okuma; --json)_
 - `vlad task idle` — Uzun süredir güncellenmeyen running/blocked görevler (bekçi modu dürtmesi için). _(yerel; konsol: okuma; --json)_
 - `vlad task ready` — `task ready --parent <id>`: başlatılabilir fazları verir (`maxParallel` doluysa fazlar `held_by_limit`'te döner). _(yerel; konsol: okuma; --json)_
 
 ## status
 
-- `vlad status` — `vlad status [--summary] [--no-mark]`: aktif görevler. `--summary` digest edilmemiş `done` görev varsa "N done görev digest edilmedi (en eski: <tarih>)" ekler; JSON'da `undigested` ve `oldestUndigested`. `--no-mark`: yan etkisiz okuma — stalled işaretlemez, mod penceresini temizlemez; aynı JSON şekli. `--summary` satırı "N kb çelişkisi" ekler ve JSON'da `kbLint: {count, byCode, at}` verir — son tam `vlad kb lint` koşusunun önbelleği `kb/logs/kb-lint.json`, `summary_stale` sayılmaz, hook lint çalıştırmaz. _(yerel; konsol: okuma; --json)_
+- `vlad status` — `vlad status [--summary] [--no-mark]`: aktif görevler. `--summary` digest edilmemiş `done` görev varsa "N done görev digest edilmedi (en eski: <tarih>)" ekler; JSON'da `undigested` ve `oldestUndigested`. `--no-mark`: yan etkisiz okuma — stalled işaretlemez, mod penceresini temizlemez; aynı JSON şekli. `--summary` satırı "N kb çelişkisi" ekler ve JSON'da `kbLint: {count, byCode, at}` verir — son tam `vlad kb lint` koşusunun önbelleği `kb/logs/kb-lint.json`, `summary_stale` sayılmaz, SessionStart hook'u önbellek 6 saatten eskiyse ya da kb HEAD değiştiyse `kb lint`'i 10 sn zaman aşımıyla koşup önbelleği tazeler (işçide/kimliği belirsiz makinede koşmaz; tazelenemezse eski diye gösterir). _(yerel; konsol: okuma; --json)_
 
 ## mode
 
@@ -107,7 +107,7 @@ Onay bekleyen digest maddeleri.
 ## kb
 
 - `vlad kb commit` — `kb commit "<özet>" [--push]`: kb reposunda commit'ler, upstream'e push eder. _(işçide reddedilir; konsol: yazma; --json)_
-- `vlad kb maintain` — `kb maintain [--days 30] [--dry-run] --json`: biten görev/bulguları arşive taşır (silme yok); ayrıca eski tek dosyalı karar günlüğünü böler. _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad kb maintain` — `kb maintain [--days 14] [--dry-run] --json`: biten görev/bulguları arşive taşır (silme yok); ayrıca eski tek dosyalı karar günlüğünü böler. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad kb get` — `kb get <id> [--section "## Kapanış raporu"] --json`: kaydın gerçek yolu + içeriği (arşivdekini de bulur). _(yerel; konsol: okuma; --json)_
 - `vlad kb search` — `kb search "<sorgu>" [--project] [--type] --json`: sınırlı arama (arşiv dahil). _(yerel; konsol: okuma; --json)_
 - `vlad kb refs` — `kb refs <id> [--json]`: T…/F-…/D-… ID'ye atıf yapan kayıtlar (bölüm/durum/tarih), ilgili commit'ler ve çelişki işaretleri; salt okuma. _(yerel; konsol: okuma; --json)_

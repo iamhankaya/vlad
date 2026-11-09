@@ -33,6 +33,17 @@ describe("task new --pipeline", { timeout: 30_000 }, () => {
     const id = JSON.parse(r.out).phases[0].id;
     expect(vlad(["kb", "get", id, "--json"]).out).toContain("ÖZEL-GÖVDE");
   });
+  it("--phase-model faz=model[:gerekçe] sets the phase model; opus needs a reason", () => {
+    const r = vlad([...base, "--cycle", "kısa", "--phase-model", "uygulama=opus:kritik iş", "--phase-model", "doğrulama=haiku", "--json"], BODY);
+    expect(r.code, r.err).toBe(0);
+    const [u, d] = JSON.parse(r.out).phases.map((p: { id: string }) => vlad(["kb", "get", p.id, "--json"]).out);
+    expect(u).toContain('"model":"opus"'); expect(u).toContain("kritik iş"); expect(d).toContain('"model":"haiku"');
+    const before = files().length;
+    expect(vlad([...base, "--cycle", "kısa", "--phase-model", "uygulama=opus"], BODY).code).toBe(1);
+    expect(vlad([...base, "--cycle", "kısa", "--phase-model", "uygulama"], BODY).code).toBe(1);
+    expect(vlad(["task", "new", "--project", "p", "--title", "T", "--phase-model", "uygulama=haiku", "--body-file", "-"], BODY).code).toBe(1);
+    expect(files()).toHaveLength(before);
+  });
   it("errors write nothing: bad cycle, missing cycle, skip without reason, stray flags", () => {
     expect(vlad([...base, "--cycle", "tek"], BODY).code).toBe(1);
     expect(vlad(base, BODY).code).toBe(1);

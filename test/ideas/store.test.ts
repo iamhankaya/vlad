@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, validate } from "../../src/kb/index.js";
 import { addFinding, getFinding } from "../../src/findings/store.js";
@@ -80,12 +80,25 @@ describe("ideas store", () => {
     const body = readFileSync(join(kbPaths().findings, `${f1.data.id}.md`), "utf8");
     expect(body).toContain("state: wontfix");
     expect(body).toContain("fikir deposuna taşındı: I-alpha-001");
+    expect(readFileSync(join(kbPaths().findings, `${f2.data.id}.md`), "utf8")).toContain("fikir deposuna taşındı: I-alpha-002"); // each finding names its own idea
     // closed finding cannot be moved again; nothing is written when any id fails
     const f3 = addFinding({ project: "alpha", severity: "bilgi", source: "T20261109-01", title: "Üçüncü" });
     expect(() => fromFindings([f3.data.id, f1.data.id])).toThrow(/açık değil/);
     expect(() => fromFindings([f3.data.id, "F-alpha-099"])).toThrow(/bulgu bulunamadı/);
     expect(listIdeas().ideas).toHaveLength(2);
     expect(readFileSync(join(kbPaths().findings, `${f3.data.id}.md`), "utf8")).toContain("state: open");
+  });
+  it.skipIf(process.platform === "win32")("from-finding: closing the findings fails → the ideas it opened are removed and no finding is left half-closed", () => {
+    card("alpha");
+    const f1 = addFinding({ project: "alpha", severity: "bilgi", source: "T20261109-01", title: "Bir" });
+    const f2 = addFinding({ project: "alpha", severity: "bilgi", source: "T20261109-01", title: "İki" });
+    chmodSync(kbPaths().findings, 0o500); // findings dir unwritable: the close step fails
+    try {
+      expect(() => fromFindings([f1.data.id, f2.data.id])).toThrow();
+    } finally { chmodSync(kbPaths().findings, 0o700); }
+    expect(listIdeas().ideas).toHaveLength(0);
+    expect(getFinding(f1.data.id).data.state).toBe("open");
+    expect(getFinding(f2.data.id).data.state).toBe("open");
   });
   it("from-finding reuses an open idea of the same source (re-run after a failed finding write leaves no twin)", () => {
     card("alpha");

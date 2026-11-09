@@ -121,6 +121,9 @@ export async function runBaseGate(cwd: string, branch: string, cachedHead: strin
   if (cur !== branch) throw failed(`${cwd} dizini ${branch} dalında değil (${cur || "bilinmiyor"}); taban koşulamadı`);
   const dirty = (await runGit(cwd, ["status", "--porcelain", "-uno"])).stdout.trim();
   if (dirty) throw failed(`${cwd} kirli (izlenen dosyalarda değişiklik); taban koşulmadı:\n${dirty.slice(0, 500)}`);
+  // işçideki dal upstream'in gerisindeyse uç bayat: gate yanlış tabanı koşar; fetch sonrası ilerletmeyi işçi yapar
+  const behind = await runGit(cwd, ["rev-list", "--count", `${branch}..${branch}@{u}`]);
+  if (behind.code === 0 && Number(behind.stdout.trim()) > 0) throw failed(`${branch} işçide upstream'in ${behind.stdout.trim()} commit geride; taban koşulmadı (önce işçide güncelle)`);
   const tip = (await mustGit(cwd, ["rev-parse", "HEAD"])).trim();
   if (cachedHead === tip) return { exit: 0, stdout: "", stderr: "", head: tip, cached: true };
   return runGate(gate, cwd);

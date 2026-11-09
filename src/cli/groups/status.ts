@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { join } from "node:path";
 import type { RemoteStallPlan } from "../../tasks/liveness.js";
 import { lintAgeNote, refreshLintCacheIfStale } from "../../audit/lint-cache.js";
+import { workerState } from "../../agent/forward.js";
 import { loadConfig } from "../../kb/index.js";
 import { staleSummaryText, undigestedNote } from "../../projects/status.js";
 import { statusSummary } from "../../tasks/index.js";
@@ -12,7 +13,7 @@ export function registerStatus(program: Command, k: Kit): void {
   const { ctx, out, def, statusLine, withModel } = k;
   def(program, "status", "Aktif görevler; eski running görevleri stalled yapar", (o: Opts) => {
     // SessionStart hook: refresh a stale lint cache first (short timeout); a refresh that did not finish shows the old numbers as "eski"
-    const lintStale = o.hook && o.summary && o.mark !== false ? refreshLintCacheIfStale().stale : false;
+    const lintStale = o.hook && o.summary && o.mark !== false ? refreshLintCacheIfStale({ canRun: () => ["brain", "off"].includes(workerState().kind) }).stale : false;
     const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false, remotePlans: o.remotePlans as RemoteStallPlan[] | undefined });
     if (o.summary) {
       // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
