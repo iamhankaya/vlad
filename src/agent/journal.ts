@@ -51,6 +51,11 @@ export class Journal {
   start(opId: string, from: string, op: AgentOp, argsHash: string, args?: unknown): void {
     this.put({ opId, from, op, state: "started", ts: this.now(), argsHash, ...(args !== undefined ? { args } : {}) });
   }
+  /** `started` kaydın argümanına alan ekler (ör. betik sınıfı: uzlaştırma çalışırken mevcut HEAD'e değil buna bakar). */
+  annotate(opId: string, extra: Record<string, unknown>): void {
+    const r = this.recs.get(opId);
+    if (r?.state === "started") this.put({ ...r, args: { ...(r.args && typeof r.args === "object" ? r.args : {}), ...extra } });
+  }
   finish(opId: string, state: "done" | "aborted", result?: unknown, meta?: OpMeta): void {
     const prev = this.recs.get(opId);
     if (!prev) throw new Error(`günlükte yok: ${opId}`);

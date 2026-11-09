@@ -24,7 +24,7 @@ Betik ya da manifest değişince karmayı güncelle: `node scripts/agent-scripts
 
 1. `VLAD_HOME` bir git deposunun kökü olmalı; `agent-scripts/` altında değişmiş/izlenmeyen dosya varsa red (`dirty`).
 2. Doğruluk kaynağı **HEAD'deki blob**'dur (çalışma ağacı değil): düzenli dosya (100644/100755), karması manifestle eşleşmeli (`hash_mismatch`, `not_in_head`, `not_regular`).
-3. Çalışan commit origin'in **varsayılan dalında** olmalı (`refs/remotes/origin/HEAD`, yoksa origin/main|master; `unpushed`, `no_upstream`): itilmemiş commit ve özellik dalına itilmiş kod çalışmaz. **Repo push yetkisi = işçide kod çalıştırma yetkisi**; varsayılan dalı korumalı tut (inceleme/branch protection).
+3. Çalışan commit origin'in **varsayılan dalında** olmalı (dalın upstream'i `refs/remotes/origin/HEAD`, yoksa origin/main|master olmalı; `unpushed`, `no_upstream`): itilmemiş commit ve özellik dalına itilmiş kod çalışmaz. **Repo push yetkisi = işçide kod çalıştırma yetkisi**; varsayılan dalı korumalı tut (inceleme/branch protection).
    HEAD bir kez okunur (oid); manifest, betik ve atalık kontrolü aynı oid ile yapılır, sonuçtaki `head` çalışan betiğin commit'idir.
 4. Blob baytları özel (0600; dizin 0700 / Windows ACL) geçici dosyaya yazılıp o çalıştırılır; Windows'ta ACL kurulamazsa betik çalışmaz (fail-closed); çalışırken `git pull` ya da autocrlf sonucu değiştirmez.
 5. `shell:false`; parametreler argv'de değil `VLAD_PARAM_<AD>` ortam değişkenindedir. Ortam allowlist'tir (sırlar, `NODE_OPTIONS`, `VLAD_AGENT_*` geçmez) + `VLAD_HOME/REPO/MACHINE/OP_ID/SCRIPT/ROOTS`.
@@ -36,7 +36,7 @@ Hata iletisi biçimi: `<kod>: [<neden>] <ayrıntı>`; nedenler: bad_name, bad_pa
 ## Onay ve uzlaştırma notları
 
 - **plan-id kriptografik değil, işlemsel bir kontroldür:** gizli değildir, herkes hesaplayabilir; `--confirmed`'ın kullanıcı onayından sonra verilmesi prosedürel kuraldır (CLAUDE.md). Amacı, onaylanan plan ile çalışan betik/parametre/makine arasındaki kaymayı yakalamaktır. `class`/`timeoutSec`/`file` plan-id'de yoktur (değişimleri `sha256` ve manifest satırıyla incelemede görünür).
-- Agent çökmesinde yarım kalan `script-run` kaydı **her zaman** `done + uncertain` olur (otomatik yeniden koşma yok; mevcut HEAD'deki manifest'e güvenilmez). Aynı `--op-id` ile tekrar çağrı betiği koşmaz, CLI "belirsiz, makinede doğrula" der.
+- Agent çökmesinde yarım kalan `script-run` kaydı: sınıf (read/write) başlangıçta kayda yazılır; `read` → `aborted` (aynı opId yeniden koşabilir), `write` ya da sınıfı yazılmamış → `done + uncertain` (otomatik yeniden koşma yok; mevcut HEAD'deki manifeste güvenilmez). Belirsiz kayıtta aynı `--op-id` betiği koşmaz, CLI "belirsiz, makinede doğrula" der.
 - Terminale yazılan uzak çıktıdan kontrol karakterleri (ESC dizileri) ayıklanır; `--json` çıktısı ham (kaçışlı) kalır.
 - Desenli `string` parametrede baştaki `-` yine reddedilir (bayrak enjeksiyonu); manifestte `allowLeadingDash: true` ile açıkça izin verilebilir.
 

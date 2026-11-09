@@ -7,6 +7,8 @@ import {
 import { checkEntry, checkPushed, loadRepoState, scriptFail } from "../scripts/integrity.js";
 import { normalizeParams, scriptPlanId } from "../scripts/manifest.js";
 import { runScript, scriptEnv } from "../scripts/run.js";
+import type { Journal, JournalRecord } from "../journal.js";
+import type { Verdict } from "../reconcile.js";
 import { machineDef } from "../../fleet/registry.js";
 import { agentEnv } from "./env.js";
 import { argObject, bad } from "./worker.js";
@@ -26,11 +28,13 @@ export interface ScriptDeps {
   env: NodeJS.ProcessEnv;
   /** itilmemiş HEAD reddi (varsayılan açık; spec açık soru 3) */
   requirePushed?: boolean;
+  /** started kaydına betik sınıfı yazılır (çökme uzlaştırması için) */
+  journal?: Journal;
 }
 export const defaultScriptDeps = (): ScriptDeps => {
   // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
   const e = agentEnv();
-  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env };
+  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env, journal: e.journal };
 };
 
 /** Tek seferde tek betik: ikinci çağrı `busy` (geçici; CLI çıkış kodu 75). shortcut: bakım (maintenance) bayrağı (b) fazında bu kilide bağlanır. */
@@ -75,6 +79,7 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     if (a.approval?.planId !== want) throw scriptFail("forbidden", "approval", "write betiği için geçerli plan-id gerekli (önce --plan, kullanıcı onayından sonra --confirmed)");
   }
 
+  d.journal?.annotate(ctx.opId, { cls: entry.class }); // çökme uzlaştırması: sınıf kayıttan okunur
   if (active) throw new RemoteError("busy", `busy: başka bir betik sürüyor: ${active}`);
   active = entry.name;
   try {
@@ -87,5 +92,10 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   } finally { active = null; }
 }
 
-// Çökme sonrası uzlaştırıcı yok (bilerek): `script-run` IDEMPOTENT değildir, reconcile varsayılanı `unknown` → done+uncertain.
-// Sınıf (read/write) started kaydında tutulmadığından ve mevcut HEAD'e güvenilemeyeceğinden (betik/manifest değişmiş olabilir) otomatik yeniden koşma yok.
+/**
+ * Çökme sonrası uzlaştırma: yalnız started kaydına yazılmış sınıfa bakılır (mevcut HEAD'deki manifeste güvenilmez; betik/manifest
+ * değişmiş olabilir). `read` → `not-applied` (yeniden koşabilir); `write` ya da sınıf yazılmamış (çökme öncesi) → `unknown`.
+ */
+export function reconcileScriptRun(rec: JournalRecord): Verdict {
+  return (rec.args as { cls?: unknown } | undefined)?.cls === "read" ? "not-applied" : "unknown";
+}
