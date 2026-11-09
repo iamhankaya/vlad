@@ -166,6 +166,7 @@
     "test/acceptance/machines-scripts-manifest.test.ts",
     "test/acceptance/machines-scripts-run.test.ts",
     "test/acceptance/machines-scripts-repo-guncelle.test.ts",
+    "test/acceptance/machines-scripts-e2e.test.ts",
     "test/aktarim/a1-origin.test.ts",
     "test/aktarim/a1-receive.test.ts",
     "test/aktarim/a1-wire.test.ts",
