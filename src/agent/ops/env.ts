@@ -14,6 +14,10 @@ export interface AgentEnv {
   journal: Journal;
   transport: RemoteTransport;
   queue?: AgentQueue;
+  /** selfUpdate başarısında yeniden başlatmayı zamanlar (start.ts kurar); yoksa yeniden başlatma yolu yoktur (ör. süreç içi testler) */
+  requestRestart?: () => void;
+  /** açılışta okunan dist/.build-head */
+  runningBuildHead?: string;
   now(): number;
 }
 let current: AgentEnv | undefined;

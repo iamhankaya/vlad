@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { psQuote } from "../launcher/terminal.js";
 import { normalizeParams, scriptPlanId } from "../agent/scripts/manifest.js";
 import {
   RemoteError, type RemoteTransport, type ScriptClass, type ScriptIntegrity, type ScriptListResult, type ScriptPlatform, type ScriptRunResult,
@@ -68,14 +69,24 @@ export function formatScripts(l: ScriptListResult): string {
   return [`${l.platform}  HEAD ${shortSha(l.head)}`, ...rows].join("\n");
 }
 
-export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>): string {
+/**
+ * Önerilen komutu yerel kabuğa göre tırnaklar (root=C:\dev zsh'de bozulmasın, boşluklu kök bölünmesin); güvenli karakterler tırnaksız kalır (% ve \ değil).
+ * Windows (PowerShell): tek tırnak, tek/tipografik tırnaklar ikilenir. Satır sonu içeren değer komutu bölerdi: reddedilir.
+ */
+const shq = (v: string, platform: NodeJS.Platform): string => {
+  if (/[\r\n]/.test(v)) throw new Error("onay komutu üretilemedi: değer satır sonu içeriyor");
+  if (/^[A-Za-z0-9._\/:=@+,-]+$/.test(v)) return v;
+  return platform === "win32" ? psQuote(v) : `'${v.replace(/'/g, `'\\''`)}'`;
+};
+
+export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>, platform: NodeJS.Platform = process.platform): string {
   const ps = Object.entries(p.params).map(([k, v]) => `${k}=${v}`).join(" ") || "(yok)";
   return [
     `plan: ${p.name} @ ${p.machine} (${p.platform}, HEAD ${shortSha(p.head)}, sha ${shortSha(p.sha256)})`,
     `sınıf: ${p.class}${p.class === "write" ? " (kullanıcı onayı gerekir)" : ""}  zaman aşımı: ${p.timeoutSec}s  bütünlük: ${p.integrity}`,
     `parametreler: ${ps}`,
     `plan-id: ${p.planId}`,
-    ...(p.class === "write" ? [`onaydan sonra: vlad machine run ${p.machine} ${p.name} ${Object.entries(p.params).map(([k, v]) => `--param ${k}=${v}`).join(" ")} --confirmed ${p.planId}`.replace(/ {2,}/g, " ")] : []),
+    ...(p.class === "write" ? [["onaydan sonra: vlad machine run", shq(p.machine, platform), shq(p.name, platform), ...Object.entries(p.params).map(([k, v]) => `--param ${shq(`${k}=${v}`, platform)}`), "--confirmed", shq(p.planId, platform)].join(" ")] : []),
   ].join("\n");
 }
 

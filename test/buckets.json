@@ -179,6 +179,7 @@
     "test/aktarim/s-contract.test.ts",
     "test/aktarim/w-worker-local.test.ts",
     "test/isolation/**/*.test.ts",
+    "test/machines/agent-restart.test.ts",
     "test/machines/b-e2e.test.ts",
     "test/machines/b-review.test.ts",
     "test/machines/b-server.test.ts",
@@ -199,7 +200,9 @@
     "test/machines/script-ops.test.ts",
     "test/machines/script-registry.test.ts",
     "test/machines/script-repo-guncelle.test.ts",
-    "test/machines/script-run.test.ts"
+    "test/machines/script-run.test.ts",
+    "test/machines/script-selfupdate.test.ts",
+    "test/machines/script-vlad-guncelle.test.ts"
   ],
   "platform": [
     "test/aktarim/a1-ledger-notify.test.ts",

@@ -10,6 +10,7 @@ import { resumeFlags } from "./resume.js";
 // PowerShell treats typographic single quotes as quote characters too; double each one.
 const SQ = /['‘’‚‛]/g;
 const q = (s: string) => `'${s.replace(SQ, (m) => m + m)}'`;
+export const psQuote = q;
 // Same as the role schema's `model` pattern; checked again here because the value lands in a script.
 const AUTOCOMPACT = /^\d+(\.\d+)?[kKmM]?$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;

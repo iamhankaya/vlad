@@ -102,12 +102,14 @@ export function capUtf8(b: Buffer, total: number, cap: number): string {
 
 function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
   const outCap = s.stdoutCapKb * 1024, errCap = SCRIPT_LIMITS.stderrKb * 1024;
+  // stdout kuyruk tamponu gösterim tavanından bağımsız en az 64 KiB: 16 KiB'lik sonuç satırı küçük outputMaxKb'de kaybolmasın (Codex P2); gösterim yine capUtf8 ile outCap'e iner
+  const outKeep = Math.max(2 * outCap, 4 * SCRIPT_LIMITS.resultJsonKb * 1024);
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     const p = spawn(cmd, args, { cwd: s.cwd, env: s.env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     let outBuf = Buffer.alloc(0), errBuf = Buffer.alloc(0), outTotal = 0, errTotal = 0, started = false, finished = false;
     p.once("spawn", () => { started = true; });
-    p.stdout.on("data", (d: Buffer) => { outTotal += d.length; outBuf = Buffer.concat([outBuf, d]).subarray(-2 * outCap); }); // bellek sınırı 2×tavan (bayt)
+    p.stdout.on("data", (d: Buffer) => { outTotal += d.length; outBuf = Buffer.concat([outBuf, d]).subarray(-outKeep); }); // bellek sınırı (bayt)
     p.stderr.on("data", (d: Buffer) => { errTotal += d.length; errBuf = Buffer.concat([errBuf, d]).subarray(-2 * errCap); });
     const done = (exit: number, timedOut: boolean, extraErr = "") => {
       if (finished) return;
