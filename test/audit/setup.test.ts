@@ -95,6 +95,24 @@ describe("auditSetup", () => {
     expect(r.signals.izin_reddi).toEqual({ tasks: 1, count: 1, examples: [b] });
   });
 
+  it("counts the real worker phrasings of a permission/classifier denial (T20261109-17 lines) but not unrelated lines (F-vlad-279 #1)", () => {
+    const real = task({ at: "2026-10-29", progress: [
+      "- 2026-11-09T18:13:56+03:00 push reddedildi (auto mode classifier, Bash). HEAD e32997c doğrulandı, ağaç temiz.",
+      "- 2026-11-09T18:14:00+03:00 git push origin vlad/x (Bash) auto-mode sınıflayıcısı tarafından engellendi.",
+      "- 2026-11-09T18:15:00+03:00 komut sınıflayıcı tarafından reddedildi",
+      "- 2026-11-09T18:16:00+03:00 İzin reddi: git push origin vlad/x — auto mode classifier (Bash) reddedildi", // skill's format: one line, counted once
+    ] });
+    const plain = task({ at: "2026-10-29", progress: [
+      "- 2026-10-29T10:00:00+03:00 PR yorumu reddedildi (kullanıcı vazgeçti)",
+      "- 2026-10-29T10:01:00+03:00 sınıflandırma testi yazıldı; classifier modülü eklendi",
+      "- 2026-10-29T10:02:00+03:00 başvuru engellendi: ağ kesintisi",
+      "- 2026-10-29T10:03:00+03:00 classifier testi eklendi; xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx eski test reddedildi",
+    ] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.signals.izin_reddi).toEqual({ tasks: 1, count: 4, examples: [real] });
+    expect(plain).not.toBe(real);
+  });
+
   it("counts Codex rounds from the structural İlerleme line only (last line per task, template text ignored)", () => {
     const a = task({ at: "2026-10-28", progress: ["- 2026-10-28T10:00:00+03:00 Codex turları: ara=1 son=1", "- 2026-10-28T12:00:00+03:00 Codex turları: ara=2 son=2"] });
     const b = task({ at: "2026-10-29", progress: ["- 2026-10-29T10:00:00+03:00 Codex turları: ara=0 son=1"] });
