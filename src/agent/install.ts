@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, win32 } from "node:path";
 import type { Os } from "../fleet/types.js";
@@ -39,8 +39,16 @@ const winStartContent = (c: Pick<InstallCtx, "node" | "cli" | "home">): string =
   }
   const home = win32.normalize(c.home).replace(/%/g, "%%"); // ileri eğik çizgili VLAD_HOME karışık ayraçlı yol üretmesin
   // çıktı agent.log'a gider (launchd ile aynı); oturum açılışında konsol içeriği görünmez
-  return `@echo off\r\nchcp 65001 >nul\r\nset "VLAD_HOME=${home}"\r\n"${c.node}" "${c.cli}" agent start >> "${home}\\.vlad-agent\\agent.log" 2>&1\r\n`;
+  const node = c.node.replace(/%/g, "%%"), cli = c.cli.replace(/%/g, "%%"); // cmd %VAR% tırnak içinde de genişler
+  return `@echo off\r\nchcp 65001 >nul\r\nset "VLAD_HOME=${home}"\r\n"${node}" "${cli}" agent start >> "${home}\\.vlad-agent\\agent.log" 2>&1\r\n`;
 };
+
+/** Homebrew Cellar sürümlü yolu (brew upgrade'de silinir) kararlı `opt/<formül>` yoluna çevirir; yol yoksa dokunmaz. */
+export function stableNodePath(execPath: string, exists: (p: string) => boolean = existsSync): string {
+  const m = /^(.*\/)Cellar\/([^/]+)\/[^/]+\/bin\/node$/.exec(execPath);
+  const stable = m && `${m[1]}opt/${m[2]}/bin/node`;
+  return stable && exists(stable) ? stable : execPath;
+}
 
 export interface Plan { description: string; command?: string; file?: string; content?: string; apply?: () => void }
 

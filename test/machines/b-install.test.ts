@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { installPlan, launchdPlist, schtasksArgs } from "../../src/agent/install.js";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { installPlan, launchdPlist, schtasksArgs, stableNodePath } from "../../src/agent/install.js";
+import { lstatSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rotateLog } from "../../src/agent/start.js";
@@ -51,6 +51,31 @@ describe("install girdi doğrulaması ve log rotasyonu (F-vlad-153)", () => {
     rotateLog(f, 10);
     expect(readFileSync(f, "utf8")).toBe("");
     expect(readFileSync(`${f}.1`, "utf8")).toHaveLength(50);
+    rmSync(d, { recursive: true, force: true });
+  });
+});
+
+describe("agent install sertleştirme (T20261109-26)", () => {
+  it("F-vlad-158: win32 agent-start.cmd node/cli yollarındaki % karakterini kaçırır", () => {
+    const p = installPlan("win32", { node: "C:\\a%PATH%\\node.exe", cli: "C:\\b%X%\\cli.js", home: "C:\\h", path: "p" });
+    expect(p.content).toContain('"C:\\a%%PATH%%\\node.exe" "C:\\b%%X%%\\cli.js"');
+  });
+  it("F-vlad-194: Homebrew Cellar sürümlü yolu kararlı opt yoluna çevrilir (yoksa dokunmaz)", () => {
+    const cellar = "/opt/homebrew/Cellar/node@22/22.23.4_2/bin/node";
+    expect(stableNodePath(cellar, () => true)).toBe("/opt/homebrew/opt/node@22/bin/node");
+    expect(stableNodePath(cellar, () => false)).toBe(cellar);
+    expect(stableNodePath("/usr/local/bin/node", () => true)).toBe("/usr/local/bin/node");
+  });
+  it("F-vlad-159: rotateLog .1 symlink'ini izlemez ve yedeği 0600 yapar", () => {
+    const d = mkdtempSync(join(tmpdir(), "vlad-rot-"));
+    const f = join(d, "agent.log"), victim = join(d, "victim.txt");
+    writeFileSync(f, "x".repeat(50)); writeFileSync(victim, "KEEP");
+    symlinkSync(victim, `${f}.1`);
+    rotateLog(f, 10);
+    expect(readFileSync(victim, "utf8")).toBe("KEEP");
+    expect(lstatSync(`${f}.1`).isSymbolicLink()).toBe(false);
+    expect(readFileSync(`${f}.1`, "utf8")).toHaveLength(50);
+    if (process.platform !== "win32") expect(lstatSync(`${f}.1`).mode & 0o777).toBe(0o600);
     rmSync(d, { recursive: true, force: true });
   });
 });

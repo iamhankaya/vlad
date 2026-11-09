@@ -4,7 +4,7 @@ import { readInput } from "../../kb/input.js";
 import { getVladHome, loadConfig } from "../../kb/index.js";
 import { runRemote, callLocal, workerContext } from "../../agent/forward.js";
 import { agentKeygen, agentSetKey, agentStart, agentStatus } from "../../agent/start.js";
-import { installPlan } from "../../agent/install.js";
+import { installPlan, stableNodePath } from "../../agent/install.js";
 import { selfName } from "../../fleet/state.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -43,7 +43,7 @@ sonra iki ucun Agent'ını yeniden başlat)`
     const self = selfName();
     const m = cfg.machines?.find((x) => x.name === self);
     if (!m) throw new Error(`agent install: ${self} config machines içinde değil`);
-    const plan = installPlan(m.os, { node: process.execPath, cli: ctx.argv[1]!, home: getVladHome(), path: ctx.env.PATH ?? "" });
+    const plan = installPlan(m.os, { node: stableNodePath(process.execPath), cli: ctx.argv[1]!, home: getVladHome(), path: ctx.env.PATH ?? "" });
     if (o.apply) plan.apply?.();
     const text = [plan.description, ...(plan.file ? [`dosya: ${plan.file}`] : []), ...(plan.content ? ["", plan.content] : []), `komut: ${plan.command}`, ...(o.apply ? ["uygulandı"] : ["(uygulamak için --apply)"])].join("\n");
     out(o, { description: plan.description, file: plan.file, content: plan.content, command: plan.command, applied: !!o.apply }, text);

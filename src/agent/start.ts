@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync, truncateSync } from "node:fs";
+import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync, truncateSync, chmodSync, constants } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -48,7 +48,9 @@ export async function probeLocal(): Promise<{ alive: boolean; host: string; port
 export function rotateLog(file: string, max = 1_000_000): void {
   try {
     if (statSync(file).size <= max) return;
-    copyFileSync(file, `${file}.1`);
+    rmSync(`${file}.1`, { force: true }); // symlink'i izleme: bağlantının kendisi silinir
+    copyFileSync(file, `${file}.1`, constants.COPYFILE_EXCL);
+    chmodSync(`${file}.1`, 0o600);
     truncateSync(file, 0);
   } catch { /* günlük yoksa ya da kilitliyse sessiz geç */ }
 }
