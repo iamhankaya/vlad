@@ -99,6 +99,13 @@ describe("status --summary kbLint", () => {
     expect(refreshLintCacheIfStale({ now: NOW, head: () => "h2", run: () => ({ ok: false }) })).toEqual({ refreshed: false, stale: true });
   });
 
+  it("refreshLintCacheIfStale: on a worker / unknown-identity machine it does not run `kb lint` (the worker rejects it) and reports stale", () => {
+    const calls: number[] = [];
+    const run = (t: number) => { calls.push(t); return { ok: true }; };
+    expect(refreshLintCacheIfStale({ now: NOW, head: () => "h2", run, canRun: () => false })).toEqual({ refreshed: false, stale: true });
+    expect(calls).toEqual([]);
+  });
+
   it("the SessionStart hook re-lints a stale cache itself; --no-mark reads never do", () => {
     writeCard(`${FRESH}\n## Açık konular\n- F-vlad-160 hâlâ açık\n`);
     finding("F-vlad-160", "fixed");

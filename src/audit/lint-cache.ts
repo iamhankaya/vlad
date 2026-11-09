@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { writeFileAtomic } from "../kb/atomic.js";
+import { workerState } from "../agent/forward.js";
 import { kbPaths } from "../kb/home.js";
 import type { LintCode, LintResult } from "./lint.js";
 import { nowIso } from "../kb/time.js";
@@ -88,6 +89,8 @@ export interface LintRefreshDeps {
   /** runs the whole-kb lint (which rewrites the cache) within `timeoutMs`; `timedOut` also covers a failed run */
   run?: (timeoutMs: number) => { ok: boolean };
   head?: () => string | null;
+  /** false on a worker / unknown-identity machine: `kb lint` is rejected there, so the hook must not try it */
+  canRun?: () => boolean;
   timeoutMs?: number;
 }
 
@@ -99,11 +102,12 @@ export interface LintRefreshDeps {
 export function refreshLintCacheIfStale(d: LintRefreshDeps = {}): { refreshed: boolean; stale: boolean } {
   try {
     const now = d.now ?? new Date();
+    if (!(d.canRun ?? (() => ["brain", "off"].includes(workerState().kind)))()) return { refreshed: false, stale: true };
     const head = (d.head ?? kbHead)();
     if (!lintCacheStale(readLintCache(), head, now)) return { refreshed: false, stale: false };
     const run = d.run ?? ((timeoutMs) => {
       const r = spawnSync(process.execPath, [process.argv[1], "kb", "lint", "--json"], { timeout: timeoutMs, stdio: "ignore", env: process.env });
-      return { ok: r.status === 0 || r.status === 1 }; // 1 = flags with --strict only; either way the cache was written
+      return { ok: r.status === 0 }; // no --strict: a clean run exits 0; anything else (worker rejection, crash, timeout) is not a refresh
     });
     const res = run(d.timeoutMs ?? LINT_REFRESH_TIMEOUT_MS);
     return { refreshed: res.ok, stale: !res.ok || lintCacheStale(readLintCache(), head, now) };
