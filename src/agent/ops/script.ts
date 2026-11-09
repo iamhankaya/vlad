@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { getVladHome } from "../../kb/home.js";
 import { agentDir } from "../../fleet/state.js";
@@ -33,11 +34,13 @@ export interface ScriptDeps {
   journal?: Journal;
   /** selfUpdate başarısında yeniden başlatmayı zamanlar; yoksa sonuçta `restart` alanı olmaz */
   restart?: () => void;
+  /** Çalışan sürecin açılışta okuduğu dist/.build-head; yoksa bilinmiyor (yeniden başlatma uygun sayılır) */
+  runningBuildHead?: string;
 }
 export const defaultScriptDeps = (): ScriptDeps => {
   // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
   const e = agentEnv();
-  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env, journal: e.journal, restart: e.requestRestart };
+  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env, journal: e.journal, restart: e.requestRestart, runningBuildHead: e.runningBuildHead };
 };
 
 /** Tek seferde tek betik: ikinci çağrı `busy` (geçici; CLI çıkış kodu 75). selfUpdate betiği ayrıca bakım bayrağını açar (maintenance.ts). */
@@ -96,8 +99,8 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
       env: scriptEnv(d.env, { home: d.home, repo: st.repo, machine: d.machine, opId: ctx.opId, script: entry.name, params, roots: d.roots }),
       timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform,
     });
-    // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed !== false; zaten güncelse yeniden başlatma gereksiz) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
-    if (entry.selfUpdate && out.exit === 0 && out.data?.ok === true && out.data.changed !== false && d.restart) {
+    // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed:false iken yalnız çalışan derleme diskteki dist/.build-head'den farklıysa: önceki yardımcı başarısız olduysa yeniden denenebilsin) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
+    if (entry.selfUpdate && out.exit === 0 && out.data?.ok === true && (out.data.changed !== false || diskBuildHead(st.repo) !== d.runningBuildHead || d.runningBuildHead === undefined) && d.restart) {
       d.restart(); restarting = true;
       return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out, restart: "scheduled" };
     }
@@ -114,4 +117,9 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
  */
 export function reconcileScriptRun(rec: JournalRecord): Verdict {
   return (rec.args as { cls?: unknown } | undefined)?.cls === "read" ? "not-applied" : "unknown";
+}
+
+/** Diskteki dist/.build-head (yoksa undefined). */
+export function diskBuildHead(repo: string): string | undefined {
+  try { return readFileSync(join(repo, "dist", ".build-head"), "utf8").trim() || undefined; } catch { return undefined; }
 }
