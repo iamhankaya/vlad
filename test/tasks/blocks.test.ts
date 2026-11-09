@@ -85,3 +85,29 @@ describe("blocks/ project repo skills", () => {
     expect(buildPrompt("f.md", "commit", undefined, { taskId: ID, parent: null, projectSkills: ["ab-test-ve-kapi"] })).toContain("`ab-test-ve-kapi`");
   });
 });
+
+describe("blocks/ related open findings", () => {
+  const rel = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `F-alpha-${String(i + 1).padStart(3, "0")}`, severity: "orta", title: `bulgu ${i + 1} ${"x".repeat(300)}` }));
+  it("lists them with full ids, asks for a `### Kapatılan bulgular` entry, truncates titles", () => {
+    const t = text({ autonomy: "commit", relatedFindings: rel(3) });
+    expect(t).toContain("F-alpha-001");
+    expect(t).toContain("F-alpha-003");
+    expect(t).toContain("### Kapatılan bulgular");
+    expect(t).toMatch(/[Dd]okunduğun alanda düzelttiğin bulgu/);
+    expect(t).not.toContain("x".repeat(200)); // title cut
+  });
+  it("caps the list (prompt must not bloat)", () => {
+    const t = text({ autonomy: "commit", relatedFindings: rel(40) });
+    expect(t).toContain("F-alpha-015");
+    expect(t).not.toContain("F-alpha-016");
+  });
+  it("absent/empty → no block; plan and cloud never get it", () => {
+    expect(text({ autonomy: "commit" })).not.toContain("Kapatılan bulgular");
+    expect(text({ autonomy: "commit", relatedFindings: [] })).not.toContain("Kapatılan bulgular");
+    expect(text({ autonomy: "plan", relatedFindings: rel(2) })).not.toContain("F-alpha-001");
+    expect(text({ autonomy: "commit", mode: "cloud", relatedFindings: rel(2) })).not.toContain("F-alpha-001");
+  });
+  it("buildPrompt carries them through ctx", () => {
+    expect(buildPrompt("f.md", "commit", undefined, { taskId: ID, parent: null, relatedFindings: rel(1) })).toContain("F-alpha-001");
+  });
+});

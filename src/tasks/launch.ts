@@ -8,6 +8,7 @@ import {
 import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
+import { relatedOpenFindings } from "../findings/similar.js";
 import { countInbox } from "../inbox/inbox.js";
 import type { Launcher } from "../launcher/index.js";
 import { splitSkills } from "../roles/store.js";
@@ -18,7 +19,7 @@ import {
   effectiveModel, getTask, listTasks, logTask, markStale, roleFor, saveTask, saveTaskQuiet, setState, syncAutonomy, unmetDependencies,
 } from "./store.js";
 import type { Task } from "./store.js";
-import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
+import { BLOCKS_HEADING, RELATED_FINDINGS_MAX, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { staleSummaries } from "../projects/status.js";
 import { readLintCache } from "../audit/lint-cache.js";
@@ -61,14 +62,22 @@ const recordError = (id: string, msg: string): Promise<void> => withKbLock(() =>
   saveTask(t);
 });
 
+/** Open findings of the task's project near its title/body (file or module names); bounded list for the launch prompt. */
+function relatedFindingsOf(task: Task): NonNullable<BlockCtx["relatedFindings"]> {
+  try {
+    return relatedOpenFindings(task.data.project, `${task.data.title}\n${task.body}`, RELATED_FINDINGS_MAX)
+      .map((f) => ({ id: f.data.id, severity: f.data.severity, title: f.data.title }));
+  } catch { return []; } // a broken finding store must not block a launch
+}
+
 export function buildPrompt(
   taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; ponytailOff?: boolean },
-  ctx?: { taskId: string; parent: string | null; projectSkills?: string[] },
+  ctx?: { taskId: string; parent: string | null; projectSkills?: string[]; relatedFindings?: BlockCtx["relatedFindings"] },
   portable = false,
 ): string {
   const core = promptCore(taskFile, autonomy, role, portable);
   if (!ctx) return core;
-  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local", projectSkills: ctx.projectSkills });
+  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local", projectSkills: ctx.projectSkills, relatedFindings: ctx.relatedFindings });
   return [core, BLOCKS_HEADING, ...blocks].join("\n\n");
 }
 
@@ -344,7 +353,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   try {
     ({ reused = false } = await launchCore({
       taskId: id, repo, worktree: wt, branch, ...(adopt ? { adopt } : {}), ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
-      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills }),
+      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills, relatedFindings: relatedFindingsOf(task) }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
@@ -576,7 +585,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const args = {
     taskId: id, project: task.data.project, repoName: repoNameOf(card.path), branch: `vlad/${id}`,
     base: parent ? { kind: "integration", parent, ...(def ? { defaultBranch: def } : {}) } : { kind: "default", ...(def ? { defaultBranch: def } : {}) },
-    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills }, true),
+    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills, relatedFindings: relatedFindingsOf(task) }, true),
     title: `VLAD ${id} — ${task.data.title}`,
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
