@@ -7,6 +7,7 @@ import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
 import { PONYTAIL_AB_VALID_FROM } from "../tasks/experiment.js";
+import { parseDenyLine } from "../tasks/denials.js";
 import { firstAdded, installedSkills, lastChanged, roleSkillSince, skillDirs } from "./rules.js";
 import { auditSkills, parseSince } from "./skills.js";
 
@@ -16,7 +17,7 @@ const EXAMPLES = 5;
 const CLS = "(?:sınıflay[ıi]c[ıi]|sınıflandırıcı|auto[- ]mode classifier|classifier)";
 const DENY = "(?:reddedildi|engellendi|reddetti|engelledi|denied|blocked)";
 // one İlerleme line counts once; the classifier word must sit within 80 chars of the denial verb (F-vlad-279 review)
-const IZIN_REDDI = new RegExp(`[iİ]zin reddi|permission denied|${DENY}.{0,80}${CLS}|${CLS}.{0,80}${DENY}`, "i");
+const IZIN_REDDI = new RegExp(`[iİ]zin reddi|\\[izin\\]|permission denied|${DENY}.{0,80}${CLS}|${CLS}.{0,80}${DENY}`, "i");
 const countLines = (s: string, re: RegExp) => s.split("\n").filter((l) => re.test(l.replace(/İ/g, "i").replace(/I/g, "ı"))).length;
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
@@ -24,6 +25,8 @@ export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: R
 /** Codex rounds written by /status at the final gate (`Codex turları: ara=<n> son=<n>`); `count` = ara + son. */
 export interface CodexRounds extends Signal { ara: number; son: number }
 export interface Signal { tasks: number; count: number; examples: string[] }
+/** The same tool+pattern denied (`vlad task deny`) in >= 2 tasks: a permission-rule candidate. `count` = denial lines, `tasks` = distinct tasks. */
+export interface PermissionCandidate { tool: string; pattern: string; tasks: number; count: number; examples: string[] }
 type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
 interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
 export interface SetupAudit {
@@ -37,6 +40,7 @@ export interface SetupAudit {
     sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
   open_points: { total: number; by_severity: Record<string, number> };
   signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal; codex_turlari: CodexRounds };
+  permission_candidates: PermissionCandidate[];
   cancelled: { total: number; with_reason: number; without_reason_ids: string[] };
   skills: {
     /**
@@ -85,6 +89,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
       karar: { tasks: 0, count: 0, examples: [] }, izin_reddi: { tasks: 0, count: 0, examples: [] },
       codex_turlari: { tasks: 0, count: 0, ara: 0, son: 0, examples: [] },
     },
+    permission_candidates: [],
     cancelled: { total: 0, with_reason: 0, without_reason_ids: [] },
     skills: { inventory: [], unused: [], transcripts: 0, coverage: { by_skill: [], skipped_before_rule: 0, expected: 0, loaded: 0, rate: null } },
     rules: { claude_md: null, roles: {} },
@@ -96,6 +101,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     s.tasks++; s.count += n;
     if (s.examples.length < EXAMPLES) s.examples.push(id);
   };
+  const denied = new Map<string, PermissionCandidate>();
   for (const t of tasks) {
     const { id } = t.data;
     bump(out.tasks.by_role, t.data.role);
@@ -135,6 +141,16 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     // "İzin reddi", "permission denied", and the workers' real phrasings: "push reddedildi (auto mode classifier, Bash)", "sınıflayıcı tarafından engellendi" (F-vlad-279)
     signal(out.signals.izin_reddi, id, countLines(progress, IZIN_REDDI));
 
+    for (const line of progress.split("\n")) {
+      const d = parseDenyLine(line);
+      if (!d) continue;
+      const key = `${d.tool.toLowerCase()}\u0000${d.pattern}`;
+      const c = denied.get(key) ?? { tool: d.tool, pattern: d.pattern, tasks: 0, count: 0, examples: [] };
+      c.count++;
+      if (!c.examples.includes(id)) { c.tasks++; c.examples.push(id); }
+      denied.set(key, c);
+    }
+
     // structural line only (`- <ts> Codex turları: ara=<n> son=<n>`); the last one wins, as the gate rewrites the total
     const cx = [...progress.matchAll(/^- \S+ Codex turları: ara=(\d+) son=(\d+)\s*$/gm)].pop();
     if (cx) {
@@ -152,6 +168,8 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     }
   }
   out.cancelled.without_reason_ids.sort();
+  out.permission_candidates = [...denied.values()].filter((c) => c.tasks >= 2)
+    .sort((a, b) => b.tasks - a.tasks || b.count - a.count || a.tool.localeCompare(b.tool) || a.pattern.localeCompare(b.pattern));
 
   // skills: where they live, which roles name them (by the name the role uses), how often transcripts show them loaded
   const home = getVladHome();

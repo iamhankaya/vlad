@@ -36,6 +36,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["task", "repin"], { console: none("çatı pin'ini taşımak konsoldan açılmadı; ayrı karar") }),
   c(["task", "ingest"], { lock: "outer", console: { kind: "write", fileFlags: ["--events-file","--file"] } }),
   c(["task", "log"], { lock: "outer", worker: { kind: "forward", op: "task.log" }, console: { kind: "write" } }),
+  c(["task", "deny"], { lock: "outer", worker: { kind: "forward", op: "task.log" }, console: { kind: "write" } }),
   c(["task", "ask"], { lock: "outer", worker: { kind: "forward", op: "task.ask" }, console: { kind: "write" } }),
   c(["task", "answer"], { lock: "outer", console: { kind: "write" } }),
   c(["task", "report"], { lock: "outer", worker: { kind: "forward", op: "task.report" }, console: { kind: "write", fileFlags: ["--file"] } }),

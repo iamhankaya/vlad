@@ -355,6 +355,16 @@ describe("auditSetup", () => {
     });
   });
 
+  it("lists permission-rule candidates: the same tool+pattern denied in >=2 tasks (T20261110-13)", () => {
+    const L = (tool: string, pat: string) => `- 2026-10-29T10:00:00+03:00 [İZİN] ${tool}: ${pat}`;
+    const a = task({ at: "2026-10-29", progress: [L("PowerShell", "powershell -File build.ps1"), L("PowerShell", "powershell -File build.ps1")] });
+    const b = task({ at: "2026-10-29", progress: [L("PowerShell", "powershell  -File build.ps1 — neden")] });
+    task({ at: "2026-10-29", progress: [L("Bash", "git push origin vlad/x")] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.permission_candidates).toEqual([{ tool: "PowerShell", pattern: "powershell -File build.ps1", tasks: 2, count: 3, examples: [a, b] }]);
+    expect(r.signals.izin_reddi.count).toBe(4); // [İZİN] lines also count as the friction signal
+  });
+
   it("rejects an invalid since", () => {
     expect(() => auditSetup({ since: "dün", configDir: cfgDir })).toThrow(/geçersiz --since/);
   });

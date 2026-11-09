@@ -10,7 +10,7 @@ import { brainTransport, makeRemote } from "../../machines/remote.js";
 import { selfName } from "../../fleet/state.js";
 import { AgentClient } from "../../agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js";
-import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
+import { TRANSITIONS, answerTask, denyTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskList } from "./task-list.js";
@@ -127,6 +127,13 @@ export function registerTask(program: Command, k: Kit): void {
     logTask(id, msg);
     out(o, { id }, "eklendi");
   });
+  def(task, "deny <id>", "İzin reddini kaydeder: İlerleme'ye [İZİN] satırı + kb/logs/denials.jsonl (audit setup tekrarlayan kalıpları aday sayar)", (id: string, o: Opts) => {
+    denyTask(id, { tool: o.tool as string, pattern: o.pattern as string, reason: o.reason as string | undefined });
+    out(o, { id }, "kaydedildi");
+  })
+    .requiredOption("--tool <ad>", "reddedilen araç (Bash, PowerShell, ...)")
+    .requiredOption("--pattern <komut>", "reddedilen komut/kalıp")
+    .option("--reason <metin>", "ret nedeni (sınıflayıcı/izin kuralı mesajı)");
   def(task, "ask <id> <soru>", "Soru ekler, blocked yapar", (id: string, q: string, o: Opts) => {
     const t = askTask(id, q);
     out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
