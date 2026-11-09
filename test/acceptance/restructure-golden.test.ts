@@ -21,7 +21,7 @@ describe("restructure: golden dosyaları sağlam (boş küme ya da eksik sayı �
     expect(classes.base).toBe("bbe6ccd");
     expect(classes.KB_WRITES.length).toBeGreaterThanOrEqual(32);
     expect(classes.KB_WRITES).toEqual(expect.arrayContaining(["task new", "task log", "project write", "mode status", "task resume", "task cleanup"]));
-    expect(classes.REFRESH_KEYS.slice().sort()).toEqual(["decision add", "decision set", "finding add", "finding set", "project write", "task set"]);
+    expect(classes.REFRESH_KEYS.slice().sort()).toEqual(["decision add", "decision migrate", "decision set", "finding add", "finding set", "kb maintain", "project write", "task digested", "task set"]);
     expect(classes.INNER_LOCK.slice().sort()).toEqual(["task cleanup", "task resume"]);
     expect(Object.keys(classes.FORWARD).sort()).toEqual(["task ask", "task log", "task report", "task session"]);
     expect(classes.WORKER_LOCAL.length).toBeGreaterThanOrEqual(39);

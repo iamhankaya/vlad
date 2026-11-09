@@ -61,7 +61,7 @@ describe("s-types: filled manifest and accessors (U1 replaced the S stub)", () =
 describe("s-types: KB_WRITES / REFRESH_KEYS are exported and consistent", () => {
   it("export real, non-empty sets", () => {
     expect(KB_WRITES.size).toBeGreaterThan(30);
-    expect(REFRESH_KEYS.size).toBe(6);
+    expect(REFRESH_KEYS.size).toBe(9);
   });
   it("every refresh key writes the kb", () => {
     for (const k of REFRESH_KEYS) expect(KB_WRITES.has(k)).toBe(true);
