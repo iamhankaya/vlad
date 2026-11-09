@@ -1,3 +1,4 @@
+import { encodeFrame, FrameDecoder } from "../../src/agent/frame.js";
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -82,5 +83,14 @@ describe("F-vlad-281: recoverSelfUpdate rename hatasında dist'siz kalmaz", () =
       recoverSelfUpdate(repo, failing);
       expect(readFileSync(join(repo, "dist", "cli.js"), "utf8")).toBe("NEW");
     } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+});
+
+describe("F-vlad-264: 'worktree list -z' NUL baytı Agent çerçevesinde ve trim'de korunur", () => {
+  it("encodeFrame/FrameDecoder gidiş-dönüşü NUL'u korur; String.trim NUL'u silmez", () => {
+    const out = "worktree /r\0HEAD abc\0branch refs/heads/x\0\0";
+    const [back] = new FrameDecoder().push(encodeFrame({ result: out })) as { result: string }[];
+    expect(back!.result).toBe(out);
+    expect(out.trim()).toBe(out);
   });
 });

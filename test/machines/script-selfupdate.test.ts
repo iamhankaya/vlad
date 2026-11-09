@@ -106,9 +106,11 @@ describe("script-run selfUpdate", () => {
     expect([r.restart, during]).toEqual([undefined, false]);
   });
   posix("betik sürerken bayrak açık; bitince (başarısızsa) kapalı", async () => {
-    const { deps, args } = setup(`sleep 0.3\necho '${S} {"ok":false}'\n`);
+    // ön denetimler (git süreçleri) yük altında yavaş olabilir: sabit bekleme yok, bayrak açılana dek koşula bağlı bekle (en çok 10 sn); betik bayrak görülene dek sürer
+    const { deps, args } = setup(`sleep 2\necho '${S} {"ok":false}'\n`);
     const p = scriptRun(args, deps, ctx);
-    await new Promise((r) => setTimeout(r, 100));
+    const t0 = Date.now();
+    while (!maint.on && Date.now() - t0 < 10_000) await new Promise((r) => setTimeout(r, 10));
     expect(maint.on).toBe(true);
     await p;
     expect(maint.on).toBe(false);
