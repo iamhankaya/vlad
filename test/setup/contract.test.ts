@@ -9,7 +9,6 @@ import {
   type PartCheck, type SetupCheckResult, type SetupPart,
 } from "../../src/setup/index.js";
 import { validate, ValidationError } from "../../src/kb/index.js";
-import { makeHome } from "../helpers.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const s1 = { role: "brain", machines: "single", kb: { mode: "local", dir: "~/dev/vlad-kb" }, roots: ["~/dev"] };
@@ -164,11 +163,11 @@ describe("setup sözleşmesi: --check --json sonuç şeması", () => {
   const v = new Ajv({ allErrors: true, strict: false }).compile(schema);
   const ok: SetupCheckResult = {
     version: 1, platform: "darwin", strict: false, exit: 0, ok: true,
-    parts: [{ part: "cli", status: "ok", severity: "error", evidence: "dist/cli.js var" }],
+    parts: [{ part: "cli", status: "ok", severity: "error", evidence: "cli.js var" }],
   };
   it("geçerli sonuç kabul edilir", () => { expect(v(ok), JSON.stringify(v.errors)).toBe(true); });
   it("eksik parça düzeltme komutu taşıyabilir", () => {
-    expect(v({ ...ok, exit: 1, ok: false, parts: [{ part: "cli", status: "eksik", severity: "error", evidence: "dist/ yok", fix: "npm run build" }] })).toBe(true);
+    expect(v({ ...ok, exit: 1, ok: false, parts: [{ part: "cli", status: "eksik", severity: "error", evidence: "derleme çıktısı yok", fix: "npm run build" }] })).toBe(true);
   });
   it("bilinmeyen durum / parça / ek alan reddedilir", () => {
     expect(v({ ...ok, parts: [{ ...ok.parts[0], status: "belki" }] })).toBe(false);
@@ -185,7 +184,7 @@ describe("setup sözleşmesi: config overlay ve kbRepo", () => {
   it("overlay dosya adı", () => { expect(LOCAL_CONFIG_FILE).toBe("vlad.config.local.json"); });
   it("loadLayeredConfig tek okuyucu olarak dışa açık", () => { expect(typeof loadLayeredConfig).toBe("function"); });
   it("config şeması kbRepo (owner/name) kabul eder, bozuk adı reddeder", () => {
-    const home = makeHome();
+    const home = root; // repo kökünün schemas/ klasörü (geçici home gerekmez)
     const base = {
       roots: ["/x"], ignore: [], defaultAutonomy: "commit", staleAfterHours: 6, launcher: "auto", worktreeDir: "{repo}-wt", projects: {},
     };
