@@ -75,6 +75,17 @@ describe("launchTask", () => {
     expect(l.reqs[0].prompt).toContain("Yetki seviyen: `pr`");
     expect(l.reqs[0].prompt).toContain("Yetki (autonomy pr)");
   });
+  it("lists the project's open findings related to the task text in the launch prompt", async () => {
+    const hit = addFinding({ project: "alpha", severity: "orta", source: "T20261022-01", title: "parser.ts boş girdide çöküyor" });
+    addFinding({ project: "alpha", severity: "orta", source: "T20261022-01", title: "tamamen başka alan: renderer" });
+    const t = createTask({ project: "alpha", title: "parser.ts düzelt", kind: "dev", body: "## Tanım\nparser.ts içinde bir şey" });
+    const l = fakeLauncher();
+    await launchTask(t.data.id, { launcher: l, cfg });
+    const p = l.reqs[0].prompt;
+    expect(p).toContain(hit.data.id);
+    expect(p).toContain("### Kapatılan bulgular");
+    expect(p).not.toContain("renderer"); // matched subset, not the newest-N fallback
+  });
   it("passes cfg.workerAutoCompact to the launcher request, and nothing when unset", async () => {
     const l = fakeLauncher();
     await launchTask(mk().data.id, { launcher: l, cfg });

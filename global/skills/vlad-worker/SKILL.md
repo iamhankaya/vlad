@@ -93,6 +93,8 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
 (ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir. **Görevin amacı bulgu çözmekse** (Tanım/Bağlam bir `F-…`'yi kapatıyor) maddeyi etiketle: `- [önem] [regresyon] başlık — …` (senin getirdiğin regresyon), `- [önem] [kalan F-…] başlık — …` (çözdüğün bulgunun kalan kısmı; yeni bulgu açılmaz, mevcut açık kalır); etiketsiz ve kritik/yüksek olmayan maddeler raporda kalır, bulgu olmaz)
+### Kapatılan bulgular
+(yalnız bu görev bir bulguyu kapattıysa, görevin amacı o olmasa da; launch prompt'undaki "Projenin açık bulguları" listesine bak: dokunduğun alanda düzelttiğin bulgu varsa yaz. Her satır: `- F-<proje>-NNN — fixed|zaten düzelmiş — kanıt (commit <sha> ya da dosya:satır)`. **Tam ID zorunlu**: aralık/kısaltma (`F-014,017-024`, `F-024`, `#24`) yasak; commit mesajlarında da tam ID kullan. Bölüm yoksa digest eski yoldan (rapor metninde ID arama) kapatır; kısaltılmış ID'yi digest kapatmaz, onaya taşır)
 ### Test itirazı (hızlı yol)
 (yalnız developer rolünde ve yalnız hızlı yolla mekanik test düzeltmesi yaptıysan: `- <test yol:satır> — ne değişti, gerekçe, commit`; yoksa bölümü yazma)
 ### CLAUDE.md komut satırı önerisi

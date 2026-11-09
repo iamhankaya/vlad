@@ -9,6 +9,24 @@ export type BlockCtx = {
   mode: "local" | "cloud";
   /** Repo skills named on the project card; listed for local workers only (a cloud worker clones the repo and sees them itself). */
   projectSkills?: string[];
+  /** Open findings of the project near the task's area (chosen by the caller, `relatedOpenFindings`); local non-plan prompts only. */
+  relatedFindings?: { id: string; severity: string; title: string }[];
+};
+
+/** Prompt cap of the related-findings list and of a title in it (a big project must not bloat the prompt). */
+export const RELATED_FINDINGS_MAX = 15;
+const RELATED_TITLE_MAX = 100;
+
+const relatedFindingsBlock = (list: NonNullable<BlockCtx["relatedFindings"]>): string => {
+  const lines = list.slice(0, RELATED_FINDINGS_MAX).map((f) => {
+    const t = f.title.replace(/\s+/g, " ").trim();
+    return `- ${f.id} [${f.severity}] ${t.length > RELATED_TITLE_MAX ? `${t.slice(0, RELATED_TITLE_MAX - 1)}…` : t}`;
+  });
+  return (
+    "Projenin açık bulguları (dokunduğun alanla ilgili olabilir; liste kısaltılmıştır, `vlad finding list --project <slug>` tamamını verir):\n" +
+    lines.join("\n") +
+    "\nDokunduğun alanda düzelttiğin bulgu varsa kapanış raporunda `### Kapatılan bulgular` altında tam ID (`F-<proje>-NNN`; aralık/kısaltma yok), sonuç (fixed / zaten düzelmiş) ve kanıtla (commit ya da dosya:satır) yaz; commit mesajında da tam ID kullan."
+  );
 };
 
 export const BLOCKS_HEADING = "VLAD standart blokları:";
@@ -66,5 +84,6 @@ export function standardBlocks(ctx: BlockCtx): string[] {
   const repoSkills = mode === "local" && ctx.projectSkills?.length
     ? [`Projenin repo skill'leri: ${ctx.projectSkills.map((s) => `\`${s}\``).join(", ")}. İşe başlamadan hepsini Skill aracıyla yükle (zorunlu); yükleyemediysen nedenini kapanış raporuna yaz.`]
     : [];
-  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, realSource(mode)];
+  const related = mode === "local" && ctx.relatedFindings?.length ? [relatedFindingsBlock(ctx.relatedFindings)] : [];
+  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, ...related, realSource(mode)];
 }
