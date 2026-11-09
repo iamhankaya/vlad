@@ -12,7 +12,7 @@ import type { RecordState } from "../kb/refs.js";
 import { fencedLines } from "../kb/sections.js";
 
 export const LINT_CODES = [
-  "closed_finding_listed_open", "finished_task_listed_active", "inactive_decision_listed_valid",
+  "closed_finding_listed_open", "closed_idea_listed_open", "finished_task_listed_active", "inactive_decision_listed_valid",
   "expired_decision_valid", "memory_stale_task", "summary_stale",
 ] as const;
 export type LintCode = (typeof LINT_CODES)[number];
@@ -58,7 +58,7 @@ const AUTHORITY_CTX = words("yalnız", "sadece", "only", "çatı\\p{L}*", "bitin
 const VALID_LIST_CTX = words("geçerli karar\\p{L}*", "geçerli olan kararlar", "valid decisions");
 const INACTIVE_WORDS = words("geçersiz\\p{L}*", "yerine geçti", "yerine-geçti", "iptal\\p{L}*", "kaldırıl\\p{L}*", "superseded", "invalid", "geçerli karar değil", "geçerli değil");
 const DATE_LED = /^\s*(?:[-*]\s*)?(?:\*\*)?_?\d{4}-\d{2}-\d{2}/;
-const ID_G = /(?<![A-Za-z0-9-])(T\d{8}-\d{2,}|F-[a-z0-9-]+-\d+|D-[a-z0-9-]+-\d+)(?![A-Za-z0-9])/g;
+const ID_G = /(?<![A-Za-z0-9-])(T\d{8}-\d{2,}|F-[a-z0-9-]+-\d+|I-[a-z0-9-]+-\d+|D-[a-z0-9-]+-\d+)(?![A-Za-z0-9])/g;
 /** "… 2026-10-28 08:00'e kadar", "… 2026-10-28'e kadar" */
 const EXPIRY_TR = /(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?['’]?(?:y?[ea])?\s+(?:kadar|dek)(?![\p{L}])/giu;
 const EXPIRY_EN = /(?:until|through|expires?(?: on)?)\s+(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/gi;
@@ -142,6 +142,11 @@ function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, pus
       if (ctx.kind === "decision" || narrative || closed || FIXED_NOTE_CTX.test(text)) continue;
       if (inOpenSection || OPEN_CTX.test(text)) {
         emit({ code: "closed_finding_listed_open", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "açık/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} kapandı" diye geçmişe çevir (özet: /digest)` });
+      }
+    } else if (st.type === "idea" && (status === "promoted" || status === "dropped")) {
+      if (ctx.kind === "decision" || narrative || closed || FIXED_NOTE_CTX.test(text)) continue;
+      if (inOpenSection || OPEN_CTX.test(text)) {
+        emit({ code: "closed_idea_listed_open", line: tl.n, id, actual_state: status, message: `${id} ${status} ama ${inOpenSection ? "Açık konular'da" : "açık/bekliyor bağlamında"} geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "promoted" ? "göreve alındı" : "bırakıldı"}" diye geçmişe çevir` });
       }
     } else if (st.type === "task" && (status === "done" || status === "cancelled")) {
       if (ctx.kind === "memory") {

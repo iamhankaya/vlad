@@ -25,6 +25,7 @@ Yanlış pozitif kuralları (T20261103-25; T20261103-14 doğrulamasında 35 işa
 | kod | ne zaman |
 |---|---|
 | `closed_finding_listed_open` | `fixed`/`wontfix` bulgu Açık konular'da ya da açık/bekliyor/yapılacak bağlamında |
+| `closed_idea_listed_open` | `promoted`/`dropped` fikir (`I-<proje>-NNN`) Açık konular'da ya da açık/bekliyor/yapılacak bağlamında (bulguyla aynı kurallar) |
 | `finished_task_listed_active` | `done`/`cancelled` görev Açık konular'da ya da sürüyor/devam ediyor/çalışıyor/bekliyor bağlamında |
 | `inactive_decision_listed_valid` | `geçersiz`/`yerine-geçti` karar "geçerli kararlar" listesinde |
 | `expired_decision_valid` | `Durum: geçerli` kararın başlık/metnindeki "… 2026-10-28 08:00'e kadar" (ya da `until YYYY-MM-DD`) süresi geçmiş; yalnız saat verilmediyse gün sonu |

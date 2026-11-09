@@ -17,6 +17,7 @@ export interface MaintainResult {
   decisions: { file: string; blocks: number }[];
   tasks: { id: string; from: string; to: string }[];
   findings: { id: string; from: string; to: string }[];
+  ideas: { id: string; from: string; to: string }[];
   gitignore_added: string[];
 }
 
@@ -96,8 +97,8 @@ function ensureObsidianIgnore(dry: boolean): string[] {
 }
 
 /**
- * kb upkeep: splits decisions.md per project, archives closed tasks (done|cancelled) and settled findings
- * (fixed|wontfix) not updated for `days` days, keeps Obsidian state out of git. Idempotent; never deletes
+ * kb upkeep: splits decisions.md per project, archives closed tasks (done|cancelled), settled findings
+ * (fixed|wontfix) and settled ideas (promoted|dropped) not updated for `days` days, keeps Obsidian state out of git. Idempotent; never deletes
  * content; `dryRun` only reports. The stores read the archive transparently.
  */
 export function maintainKb(o: { days?: number; dryRun?: boolean; now?: Date } = {}): MaintainResult {
@@ -112,6 +113,7 @@ export function maintainKb(o: { days?: number; dryRun?: boolean; now?: Date } = 
     decisions: splitDecisions(dry),
     tasks: archiveDir(p.tasks, ["done", "cancelled"], cutoff, dry),
     findings: archiveDir(p.findings, ["fixed", "wontfix"], cutoff, dry),
+    ideas: archiveDir(p.ideas, ["promoted", "dropped"], cutoff, dry),
     gitignore_added: ensureObsidianIgnore(dry),
   };
 }

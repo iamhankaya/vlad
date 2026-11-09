@@ -4,6 +4,7 @@ import { helpOf } from "./ctx.js";
 import type { CliCtx } from "./ctx.js";
 import { registerProject } from "./groups/project.js";
 import { registerFinding } from "./groups/finding.js";
+import { registerIdea } from "./groups/idea.js";
 import { registerRole } from "./groups/role.js";
 import { registerTask } from "./groups/task.js";
 import { registerStatus } from "./groups/status.js";
@@ -39,6 +40,7 @@ export function buildProgram(ctx: CliCtx): Command {
 
   registerProject(program, kit);
   registerFinding(program, kit);
+  registerIdea(program, kit);
   registerRole(program, kit);
   registerTask(program, kit);
   registerStatus(program, kit);
