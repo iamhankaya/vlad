@@ -49,6 +49,7 @@ export async function runRemoteScript(t: RemoteTransport, machine: string, name:
   const args = { name, params: o.params, ...(entry.class === "write" ? { approval: { planId: o.confirmed } } : {}) };
   try {
     const r = await t.call<ScriptRunResult>(machine, "script-run", args, { opId, timeoutMs: entry.timeoutSec * 1000 + TIMEOUT_MARGIN_MS });
+    if (!r.result) throw new RemoteError("uncertain", `uncertain: ${name} önceki çağrıda yarıda kalmış, sonucu bilinmiyor; makinede doğrula (aynı --op-id ${opId} yeniden koşmaz)`, machine);
     return { kind: "result", opId, result: r.result, replayed: !!r.meta?.replayed, uncertain: !!r.meta?.uncertain };
   } catch (e) {
     // yanıt gelmediyse betik koşmuş olabilir: aynı opId ile tekrar çağrı ikinci kez koşmaz, kayıtlı sonucu döner

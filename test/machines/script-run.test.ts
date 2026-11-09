@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,6 +17,7 @@ describe("parseResultLine", () => {
   });
   it("CRLF satır sonları kabul edilir", () => {
     expect(parseResultLine(`a\r\n${S} {"ok":true}\r\n`)).toEqual({ data: { ok: true } });
+    expect(parseResultLine(`\uFEFF${S} {"ok":true}\n`)).toEqual({ data: { ok: true } }); // PS 5.1 BOM
   });
   it("sentinel son 20 satırın dışındaysa görülmez", () => {
     const out = [`${S} {"ok":true}`, ...Array.from({ length: 20 }, (_, i) => `l${i}`)].join("\n");
@@ -106,9 +107,13 @@ describe("runScript (POSIX)", () => {
   });
   posix("zaman aşımı: süreç grubu öldürülür, exit 124, fırlatmaz", async () => {
     const t0 = Date.now();
-    const r = await run("sleep 30 & sleep 30", { timeoutMs: 400 });
+    const pidBase = join(tmp(), "bg");
+    const r = await run('sleep 30 & echo $! > "$PIDBASE.pid"; sleep 30', { timeoutMs: 600, env: { PATH: process.env.PATH ?? "/usr/bin:/bin", PIDBASE: pidBase } });
     expect(r).toMatchObject({ exit: 124, timedOut: true });
     expect(Date.now() - t0).toBeLessThan(8000);
+    const pid = Number(readFileSync(`${pidBase}.pid`, "utf8").trim());
+    await new Promise((res) => setTimeout(res, 300));
+    expect(() => process.kill(pid, 0)).toThrow(); // arka plan çocuğu da ölmüş olmalı
   });
   posix("stdout tavanı: sondan kırpılır, truncated işaretlenir, sentinel yine okunur", async () => {
     const r = await run(`yes xxxxxxxxxxxxxxxx | head -c 200000; echo; echo '${S} {"ok":true}'`, { stdoutCapKb: 1 });

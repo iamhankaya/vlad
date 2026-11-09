@@ -44,7 +44,7 @@ export function interpreterFor(ext: "ps1" | "sh", platform: NodeJS.Platform, sys
 export function parseResultLine(stdout: string): { data: Record<string, unknown> | null; dataError?: "no_result_line" | "bad_json" | "too_large" } {
   const lines = stdout.split("\n").map((l) => l.replace(/\r$/, "")).slice(-20);
   for (let i = lines.length - 1; i >= 0; i--) {
-    const l = lines[i]!;
+    const l = lines[i]!.replace(/^\uFEFF/, ""); // PS 5.1 yönlendirilmiş stdout'a BOM ekleyebilir
     if (!l.startsWith(`${SCRIPT_RESULT_SENTINEL} `)) continue;
     const json = l.slice(SCRIPT_RESULT_SENTINEL.length + 1);
     if (Buffer.byteLength(json) > SCRIPT_LIMITS.resultJsonKb * 1024) return { data: null, dataError: "too_large" };

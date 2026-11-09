@@ -53,6 +53,13 @@ describe("runRemoteScript", () => {
     expect(r.planId).toBe(scriptPlanId({ machine: "windows", name: "repo-guncelle", platform: "win32", sha256: H, params: { root: "C:\\dev", n: "3" } }));
     expect(r).toMatchObject({ class: "write", sha256: H, name: "repo-guncelle" });
   });
+  it("belirsiz tekrar (sonuçsuz yanıt) TypeError değil uncertain RemoteError verir", async () => {
+    const t: RemoteTransport = { async call(_to, op, _a, o) { return op === "script-list" ? { opId: "l", result: list(info({ class: "read" })) as never } : { opId: o?.opId ?? "r", meta: { replayed: true, uncertain: true } } as never; } };
+    const e = await runRemoteScript(t, "windows", "repo-guncelle", { params: {}, opId: "op-9" }).catch((x) => x);
+    expect(e).toBeInstanceOf(RemoteError);
+    expect(e.code).toBe("uncertain");
+    expect(e.message).toContain("op-9");
+  });
   it("write sınıfı --confirmed olmadan çağrı yapmaz (önce --plan)", async () => {
     const { t, calls } = fake(list(info()));
     await expect(runRemoteScript(t, "windows", "repo-guncelle", { params: {} })).rejects.toThrow(/--plan/);
