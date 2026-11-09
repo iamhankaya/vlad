@@ -185,7 +185,8 @@
     "test/machines/e2-local-capacity.test.ts",
     "test/machines/e3-codex3.test.ts",
     "test/machines/s-contract.test.ts",
-    "test/machines/s-harness.test.ts"
+    "test/machines/s-harness.test.ts",
+    "test/machines/script-contract.test.ts"
   ],
   "platform": [
     "test/aktarim/a1-ledger-notify.test.ts",

@@ -36,7 +36,7 @@ export const TRANSFER_OPS: readonly AgentOp[] = ["xfer-begin", "xfer-chunk", "xf
 
 const ALLOWED: Record<AgentKind, Partial<Record<CallerRole, readonly AgentOp[]>>> = {
   "worker-agent": {
-    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", ...TRANSFER_OPS],
+    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "script-list", "script-run", ...TRANSFER_OPS],
     self: ["forward-write", "queue-list", "queue-flush", "queue-drop"],
   },
   "brain-agent": {
@@ -49,7 +49,7 @@ export const allowedOps = (agent: AgentKind, caller: CallerRole): readonly Agent
 export const isAllowed = (agent: AgentKind, caller: CallerRole, op: AgentOp): boolean => allowedOps(agent, caller).includes(op);
 
 const OPS: AgentOp[] = [
-  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge",
+  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "script-list", "script-run",
   "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop",
   ...TRANSFER_OPS,
 ];

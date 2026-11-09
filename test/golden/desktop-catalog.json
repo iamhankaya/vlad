@@ -788,6 +788,28 @@
   },
   {
    "path": [
+    "machine",
+    "scripts"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "uzak bakım betiği konsoldan çalıştırılamaz"
+   }
+  },
+  {
+   "path": [
+    "machine",
+    "run"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "uzak bakım betiği konsoldan çalıştırılamaz"
+   }
+  },
+  {
+   "path": [
     "send"
    ],
    "json": true,

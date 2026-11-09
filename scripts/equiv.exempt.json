@@ -11,6 +11,8 @@
     "vlad remote": "beyin Agent'ına bağlanır (ağ)",
     "machine ping": "uzak Agent'a bağlanır (ağ)",
     "machine probe-window": "işçide gerçek pencere açar",
+    "machine scripts": "uzak Agent'a bağlanır (ağ); gövde sonraki fazda",
+    "machine run": "uzak Agent'ta betik çalıştırır (ağ); gövde sonraki fazda",
     "vlad send": "ağ ve karşı makineye dosya gönderir",
     "clip on": "pano ve Agent durumu (kullanıcı makinesi)",
     "clip off": "pano ve Agent durumu (kullanıcı makinesi)",
