@@ -1,7 +1,34 @@
 {
   "version": 1,
   "entries": [
-    { "id": "T20261107-01", "keys": ["task repin --help", "task --help", "task (bare)"] },
-    { "id": "T20261109-05", "keys": ["machine scripts --help", "machine run --help", "machine --help", "machine (bare)"] }
+    {
+      "id": "T20261107-01",
+      "keys": [
+        "task repin --help",
+        "task --help",
+        "task (bare)"
+      ]
+    },
+    {
+      "id": "T20261109-05",
+      "keys": [
+        "machine scripts --help",
+        "machine run --help",
+        "machine --help",
+        "machine (bare)"
+      ]
+    },
+    {
+      "id": "T20261109-22",
+      "keys": [
+        "mode night --help",
+        "single :: mode off",
+        "single :: mode status",
+        "brain :: mode off",
+        "brain :: mode status",
+        "forwarded :: mode off",
+        "forwarded :: mode status"
+      ]
+    }
   ]
 }
