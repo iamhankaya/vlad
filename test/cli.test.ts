@@ -78,6 +78,17 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     expect(vlad(args, body).out).toContain("uyarı:");
     expect(JSON.parse(vlad([...args, "--json"], "## Tanım\nx\n").out).warnings).toEqual([]);
   });
+  it("task set done reports summaryStale + warning (json and text); other states carry no such field", () => {
+    writeCard(root);
+    const id = mkTask();
+    expect(vlad(["task", "set", id, "running"]).code).toBe(0);
+    expect(JSON.parse(vlad(["task", "set", id, "awaiting_approval", "--json"]).out)).toEqual({ id, state: "awaiting_approval" });
+    const r = vlad(["task", "set", id, "done", "--json"]);
+    expect(r.code, r.err).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j).toMatchObject({ id, state: "done", summaryStale: true });
+    expect(j.warnings[0]).toContain("özet bayat");
+  });
   it("invalid transition exits 1 with JSON error on stderr", () => {
     const id = mkTask();
     const r = vlad(["task", "set", id, "done", "--json"]);
@@ -161,8 +172,8 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     const id = mkTask();
     const f = join(home, "kb", "tasks", readdirSync(join(home, "kb", "tasks")).find((n) => n.startsWith(id))!);
     writeFileSync(f, readFileSync(f, "utf8").replace(/^state: queued\r?$/m, "state: done"));
-    expect(vlad(["status", "--summary"]).out.trim()).toBe(
-      "İşlenmemiş 1 rapor, 0 aktif görev (0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı)",
+    expect(vlad(["status", "--summary"]).out.trim()).toMatch(
+      /^İşlenmemiş 1 rapor, 0 aktif görev \(0 onay bekliyor, 0 takıldı, 0 soru soruyor, 0 hatalı\), 1 done görev digest edilmedi \(en eski: \d{4}-\d\d-\d\d\)$/,
     );
     expect(JSON.parse(vlad(["status", "--json"]).out).undigested).toBe(1);
     const l = JSON.parse(vlad(["task", "list", "--undigested", "--json"]).out);

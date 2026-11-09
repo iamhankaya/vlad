@@ -15,6 +15,7 @@ import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskList } from "./task-list.js";
 import { closedFindingWarnings } from "../../findings/closed-report.js";
+import { doneSummaryNote } from "../../projects/status.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -188,7 +189,10 @@ export function registerTask(program: Command, k: Kit): void {
     if (!(state in TRANSITIONS)) throw new Error(`bilinmeyen durum: ${state}; geçerliler: ${Object.keys(TRANSITIONS).join(", ")}`);
     if (o.reason !== undefined && state !== "cancelled") throw new Error("--reason yalnızca cancelled için");
     const t = state === "cancelled" ? cancelTask(id, String(o.reason ?? "")) : setState(id, state as TaskState);
-    out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
+    // a closed task makes the project summary stale: say so now (card `## Durum özeti`; /digest rewrites it)
+    const note = t.data.state === "done" ? doneSummaryNote(t) : null;
+    out(o, note?.summaryStale == null ? { id, state: t.data.state } : { id, state: t.data.state, summaryStale: note.summaryStale, warnings: note.warnings },
+      [`${id} -> ${t.data.state}`, ...(note?.warnings ?? []).map((w) => `uyarı: ${w}`)].join("\n"));
   }).option("--reason <metin>", "iptal gerekçesi (cancelled için zorunlu; İlerleme'ye 'İptal: <metin>' yazılır)");
   def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod)", (id: string, o: Opts) => {
     const ids = (v: unknown) => (v === undefined ? undefined : String(v).split(",").map((x) => x.trim()).filter(Boolean));
