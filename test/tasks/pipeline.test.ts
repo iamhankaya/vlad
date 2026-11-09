@@ -20,6 +20,21 @@ const shape = (r: ReturnType<typeof run>) =>
   r.phases.map((p) => `${p.phase}:${p.role}:${p.kind}<${p.depends_on.map((d) => r.phases.find((x) => x.id === d)!.phase).join(",")}`);
 const taskFiles = () => readdirSync(join(home, "kb", "tasks")).filter((f) => f.endsWith(".md"));
 
+describe("createPipeline phaseModels", () => {
+  it("sets the model per phase (opus keeps its mandatory reason)", () => {
+    const r = run("kısa", { phaseModels: { uygulama: { model: "opus", reason: "kritik" }, doğrulama: { model: "haiku" } } });
+    const by = (ph: string) => getTask(r.phases.find((p) => p.phase === ph)!.id).data;
+    expect(by("uygulama")).toMatchObject({ model: "opus", model_reason: "kritik" });
+    expect(by("doğrulama").model).toBe("haiku");
+  });
+  it("unknown phase, bad model or opus without reason fail and write nothing", () => {
+    expect(() => run("kısa", { phaseModels: { spec: { model: "haiku" } } })).toThrow(/faz yok/);
+    expect(() => run("kısa", { phaseModels: { uygulama: { model: "gpt" } } })).toThrow(/geçersiz model/);
+    expect(() => run("kısa", { phaseModels: { doğrulama: { model: "opus" } } })).toThrow(/model-reason/);
+    expect(taskFiles()).toHaveLength(0);
+  });
+});
+
 describe("createPipeline", () => {
   it("tam", () => {
     expect(shape(run("tam"))).toEqual([

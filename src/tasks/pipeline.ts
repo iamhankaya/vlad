@@ -8,6 +8,8 @@ export type PipelineOpts = {
   ui?: boolean; prova?: boolean; skip?: string[]; skipReason?: string;
   /** phase name → full phase body (replaces the derived default). */
   phaseBodies?: Record<string, string>;
+  /** phase name → model (+ reason; opus requires one, enforced by createTask). */
+  phaseModels?: Record<string, { model: string; reason?: string }>;
 };
 export type PipelineResult = { id: string; cycle: string; phases: { id: string; phase: string; role: string; kind: string; depends_on: string[] }[] };
 
@@ -77,6 +79,9 @@ export function createPipeline(o: PipelineOpts, now: Date = new Date(), step: <T
   for (const name of Object.keys(o.phaseBodies ?? {})) {
     if (!specs.some((s) => s.phase === name)) throw new Error(`faz yok: ${name} (bu pipeline'da: ${specs.map((s) => s.phase).join(", ")})`);
   }
+  for (const name of Object.keys(o.phaseModels ?? {})) {
+    if (!specs.some((s) => s.phase === name)) throw new Error(`faz yok: ${name} (bu pipeline'da: ${specs.map((s) => s.phase).join(", ")})`);
+  }
   const created: Task[] = [];
   try {
     const skipNote = skipContract ? `\n\n### Atlanan fazlar\n- sözleşme atlandı: ${o.skipReason!.trim()}\n` : "";
@@ -90,6 +95,7 @@ export function createPipeline(o: PipelineOpts, now: Date = new Date(), step: <T
       const t = step(() => createTask({
         project: o.project, title: `${o.title} — ${s.phase}`, kind: s.kind, role: s.role, body,
         parent: chati.data.id, dependsOn: depends_on, phase: s.phase,
+        ...(o.phaseModels?.[s.phase] ? { model: o.phaseModels[s.phase]!.model, modelReason: o.phaseModels[s.phase]!.reason } : {}),
       }, now));
       created.push(t);
       ids.set(s.phase, t.data.id);

@@ -28,4 +28,19 @@ describe("docs/commands.md (generated from the manifest)", () => {
     for (const n of ["`cancelled` için `--reason", "hepsi-ya-hiç", "`--no-mark`", "<1 sn", "benzer açık bulgu"]) expect(text).toContain(n);
     expect(Object.keys(COMMAND_DOCS).length).toBe(COMMANDS.length);
   });
+  it("does not carry stale behaviour text (maintain default 14 days, hook lint, short task list, report guidance)", () => {
+    const text = renderCommandsDoc();
+    expect(text).not.toContain("--days 30");
+    expect(text).toContain("--days 14");
+    expect(text).not.toContain("hook lint çalıştırmaz");
+    expect(text).toMatch(/hook[^.]*lint[^.]*(eski|10 sn)/);
+    expect(COMMAND_DOCS["task list"]).toMatch(/effective_model[^.]*kısa/);
+    for (const f of ["roles/developer.md", "global/skills/vlad-worker/SKILL.md", "CLAUDE.md"]) {
+      const t = readFileSync(resolve(import.meta.dirname, "../..", f), "utf8");
+      expect(t, f).not.toContain("CLAUDE.md komut satırı önerisi");
+    }
+    for (const f of ["roles/developer.md", "global/skills/vlad-worker/SKILL.md"]) {
+      expect(readFileSync(resolve(import.meta.dirname, "../..", f), "utf8"), f).toContain("docs-data.ts");
+    }
+  });
 });
