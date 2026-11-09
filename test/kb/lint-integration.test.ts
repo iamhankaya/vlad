@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addDecision, isDecisionExpired, listDecisions, parseUntil } from "../../src/kb/decisions.js";
 import { defaultMemoryDir, lintKb } from "../../src/audit/lint.js";
-import { lintAgeNote, readLintCache, writeLintCache } from "../../src/audit/lint-cache.js";
+import { lintAgeNote, lintCacheStale, readLintCache, refreshLintCacheIfStale, writeLintCache } from "../../src/audit/lint-cache.js";
 import { projectStatus } from "../../src/projects/status.js";
 import { makeHome } from "../helpers.js";
 import { isolatedEnv } from "../isolate-env.js";
@@ -72,6 +72,42 @@ describe("status --summary kbLint", () => {
     const line = JSON.parse(run(["status", "--summary", "--json", "--no-mark"]).out).summary as string;
     expect(line).toMatch(/3 kb çelişkisi \(lint \d+ gün önce\)/);
     expect(lintAgeNote({ count: 1, byCode: {}, at: "2026-11-03T11:00:00+03:00" }, NOW)).toBe("");
+  });
+
+  it("lintCacheStale: missing, older than 6 h, or another kb HEAD", () => {
+    const at = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
+    expect(lintCacheStale({ count: 0, byCode: {}, at: null }, "a", NOW)).toBe(true);
+    expect(lintCacheStale({ count: 0, byCode: {}, at: at(7), head: "a" }, "a", NOW)).toBe(true);
+    expect(lintCacheStale({ count: 0, byCode: {}, at: at(1), head: "a" }, "b", NOW)).toBe(true);
+    expect(lintCacheStale({ count: 0, byCode: {}, at: at(1) }, "b", NOW)).toBe(true); // old cache without head
+    expect(lintCacheStale({ count: 0, byCode: {}, at: at(1), head: "a" }, "a", NOW)).toBe(false);
+    expect(lintCacheStale({ count: 0, byCode: {}, at: at(1) }, null, NOW)).toBe(false); // kb is not a git checkout: age only
+  });
+
+  it("refreshLintCacheIfStale: skips a fresh cache, runs the lint with the timeout when stale, reports a timeout as stale", () => {
+    mkdirSync(kb("logs"), { recursive: true });
+    const fresh = { count: 1, byCode: {}, at: new Date(NOW.getTime() - 3_600_000).toISOString(), head: "h1" };
+    writeFileSync(kb("logs", "kb-lint.json"), JSON.stringify(fresh));
+    const calls: number[] = [];
+    const ok = (t: number) => { calls.push(t); return { ok: true }; };
+    expect(refreshLintCacheIfStale({ now: NOW, head: () => "h1", run: ok })).toEqual({ refreshed: false, stale: false });
+    expect(calls).toEqual([]);
+    // HEAD moved: runs once, with the 10 s bound; the fake run does not rewrite the cache, so it is still stale after
+    expect(refreshLintCacheIfStale({ now: NOW, head: () => "h2", run: ok })).toEqual({ refreshed: true, stale: true });
+    expect(calls).toEqual([10_000]);
+    expect(refreshLintCacheIfStale({ now: NOW, head: () => "h2", run: () => { throw new Error("boom"); } })).toEqual({ refreshed: false, stale: true });
+    expect(refreshLintCacheIfStale({ now: NOW, head: () => "h2", run: () => ({ ok: false }) })).toEqual({ refreshed: false, stale: true });
+  });
+
+  it("the SessionStart hook re-lints a stale cache itself; --no-mark reads never do", () => {
+    writeCard(`${FRESH}\n## Açık konular\n- F-vlad-160 hâlâ açık\n`);
+    finding("F-vlad-160", "fixed");
+    mkdirSync(kb("logs"), { recursive: true });
+    writeFileSync(kb("logs", "kb-lint.json"), JSON.stringify({ count: 0, byCode: {}, at: "2026-10-01T10:00:00+03:00" })); // old and empty
+    expect(JSON.parse(run(["status", "--summary", "--json", "--no-mark"]).out).summary).not.toContain("kb çelişkisi");
+    const hook = JSON.parse(run(["status", "--summary", "--hook"]).out);
+    expect(hook.systemMessage).toContain("kb çelişkisi");
+    expect(readLintCache().at).not.toBe("2026-10-01T10:00:00+03:00");
   });
 
   it("a corrupt cache reads as empty; writing works", () => {
