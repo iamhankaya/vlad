@@ -1,6 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { recoverSelfUpdate } from "../../src/agent/ops/script.js";
 import { runScript } from "../../src/agent/scripts/run.js";
 import { validateScriptManifest } from "../../src/agent/scripts/manifest.js";
 import { describe, expect, it } from "vitest";
@@ -67,5 +68,19 @@ describe("F-vlad-280: zaman aşımı sürerken gelen error olayı zaman aşımı
       expect(r.timedOut).toBe(true);
       expect(r.exit).toBe(124);
     } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+});
+
+describe("F-vlad-281: recoverSelfUpdate rename hatasında dist'siz kalmaz", () => {
+  posix("dist-old → dist rename'i patlarsa mevcut dist geri konur", () => {
+    const repo = mkdtempSync(join(tmpdir(), "vlad-f281-"));
+    try {
+      for (const [rel, v] of [["dist/cli.js", "NEW"], ["dist-old/cli.js", "OLD"], [".vlad-npm-ci-running", "swap"]] as const) {
+        mkdirSync(dirname(join(repo, rel)), { recursive: true }); writeFileSync(join(repo, rel), v);
+      }
+      const failing = (a: string, b: string) => { if (a.endsWith("dist-old")) throw new Error("EXDEV"); renameSync(a, b); };
+      recoverSelfUpdate(repo, failing);
+      expect(readFileSync(join(repo, "dist", "cli.js"), "utf8")).toBe("NEW");
+    } finally { rmSync(repo, { recursive: true, force: true }); }
   });
 });
