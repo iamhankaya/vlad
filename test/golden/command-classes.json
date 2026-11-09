@@ -7,6 +7,10 @@
     "decision set",
     "finding add",
     "finding set",
+    "idea add",
+    "idea from-finding",
+    "idea promote",
+    "idea set",
     "inbox done",
     "journal append",
     "kb maintain",
@@ -41,6 +45,7 @@
     "decision set",
     "finding add",
     "finding set",
+    "idea from-finding",
     "kb maintain",
     "project write",
     "task digested",
@@ -60,6 +65,7 @@
     "clip status",
     "decision list",
     "finding list",
+    "idea list",
     "inbox count",
     "inbox list",
     "journal get",
@@ -180,6 +186,44 @@
     {
       "path": [
         "finding",
+        "set"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "idea",
+        "add"
+      ],
+      "kind": "write",
+      "fileFlags": [
+        "--detail-file"
+      ]
+    },
+    {
+      "path": [
+        "idea",
+        "from-finding"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "idea",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "idea",
+        "promote"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "idea",
         "set"
       ],
       "kind": "write"
