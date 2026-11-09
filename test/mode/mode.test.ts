@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
-import { DEFAULT_EXCEPT, expireMode, modeStatus, parseUntil, setNight, setWatch, setOff, modeLine } from "../../src/mode/store.js";
+import { DEFAULT_EXCEPT, assertNotWorker, expireMode, modeStatus, parseUntil, setNight, setWatch, setOff, modeLine } from "../../src/mode/store.js";
 import { createTask, getTask, saveTask } from "../../src/tasks/store.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { defaultConfig } from "../../src/kb/index.js";
@@ -158,5 +158,40 @@ describe("M2: görev bağlı pencere (T20261109-22)", () => {
   it("bilinmeyen görev ID'si ve boş (until yok, görev yok) reddedilir", () => {
     expect(() => setNight({ untilTasks: ["T20990101-99"] }, now)).toThrow(/görev bulunamadı/);
     expect(() => setNight({}, now)).toThrow(/--until|--until-task/);
+  });
+});
+
+describe("mod güvenliği (T20261109-30: F-vlad-282/285/286)", () => {
+  const mk = (t: string) => createTask({ project: "alpha", title: t, kind: "dev", body: "" }).data.id;
+
+  it("F-282: VLAD_TASK_ID tanımlıyken yazma komutları reddedilir", () => {
+    expect(() => assertNotWorker({ VLAD_TASK_ID: "T20261109-30" })).toThrow(/çalışan/);
+    expect(() => assertNotWorker({})).not.toThrow();
+    expect(() => assertNotWorker({ VLAD_TASK_ID: " " })).not.toThrow();
+  });
+
+  it("F-285: --except biçimi doğrulanır, küçük harfe çevrilir; --until-task biçimi doğrulanır", () => {
+    expect(() => setNight({ until: "08:00", except: ["a b"] }, now)).toThrow(/geçersiz istisna/);
+    expect(setNight({ until: "08:00", except: ["Mail"] }, now).except).toContain("mail");
+    expect(() => setNight({ untilTasks: ["../x"] }, now)).toThrow(/geçersiz görev/);
+  });
+
+  it("F-285: tarih-yalnız --until yerel gece yarısı çözülür (UTC değil)", () => {
+    const n = new Date(2026, 9, 28, 23, 30);
+    expect(parseUntil("2026-10-29", n).getTime()).toBe(new Date(2026, 9, 29, 0, 0).getTime());
+  });
+
+  it("F-286: failed görev pencereyi kapatır", () => {
+    const a = mk("a");
+    setNight({ untilTasks: [a] }, now);
+    const t = getTask(a); t.data.state = "failed"; saveTask(t);
+    expect(modeStatus(now)).toMatchObject({ night: null, expired: true, remaining: [] });
+  });
+
+  it("F-286: setWatch dolmuş pencereyi düşürdüğünü bildirir", () => {
+    setNight({ until: "23:45" }, now);
+    const later = new Date(now.getTime() + 20 * 60_000);
+    expect(setWatch(true, later)).toBe(true);
+    expect(setWatch(true, later)).toBe(false);
   });
 });
