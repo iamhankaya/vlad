@@ -95,7 +95,7 @@ export function doneSummaryNote(task: Task): { summaryStale: boolean | null; war
   let state: ProjectStatus["summary"]["state"];
   try { state = projectStatus(task.data.project).summary.state; } catch { return { summaryStale: null, warnings: [] }; }
   if (state === "güncel") return { summaryStale: false, warnings: [] };
-  return { summaryStale: true, warnings: [`${task.data.project} proje özet bayat (${state === "yok" ? "özet yok" : "görev sonrası kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
+  return { summaryStale: true, warnings: [`${task.data.project} proje özet bayat (${state === "yok" ? "özet yok" : "özetten sonra kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
 }
 
 /** Opening warning for done tasks that /digest has not processed ("" when none). */
