@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { psQuote } from "../launcher/terminal.js";
 import { normalizeParams, scriptPlanId } from "../agent/scripts/manifest.js";
 import {
   RemoteError, type RemoteTransport, type ScriptClass, type ScriptIntegrity, type ScriptListResult, type ScriptPlatform, type ScriptRunResult,
@@ -68,10 +69,14 @@ export function formatScripts(l: ScriptListResult): string {
   return [`${l.platform}  HEAD ${shortSha(l.head)}`, ...rows].join("\n");
 }
 
-/** Önerilen komutu yerel kabuğa göre tırnaklar (root=C:\dev zsh'de bozulmasın, boşluklu kök bölünmesin); güvenli karakterler tırnaksız kalır. */
+/**
+ * Önerilen komutu yerel kabuğa göre tırnaklar (root=C:\dev zsh'de bozulmasın, boşluklu kök bölünmesin); güvenli karakterler tırnaksız kalır (% ve \ değil).
+ * Windows (PowerShell): tek tırnak, tek/tipografik tırnaklar ikilenir. Satır sonu içeren değer komutu bölerdi: reddedilir.
+ */
 const shq = (v: string, platform: NodeJS.Platform): string => {
-  if (/^[A-Za-z0-9._\/:=@%+,-]+$/.test(v) && !v.includes("\\")) return v;
-  return platform === "win32" ? `"${v.replace(/"/g, '\\"')}"` : `'${v.replace(/'/g, `'\\''`)}'`;
+  if (/[\r\n]/.test(v)) throw new Error("onay komutu üretilemedi: değer satır sonu içeriyor");
+  if (/^[A-Za-z0-9._\/:=@+,-]+$/.test(v)) return v;
+  return platform === "win32" ? psQuote(v) : `'${v.replace(/'/g, `'\\''`)}'`;
 };
 
 export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>, platform: NodeJS.Platform = process.platform): string {
@@ -81,7 +86,7 @@ export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>, platform: N
     `sınıf: ${p.class}${p.class === "write" ? " (kullanıcı onayı gerekir)" : ""}  zaman aşımı: ${p.timeoutSec}s  bütünlük: ${p.integrity}`,
     `parametreler: ${ps}`,
     `plan-id: ${p.planId}`,
-    ...(p.class === "write" ? [["onaydan sonra: vlad machine run", p.machine, p.name, ...Object.entries(p.params).map(([k, v]) => `--param ${shq(`${k}=${v}`, platform)}`), "--confirmed", p.planId].join(" ")] : []),
+    ...(p.class === "write" ? [["onaydan sonra: vlad machine run", shq(p.machine, platform), shq(p.name, platform), ...Object.entries(p.params).map(([k, v]) => `--param ${shq(`${k}=${v}`, platform)}`), "--confirmed", shq(p.planId, platform)].join(" ")] : []),
   ].join("\n");
 }
 

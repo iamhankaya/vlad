@@ -132,8 +132,18 @@ describe("formatPlan: önerilen onay komutu yerel kabuğa göre tırnaklanır (C
     expect(cmd(formatPlan(plan({ root: "/a b/c" }), "darwin"))).toContain("--param 'root=/a b/c'");
     expect(cmd(formatPlan(plan({ x: "it's" }), "darwin"))).toContain("--param 'x=it'\\''s'");
   });
-  it("Windows: çift tırnak", () => {
-    expect(cmd(formatPlan(plan({ root: "C:\\my dev" }), "win32"))).toContain('--param "root=C:\\my dev"');
+  it("Windows (PowerShell): tek tırnak, gömülü tek tırnak ve tipografik tırnaklar ikilenir; % güvenli sette değil", () => {
+    expect(cmd(formatPlan(plan({ root: "C:\\my dev" }), "win32"))).toContain("--param 'root=C:\\my dev'");
+    expect(cmd(formatPlan(plan({ x: "it's" }), "win32"))).toContain("--param 'x=it''s'");
+    expect(cmd(formatPlan(plan({ x: "a\u2019b" }), "win32"))).toContain("--param 'x=a\u2019\u2019b'");
+    expect(cmd(formatPlan(plan({ x: "%PATH%" }), "win32"))).toContain("--param '%PATH%'".replace("'%PATH%'", "'x=%PATH%'"));
+  });
+  it("satır sonu içeren değer reddedilir (komut satırı bölünürdü)", () => {
+    for (const v of ["a\nb", "a\rb"]) expect(() => formatPlan(plan({ x: v }), "darwin"), JSON.stringify(v)).toThrow(/satır sonu/);
+  });
+  it("makine, betik adı ve plan-id de tırnaktan geçer", () => {
+    const p = { ...plan({}), machine: "a b", name: "x y", planId: "p'q" };
+    expect(cmd(formatPlan(p, "darwin"))).toBe("onaydan sonra: vlad machine run 'a b' 'x y' --confirmed 'p'\\''q'");
   });
   it("güvenli değerler tırnaksız kalır", () => {
     expect(cmd(formatPlan(plan({ n: "3" }), "darwin"))).toContain("--param n=3 --confirmed");

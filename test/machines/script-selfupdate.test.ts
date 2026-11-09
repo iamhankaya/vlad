@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -65,11 +65,26 @@ describe("script-run selfUpdate", () => {
     expect(n).toBe(0);
     expect(maint.on).toBe(false);
   });
-  posix("data.changed false (zaten güncel) → gereksiz yeniden başlatma yok, bayrak kalkar", async () => {
-    const { deps, args } = setup(`echo '${S} {"ok":true,"changed":false}'\n`, {}, { restart: () => { throw new Error("çağrılmamalı"); } });
+  posix("changed:false ve çalışan süreç diskteki dist ile aynı derlemede → gereksiz yeniden başlatma yok, bayrak kalkar", async () => {
+    const { f, deps, args } = setup(`echo '${S} {"ok":true,"changed":false}'\n`, {}, { restart: () => { throw new Error("çağrılmamalı"); }, runningBuildHead: "abc123" });
+    mkdirSync(join(f.dir, "dist")); writeFileSync(join(f.dir, "dist", ".build-head"), "abc123");
     const r = await scriptRun(args, deps, ctx);
     expect([r.restart, r.data?.ok]).toEqual([undefined, true]);
     expect(maint.on).toBe(false);
+  });
+  posix("changed:false AMA çalışan süreç eski derlemede (önceki yeniden başlatma yardımcısı başarısız oldu) → yeniden başlatma yine zamanlanır", async () => {
+    let n = 0;
+    const { f, deps, args } = setup(`echo '${S} {"ok":true,"changed":false}'\n`, {}, { restart: () => { n++; }, runningBuildHead: "eski" });
+    mkdirSync(join(f.dir, "dist")); writeFileSync(join(f.dir, "dist", ".build-head"), "yeni");
+    const r = await scriptRun(args, deps, ctx);
+    expect([r.restart, n]).toEqual(["scheduled", 1]);
+  });
+  posix("changed:false ve çalışan derleme bilinmiyor (damga yok) → yeniden başlatma uygun sayılır", async () => {
+    let n = 0;
+    const { f, deps, args } = setup(`echo '${S} {"ok":true,"changed":false}'\n`, {}, { restart: () => { n++; } });
+    mkdirSync(join(f.dir, "dist")); writeFileSync(join(f.dir, "dist", ".build-head"), "yeni");
+    expect((await scriptRun(args, deps, ctx)).restart).toBe("scheduled");
+    expect(n).toBe(1);
   });
   posix("data.ok 'true' (dize) ya da yok → restart yok", async () => {
     for (const j of ['{"ok":"true"}', '{"summary":"x"}']) {
