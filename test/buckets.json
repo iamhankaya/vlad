@@ -190,7 +190,16 @@
     "test/machines/e3-codex3.test.ts",
     "test/machines/s-contract.test.ts",
     "test/machines/s-harness.test.ts",
-    "test/machines/script-contract.test.ts"
+    "test/machines/script-cli.test.ts",
+    "test/machines/script-contract.test.ts",
+    "test/machines/script-e2e.test.ts",
+    "test/machines/script-hardening.test.ts",
+    "test/machines/script-integrity.test.ts",
+    "test/machines/script-manifest.test.ts",
+    "test/machines/script-ops.test.ts",
+    "test/machines/script-registry.test.ts",
+    "test/machines/script-repo-guncelle.test.ts",
+    "test/machines/script-run.test.ts"
   ],
   "platform": [
     "test/aktarim/a1-ledger-notify.test.ts",

@@ -47,6 +47,7 @@ vlad machine probe-window windows
 - `vlad task close-window <id>`: işçide pencere/süreç ağacını kapatır; durum ve worktree değişmez.
 - `vlad task cleanup <id>`: yalnız done/cancelled; işçi worktree'yi kendi başlatma kaydından doğrulayıp siler, güven kaydını kaldırır (kaldıramazsa silmez). Ağ çağrısı kb kilidi dışında yapılır.
 - Makine kapalı/ulaşılamazken komutlar çıkış kodu **75** (geçici hata) ile biter; sonra tekrar dene. Belirsiz bir launch (yanıt gelmedi) rezervasyonunu korur; bir sonraki `task launch` `op-status` ile işçiye sorar.
+- `vlad machine scripts <ad>` / `vlad machine run <ad> <betik> --plan|--confirmed <plan-id>`: işçide repoda kayıtlı bakım betiklerini (ör. `repo-guncelle`) çalıştırır; write sınıfı açık onay ister. Ayrıntı: `docs/agent-scripts.md`.
 
 ## 5. Bilinen sınırlar
 

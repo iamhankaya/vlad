@@ -10,6 +10,7 @@ import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
 import { probeWindow } from "./probe-window.js";
 import { gateRun, mergeOp, mergePreview } from "./gate.js";
 import { liveness } from "./liveness.js";
+import { scriptList, scriptRun } from "./script.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
 import { createClipReceiver } from "../../clip/receive.js";
 import { createXferReceiver } from "../../transfer/receive.js";
@@ -81,6 +82,10 @@ OP_TABLE["gate-run"] = (a) => gateRun(a);
 OP_TABLE["merge-preview"] = (a) => mergePreview(a);
 OP_TABLE.merge = (a) => mergeOp(a);
 // --- /machines:C4 ---
+// --- scripts: kayıtlı bakım betikleri (T20261109-03) ---
+OP_TABLE["script-list"] = (a) => scriptList(a);
+OP_TABLE["script-run"] = (a, c) => scriptRun(a, undefined, c);
+// --- /scripts ---
 
 /**
  * Aktarım S: op tablosunu `d`'ye bağlar. Süreç geneli durum yok: her çağrı ayrı alıcılar kurar (aynı süreçte iki Agent: test).

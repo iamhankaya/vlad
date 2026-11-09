@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "scripts": [
+    {
+      "name": "repo-guncelle",
+      "title": "Repo güncelle (fetch + pull --ff-only)",
+      "platform": "win32",
+      "file": "agent-scripts/repo-guncelle.ps1",
+      "sha256": "aeeee1c741927973911a844475b49b5e5123f5929c3c6c779b2bd91d4b7ff769",
+      "class": "write",
+      "timeoutSec": 900,
+      "outputMaxKb": 32,
+      "selfUpdate": false,
+      "params": [
+        {
+          "name": "root",
+          "type": "root",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "repo-guncelle",
+      "title": "Repo güncelle (fetch + pull --ff-only)",
+      "platform": "darwin",
+      "file": "agent-scripts/repo-guncelle.sh",
+      "sha256": "da178d030a76fc840d728929ab551bf8b4d2ca291d646c31102a010b0ec48b07",
+      "class": "write",
+      "timeoutSec": 900,
+      "outputMaxKb": 32,
+      "selfUpdate": false,
+      "params": [
+        {
+          "name": "root",
+          "type": "root",
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "repo-guncelle",
+      "title": "Repo güncelle (fetch + pull --ff-only)",
+      "platform": "linux",
+      "file": "agent-scripts/repo-guncelle.sh",
+      "sha256": "da178d030a76fc840d728929ab551bf8b4d2ca291d646c31102a010b0ec48b07",
+      "class": "write",
+      "timeoutSec": 900,
+      "outputMaxKb": 32,
+      "selfUpdate": false,
+      "params": [
+        {
+          "name": "root",
+          "type": "root",
+          "required": false
+        }
+      ]
+    }
+  ]
+}

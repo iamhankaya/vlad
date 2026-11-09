@@ -174,7 +174,7 @@ export type ScriptParamSpec =
    * betik yazarı değeri `--` ve tırnakla kullanır; değer env'den (VLAD_PARAM_<AD>) gelir, argv/komut metnine enjekte edilmez).
    * maxLen ≤ SCRIPT_LIMITS.paramMaxLen (yoksa o). `default` verilmişse `required` anlamsızdır (varsayılan uygulanır).
    */
-  | { name: string; type: "string"; required?: boolean; default?: string; pattern?: string; maxLen?: number }
+  | { name: string; type: "string"; required?: boolean; default?: string; pattern?: string; maxLen?: number; /** desenli parametrede baştaki '-' (bayrak enjeksiyonu) yine reddedilir; true ise izinli */ allowLeadingDash?: boolean }
   | { name: string; type: "enum"; required?: boolean; default?: string; values: string[] }
   | { name: string; type: "int"; required?: boolean; default?: number; min?: number; max?: number }
   | { name: string; type: "bool"; required?: boolean; default?: boolean }

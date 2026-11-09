@@ -17,6 +17,7 @@ function summarize(result: unknown, bytes: number): Record<string, unknown> {
       if (typeof v === "string") out[k] = v.length > SUMMARY_STR_MAX ? v.slice(0, SUMMARY_STR_MAX) + "…" : v;
       else if (typeof v === "number" || typeof v === "boolean" || v === null) out[k] = v;
       else if (k === "integration" && v && typeof v === "object") out[k] = summarize(v, 0); // launch'ın pipeline entegrasyon worktree'si commit'te gerekir
+      else if (k === "truncated" && v && typeof v === "object" && Object.values(v).every((x) => typeof x === "boolean")) out[k] = v; // script-run: {stdout, stderr} kırpıldı bayrakları (iki bool)
     }
   }
   return out;
@@ -49,6 +50,11 @@ export class Journal {
 
   start(opId: string, from: string, op: AgentOp, argsHash: string, args?: unknown): void {
     this.put({ opId, from, op, state: "started", ts: this.now(), argsHash, ...(args !== undefined ? { args } : {}) });
+  }
+  /** `started` kaydın argümanına alan ekler (ör. betik sınıfı: uzlaştırma çalışırken mevcut HEAD'e değil buna bakar). */
+  annotate(opId: string, extra: Record<string, unknown>): void {
+    const r = this.recs.get(opId);
+    if (r?.state === "started") this.put({ ...r, args: { ...(r.args && typeof r.args === "object" ? r.args : {}), ...extra } });
   }
   finish(opId: string, state: "done" | "aborted", result?: unknown, meta?: OpMeta): void {
     const prev = this.recs.get(opId);
