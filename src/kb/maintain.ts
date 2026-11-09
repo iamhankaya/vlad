@@ -95,13 +95,16 @@ function ensureObsidianIgnore(dry: boolean): string[] {
   return [OBSIDIAN];
 }
 
+/** Closed records older than this many days are archived unless `--days` says otherwise. */
+export const DEFAULT_ARCHIVE_DAYS = 14;
+
 /**
  * kb upkeep: splits decisions.md per project, archives closed tasks (done|cancelled) and settled findings
  * (fixed|wontfix) not updated for `days` days, keeps Obsidian state out of git. Idempotent; never deletes
  * content; `dryRun` only reports. The stores read the archive transparently.
  */
 export function maintainKb(o: { days?: number; dryRun?: boolean; now?: Date } = {}): MaintainResult {
-  const days = o.days ?? 30;
+  const days = o.days ?? DEFAULT_ARCHIVE_DAYS;
   if (!Number.isFinite(days) || days < 0) throw new Error(`geçersiz --days: ${o.days}`);
   const dry = !!o.dryRun;
   const cutoff = (o.now ?? new Date()).getTime() - days * DAY_MS;

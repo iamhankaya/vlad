@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -92,6 +92,14 @@ describe("main", () => {
     const logs = readdirSync(join(home, "kb", "logs"));
     expect(logs).toHaveLength(1);
     expect(readFileSync(join(home, "kb", "logs", logs[0]), "utf8").length).toBeGreaterThan(0);
+    expect(process.exitCode).toBe(0);
+  });
+  it("a missing transcript (short-lived session) writes nothing and logs nothing", async () => {
+    process.exitCode = undefined;
+    await main(JSON.stringify({ session_id: "gone", transcript_path: join(home, "yok.jsonl"), cwd: home, reason: "exit" }));
+    expect(readdirSync(join(home, "kb", "inbox")).filter((f) => f.endsWith(".json"))).toEqual([]);
+    const logDir = join(home, "kb", "logs");
+    expect(existsSync(logDir) ? readdirSync(logDir) : []).toEqual([]);
     expect(process.exitCode).toBe(0);
   });
   it("writes inbox file for a valid session", async () => {
