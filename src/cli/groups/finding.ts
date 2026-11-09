@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import { join } from "node:path";
 import { addFinding, listFindingsWithWarnings, parseFilter, setFindingStates, SEVERITIES, STATES } from "../../findings/store.js";
+import { similarOpenFindings } from "../../findings/similar.js";
 import { readInput } from "../../kb/input.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -17,11 +18,14 @@ export function registerFinding(program: Command, k: Kit): void {
   const findingLine = (f: { data: { id: string; severity: string; state: string; project: string; title: string; fixed_by?: string | null } }) =>
     `${f.data.id}  ${f.data.severity.padEnd(7)} ${f.data.state.padEnd(8)} ${f.data.title}${f.data.fixed_by ? `  (düzeltti: ${f.data.fixed_by})` : ""}`;
   def(finding, "add", "Bulgu kaydı oluşturur (varsayılan open)", (o: Opts) => {
+    // checked before the write so the new finding cannot match itself; a warning only, never a refusal
+    const similar = similarOpenFindings(o.project as string, o.title as string).map((x) => ({ similar: x.data.id }));
     const f = addFinding({
       project: o.project as string, severity: o.severity as string, source: o.source as string, title: o.title as string,
       detail: o.detailFile ? readInput(o.detailFile as string) : undefined, state: o.state as string | undefined,
     });
-    out(o, { id: f.data.id }, f.data.id);
+    for (const w of similar) process.stderr.write(`uyarı: benzer açık bulgu: ${w.similar} (birleştir ya da digest-pending'e ekle)\n`);
+    out(o, similar.length ? { id: f.data.id, warnings: similar } : { id: f.data.id }, f.data.id);
   })
     .requiredOption("--project <slug>", "proje slug'ı")
     .requiredOption("--severity <önem>", SEVERITIES.join(" | "))
