@@ -104,7 +104,7 @@ export function modeLine(now: Date): string | null {
     const n = s.night;
     const until = n.until.slice(5, 16).replace("T", " "); // MM-DD HH:MM: a window that rolled into tomorrow shows
     const bound = s.remaining.length ? `${s.remaining.join(", ")} bitene ya da ${until} tavanına kadar` : `${until}'e kadar`;
-    const push = n.push ? `push yetkisi açık (yalnız gate/CI yeşil, açık P1 yok; istisna: ${n.except.join(",")})` : "push yok";
+    const push = n.push ? `push yetkisi açık${n.projects.length ? "" : " (tüm projeler)"} (yalnız gate/CI yeşil, açık P1 yok; istisna: ${n.except.join(",")})` : "push yok";
     return `gece modu etkin (${bound}${n.projects.length ? `; ${n.projects.join(", ")}` : ""}${n.note ? `; ${n.note}` : ""}; ${push}), bekçi açık`;
   }
   if (s.expired) {

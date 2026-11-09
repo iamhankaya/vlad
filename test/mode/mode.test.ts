@@ -110,6 +110,9 @@ describe("M1: push yetkisi ve istisnalar (T20261109-22)", () => {
   it("satır push yetkisini ve istisnaları gösterir; push yoksa 'push yok' der", () => {
     setNight({ until: "08:00", push: true, except: ["ödeme"] }, now);
     expect(modeLine(now)).toMatch(/push yetkisi.*gate\/CI yeşil.*P1.*istisna: .*deploy.*ödeme/);
+    expect(modeLine(now)).toMatch(/tüm projeler/); // push + boş --projects = hepsi: satır bunu açıkça söyler
+    setNight({ until: "08:00", push: true, projects: ["vlad"] }, now);
+    expect(modeLine(now)).not.toMatch(/tüm projeler/);
     setNight({ until: "08:00" }, now);
     expect(modeLine(now)).toMatch(/push yok/);
   });
