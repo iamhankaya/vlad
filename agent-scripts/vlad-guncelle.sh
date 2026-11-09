@@ -22,6 +22,7 @@ cd "$repo" || fail setup "VLAD_REPO'ya girilemedi"
 # yarida kalan npm ci kurtarma (her seyden once): eski node_modules geri
 if [ -e .vlad-npm-ci-running ]; then
   if [ -d node_modules-old ]; then rm -rf node_modules && mv node_modules-old node_modules || fail setup "yarim node_modules yedekten geri yuklenemedi"; fi
+  if [ "$(cat .vlad-npm-ci-running 2>/dev/null)" = swap ] && [ -d dist-old ]; then rm -rf dist && mv dist-old dist || fail setup "yarim dist yedekten geri yuklenemedi"; fi
   rm -f .vlad-npm-ci-running
 fi
 
@@ -67,6 +68,7 @@ fi
 printf '%s' "$full" > dist-next/.build-head
 
 rm -rf dist-old
+printf swap > .vlad-npm-ci-running # asama isareti: bundan sonra kesilirse kurtarma dist'i de dist-old'dan geri yukler
 if [ -d dist ]; then mv dist dist-old || { rm -rf dist-next; restore_nm; fail swap "dist dist-old'a tasinamadi; eski dist ve node_modules korundu"; }; fi
 if ! mv dist-next dist; then
   [ -d dist-old ] && mv dist-old dist

@@ -223,4 +223,6 @@ export interface ScriptRunResult {
   dataError?: "no_result_line" | "bad_json" | "too_large";
   /** yalnız selfUpdate && exit==0 && data.ok==true iken */
   restart?: "scheduled";
+  /** yalnız selfUpdate zaman aşımında süreç ağacının ölümü doğrulanamadıysa: geri yükleme ertelendi, bakım bayrağı açık, Agent yeniden dener */
+  recovery?: "pending";
 }

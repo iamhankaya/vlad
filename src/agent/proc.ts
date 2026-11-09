@@ -11,3 +11,49 @@ export function killTree(p: ReturnType<typeof spawn>): void {
   else if (p.pid) { try { process.kill(-p.pid, "SIGKILL"); } catch { p.kill("SIGKILL"); } } // detached: süreç grubu lideri; torunlar da gider
   else p.kill();
 }
+
+export interface KillDeps {
+  platform?: NodeJS.Platform;
+  /** taskkill çıkış kodu; başlatılamazsa null */
+  spawnTaskkill?: (pid: number) => Promise<number | null>;
+  /** POSIX: negatif pid = süreç grubu */
+  signalGroup?: (pid: number) => void;
+  isAlive?: (pid: number) => boolean;
+  sleep?: (ms: number) => Promise<void>;
+  /** ölümü bekleme tavanı (varsayılan 10 sn) */
+  waitMs?: number;
+  pollMs?: number;
+  /** yeniden deneme: POSIX'te tekrar SIGKILL atılmaz (grup ölüp pid başka sürece düşmüş olabilir), yalnız ölüm yoklanır */
+  recheck?: boolean;
+}
+const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; } };
+const runTaskkill = (pid: number): Promise<number | null> => new Promise((res) => {
+  const t = spawn(taskkillPath(), ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
+  t.on("error", () => res(null)); t.on("close", (c) => res(c));
+});
+
+/**
+ * Süreç ağacını öldürür ve GERÇEKTEN bittiğini bekler (F-vlad-270). true = doğrulandı; false = doğrulanamadı (taskkill başarısız ya da kök pid / süreç grubu
+ * `waitMs` içinde ölmedi): çağıran yarım işi geri almamalı (npm/tsc hâlâ node_modules'a yazıyor olabilir).
+ * Windows: taskkill çıkışı beklenir (0 ya da 128 = süreç yok) + kök pid ölümü; POSIX: süreç grubuna SIGKILL + grubun yok olması (spawn `detached: true` gerekir).
+ */
+export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "kill">, d: KillDeps = {}): Promise<boolean> {
+  const pid = p.pid;
+  if (!pid) return true;
+  const win = (d.platform ?? process.platform) === "win32";
+  const isAlive = d.isAlive ?? alive, sleep = d.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms)));
+  const waitMs = d.waitMs ?? 10_000, pollMs = d.pollMs ?? 100;
+  let target = pid;
+  if (win) {
+    const code = await (d.spawnTaskkill ?? runTaskkill)(pid);
+    if (code !== 0 && code !== 128) { try { p.kill(); } catch { /* yok */ } return false; }
+  } else {
+    target = -pid;
+    if (!d.recheck) try { (d.signalGroup ?? ((g) => process.kill(g, "SIGKILL")))(target); } catch { try { p.kill("SIGKILL"); } catch { /* yok */ } }
+  }
+  for (let waited = 0; ; waited += pollMs) {
+    if (!isAlive(target)) return true;
+    if (waited >= waitMs) return false;
+    await sleep(pollMs);
+  }
+}

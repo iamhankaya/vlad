@@ -217,14 +217,13 @@ describe.skipIf(!posix)("V-T: vlad-guncelle zaman aşımı → Agent kendi geri 
   }, 240_000);
 });
 
-// F-vlad-271 (açık bulgu, düzeltme bu fazda yok): swap'tan SONRA, işaret silinmeden kesilen güncelleme. `it.fails`: bulgu düzelince bu test
-// "beklenmedik geçti" ile kırılır ve düz `it`'e çevrilmelidir. Gerçek davranış: node_modules eski geri gelir, dist yeni kalır (yeni kod + eski bağımlılık).
+// F-vlad-271 (T20261109-11'de düzeltildi): swap'tan SONRA, işaret ("swap") silinmeden kesilen güncelleme; kurtarma dist ve node_modules'ı eş nesilden bırakır.
 describe.skipIf(!posix)("V-F271: swap sonrası kesilme — kurtarma dist'i de tutarlı bırakmalı", () => {
-  it.fails("F-vlad-271: işaret + node_modules-old + (yeni dist, dist-old) → kurtarma sonrası dist ile node_modules aynı nesilden olmalı", () => {
+  it("F-vlad-271: işaret + node_modules-old + (yeni dist, dist-old) → kurtarma sonrası dist ile node_modules aynı nesilden olmalı", () => {
     const repo = mktmp("vlad-f271-");
     const put = (rel: string, v: string) => { mkdirSync(dirname(join(repo, rel)), { recursive: true }); writeFileSync(join(repo, rel), v); };
     put("dist/cli.js", "NEW"); put("dist/.build-head", "newhead"); put("dist-old/cli.js", "OLD");
-    put("node_modules/marker", "yeni-bagimlilik"); put("node_modules-old/marker", "eski-bagimlilik"); put(".vlad-npm-ci-running", "");
+    put("node_modules/marker", "yeni-bagimlilik"); put("node_modules-old/marker", "eski-bagimlilik"); put(".vlad-npm-ci-running", "swap");
     recoverSelfUpdate(repo);
     const nm = readFileSync(join(repo, "node_modules", "marker"), "utf8");
     const dist = readFileSync(join(repo, "dist", "cli.js"), "utf8");

@@ -4,7 +4,7 @@ import { readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, win32 } from "node:path";
 import { ensurePrivateDir, lockDownFile } from "../../fleet/state.js";
 import { RemoteError, SCRIPT_LIMITS, SCRIPT_RESULT_SENTINEL, type ScriptRunResult } from "../../fleet/types.js";
-import { killTree } from "../proc.js";
+import { killTreeWait } from "../proc.js";
 
 // Betik çalıştırma: bayt'lar özel geçici dosyaya yazılır (TOCTOU/çalışırken `git pull`/autocrlf), allowlist ortamı, parametre env'den
 // (argv/kabuk yok), çıktı tavanı, zaman aşımında süreç ağacı öldürülür. Başladıktan sonra hiçbir yol fırlatmaz.
@@ -61,8 +61,13 @@ export interface RunSpec {
   /** geçici betiklerin özel dizini (`<agentDir>/scripts-run`) */
   dir: string;
   env: NodeJS.ProcessEnv; timeoutMs: number; stdoutCapKb: number; platform?: NodeJS.Platform;
+  /** zaman aşımında ağacı öldürür; true = bittiği doğrulandı (varsayılan killTreeWait; testler değiştirir) */
+  killTree?: (p: ReturnType<typeof spawn>) => Promise<boolean>;
 }
-export type RunOut = Pick<ScriptRunResult, "exit" | "timedOut" | "durationMs" | "stdout" | "stderr" | "truncated" | "data" | "dataError">;
+export type RunOut = Pick<ScriptRunResult, "exit" | "timedOut" | "durationMs" | "stdout" | "stderr" | "truncated" | "data" | "dataError" | "recovery"> & {
+  /** yalnız recovery:"pending" iken: öldürmeyi yeniden dener (iç kullanım; sonuca girmez) */
+  retryKill?: () => Promise<boolean>;
+};
 
 /** Açılışta (ve çökme sonrası) kalan geçici betikleri siler. */
 export function sweepScriptDir(dir: string): void {
@@ -111,7 +116,7 @@ function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
     p.once("spawn", () => { started = true; });
     p.stdout.on("data", (d: Buffer) => { outTotal += d.length; outBuf = Buffer.concat([outBuf, d]).subarray(-outKeep); }); // bellek sınırı (bayt)
     p.stderr.on("data", (d: Buffer) => { errTotal += d.length; errBuf = Buffer.concat([errBuf, d]).subarray(-2 * errCap); });
-    const done = (exit: number, timedOut: boolean, extraErr = "") => {
+    const done = (exit: number, timedOut: boolean, extraErr = "", unkilled = false) => {
       if (finished) return;
       finished = true; clearTimeout(timer);
       const parsed = parseResultLine(tailUtf8(outBuf, outBuf.length));
@@ -119,15 +124,19 @@ function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
         exit, timedOut, durationMs: Date.now() - t0,
         stdout: capUtf8(outBuf, outTotal, outCap), stderr: capUtf8(extraErr ? Buffer.concat([errBuf, Buffer.from(extraErr)]) : errBuf, errTotal + Buffer.byteLength(extraErr), errCap),
         truncated: { stdout: outTotal > outCap, stderr: errTotal > errCap }, ...parsed,
+        ...(unkilled ? { recovery: "pending" as const, retryKill: () => (s.killTree ? kill(p) : killTreeWait(p, { recheck: true })) } : {}),
       });
     };
     // sonucu 'close'u beklemeden ver: torun borulara tutunsa da op asılı kalmaz
-    const timer = setTimeout(() => { killTree(p); done(124, true, "\nbetik zaman aşımına uğradı"); }, s.timeoutMs);
+    // ağacın gerçekten bittiği beklenir (F-vlad-270): doğrulanamazsa recovery:"pending" (çağıran geri yükleme yapmaz)
+    const kill = s.killTree ?? ((x) => killTreeWait(x));
+    let timing = false; // öldürme sürerken gelen 'close' sonucu zaman aşımı olarak raporlanır
+    const timer = setTimeout(() => { timing = true; void kill(p).catch(() => false).then((ok) => done(124, true, "\nbetik zaman aşımına uğradı" + (ok ? "" : "; süreç ağacı sonlandırılamadı, geri yükleme ertelendi"), !ok)); }, s.timeoutMs);
     p.on("error", (e) => {
       if (started) return done(1, false, `\n${e.message}`);
       finished = true; clearTimeout(timer);
       reject(new RemoteError("failed", `failed: betik başlatılamadı: ${e.message}`));
     });
-    p.on("close", (code) => done(code ?? 1, false));
+    p.on("close", (code) => { if (!timing) done(code ?? 1, false); });
   });
 }
