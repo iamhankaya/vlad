@@ -109,6 +109,23 @@ export interface FindingData {
   fixed?: string | null;
 }
 
+export type IdeaState = "open" | "promoted" | "dropped";
+
+/** kb/ideas/<id>.md frontmatter: an idea is not a finding (no severity, never in the card's open-findings block). */
+export interface IdeaData {
+  /** `I-<project>-NNN`, numbered per project. */
+  id: string;
+  project: string;
+  title: string;
+  state: IdeaState;
+  /** Task or finding the idea came from; absent when entered by hand. */
+  source?: string | null;
+  /** Task that took the idea on; only while `state` is `promoted`. */
+  promoted_task?: string | null;
+  created: string;
+  updated: string;
+}
+
 /** roles/<slug>.md frontmatter (roles spec §4) */
 export interface RoleData {
   slug: string;

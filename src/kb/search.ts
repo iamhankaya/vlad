@@ -4,7 +4,7 @@ import { scanDecisions } from "./decisions.js";
 import { parseDoc, readText } from "./doc.js";
 import { kbPaths } from "./home.js";
 
-export const SEARCH_TYPES = ["task", "finding", "decision", "journal"] as const;
+export const SEARCH_TYPES = ["task", "finding", "idea", "decision", "journal"] as const;
 export type SearchType = (typeof SEARCH_TYPES)[number];
 
 export interface SearchHit {
@@ -93,6 +93,15 @@ function* findingUnits(): Generator<Unit> {
   }
 }
 
+function* ideaUnits(): Generator<Unit> {
+  for (const path of listMdFiles(kbPaths().ideas)) {
+    try {
+      const { data, body } = parseDoc<{ id?: string; project?: string; title?: string; state?: string; updated?: string }>(readText(path));
+      yield { id: data.id ?? basename(path, ".md"), type: "idea", project: data.project ?? null, status: data.state ?? null, date: data.updated ?? null, title: data.title ?? "", text: body, path };
+    } catch { /* see above */ }
+  }
+}
+
 function* decisionUnits(project?: string): Generator<Unit> {
   let n = 0; // unmigrated blocks have no id: file#date#index keeps same-day ones apart
   for (const { rec, text } of scanDecisions(project)) {
@@ -136,6 +145,7 @@ export function searchKb(o: { query: string; project?: string; type?: string; li
   };
   if (want("task")) for (const u of taskUnits()) consider(u);
   if (want("finding")) for (const u of findingUnits()) consider(u);
+  if (want("idea")) for (const u of ideaUnits()) consider(u);
   if (want("decision")) for (const u of decisionUnits(o.project && o.project !== "genel" ? o.project : undefined)) consider(u);
   if (want("journal")) for (const u of journalUnits()) consider(u);
   return [...best.values()]

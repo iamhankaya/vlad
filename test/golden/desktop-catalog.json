@@ -124,6 +124,59 @@
   },
   {
    "path": [
+    "idea",
+    "add"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write",
+    "fileFlags": [
+     "--detail-file"
+    ]
+   }
+  },
+  {
+   "path": [
+    "idea",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "idea",
+    "set"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "idea",
+    "promote"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "idea",
+    "from-finding"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
     "role",
     "list"
    ],

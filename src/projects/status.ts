@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/store.js";
+import { countOpenIdeas } from "../ideas/store.js";
 import { getSection, isDecisionExpired, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
 import type { DecisionRecord, ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
@@ -39,6 +40,8 @@ export interface ProjectStatus {
     /** kritik/yüksek/orta only, at most LIST_MAX (the full list: `vlad finding list`) */
     open: { id: string; severity: string; state: string; title: string }[];
   };
+  /** idea store (kept out of the findings counts and the card's open-findings block) */
+  ideas: { open: number };
   decisions: {
     total: number;
     /** newest LIST_MAX valid decisions (the full list: `vlad decision list --project`) */
@@ -128,6 +131,7 @@ export function projectStatus(slug: string): ProjectStatus {
         .slice(0, LIST_MAX)
         .map((f) => ({ id: f.data.id, severity: f.data.severity, state: f.data.state, title: f.data.title })),
     },
+    ideas: { open: countOpenIdeas(slug) },
     decisions: {
       total: decisions.length,
       recent: [...decisions].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, LIST_MAX).map((d) => ({ id: d.id, date: d.date, title: d.title, ...(d.until ? { until: d.until } : {}), ...(isDecisionExpired(d) ? { expired: true as const } : {}) })),
