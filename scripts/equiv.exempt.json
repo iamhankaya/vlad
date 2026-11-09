@@ -4,6 +4,7 @@
     "agent start": "uzun ömürlü süreç, ağ portu dinler",
     "agent keygen": "rastgele anahtar üretir, çıktı deterministik değil",
     "agent setkey": "anahtarı stdin'den yazar; anahtar maddesi golden/küme testlerinde kapsanır",
+    "task deny": "yeni komut (T20261110-13): tabanda yok, eski/yeni CLI eşdeğerliği anlamsız; davranış test/tasks/denials.test.ts",
     "agent install": "işletim sistemi hizmeti kurar",
     "queue list": "yerel Agent'a bağlanır (ağ)",
     "queue flush": "yerel Agent'a bağlanır (ağ)",

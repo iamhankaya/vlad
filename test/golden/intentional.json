@@ -38,6 +38,14 @@
         "finding list --help",
         "finding set --help"
       ]
+    },
+    {
+      "id": "T20261110-13",
+      "keys": [
+        "task deny --help",
+        "task --help",
+        "task (bare)"
+      ]
     }
   ]
 }

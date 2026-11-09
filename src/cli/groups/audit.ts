@@ -32,6 +32,7 @@ export function registerAudit(program: Command, k: Kit): void {
       ...(r.measures.by_ponytail.on.tasks + r.measures.by_ponytail.off.tasks ? [`ponytail A/B: ` + (['on', 'off'] as const).map((k) => `${k} ${r.measures.by_ponytail[k].tasks} görev (${r.measures.by_ponytail[k].tasks_with_measure} ölçümlü; ${Object.entries(r.measures.by_ponytail[k].sums).map(([n, v]) => `${n}=${v}`).join(' ') || '-'})`).join(' | ')] : []),
       `açık nokta: ${r.open_points.total} (${sev})`,
       `işaretler: test itirazı ${sg.test_itirazi.count}, değişiklik turu ${sg.degisiklik_istegi.count}, [KARAR] ${sg.karar.count}, izin reddi ${sg.izin_reddi.count}, Codex turu ara ${sg.codex_turlari.ara}/son ${sg.codex_turlari.son} (${sg.codex_turlari.tasks} çatıda ölçüm)`,
+      `izin kuralı adayı: ${r.permission_candidates.length ? r.permission_candidates.map((c) => `${c.tool}: ${c.pattern} (${c.tasks} görev, ${c.count} ret)`).join("; ") : "-"}`,
       `skill: ${r.skills.inventory.length} envanterde, ${r.skills.unused.length} hiç yüklenmemiş (${r.skills.transcripts} oturum kaydı); rol skill oranı ${r.skills.coverage.rate === null ? "-" : `%${Math.round(r.skills.coverage.rate * 100)} (${r.skills.coverage.loaded}/${r.skills.coverage.expected}, kuraldan önceki ${r.skills.coverage.skipped_before_rule} atlandı)`}`,
       `iptal: ${r.cancelled.total} görev, ${r.cancelled.with_reason} gerekçeli`,
       `bulgu: ${r.findings.unresolved.length} açık/ertelenmiş, ${r.findings.stale} tanesi 30 günden eski`,

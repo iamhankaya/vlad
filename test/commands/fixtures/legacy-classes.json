@@ -23,6 +23,7 @@
   "task answer",
   "task ask",
   "task cleanup",
+  "task deny",
   "task deps",
   "task digested",
   "task ingest",
@@ -87,6 +88,7 @@
  ],
  "FORWARD": {
   "task ask": "task.ask",
+  "task deny": "task.log",
   "task log": "task.log",
   "task report": "task.report",
   "task session": "task.session"
@@ -230,6 +232,13 @@
    "path": [
     "task",
     "ask"
+   ],
+   "kind": "write"
+  },
+  {
+   "path": [
+    "task",
+    "deny"
    ],
    "kind": "write"
   },
