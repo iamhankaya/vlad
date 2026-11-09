@@ -38,4 +38,9 @@ describe("denyTask", () => {
     expect(parseDenyLine(`- 2026-11-10T10:00:00+03:00 ${formatDenyLine({ tool: "Bash", pattern: "git  push  origin", reason: "r" })}`)).toEqual({ tool: "Bash", pattern: "git push origin", reason: "r" });
     expect(parseDenyLine("- 2026-11-10T10:00:00+03:00 İzin reddi: x")).toBeNull();
   });
+  it("a pattern containing ' — ' without a reason is not split into pattern + reason (and survives with a reason)", () => {
+    const line = (d: Parameters<typeof formatDenyLine>[0]) => parseDenyLine(`- 2026-11-10T10:00:00+03:00 ${formatDenyLine(d)}`);
+    expect(line({ tool: "Bash", pattern: "echo a — b" })).toEqual({ tool: "Bash", pattern: "echo a — b" });
+    expect(line({ tool: "Bash", pattern: "echo a — b", reason: "neden — ayrıntı" })).toEqual({ tool: "Bash", pattern: "echo a — b", reason: "neden — ayrıntı" });
+  });
 });

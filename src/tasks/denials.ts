@@ -7,6 +7,8 @@ export interface Denial { tool: string; pattern: string; reason?: string }
 
 /** One line, single spaces: a multi-line value must not forge extra İlerleme entries, and spacing must not split one pattern in two. */
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+// " — " separates pattern and reason; one inside the pattern is written as " \\— " (the parser splits on the first real separator and unescapes)
+const SEP = " — ", ESCAPED_SEP = " \\— ";
 const DENY_LINE = /^- \S+ \[İZİN\] ([^:\n]+): (.+?)(?: — (.+))?$/;
 
 /** The İlerleme text (without timestamp) `task deny` writes; the setup audit reads it back with parseDenyLine. */
@@ -14,14 +16,14 @@ export function formatDenyLine(d: Denial): string {
   const tool = oneLine(d.tool), pattern = oneLine(d.pattern), reason = oneLine(d.reason ?? "");
   if (!tool) throw new Error("--tool zorunlu (Bash, PowerShell, ...)");
   if (!pattern) throw new Error("--pattern zorunlu (reddedilen komut)");
-  return `[İZİN] ${tool}: ${pattern}${reason ? ` — ${reason}` : ""}`;
+  return `[İZİN] ${tool}: ${pattern.replaceAll(SEP, ESCAPED_SEP)}${reason ? ` — ${reason}` : ""}`;
 }
 
 /** Parses a timestamped İlerleme line written by formatDenyLine; null for anything else. Pattern is whitespace-normalized. */
 export function parseDenyLine(line: string): Denial | null {
   const m = DENY_LINE.exec(line);
   if (!m) return null;
-  return { tool: m[1].trim(), pattern: oneLine(m[2]), ...(m[3] ? { reason: m[3].trim() } : {}) };
+  return { tool: m[1].trim(), pattern: oneLine(m[2].replaceAll(ESCAPED_SEP, SEP)), ...(m[3] ? { reason: m[3].trim() } : {}) };
 }
 
 /**
