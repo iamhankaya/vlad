@@ -129,7 +129,9 @@ describe("checkPushed", () => {
     f.git("push", "-q", "-u", "origin", "feat");
     const e = await thrown(checkPushed(f.dir, c));
     expect(e.message).toContain("[unpushed]");
-    await expect(checkPushed(f.dir, f.head)).resolves.toBeUndefined(); // eski (main'de olan) commit geçer
+    f.git("checkout", "-q", "main");
+    await expect(checkPushed(f.dir, f.head)).resolves.toBeUndefined(); // main'e dönünce geçer
+    await expect(thrown(checkPushed(f.dir, c))).resolves.toHaveProperty("message", expect.stringContaining("[unpushed]")); // feat commit'i main'de değil
   });
 });
 

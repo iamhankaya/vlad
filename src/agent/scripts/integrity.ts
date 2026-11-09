@@ -81,12 +81,16 @@ async function defaultRemoteRef(repo: string): Promise<string | null> {
 }
 
 /**
- * Çalışan commit (`head`, tek seferde okunmuş oid) origin'in VARSAYILAN dalında olmalı: itilmemiş commit da, özellik dalına itilmiş
- * kod da çalışmaz. Repo push yetkisi = işçide kod çalıştırma yetkisi; bu kontrol yetkiyi varsayılan dala (inceleme/koruma) çeker.
+ * Depo, dalının upstream'i origin'in VARSAYILAN dalı olacak şekilde izlemeli ve çalışan commit (`head`, tek seferde okunmuş oid) o
+ * dalda olmalı: itilmemiş commit da, özellik dalına itilmiş kod da çalışmaz. Repo push yetkisi = işçide kod çalıştırma yetkisi;
+ * bu kontrol yetkiyi varsayılan dala (inceleme/koruma) çeker.
  */
 export async function checkPushed(repo: string, head: string): Promise<void> {
+  const up = await runGit(repo, ["rev-parse", "--symbolic-full-name", "@{u}"]);
+  if (up.code !== 0) throw scriptFail("forbidden", "no_upstream", "depoda upstream yok; betikler yalnız origin'in varsayılan dalını izleyen depodan çalışır");
   const ref = await defaultRemoteRef(repo);
-  if (!ref) throw scriptFail("forbidden", "no_upstream", "origin'in varsayılan dalı (origin/HEAD, origin/main|master) bulunamadı; betikler yalnız varsayılan dala itilmiş commit'ten çalışır");
+  if (!ref) throw scriptFail("forbidden", "no_upstream", "origin'in varsayılan dalı bulunamadı (origin/HEAD, origin/main|master)");
+  if (up.stdout.trim() !== ref) throw scriptFail("forbidden", "unpushed", `upstream ${up.stdout.trim().replace("refs/remotes/", "")} varsayılan dal (${ref.replace("refs/remotes/", "")}) değil`);
   const r = await runGit(repo, ["merge-base", "--is-ancestor", head, ref]);
-  if (r.code !== 0) throw scriptFail("forbidden", "unpushed", `commit ${head.slice(0, 8)} ${ref.replace("refs/remotes/", "")} içinde değil; önce varsayılan dala it/merge et`);
+  if (r.code !== 0) throw scriptFail("forbidden", "unpushed", `commit ${head.slice(0, 8)} ${ref.replace("refs/remotes/", "")} içinde değil; önce it`);
 }
