@@ -25,7 +25,8 @@
     "install.ts": 2,
     "cli": 3,
     "cli.ts": 3,
-    "fleet": 0
+    "fleet": 0,
+    "setup": 2
   },
   "pure": [
     "commands"

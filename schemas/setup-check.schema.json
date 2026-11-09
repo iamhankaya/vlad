@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "`vlad setup --check --json` çıktısı (T20261110-03 sözleşmesi). Anahtar/sır alanı yoktur; kanıt metni sır içermez.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "platform", "strict", "exit", "ok", "parts"],
+  "properties": {
+    "version": { "const": 1 },
+    "platform": { "enum": ["win32", "darwin", "linux"] },
+    "role": { "enum": ["brain", "worker"] },
+    "strict": { "type": "boolean" },
+    "exit": { "enum": [0, 1] },
+    "ok": { "type": "boolean" },
+    "experimental": { "type": "array", "items": { "type": "string" } },
+    "parts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["part", "status", "severity", "evidence"],
+        "properties": {
+          "part": { "enum": ["cli", "global-skills", "repo-skills", "permissions", "plugins", "hooks", "config", "kb", "agent", "launcher", "mac-main", "tools", "memory"] },
+          "status": { "enum": ["ok", "eksik", "eski", "çakışan", "n/a"] },
+          "severity": { "enum": ["error", "warn", "info"] },
+          "evidence": { "type": "string" },
+          "fix": { "type": "string" },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "status", "evidence"],
+              "properties": {
+                "id": { "type": "string" },
+                "status": { "enum": ["ok", "eksik", "eski", "çakışan", "n/a"] },
+                "evidence": { "type": "string" },
+                "fix": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -58,7 +58,8 @@
         "src/launcher/**",
         "src/platform/**",
         "src/git/**",
-        "src/install.ts"
+        "src/install.ts",
+        "src/setup/**"
       ],
       "buckets": [
         "process",

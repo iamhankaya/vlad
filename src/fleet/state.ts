@@ -90,7 +90,7 @@ export function buildId(): string {
   } catch { return "0"; }
 }
 
-const PRIVATE_V4 = [/^127\./, /^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./];
+export const PRIVATE_V4 = [/^127\./, /^10\./, /^192\.168\./, /^172\.(1[6-9]|2\d|3[01])\./, /^169\.254\./];
 /** Agent yalnız loopback / RFC1918 / link-local adrese bağlanır (0.0.0.0, ::, genel adres ve çözümlenemeyen ad reddedilir). */
 export async function assertPrivateBind(addr: string): Promise<string> {
   let ip = addr;

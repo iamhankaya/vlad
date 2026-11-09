@@ -54,6 +54,7 @@
     "test/scope/u2-imports-posix.test.ts",
     "test/scope/u2-no-process-env.test.ts",
     "test/scope/u2-scope.test.ts",
+    "test/setup/contract.test.ts",
     "test/skills/**/*.test.ts",
     "test/stdout-epipe.test.ts",
     "test/tasks/blocks.test.ts",
