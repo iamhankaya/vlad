@@ -58,6 +58,7 @@
     "test/stdout-epipe.test.ts",
     "test/tasks/blocks.test.ts",
     "test/tasks/deps.test.ts",
+    "test/tasks/gate-compare.test.ts",
     "test/tasks/idle.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
