@@ -2,7 +2,9 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { reconcileScriptRun, scriptList, scriptRun, type ScriptDeps } from "../../src/agent/ops/script.js";
+import { scriptList, scriptRun, type ScriptDeps } from "../../src/agent/ops/script.js";
+import { Journal } from "../../src/agent/journal.js";
+import { reconcile } from "../../src/agent/reconcile.js";
 import { scriptPlanId } from "../../src/agent/scripts/manifest.js";
 import { RemoteError, SCRIPT_RESULT_SENTINEL, type Os, type ScriptEntry } from "../../src/fleet/types.js";
 import { entryOf, makeRepo, manifestJson, scriptRepo, sha256, symlinkIn, type Fixture } from "./script-fixture.js";
@@ -179,18 +181,11 @@ describe("script-run: çalıştırma sonucu", () => {
   });
 });
 
-describe("reconcileScriptRun", () => {
-  const rec = (name: unknown) => ({ opId: "o", from: "mac", op: "script-run" as const, state: "started" as const, ts: 1, argsHash: "h", args: { name } });
-  it("read → not-applied; write → unknown; çözülemeyen ad/HEAD → unknown", () => {
-    const r = entryOf(OS, "oku", "a"), w = entryOf(OS, "yaz", "b", { class: "write" });
-    const f = makeRepo({ "agent-scripts/manifest.json": manifestJson(r, w) });
-    fixtures.push(f);
-    const d = { home: f.dir, platform: OS };
-    expect(reconcileScriptRun(rec("oku"), d)).toBe("not-applied");
-    expect(reconcileScriptRun(rec("yaz"), d)).toBe("unknown");
-    expect(reconcileScriptRun(rec("yok"), d)).toBe("unknown");
-    expect(reconcileScriptRun(rec(5), d)).toBe("unknown");
-    expect(reconcileScriptRun({ ...rec("oku"), args: undefined }, d)).toBe("unknown");
-    expect(reconcileScriptRun(rec("oku"), { home: "/yok/boyle/yer", platform: OS })).toBe("unknown");
+describe("script-run uzlaştırması", () => {
+  it("started kalan script-run (read dahil) done+uncertain olur; mevcut HEAD'e güvenilmez", () => {
+    const j = new Journal(join(state(), "j.jsonl"), () => 1);
+    j.start("o1", "mac", "script-run", "h", { name: "oku" });
+    reconcile(j, {});
+    expect(j.get("o1")).toMatchObject({ state: "done", meta: { uncertain: true } });
   });
 });

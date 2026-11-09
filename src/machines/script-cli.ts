@@ -36,13 +36,13 @@ export async function listScripts(t: RemoteTransport, machine: string): Promise<
 export async function runRemoteScript(t: RemoteTransport, machine: string, name: string, o: RunOpts): Promise<RunOutcome> {
   const list = await listScripts(t, machine);
   const entry = list.scripts.find((s) => s.name === name);
-  if (!entry) throw new Error(`kayıtlı betik değil: ${name} (${machine}, ${list.platform}); \`vlad machine scripts ${machine}\` ile bak`);
+  if (!entry) throw new Error(`[unregistered] kayıtlı betik değil: ${name} (${machine}, ${list.platform}); \`vlad machine scripts ${machine}\` ile bak`);
   const params = normalizeParams(entry, o.params);
   const planId = scriptPlanId({ machine, name, platform: list.platform, sha256: entry.sha256, params });
   if (o.plan) return { kind: "plan", machine, name, platform: list.platform, head: list.head, sha256: entry.sha256, class: entry.class, integrity: entry.integrity, timeoutSec: entry.timeoutSec, params, planId };
   if (entry.integrity !== "ok") throw new Error(`${name} bütünlük denetimini geçemiyor (${entry.integrity}); çalıştırılmaz`);
   if (entry.class === "write") {
-    if (!o.confirmed) throw new Error(`${name} write sınıfı: önce --plan ile planı göster, kullanıcının açık onayından sonra --confirmed <plan-id> ile çalıştır`);
+    if (!o.confirmed) throw new Error(`[approval] ${name} write sınıfı: önce --plan ile planı göster, kullanıcının açık onayından sonra --confirmed <plan-id> ile çalıştır`);
     if (!PLAN_ID_RE.test(o.confirmed)) throw new Error("--confirmed 16 küçük hex karakterlik plan-id olmalı");
   }
   const opId = o.opId ?? randomUUID();

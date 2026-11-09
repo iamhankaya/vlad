@@ -76,29 +76,29 @@ describe("loadRepoState", () => {
 describe("checkEntry", () => {
   it("ok: blob baytları döner", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
-    const r = await checkEntry(f.dir, f.entry);
+    const r = await checkEntry(f.dir, f.entry, f.head);
     expect(r.integrity).toBe("ok");
     expect(r.bytes!.toString()).toBe(BODY);
   });
   it("manifest sha256'sı tutmuyor → hash_mismatch", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
-    expect((await checkEntry(f.dir, { ...f.entry, sha256: sha256("başka") })).integrity).toBe("hash_mismatch");
+    expect((await checkEntry(f.dir, { ...f.entry, sha256: sha256("başka") }, f.head)).integrity).toBe("hash_mismatch");
   });
   it("betik yalnız çalışma ağacında → not_in_head", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
     f.write("agent-scripts/y.sh", "echo y");
-    expect((await checkEntry(f.dir, entryOf("darwin", "y", "echo y"))).integrity).toBe("not_in_head");
+    expect((await checkEntry(f.dir, entryOf("darwin", "y", "echo y"), f.head)).integrity).toBe("not_in_head");
   });
   it("symlink betik → not_regular", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
     symlinkIn(f, "agent-scripts/ln.sh", "x.sh");
-    f.commit("ln");
-    expect((await checkEntry(f.dir, entryOf("darwin", "ln", BODY))).integrity).toBe("not_regular");
+    const c = f.commit("ln");
+    expect((await checkEntry(f.dir, entryOf("darwin", "ln", BODY), c)).integrity).toBe("not_regular");
   });
   it("çalışma ağacındaki içerik değil HEAD blob'u okunur (yerel değişiklik ve CRLF dönüşümü etkilemez)", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
     f.write("agent-scripts/x.sh", "echo EVIL\r\n");
-    const r = await checkEntry(f.dir, f.entry);
+    const r = await checkEntry(f.dir, f.entry, f.head);
     expect(r.integrity).toBe("ok");
     expect(r.bytes!.toString()).toBe(BODY);
   });
@@ -107,19 +107,45 @@ describe("checkEntry", () => {
 describe("checkPushed", () => {
   it("HEAD upstream'de → geçer", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
-    await expect(checkPushed(f.dir)).resolves.toBeUndefined();
+    await expect(checkPushed(f.dir, f.head)).resolves.toBeUndefined();
   });
   it("yerel push edilmemiş commit → forbidden [unpushed]", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
-    f.commit("yerel");
-    const e = await thrown(checkPushed(f.dir));
+    const local = f.commit("yerel");
+    const e = await thrown(checkPushed(f.dir, local));
     expect(e.code).toBe("forbidden");
     expect(e.message).toContain("[unpushed]");
   });
   it("upstream yok → forbidden [no_upstream]", async () => {
     const f = track(makeRepo({ "a": "b" }));
-    const e = await thrown(checkPushed(f.dir));
+    const e = await thrown(checkPushed(f.dir, f.git("rev-parse", "HEAD").trim()));
     expect(e.code).toBe("forbidden");
     expect(e.message).toContain("[no_upstream]");
+  });
+  it("özellik dalına itilmiş commit varsayılan dalda değil → forbidden [unpushed]", async () => {
+    const f = track(scriptRepo("darwin", "x", BODY));
+    f.git("checkout", "-q", "-b", "feat");
+    const c = f.commit("özellik");
+    f.git("push", "-q", "-u", "origin", "feat");
+    const e = await thrown(checkPushed(f.dir, c));
+    expect(e.message).toContain("[unpushed]");
+    await expect(checkPushed(f.dir, f.head)).resolves.toBeUndefined(); // eski (main'de olan) commit geçer
+  });
+});
+
+describe("tek HEAD oid'i (Codex P1)", () => {
+  it("checkEntry verilen commit'ten okur: HEAD sonradan kaysa bile o commit'in baytları ve karması", async () => {
+    const f = track(scriptRepo("darwin", "x", BODY));
+    f.write("agent-scripts/x.sh", "echo yeni\n");
+    f.commit("değişti");
+    const old = await checkEntry(f.dir, f.entry, f.head);
+    expect(old.integrity).toBe("ok");
+    expect(old.bytes!.toString()).toBe(BODY);
+    expect((await checkEntry(f.dir, f.entry, f.git("rev-parse", "HEAD").trim())).integrity).toBe("hash_mismatch");
+  });
+  it("loadRepoState döndürdüğü head'in manifestini okur", async () => {
+    const f = track(scriptRepo("darwin", "x", BODY));
+    const st = await loadRepoState(f.dir);
+    expect(st.head).toBe(f.head);
   });
 });

@@ -26,9 +26,9 @@ function catBlob(cwd: string, rev: string, maxBytes: number): Promise<Buffer | "
   });
 }
 
-/** `git ls-tree HEAD -- <yol>`: tek düzenli blob → oid; yoksa "missing"; symlink/gömülü repo/dizin → "irregular". */
-async function treeEntry(repo: string, path: string): Promise<{ oid: string } | "missing" | "irregular"> {
-  const r = await runGit(repo, ["ls-tree", "HEAD", "--", path]);
+/** `git ls-tree <commit> -- <yol>`: tek düzenli blob → oid; yoksa "missing"; symlink/gömülü repo/dizin → "irregular". */
+async function treeEntry(repo: string, rev: string, path: string): Promise<{ oid: string } | "missing" | "irregular"> {
+  const r = await runGit(repo, ["ls-tree", rev, "--", path]);
   if (r.code !== 0) throw scriptFail("failed", "no_repo", `git ls-tree başarısız: ${(r.stderr || r.stdout).trim()}`);
   const lines = r.stdout.split("\n").filter(Boolean);
   if (!lines.length) return "missing";
@@ -51,7 +51,7 @@ export async function loadRepoState(home: string): Promise<RepoState> {
   if (!/^[0-9a-f]{40,64}$/.test(head)) throw scriptFail("failed", "no_repo", "HEAD çözülemedi (commit yok)");
   const st = await runGit(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--", "agent-scripts"]);
   if (st.code !== 0) throw scriptFail("failed", "no_repo", `git status başarısız: ${(st.stderr || st.stdout).trim()}`);
-  const t = await treeEntry(repo, MANIFEST_PATH);
+  const t = await treeEntry(repo, head, MANIFEST_PATH);
   if (t === "missing") throw scriptFail("forbidden", "not_in_head", `${MANIFEST_PATH} HEAD'de yok`);
   if (t === "irregular") throw scriptFail("forbidden", "not_regular", `${MANIFEST_PATH} düzenli bir dosya değil`);
   const raw = await catBlob(repo, t.oid, SCRIPT_LIMITS.manifestMaxBytes);
@@ -63,8 +63,8 @@ export async function loadRepoState(home: string): Promise<RepoState> {
 }
 
 /** Tek girişin durumu; `ok` ise çalıştırılacak baytlar da döner. Kirlilik çağıranın işidir (`RepoState.dirty`). */
-export async function checkEntry(repo: string, entry: ScriptEntry): Promise<{ integrity: ScriptIntegrity; bytes?: Buffer }> {
-  const t = await treeEntry(repo, entry.file);
+export async function checkEntry(repo: string, entry: ScriptEntry, head: string): Promise<{ integrity: ScriptIntegrity; bytes?: Buffer }> {
+  const t = await treeEntry(repo, head, entry.file);
   if (t === "missing") return { integrity: "not_in_head" };
   if (t === "irregular") return { integrity: "not_regular" };
   const bytes = await catBlob(repo, t.oid, SCRIPT_MAX_BYTES);
@@ -72,10 +72,21 @@ export async function checkEntry(repo: string, entry: ScriptEntry): Promise<{ in
   return createHash("sha256").update(bytes).digest("hex") === entry.sha256 ? { integrity: "ok", bytes } : { integrity: "hash_mismatch" };
 }
 
-/** HEAD upstream'in atası olmalı (itilmemiş yerel commit çalıştırılmaz; kb-sync ile aynı gerekçe). */
-export async function checkPushed(repo: string): Promise<void> {
-  const up = await runGit(repo, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
-  if (up.code !== 0) throw scriptFail("forbidden", "no_upstream", "depoda upstream yok; betikler yalnız itilmiş HEAD'den çalışır");
-  const r = await runGit(repo, ["merge-base", "--is-ancestor", "HEAD", "@{u}"]);
-  if (r.code !== 0) throw scriptFail("forbidden", "unpushed", "HEAD upstream'e itilmemiş; önce push et");
+/** Varsayılan dalın uzak izleme ref'i: `refs/remotes/origin/HEAD`, yoksa origin/main, yoksa origin/master. */
+async function defaultRemoteRef(repo: string): Promise<string | null> {
+  const sym = await runGit(repo, ["symbolic-ref", "-q", "refs/remotes/origin/HEAD"]);
+  if (sym.code === 0 && /^refs\/remotes\/origin\/\S+$/.test(sym.stdout.trim())) return sym.stdout.trim();
+  for (const b of ["main", "master"]) if ((await runGit(repo, ["rev-parse", "--verify", "-q", `refs/remotes/origin/${b}`])).code === 0) return `refs/remotes/origin/${b}`;
+  return null;
+}
+
+/**
+ * Çalışan commit (`head`, tek seferde okunmuş oid) origin'in VARSAYILAN dalında olmalı: itilmemiş commit da, özellik dalına itilmiş
+ * kod da çalışmaz. Repo push yetkisi = işçide kod çalıştırma yetkisi; bu kontrol yetkiyi varsayılan dala (inceleme/koruma) çeker.
+ */
+export async function checkPushed(repo: string, head: string): Promise<void> {
+  const ref = await defaultRemoteRef(repo);
+  if (!ref) throw scriptFail("forbidden", "no_upstream", "origin'in varsayılan dalı (origin/HEAD, origin/main|master) bulunamadı; betikler yalnız varsayılan dala itilmiş commit'ten çalışır");
+  const r = await runGit(repo, ["merge-base", "--is-ancestor", head, ref]);
+  if (r.code !== 0) throw scriptFail("forbidden", "unpushed", `commit ${head.slice(0, 8)} ${ref.replace("refs/remotes/", "")} içinde değil; önce varsayılan dala it/merge et`);
 }

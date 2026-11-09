@@ -1,16 +1,15 @@
-import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { getVladHome } from "../../kb/home.js";
 import { agentDir } from "../../fleet/state.js";
 import {
   RemoteError, SCRIPT_NAME_RE, type Os, type ScriptEntry, type ScriptInfo, type ScriptListResult, type ScriptRunArgs, type ScriptRunResult,
 } from "../../fleet/types.js";
-import type { JournalRecord } from "../journal.js";
-import type { Verdict } from "../reconcile.js";
 import { checkEntry, checkPushed, loadRepoState, scriptFail } from "../scripts/integrity.js";
-import { normalizeParams, scriptPlanId, validateScriptManifest } from "../scripts/manifest.js";
+import { normalizeParams, scriptPlanId } from "../scripts/manifest.js";
 import { runScript, scriptEnv } from "../scripts/run.js";
-import { argObject, bad, workerCtx } from "./worker.js";
+import { machineDef } from "../../fleet/registry.js";
+import { agentEnv } from "./env.js";
+import { argObject, bad } from "./worker.js";
 
 // Kayıtlı bakım betikleri (T20261109-03): `script-list` salt okuma, `script-run` günlüklü. Betik yalnız HEAD manifestinde kayıtlı,
 // itilmiş HEAD'de, hash'i tutan bir blob olabilir; istekten yol/komut alınmaz. Başladıktan sonra hiçbir yol fırlatmaz.
@@ -29,8 +28,9 @@ export interface ScriptDeps {
   requirePushed?: boolean;
 }
 export const defaultScriptDeps = (): ScriptDeps => {
-  const w = workerCtx();
-  return { home: getVladHome(), platform: process.platform as Os, machine: w.self, roots: w.def.roots ?? [], stateDir: agentDir(), env: process.env };
+  // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
+  const e = agentEnv();
+  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env };
 };
 
 /** Tek seferde tek betik: ikinci çağrı `busy` (geçici; CLI çıkış kodu 75). shortcut: bakım (maintenance) bayrağı (b) fazında bu kilide bağlanır. */
@@ -43,7 +43,7 @@ export async function scriptList(args: unknown, d: ScriptDeps = defaultScriptDep
   const st = await loadRepoState(d.home);
   const scripts: ScriptInfo[] = [];
   for (const e of st.manifest.scripts.filter((x) => x.platform === d.platform)) {
-    scripts.push({ ...e, integrity: st.dirty ? "dirty" : (await checkEntry(st.repo, e)).integrity });
+    scripts.push({ ...e, integrity: st.dirty ? "dirty" : (await checkEntry(st.repo, e, st.head)).integrity });
   }
   return { head: st.head, platform: d.platform, scripts };
 }
@@ -67,9 +67,9 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   for (const p of entry.params) {
     if (p.type === "root" && params[p.name] !== undefined && !d.roots.includes(params[p.name]!)) throw scriptFail("bad_request", `bad_param:${p.name}`, "root işçinin roots listesinde değil");
   }
-  const chk = await checkEntry(st.repo, entry);
+  const chk = await checkEntry(st.repo, entry, st.head);
   if (chk.integrity !== "ok") throw scriptFail("forbidden", chk.integrity, `${entry.file} bütünlük denetimini geçemedi`);
-  if (d.requirePushed !== false) await checkPushed(st.repo);
+  if (d.requirePushed !== false) await checkPushed(st.repo, st.head);
   if (entry.class === "write") {
     const want = scriptPlanId({ machine: d.machine, name: entry.name, platform: entry.platform, sha256: entry.sha256, params });
     if (a.approval?.planId !== want) throw scriptFail("forbidden", "approval", "write betiği için geçerli plan-id gerekli (önce --plan, kullanıcı onayından sonra --confirmed)");
@@ -87,16 +87,5 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   } finally { active = null; }
 }
 
-/**
- * Çökme sonrası uzlaştırma: read sınıfı betik yeniden koşabilir (`not-applied`); write ya da çözülemeyen (HEAD değişmiş, manifest
- * bozuk) → `unknown` (done+uncertain; insan karar verir).
- */
-export function reconcileScriptRun(rec: JournalRecord, d: Pick<ScriptDeps, "home" | "platform"> = { home: getVladHome(), platform: process.platform as Os }): Verdict {
-  const name = (rec.args as { name?: unknown } | undefined)?.name;
-  if (typeof name !== "string") return "unknown";
-  try {
-    const raw = execFileSync("git", ["show", "HEAD:agent-scripts/manifest.json"], { cwd: d.home, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
-    const e = validateScriptManifest(JSON.parse(raw)).scripts.find((x) => x.name === name && x.platform === d.platform);
-    return e?.class === "read" ? "not-applied" : "unknown";
-  } catch { return "unknown"; }
-}
+// Çökme sonrası uzlaştırıcı yok (bilerek): `script-run` IDEMPOTENT değildir, reconcile varsayılanı `unknown` → done+uncertain.
+// Sınıf (read/write) started kaydında tutulmadığından ve mevcut HEAD'e güvenilemeyeceğinden (betik/manifest değişmiş olabilir) otomatik yeniden koşma yok.
