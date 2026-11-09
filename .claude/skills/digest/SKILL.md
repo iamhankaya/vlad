@@ -158,9 +158,7 @@ vlad task digested <id1> <id2> ... --json
 ```
 Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak ve kullanıcıya söyle.
 
-## 6b. Arşiv
-
-Raporlar kapandıktan sonra, commit'ten önce: `vlad kb maintain --days 14 --json` (varsayılan zaten 14 gün; arşiv şeffaftır, silme yok; `digested` boş `done` görev arşivlenmez, yani bu turda işlenenler sonraki turda taşınır). Hata verirse kullanıcıya söyle, commit'e devam et.
+**Arşiv (adım 7'den önce):** `vlad kb maintain --days 14 --json` (varsayılan zaten 14 gün; arşiv şeffaftır, silme yok; `digested` boş `done` görev arşivlenmez, adım 6'da işlenmiş işaretlenenler yaşı dolmuşsa taşınır). Hata verirse kullanıcıya söyle, commit'e devam et.
 
 ## 7. Hafızayı commit'le
 
