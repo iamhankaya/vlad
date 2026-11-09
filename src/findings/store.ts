@@ -137,9 +137,9 @@ function applyState(f: Finding, state: string, by: string | undefined, reason: s
   validate("finding", next);
   let body = f.body;
   const note = reason?.trim();
-  if (note && state !== "open" && state !== "deferred") {
+  if (note) {
     const line = `- ${ts} ${state} — ${note.replace(/\s*\n\s*/g, " ")}${by ? ` (kaynak: ${by})` : ""}\n`;
-    body = body.includes(`\n${CLOSING}\n`) ? body.replace(/\n*$/, "\n") + line : `${body.replace(/\n*$/, "")}\n\n${CLOSING}\n${line}`;
+    body = /^## Kapanış\s*$/m.test(body) ? body.replace(/\n*$/, "\n") + line : `${body.replace(/\n*$/, "")}\n\n${CLOSING}\n${line}`;
   }
   return { data: next as unknown as FindingData, body };
 }

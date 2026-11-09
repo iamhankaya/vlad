@@ -50,7 +50,7 @@ VLAD iki gözü karşılaştırır. **Otomatik kapatır yalnız şu durumda:** i
    vlad finding set <id...> fixed --reason "bulgu-tarama <tarih>: <gerekçe + commit/dosya:satır>" [--by <görev>] --json
    vlad finding set <id...> wontfix --reason "bulgu-tarama <tarih>: <gerekçe>" --json
    ```
-   Birleştirilenler: `vlad finding set <id...> wontfix --reason "yinelenen: F-…"`. Gerekçe bulgu dosyasının `## Kapanış` bölümüne yazılır.
+   Birleştirilenler: `vlad finding set <id...> wontfix --reason "yinelenen: F-…"`; kapatmadan önce hedef bulgunun hâlâ açık (open/deferred) olduğunu `vlad finding list` ile doğrula, hedef kapalıysa birleştirme yapma. Gerekçe bulgu dosyasının `## Kapanış` bölümüne yazılır.
 2. Günlük: `vlad journal append` ile proje başına özet (kapanan sayı, sınıflar `fixed/wontfix/yinelenen`, kullanıcıya sorulanlar ve sonucu, kalanlar).
 3. `vlad project refresh <slug>` (kartın açık bulgu bloğu; `finding set` zaten tazeler, doğrula).
 4. `vlad kb commit "bulgu-tarama <tarih>: <özet>" --push`.

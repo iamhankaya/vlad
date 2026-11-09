@@ -150,6 +150,12 @@ describe("setFindingStates (toplu)", () => {
     expect(setFindingStates([a.data.id, a.data.id], "wontfix", { reason: "x" }, NOW)).toHaveLength(1);
     expect(readFileSync(a.file, "utf8").match(/## Kapanış/g)).toHaveLength(1);
   });
+  it("a reopen reason is recorded too", () => {
+    const a = add();
+    setFindingStates([a.data.id], "wontfix", { reason: "x" }, NOW);
+    setFindingStates([a.data.id], "open", { reason: "yanlış kapanmıştı" }, NOW);
+    expect(readFileSync(a.file, "utf8")).toContain("open — yanlış kapanmıştı");
+  });
   it("reopening needs no reason and keeps the closing history", () => {
     const a = add();
     setFindingStates([a.data.id], "wontfix", { reason: "x" }, NOW);
