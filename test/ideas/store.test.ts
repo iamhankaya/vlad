@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, validate } from "../../src/kb/index.js";
-import { addFinding } from "../../src/findings/store.js";
+import { addFinding, getFinding } from "../../src/findings/store.js";
 import { addIdea, fromFindings, getIdea, listIdeas, promoteIdea, setIdeaStates } from "../../src/ideas/store.js";
 import { getKbRecord } from "../../src/kb/get.js";
 import { searchKb } from "../../src/kb/search.js";
@@ -60,6 +60,8 @@ describe("ideas store", () => {
   });
   it("promote records the task id and state", () => {
     add();
+    mkdirSync(kbPaths().tasks, { recursive: true });
+    writeFileSync(join(kbPaths().tasks, "T20261110-09.md"), `---\nid: T20261110-09\nproject: alpha\ntitle: t\nkind: dev\nstate: queued\nautonomy: commit\ncreated: "2026-11-10T00:00:00+03:00"\nupdated: "2026-11-10T00:00:00+03:00"\n---\n\n## Tanım\nx\n`);
     const p = promoteIdea("I-alpha-001", "T20261110-09");
     expect(p.data).toMatchObject({ state: "promoted", promoted_task: "T20261110-09" });
     expect(p.body).toMatch(/## Kapanış\n- .* promoted — T20261110-09/);
@@ -84,6 +86,25 @@ describe("ideas store", () => {
     expect(() => fromFindings([f3.data.id, "F-alpha-099"])).toThrow(/bulgu bulunamadı/);
     expect(listIdeas().ideas).toHaveLength(2);
     expect(readFileSync(join(kbPaths().findings, `${f3.data.id}.md`), "utf8")).toContain("state: open");
+  });
+  it("from-finding reuses an open idea of the same source (re-run after a failed finding write leaves no twin)", () => {
+    card("alpha");
+    const f = addFinding({ project: "alpha", severity: "bilgi", source: "T20261109-01", title: "Tekrar" });
+    const pre = addIdea({ project: "alpha", title: "Tekrar", source: f.data.id }); // what a half-done first run leaves behind
+    const r = fromFindings([f.data.id]);
+    expect(r[0]!.idea.data.id).toBe(pre.data.id);
+    expect(listIdeas().ideas).toHaveLength(1);
+    expect(getFinding(f.data.id).data.state).toBe("wontfix");
+  });
+  it("promote checks the task exists and belongs to the idea's project", () => {
+    add();
+    expect(() => promoteIdea("I-alpha-001", "T20261110-77")).toThrow(/görev bulunamadı/);
+    const dir = kbPaths().tasks; mkdirSync(dir, { recursive: true });
+    const mk = (id: string, project: string) => writeFileSync(join(dir, `${id}.md`), `---\nid: ${id}\nproject: ${project}\ntitle: t\nkind: dev\nstate: queued\nautonomy: commit\ncreated: "2026-11-10T00:00:00+03:00"\nupdated: "2026-11-10T00:00:00+03:00"\n---\n\n## Tanım\nx\n`);
+    mk("T20261110-71", "beta");
+    expect(() => promoteIdea("I-alpha-001", "T20261110-71")).toThrow(/başka projenin/);
+    mk("T20261110-72", "alpha");
+    expect(promoteIdea("I-alpha-001", "T20261110-72").data.state).toBe("promoted");
   });
   it("schema rejects bad state and id", () => {
     const d = { id: "I-a-001", project: "a", title: "t", state: "open", created: "2026-11-10T00:00:00+03:00", updated: "2026-11-10T00:00:00+03:00" };

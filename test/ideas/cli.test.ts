@@ -31,7 +31,9 @@ describe("vlad idea (CLI)", () => {
     const s = vlad(["idea", "set", "I-alpha-001", "dropped", "--reason", "gereksiz", "--json"]);
     expect(JSON.parse(s.out)).toEqual({ id: "I-alpha-001", state: "dropped" });
     expect(JSON.parse(vlad(["idea", "list", "--state", "open", "--json"]).out).ideas).toHaveLength(1);
-    expect(JSON.parse(vlad(["idea", "promote", b, "--task", "T20261110-09", "--json"]).out)).toEqual({ id: b, state: "promoted", task: "T20261110-09" });
+    const tid = JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "T", "--kind", "dev", "--json"]).out).id as string;
+    expect(vlad(["idea", "promote", b, "--task", "T20261110-99"]).code).toBe(1); // no such task
+    expect(JSON.parse(vlad(["idea", "promote", b, "--task", tid, "--json"]).out)).toEqual({ id: b, state: "promoted", task: tid });
     expect(vlad(["idea", "list", "--state", "bogus"]).code).toBe(1);
   });
   it("ideas stay out of the card's open findings block and project status counts them apart", () => {

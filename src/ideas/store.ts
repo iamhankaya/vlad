@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { basename, join } from "node:path";
 import { findMdFile, kbPaths, listMdFiles, nowIso, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
 import type { IdeaData, IdeaState } from "../kb/index.js";
 import { getFinding, setFindingStates, UNRESOLVED } from "../findings/store.js";
+import { getKbRecord } from "../kb/get.js";
 
 export type Idea = { data: IdeaData; body: string; file: string };
 
@@ -120,6 +121,10 @@ export function setIdeaStates(ids: string[], state: string, o: { reason?: string
 export function promoteIdea(id: string, task: string, now: Date = new Date()): Idea {
   if (!/^T\d{8}-\d{2,}$/.test(task)) throw new Error(`geçersiz görev ID: ${task} (T<YYYYMMDD>-<NN>)`);
   const i = getIdea(id);
+  if (i.data.state !== "open") throw new Error(`${id} yalnız open fikir kapatılabilir (şu an: ${i.data.state})`);
+  let t;
+  try { t = getKbRecord(task); } catch { throw new Error(`görev bulunamadı: ${task}`); }
+  if (t.data.project !== i.data.project) throw new Error(`${task} başka projenin görevi (${String(t.data.project)}); fikir: ${i.data.project}`);
   const n = closeIdea(i, "promoted", task, { promoted_task: task }, now);
   writeDoc(i.file, n.data, n.body);
   return { ...n, file: i.file };
@@ -134,10 +139,21 @@ export function fromFindings(ids: string[], now: Date = new Date()): { finding: 
     if (!(UNRESOLVED as readonly string[]).includes(f.data.state)) throw new Error(`${f.data.id} açık değil (${f.data.state}): fikre taşınamaz`);
     checkProject(f.data.project);
   }
-  return fs.map((f) => {
-    const detail = f.body.replace(/^## Ayrıntı\n?/, "").trim();
-    const idea = addIdea({ project: f.data.project, title: f.data.title, detail, source: f.data.id }, now);
-    setFindingStates([f.data.id], "wontfix", { reason: `fikir deposuna taşındı: ${idea.data.id}` }, now);
-    return { finding: f.data.id, idea };
-  });
+  // ideas first (rolled back if one fails), then close the findings; a re-run reuses the open idea of the same source instead of opening a twin
+  const created: Idea[] = [];
+  const moved: { finding: string; idea: Idea }[] = [];
+  try {
+    for (const f of fs) {
+      const reuse = listIdeas({ project: f.data.project, state: ["open"] }).ideas.find((i) => i.data.source === f.data.id);
+      const detail = f.body.replace(/^## Ayrıntı\n?/, "").trim();
+      const idea = reuse ?? addIdea({ project: f.data.project, title: f.data.title, detail, source: f.data.id }, now);
+      if (!reuse) created.push(idea);
+      moved.push({ finding: f.data.id, idea });
+    }
+  } catch (e) {
+    for (const i of created) unlinkSync(i.file);
+    throw e;
+  }
+  for (const m of moved) setFindingStates([m.finding], "wontfix", { reason: `fikir deposuna taşındı: ${m.idea.data.id}` }, now);
+  return moved;
 }
