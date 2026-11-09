@@ -14,6 +14,7 @@ import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, r
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskList } from "./task-list.js";
+import { closedFindingWarnings } from "../../findings/closed-report.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -140,6 +141,7 @@ export function registerTask(program: Command, k: Kit): void {
     const warnings = reportReferencesPrior(md)
       ? ["rapor önceki rapora atıf içeriyor (yerine geçer / üstüne ekler / aynen geçerli); tam metin olmalı. Önceki rapor '## Önceki raporlar'da saklandı"]
       : [];
+    warnings.push(...closedFindingWarnings(md));
     out(o, { id, state: t.data.state, warnings }, [`${id} -> ${t.data.state}`, ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
   }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
   def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, state: string, o: Opts) => {

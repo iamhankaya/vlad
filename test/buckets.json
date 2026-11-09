@@ -10,6 +10,8 @@
     "test/commands/u1-manifest.test.ts",
     "test/commands/u3-equiv-manifest.test.ts",
     "test/docs-kb-layout.test.ts",
+    "test/findings/closed-report.test.ts",
+    "test/findings/closure-docs.test.ts",
     "test/findings/similar.test.ts",
     "test/findings/store.test.ts",
     "test/helpers-cleanup.test.ts",
