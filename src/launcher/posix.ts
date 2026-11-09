@@ -8,6 +8,7 @@ import { assertRealLauncherAllowed } from "./mode.js";
 import { securePosixDir } from "./posix-dir.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 import { resumeFlags } from "./resume.js";
+import { TRUST_JS } from "../tasks/trust.js";
 
 // Same patterns as terminal.ts; the values land in a shell script.
 const AUTOCOMPACT = /^\d+(\.\d+)?[kKmM]?$/;
@@ -19,7 +20,6 @@ const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 /** macOS/Linux counterpart of buildScript: same env, prompt, model/autocompact/resume flags, as a bash script. */
 // F-vlad-261: the record written at launch can be lost to a live Claude rewriting ~/.claude.json before this window's
 // claude reads it; writing it again here shrinks the gap to zero. Needs the built dist (src/*.ts is not loadable by plain node).
-const TRUST_JS = `import(process.argv[1]).then(m=>{const w=m.trustWorktree(process.argv[2]);if(w)console.error("uyarı: "+w)}).catch(()=>{})`;
 const trustPreflight = (cwd: string): string =>
   `${q(process.execPath)} -e ${q(TRUST_JS)} ${q(pathToFileURL(join(import.meta.dirname, "..", "tasks", "trust.js")).href)} ${q(cwd)} || true`;
 
@@ -145,7 +145,7 @@ export function closePosixWorker(
   const self = o.selfPid ?? process.pid;
   try { run("tmux", ["kill-session", "-t", tmuxSession(taskId)]); } catch { /* no session or no tmux */ }
   let found = "";
-  try { found = String(run("pgrep", ["-f", "--", `bash .*/vlad/${taskId.replace(/[^\w-]/g, "\\$&")}\\.sh$`]) ?? ""); } catch { /* pgrep exits 1 on no match */ }
+  try { found = String(run("pgrep", ["-f", "--", `^(/[^ ]*/)?bash .*/vlad/${taskId.replace(/[^\w-]/g, "\\$&")}\\.sh$`]) ?? ""); } catch { /* pgrep exits 1 on no match */ }
   const killed: number[] = [];
   for (const pid of found.split(/\r?\n/).map((l) => Number(l.trim())).filter((n) => n > 0 && n !== self && n !== process.ppid)) {
     try { run("pkill", ["-TERM", "-P", String(pid)]); } catch { /* no children */ }

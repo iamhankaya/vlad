@@ -2,10 +2,12 @@ import { execFile, execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { assertRealLauncherAllowed } from "./mode.js";
 import { closePosixWorker, externalPosixLaunch } from "./posix.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 import { resumeFlags } from "./resume.js";
+import { TRUST_JS } from "../tasks/trust.js";
 
 // PowerShell treats typographic single quotes as quote characters too; double each one.
 const SQ = /['‘’‚‛]/g;
@@ -17,11 +19,11 @@ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
 // Windows PowerShell 5.1 (and pwsh < 7.3) pass a native argument without escaping embedded double quotes, so the
 // argument ended at the first `"` (T20261103-26). Apply the CommandLineToArgvW rules by hand there: backslashes before
-// a quote are doubled and the quote escaped, trailing backslashes are doubled (the argument is quoted for its spaces).
+// a quote are doubled and the quote escaped, trailing backslashes are doubled only when the argument is quoted (it has whitespace; F-vlad-189).
 const PS51_ARG_ESCAPE =
   // Legacy pins the argument mode (pwsh >= 7.3 would otherwise escape on its own, or not at all for .cmd shims / a profile setting)
   "$PSNativeCommandArgumentPassing = 'Legacy'; " +
-  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); $p = [regex]::Replace($p, '(\\\\+)\\z', '$1$1')";
+  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); if ($p -match '\\s') { $p = [regex]::Replace($p, '(\\\\+)\\z', '$1$1') }";
 // CreateProcess limit is 32767 chars for the whole command line; leave room for the executable and flags.
 const MAX_ARG = 30000;
 
@@ -43,6 +45,8 @@ export function buildScript(req: LaunchRequest): string {
     ...(req.autoCompact === undefined ? [] : ["--autocompact", q(req.autoCompact)]),
     ...(req.resume ? resumeFlags(req.resume.sessionId ?? null).map((f, i) => (i ? q(f) : f)) : []),
   ];
+  // F-vlad-267 (same as POSIX F-vlad-261): write the trust record again right before claude reads it; needs the built dist
+  lines.push(`try { & ${q(process.execPath)} -e ${q(TRUST_JS)} ${q(pathToFileURL(join(import.meta.dirname, "..", "tasks", "trust.js")).href)} ${q(req.cwd)} } catch { }`); // best effort: a failing preflight must not stop claude
   lines.push(["claude", ...flags, "$p"].join(" "));
   return lines.join("\n") + "\n";
 }

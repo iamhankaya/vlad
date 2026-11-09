@@ -349,9 +349,9 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
       throw new Error(msg);
     }
   }
-  let reused = false;
+  let reused = false, queued: string | undefined;
   try {
-    ({ reused = false } = await launchCore({
+    ({ reused = false, queued } = await launchCore({
       taskId: id, repo, worktree: wt, branch, ...(adopt ? { adopt } : {}), ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
       prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills, relatedFindings: relatedFindingsOf(task) }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
@@ -377,6 +377,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     if (now === "cancelled" || now === "failed" || now === "done") { // yalnız terminal: blocked/stalled canlı görevin worktree'ine dokunulmaz
       const problems: string[] = [];
       try { (o.closeWorker ?? noCloser)(id); } catch (x) { problems.push(`pencere kapatılamadı: ${(x as Error).message}`); }
+      if (queued) try { rmSync(queued, { force: true }); } catch (x) { problems.push(`kuyruk dosyası silinemedi: ${(x as Error).message}`); } // F-vlad-179: desktop must not open a worker for it
       if (!reused) { // a re-adopted worktree carries the earlier run's work: only the window goes
         try { removeTaskWorktree(repo, wt, id); } catch (x) { problems.push(`worktree kaldırılamadı: ${(x as Error).message}`); }
         try { untrustWorktree(wt); } catch { /* best effort */ }

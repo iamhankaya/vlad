@@ -1,4 +1,4 @@
-import { lstatSync, mkdirSync, readFileSync } from "node:fs";
+import { constants, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "./atomic.js";
 import { parse, stringify } from "yaml";
@@ -19,9 +19,14 @@ export function serializeDoc(data: object, body: string): string {
   return `---\n${stringify(data, { schema: "core" })}---\n\n${body}`;
 }
 
+/** Reads a kb file as text, refusing a symlink: writes refuse links already; reads must not leave the kb either (F-vlad-036). O_NOFOLLOW (POSIX) closes the lstat→read window; Windows keeps the lstat check. */
+export function readText(file: string): string {
+  if (lstatSync(file).isSymbolicLink()) throw new Error(`symlink okunmaz: ${file}`);
+  return readFileSync(file, { encoding: "utf8", flag: constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) });
+}
+
 export function readDoc<T>(file: string): { data: T; body: string } {
-  if (lstatSync(file).isSymbolicLink()) throw new Error(`symlink okunmaz: ${file}`); // writes refuse links already; reads must not leave the kb either (F-vlad-036)
-  return parseDoc<T>(readFileSync(file, "utf8"));
+  return parseDoc<T>(readText(file));
 }
 
 export function writeDoc(file: string, data: object, body: string): void {
