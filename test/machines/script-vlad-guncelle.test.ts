@@ -1,4 +1,5 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -41,7 +42,7 @@ function world() {
     git(other, "add", "-A"); git(other, "commit", "-q", "-m", "r"); git(other, "push", "-q", "origin", "main");
   };
   const run = (env: Record<string, string> = {}) => {
-    const r = spawnSync("/bin/bash", [SCRIPT], { encoding: "utf8", cwd: repo, env: { PATH: `${bin}:${process.env.PATH ?? ""}`, HOME: process.env.HOME ?? "", VLAD_REPO: repo, ...env } });
+    const r = spawnGuarded("/bin/bash", [SCRIPT], { encoding: "utf8", cwd: repo, env: { PATH: `${bin}:${process.env.PATH ?? ""}`, HOME: process.env.HOME ?? "", VLAD_REPO: repo, ...env } });
     const p = parseResultLine(r.stdout);
     expect(p.dataError, r.stdout + r.stderr).toBeUndefined();
     return { exit: r.status, data: p.data as { ok: boolean; step?: string; summary: string; from?: string; to?: string; changed?: boolean }, calls: existsSync(log) ? readFileSync(log, "utf8") : "", stderr: r.stderr };

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { COMMANDS } from "../../src/commands/manifest.js";
@@ -6,7 +6,7 @@ import { validateManifest } from "../../src/commands/types.js";
 
 const root = resolve(import.meta.dirname, "../..");
 function listCommands(): { version: number; commands: { path: string[]; hasJson: boolean }[] } {
-  const r = spawnSync(process.execPath, ["scripts/list-commands.mjs"], { cwd: root, encoding: "utf8", timeout: 30_000, killSignal: "SIGKILL", env: { PATH: process.env.PATH ?? "" } });
+  const r = spawnGuarded(process.execPath, ["scripts/list-commands.mjs"], { cwd: root, encoding: "utf8", timeout: 30_000, killSignal: "SIGKILL", env: { PATH: process.env.PATH ?? "" } });
   expect(r.stderr).toBe("");
   expect(r.status).toBe(0);
   return JSON.parse(r.stdout);

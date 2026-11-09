@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -245,7 +245,7 @@ describe("vlad kb lint (CLI)", () => {
   const run = (args: string[]) => {
     const env = { ...isolatedEnv(), VLAD_HOME: home } as Record<string, string | undefined>;
     delete env.VLAD_KB_DIR;
-    const r = spawnSync("node", [cli, "kb", "lint", ...args], { encoding: "utf8", env });
+    const r = spawnGuarded("node", [cli, "kb", "lint", ...args], { encoding: "utf8", env });
     return { code: r.status, out: r.stdout, err: r.stderr };
   };
   it("prints json, exits 0 with flags, 1 with --strict, 1 on unknown project", () => {

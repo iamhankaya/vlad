@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -32,7 +32,7 @@ x
 });
 
 function vlad(args: string[], input?: string, env: Record<string, string> = {}) {
-  const r = spawnSync("node", [cli, ...args], {
+  const r = spawnGuarded("node", [cli, ...args], {
     encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: home, CLAUDE_CODE_REMOTE: "", ...env },
   });
   return { code: r.status, out: r.stdout, err: r.stderr };

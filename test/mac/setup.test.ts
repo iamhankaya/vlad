@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -79,7 +79,7 @@ describe.skipIf(process.platform === "win32")("mac/setup.sh", () => {
     const wrap = join(s.home, ".vlad-agent", "main-session.sh");
     // sarmalayıcı PATH'i sabitler (sahte tmux görünmez): yalnız VLAD_HOME satırını değerlendir
     const line = readFileSync(wrap, "utf8").split("\n").find((l) => l.startsWith("export VLAD_HOME=")) ?? "";
-    const w = spawnSync("/bin/bash", ["-c", `${line}\nprintf %s "$VLAD_HOME"`], { cwd: s.root, encoding: "utf8" });
+    const w = spawnGuarded("/bin/bash", ["-c", `${line}\nprintf %s "$VLAD_HOME"`], { cwd: s.root, encoding: "utf8" });
     expect(w.status).toBe(0);
     expect(existsSync(join(s.root, "PWN"))).toBe(false);
     expect(w.stdout).toBe(evil);

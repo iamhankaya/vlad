@@ -1,6 +1,7 @@
 // F-vlad-096 doğrulama (tester, T20261101-14): kilit düzeltmesini bağımsız zorlar.
 // Her şey makeHome() geçici dizininde ve sahte kb ile koşar; gerçek kb/ (C:\dev\vlad-kb) ve ~/.claude'a dokunulmaz.
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -126,7 +127,7 @@ describe("F-vlad-096 doğrulama: sahibi ölen kilit", { timeout: 300_000 }, () =
   };
   // F-vlad-107: taskkill yalnız Windows'ta var; diğer platformlarda SIGKILL (ağaç gerekmez: süreçler doğrudan `node`)
   const kill = (pid: number) => {
-    if (process.platform === "win32") spawnSync("taskkill", ["/F", "/T", "/PID", String(pid)]);
+    if (process.platform === "win32") spawnGuarded("taskkill", ["/F", "/T", "/PID", String(pid)]);
     else try { process.kill(pid, "SIGKILL"); } catch { /* zaten çıkmış */ }
   };
 

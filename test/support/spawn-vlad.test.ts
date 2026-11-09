@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isolatedEnv, runSpawn, spawnVlad } from "./spawn-vlad.js";
+import { isolatedEnv, runSpawn, spawnGuarded, spawnVlad } from "./spawn-vlad.js";
 
 const node = process.execPath;
 
@@ -108,5 +108,18 @@ describe("spawnVlad", () => {
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/Usage|vlad/i);
     expect(readFileSync(join(import.meta.dirname, "..", "..", "package.json"), "utf8")).toContain("vlad");
+  });
+});
+
+describe("spawnGuarded (F-vlad-258: drop-in spawnSync with timeout/maxBuffer guard)", () => {
+  it("cuts a hanging child with SIGKILL instead of hanging the run", () => {
+    const r = spawnGuarded(process.execPath, ["-e", "setTimeout(()=>{},20000)"], { encoding: "utf8", timeout: 400 });
+    expect(r.signal).toBe("SIGKILL");
+  });
+
+  it("applies a default timeout and keeps caller options (env/input/encoding)", () => {
+    const r = spawnGuarded(process.execPath, ["-e", "process.stdin.pipe(process.stdout)"], { encoding: "utf8", input: "hi" });
+    expect(r.stdout).toBe("hi");
+    expect(r.status).toBe(0);
   });
 });

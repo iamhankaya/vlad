@@ -1,6 +1,7 @@
 // F-vlad-102: `task launch` terminal/launcher beklemesi boyunca kb kilidini tutmaz.
 // Geçici kb + geçici git deposu; sahte yavaş launcher (VLAD_LAUNCHER=noop + VLAD_NOOP_LAUNCH_DELAY_MS).
-import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,7 +14,7 @@ let home: string;
 let repo: string;
 const env = (extra: Record<string, string> = {}) => ({ ...isolatedEnv(), VLAD_HOME: home, VLAD_LAUNCHER: "noop", ...extra });
 const vlad = (args: string[], input = "", extra: Record<string, string> = {}) =>
-  spawnSync("node", [cli, ...args], { encoding: "utf8", input, env: env(extra) });
+  spawnGuarded("node", [cli, ...args], { encoding: "utf8", input, env: env(extra) });
 const git = (...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd: repo, stdio: "pipe" });
 
 beforeEach(() => {

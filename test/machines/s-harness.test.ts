@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { existsSync, readFileSync } from "node:fs";
 import net from "node:net";
 import { dirname, join } from "node:path";
@@ -45,7 +45,7 @@ describe("machines:S harness", () => {
   it("the recorder CLI appends argv + stdin as one JSONL line and honors exit/stdout env", () => {
     const p = pair();
     const file = join(p.brain.home, "rec.jsonl");
-    const r = spawnSync(process.execPath, [RECORD_CLI, "task", "log", "T1", "a b"], {
+    const r = spawnGuarded(process.execPath, [RECORD_CLI, "task", "log", "T1", "a b"], {
       input: "içerik", encoding: "utf8",
       env: { ...isolatedEnv(), VLAD_RECORD_FILE: file, VLAD_RECORD_STDOUT: "tamam", VLAD_RECORD_EXIT: "3", VLAD_FORWARDED: "windows" },
     });

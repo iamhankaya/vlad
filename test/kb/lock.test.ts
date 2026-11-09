@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -9,7 +9,7 @@ let kb: string;
 let lock: string;
 beforeEach(() => { kb = join(makeHome(), "kb"); lock = join(kb, ".vlad.lock"); });
 
-const deadPid = () => Number(spawnSync("node", ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" }).stdout);
+const deadPid = () => Number(spawnGuarded("node", ["-e", "process.stdout.write(String(process.pid))"], { encoding: "utf8" }).stdout);
 const owner = (o: object) => writeFileSync(lock, JSON.stringify({ token: "other", ...o }));
 const fast = { timeoutMs: 300 };
 

@@ -5,7 +5,7 @@ import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupOp, closeOp, launchOp, reconcileLaunch, resumeOp } from "../../src/agent/ops/launch.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
-import { makeHome, rmTemp } from "../helpers.js";
+import { canSymlink, makeHome, rmTemp } from "../helpers.js";
 
 const git = (cwd: string, ...a: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd, stdio: "pipe", encoding: "utf8" }).trim();
 const ID = "T20261101-61";
@@ -239,7 +239,7 @@ describe("machines:C2 cleanup op (güvenlik)", () => {
     expect(readFileSync(join(outside, "a.txt"), "utf8")).toBe("x");
   });
 
-  it("F-154: silmeden hemen önce yol kök dışına çevrilirse forbidden, hedef silinmez", async () => {
+  it.skipIf(!canSymlink())("F-154: silmeden hemen önce yol kök dışına çevrilirse forbidden, hedef silinmez", async () => {
     const wt = await launched();
     const outside = join(base, "kritik3"); mkdirSync(outside); writeFileSync(join(outside, "a.txt"), "x");
     const close = () => { rmSync(wt, { recursive: true, force: true }); symlinkSync(outside, wt); return []; }; // close adımı sırasında yol oynanır

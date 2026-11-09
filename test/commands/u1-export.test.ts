@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,7 +30,7 @@ describe("u1-export: desktop catalog", () => {
     expect(cat).toEqual(snap); // a new command updates the snapshot in the same commit
   });
   it("scripts/check-desktop-catalog.mjs passes on the built CLI and fails on a stale snapshot", () => {
-    const run = (args: string[]) => spawnSync(process.execPath, ["scripts/check-desktop-catalog.mjs", ...args], { cwd: root, encoding: "utf8", timeout: 30_000, killSignal: "SIGKILL", env: { PATH: process.env.PATH ?? "" } });
+    const run = (args: string[]) => spawnGuarded(process.execPath, ["scripts/check-desktop-catalog.mjs", ...args], { cwd: root, encoding: "utf8", timeout: 30_000, killSignal: "SIGKILL", env: { PATH: process.env.PATH ?? "" } });
     const ok = run([]);
     expect(ok.stderr).toBe("");
     expect(ok.status).toBe(0);

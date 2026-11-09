@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -17,7 +17,7 @@ const cli = resolve(import.meta.dirname, "..", "..", "dist", "cli.js");
 const run = (args: string[]) => {
   const env = { ...isolatedEnv(), VLAD_HOME: home } as Record<string, string | undefined>;
   delete env.VLAD_KB_DIR;
-  const r = spawnSync("node", [cli, ...args], { encoding: "utf8", env });
+  const r = spawnGuarded("node", [cli, ...args], { encoding: "utf8", env });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 const FRESH = "## Durum özeti\n_Güncel: 2999-01-01T00:00:00+03:00_\n\nx\n";
