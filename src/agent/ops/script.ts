@@ -11,6 +11,7 @@ import type { Journal, JournalRecord } from "../journal.js";
 import type { Verdict } from "../reconcile.js";
 import { machineDef } from "../../fleet/registry.js";
 import { agentEnv } from "./env.js";
+import { maint } from "../maintenance.js";
 import { argObject, bad } from "./worker.js";
 
 // Kayıtlı bakım betikleri (T20261109-03): `script-list` salt okuma, `script-run` günlüklü. Betik yalnız HEAD manifestinde kayıtlı,
@@ -30,14 +31,16 @@ export interface ScriptDeps {
   requirePushed?: boolean;
   /** started kaydına betik sınıfı yazılır (çökme uzlaştırması için) */
   journal?: Journal;
+  /** selfUpdate başarısında yeniden başlatmayı zamanlar; yoksa sonuçta `restart` alanı olmaz */
+  restart?: () => void;
 }
 export const defaultScriptDeps = (): ScriptDeps => {
   // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
   const e = agentEnv();
-  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env, journal: e.journal };
+  return { home: getVladHome(), platform: process.platform as Os, machine: e.self, roots: machineDef(e.cfg, e.self)?.roots ?? [], stateDir: agentDir(), env: process.env, journal: e.journal, restart: e.requestRestart };
 };
 
-/** Tek seferde tek betik: ikinci çağrı `busy` (geçici; CLI çıkış kodu 75). shortcut: bakım (maintenance) bayrağı (b) fazında bu kilide bağlanır. */
+/** Tek seferde tek betik: ikinci çağrı `busy` (geçici; CLI çıkış kodu 75). selfUpdate betiği ayrıca bakım bayrağını açar (maintenance.ts). */
 let active: string | null = null;
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -65,7 +68,6 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   if (!same.length) throw scriptFail("not_found", "unregistered", `kayıtlı betik değil: ${a.name}`);
   const entry: ScriptEntry | undefined = same.find((e) => e.platform === d.platform);
   if (!entry) throw scriptFail("not_found", "no_variant", `${a.name} için ${d.platform} varyantı yok`);
-  if (entry.selfUpdate) throw new RemoteError("forbidden", "forbidden: selfUpdate betikleri bu Agent sürümünde desteklenmiyor");
 
   const params = normalizeParams(entry, given as Record<string, string>);
   for (const p of entry.params) {
@@ -81,15 +83,29 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
 
   d.journal?.annotate(ctx.opId, { cls: entry.class }); // çökme uzlaştırması: sınıf kayıttan okunur
   if (active) throw new RemoteError("busy", `busy: başka bir betik sürüyor: ${active}`);
+  // selfUpdate: başlamadan uçuşta başka op varsa busy (npm ci altlarından çekmesin); denetim ile bayrak arasında await yok (tek tur)
+  if (entry.selfUpdate) {
+    if (maint.others(ctx.opId) > 0) throw new RemoteError("busy", "busy: [maintenance] uçuşta başka işlemler var; bitince selfUpdate betiğini tekrar çalıştır");
+    maint.enter();
+  }
   active = entry.name;
+  let restarting = false;
   try {
     const out = await runScript({
       bytes: chk.bytes!, name: entry.name, ext: entry.file.endsWith(".ps1") ? "ps1" : "sh", opId: ctx.opId, cwd: st.repo, dir: join(d.stateDir, "scripts-run"),
       env: scriptEnv(d.env, { home: d.home, repo: st.repo, machine: d.machine, opId: ctx.opId, script: entry.name, params, roots: d.roots }),
       timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform,
     });
+    // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
+    if (entry.selfUpdate && out.exit === 0 && out.data?.ok === true && d.restart) {
+      d.restart(); restarting = true;
+      return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out, restart: "scheduled" };
+    }
     return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out };
-  } finally { active = null; }
+  } finally {
+    active = null;
+    if (entry.selfUpdate && !restarting) maint.leave(); // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
+  }
 }
 
 /**

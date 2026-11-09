@@ -66,10 +66,6 @@ describe("script-run: ad ve kayıt", () => {
   it("bilinmeyen istek alanı (ör. yol) bad_request", async () => {
     expect((await fail(scriptRun({ name: "x", file: "/etc/passwd" }, deps(repo("a")), ctx))).code).toBe("bad_request");
   });
-  it("selfUpdate betiği bu sürümde reddedilir", async () => {
-    const f = repo("echo a\n", { selfUpdate: true });
-    expect((await fail(scriptRun({ name: "x" }, deps(f), ctx))).code).toBe("forbidden");
-  });
 });
 
 describe("script-run: parametreler", () => {

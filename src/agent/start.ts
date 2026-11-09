@@ -3,11 +3,16 @@ import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
+import { getVladHome } from "../kb/home.js";
+import { defaultExec } from "../launcher/terminal.js";
 import { nowMs } from "../fleet/clock.js";
 import { RemoteError } from "../fleet/types.js";
 import { AgentClient } from "./client.js";
 import { Journal } from "./journal.js";
-import { setAgentEnv } from "./ops/env.js";
+import { winStartCmd } from "./install.js";
+import { maint } from "./maintenance.js";
+import { scheduleRestart, winRestartHelper, type RestartDeps } from "./restart.js";
+import { agentEnv, setAgentEnv } from "./ops/env.js";
 import { reconcileApplyWrite } from "./ops/apply-write.js";
 import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
@@ -112,6 +117,18 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   writeFileSync(pidFile(), String(process.pid));
   const clip = startClipSync(deps);
   const stop = () => { void Promise.allSettled([clip.stop(), aktarim.close()]).then(() => srv.close()).finally(() => { rmSync(pidFile(), { force: true }); process.exit(0); }); };
+  // selfUpdate başarısında yeniden başlatma (spec S23/S24): Mac'te çıkış (launchd KeepAlive), Windows'ta WMI yardımcısı agent-start.cmd'yi açar
+  const restartDeps: RestartDeps = {
+    platform: process.platform, delayMs: 2000, pollMs: 250, maxWaitMs: 5 * 60_000, inflight: () => maint.inflight(), stop,
+    helper: async () => {
+      const startCmd = winStartCmd(getVladHome());
+      if (!existsSync(startCmd)) throw new Error(`${startCmd} yok (vlad agent install --apply ile kurulmamış); Agent'ı elle yeniden başlat`);
+      const h = winRestartHelper({ pidFile: pidFile(), startCmd, systemRoot: process.env.SystemRoot });
+      await defaultExec(h.file, h.args);
+    },
+    onFail: (m) => { maint.leave(); process.stderr.write(`yeniden başlatma yapılamadı, Agent eski süreçle sürüyor: ${m}\n`); },
+  };
+  agentEnv().requestRestart = () => scheduleRestart(restartDeps);
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   if (queue) {
