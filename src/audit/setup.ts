@@ -13,9 +13,11 @@ import { auditSkills, parseSince } from "./skills.js";
 const DAY = 86_400_000;
 const STALE_DAYS = 30;
 const EXAMPLES = 5;
-const CLS = "(?:sınıflay[ıi]c[ıi]|sınıflandırıcı|classifier)";
-const DENY = "(?:reddedildi|engellendi|reddetti|engelledi)";
-const IZIN_REDDI = new RegExp(`[iİ]zin reddi|permission denied|${DENY}[^\\n]*${CLS}|${CLS}[^\\n]*${DENY}`, "gi");
+const CLS = "(?:sınıflay[ıi]c[ıi]|sınıflandırıcı|auto[- ]mode classifier|classifier)";
+const DENY = "(?:reddedildi|engellendi|reddetti|engelledi|denied|blocked)";
+// one İlerleme line counts once; the classifier word must sit within 80 chars of the denial verb (F-vlad-279 review)
+const IZIN_REDDI = new RegExp(`[iİ]zin reddi|permission denied|${DENY}.{0,80}${CLS}|${CLS}.{0,80}${DENY}`, "i");
+const countLines = (s: string, re: RegExp) => s.split("\n").filter((l) => re.test(l.replace(/İ/g, "i").replace(/I/g, "ı"))).length;
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
 export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: Record<string, number> }
@@ -124,7 +126,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     signal(out.signals.degisiklik_istegi, id, matches(getSection(t.body, "## Önceki raporlar") ?? "", /^### Önceki rapor #\d+/gm));
     signal(out.signals.karar, id, matches(progress, /^- \S+ \[KARAR\]/gm));
     // "İzin reddi", "permission denied", and the workers' real phrasings: "push reddedildi (auto mode classifier, Bash)", "sınıflayıcı tarafından engellendi" (F-vlad-279)
-    signal(out.signals.izin_reddi, id, matches(progress, IZIN_REDDI));
+    signal(out.signals.izin_reddi, id, countLines(progress, IZIN_REDDI));
 
     // structural line only (`- <ts> Codex turları: ara=<n> son=<n>`); the last one wins, as the gate rewrites the total
     const cx = [...progress.matchAll(/^- \S+ Codex turları: ara=(\d+) son=(\d+)\s*$/gm)].pop();
