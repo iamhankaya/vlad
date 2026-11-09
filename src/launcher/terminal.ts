@@ -46,7 +46,7 @@ export function buildScript(req: LaunchRequest): string {
     ...(req.resume ? resumeFlags(req.resume.sessionId ?? null).map((f, i) => (i ? q(f) : f)) : []),
   ];
   // F-vlad-267 (same as POSIX F-vlad-261): write the trust record again right before claude reads it; needs the built dist
-  lines.push(`& ${q(process.execPath)} -e ${q(TRUST_JS)} ${q(pathToFileURL(join(import.meta.dirname, "..", "tasks", "trust.js")).href)} ${q(req.cwd)}`);
+  lines.push(`try { & ${q(process.execPath)} -e ${q(TRUST_JS)} ${q(pathToFileURL(join(import.meta.dirname, "..", "tasks", "trust.js")).href)} ${q(req.cwd)} } catch { }`); // best effort: a failing preflight must not stop claude
   lines.push(["claude", ...flags, "$p"].join(" "));
   return lines.join("\n") + "\n";
 }

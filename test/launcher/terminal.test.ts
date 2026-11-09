@@ -69,7 +69,7 @@ describe("trust preflight (F-vlad-267)", () => {
     expect(at).toBeLessThan(s.indexOf("\nclaude "));
     expect(s).toContain("trustWorktree");
     const line = s.split("\n").find((l) => l.includes("trustWorktree"))!;
-    expect(line.startsWith("& ")).toBe(true);
+    expect(line.startsWith("try { & ") && line.includes("} catch { }")).toBe(true); // best effort: a failing preflight must not stop claude
     expect(line).toContain("'C:\\dev\\my proj'");
     expect(line).not.toContain('"'); // PS 5.1 would cut a native argument at an unescaped quote (T20261103-26)
   });
