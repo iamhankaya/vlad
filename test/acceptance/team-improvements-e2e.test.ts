@@ -101,7 +101,7 @@ describe("adım 2: finding add|list|set + status --summary", { timeout: 30_000 }
     add(["--severity", "orta", "--title", "o"]);
     expect(vlad(["status", "--summary"]).out).toMatch(/, 2 açık kritik\/yüksek bulgu\s*$/);
     expect(vlad(["status", "--summary", "--hook"]).out).toContain("2 açık kritik/yüksek bulgu");
-    vlad(["finding", "set", "F-alpha-001", "wontfix"]);
+    vlad(["finding", "set", "F-alpha-001", "wontfix", "--reason", "etkisiz"]);
     vlad(["finding", "set", "F-alpha-002", "fixed", "--by", "T20261022-03"]);
     expect(vlad(["status", "--summary"]).out).not.toMatch(/bulgu/);
   });
