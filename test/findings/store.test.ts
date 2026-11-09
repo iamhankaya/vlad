@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths } from "../../src/kb/index.js";
 import {
-  addFinding, countOpenSevere, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES,
+  addFinding, countOpenSevere, getFinding, listFindingsWithWarnings, parseFilter, setFindingState, setFindingStates, SEVERITIES, STATES,
 } from "../../src/findings/store.js";
 import { makeHome } from "../helpers.js";
 
@@ -110,5 +110,70 @@ describe("findings store", () => {
   it("parseFilter splits, trims and rejects unknown values", () => {
     expect(parseFilter("open, deferred", STATES, "durum")).toEqual(["open", "deferred"]);
     expect(() => parseFilter("open,x", SEVERITIES, "önem")).toThrow(/geçersiz önem: open, x/);
+  });
+});
+
+describe("setFindingStates (toplu)", () => {
+  beforeEach(() => { makeHome(); });
+  const NOW = new Date("2026-11-09T12:00:00+03:00");
+
+  it("sets many ids at once and writes a ## Kapanış section with date, state, reason and source", () => {
+    const a = add(), b = add({ project: "beta" });
+    const r = setFindingStates([a.data.id, b.data.id], "wontfix", { reason: "bulgu-tarama: etkisiz", by: undefined }, NOW);
+    expect(r.map((f) => f.data.state)).toEqual(["wontfix", "wontfix"]);
+    const text = readFileSync(a.file, "utf8");
+    expect(text).toContain("## Ayrıntı");
+    expect(text).toMatch(/## Kapanış\n- 2026-11-09.* wontfix — bulgu-tarama: etkisiz/);
+    expect(getFinding(b.data.id).data.state).toBe("wontfix");
+  });
+  it("wontfix requires a reason", () => {
+    const a = add();
+    expect(() => setFindingStates([a.data.id], "wontfix", {}, NOW)).toThrow(/--reason/);
+    expect(getFinding(a.data.id).data.state).toBe("open");
+  });
+  it("fixed records --by as source and fixed_by", () => {
+    const a = add();
+    setFindingStates([a.data.id], "fixed", { by: "T20261109-24", reason: "kodda düzeltilmiş: abc123" }, NOW);
+    expect(getFinding(a.data.id).data.fixed_by).toBe("T20261109-24");
+    expect(readFileSync(a.file, "utf8")).toContain("kaynak: T20261109-24");
+  });
+  it("all-or-nothing: one unknown id writes none", () => {
+    const a = add();
+    expect(() => setFindingStates([a.data.id, "F-alpha-099"], "wontfix", { reason: "x" }, NOW)).toThrow(/bulunamadı: F-alpha-099/);
+    expect(getFinding(a.data.id).data.state).toBe("open");
+    expect(readFileSync(a.file, "utf8")).not.toContain("Kapanış");
+  });
+  it("all-or-nothing: invalid state or --by on non-fixed writes none; duplicates are collapsed", () => {
+    const a = add();
+    expect(() => setFindingStates([a.data.id], "closed", {}, NOW)).toThrow(/geçersiz durum/);
+    expect(() => setFindingStates([a.data.id], "wontfix", { by: "T20261109-24", reason: "x" }, NOW)).toThrow(/--by/);
+    expect(setFindingStates([a.data.id, a.data.id], "wontfix", { reason: "x" }, NOW)).toHaveLength(1);
+    expect(readFileSync(a.file, "utf8").match(/## Kapanış/g)).toHaveLength(1);
+  });
+  it("reopening needs no reason and keeps the closing history", () => {
+    const a = add();
+    setFindingStates([a.data.id], "wontfix", { reason: "x" }, NOW);
+    setFindingStates([a.data.id], "open", {}, NOW);
+    expect(getFinding(a.data.id).data.state).toBe("open");
+    expect(readFileSync(a.file, "utf8")).toContain("wontfix — x");
+  });
+  it("rejects an empty id list", () => {
+    expect(() => setFindingStates([], "fixed", {}, NOW)).toThrow(/bulgu ID/);
+  });
+});
+
+describe("listFindingsWithWarnings: --older-than / --source", () => {
+  beforeEach(() => { makeHome(); });
+  it("filters by age in days (created) and by source task", () => {
+    const NOW = new Date(Date.now() + 3_600_000); // after both findings were created
+    const old = add({ source: "T20261001-01" }), fresh = add({ source: "T20261108-01" });
+    // age the first one
+    const t = readFileSync(old.file, "utf8").replace(/created: .*/, `created: ${new Date(NOW.getTime() - 40 * 86_400_000).toISOString()}`);
+    writeFileSync(old.file, t);
+    const ids = (f: Parameters<typeof listFindingsWithWarnings>[0]) => listFindingsWithWarnings(f).findings.map((x) => x.data.id);
+    expect(ids({ olderThanDays: 30, now: NOW })).toEqual([old.data.id]);
+    expect(ids({ olderThanDays: 0, now: NOW })).toEqual([old.data.id, fresh.data.id]);
+    expect(ids({ source: "T20261108-01" })).toEqual([fresh.data.id]);
+    expect(ids({ olderThanDays: 30, source: "T20261108-01", now: NOW })).toEqual([]);
   });
 });

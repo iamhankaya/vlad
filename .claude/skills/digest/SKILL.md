@@ -100,13 +100,16 @@ vlad project write <slug> --file <geçici.md> --json
 ## 4b. Bulgular
 
 Kapanış raporlarının `### Açık noktalar` bölümündeki (danışman rollerde `### Varsayımlar`, `### Açık sorular ve varsayımlar`; designer'da `### Bulgular`) **ertelenen/çözülmeyen** maddeleri bulgu kaydına geçir; kaybolmasınlar. Çalışanlar maddeleri `- [önem] başlık — ayrıntı` biçiminde yazar; önem yoksa içerikten tahmin etme, kullanıcıya sor (ya da `bilgi`). Yalnızca "yapılmadı / atlandı / sonraya" türü gerçek işleri kaydet; salt bilgi notlarını ve zaten düzeltilmiş maddeleri atla. Çalışanın kapsam dışı taramada bulup **bilerek dokunmadığı** ve somut etkisi olmadığını yazdığı `düşük`/`bilgi` maddeleri ("bırakıldı", "nadir", "yeni regresyon değil") de bulgu açmaz; yalnız günlük maddesinde tek satır anılır. Bulgu yalnız somut etkisi olan ya da gerçekten ertelenmiş iş için açılır (gerekçe: 2026-11-03 T20261103-28 — iki bulgu kapanırken iki etkisiz kenar notu bulgu olarak açıldı, F-vlad-192/193 wontfix).
+**Düzeltme fazı (D-genel-008):** düzeltme fazının raporundan çıkan yeni bulgu yalnız kritik/yüksekse değişiklik turu gerektirir; orta/düşük bulgu `vlad finding add` ile kaydedilir ama tur açmaz, son kapı listesine girer.
+
+**Bulgu çözen görev:** görevin amacı bulgu çözmekse (`## Tanım`/`## Bağlam` bir `F-…`'yi kapatıyor) raporundaki `### Açık noktalar` maddelerinden yalnız şunlar bulgu olur: (i) `[regresyon]` — görevin getirdiği regresyon, (ii) kritik/yüksek önemli madde, (iii) çözülen bulgunun kalan kısmı (`[kalan F-…]`). (iii)'te **yeni bulgu açılmaz**: mevcut bulgu açık kalır (ya da `vlad finding set <id> open`) ve kalan kısım o bulgunun ayrıntısına/günlüğe not edilir. Diğer maddeler raporda kalır, günlükte tek satır anılır; bulgu açılmaz. Çalışan etiketlemediyse raporu okuyup sınıfla; emin olmadığını `vlad digest pending add` ile ekle. Gerekçe: bulgu çözen görev yeni bulgu zinciri üretip hijyeni bozuyordu (kullanıcı, 2026-11-09).
 1. Önce yinelemeyi önle: `vlad finding list --project <slug> --json`; aynı başlık zaten kayıtlıysa yenisini ekleme.
 2. Ayrıntı varsa geçici dosyaya yaz, sonra:
    ```
    vlad finding add --project <slug> --severity <kritik|yüksek|orta|düşük|bilgi> --source <görev-id> --title "<başlık>" [--detail-file <md>] [--state deferred] --json
    ```
    Kullanıcı bilerek ertelediyse `--state deferred`, aksi halde `open`.
-3. Rapor bir bulgunun düzeltildiğini söylüyorsa (ör. "F-alpha-003 giderildi"): `vlad finding set <id> fixed --by <görev-id> --json`; "yapmayacağız" kararı için `wontfix`.
+3. Rapor bir bulgunun düzeltildiğini söylüyorsa (ör. "F-alpha-003 giderildi"): `vlad finding set <id> fixed --by <görev-id> --json`; "yapmayacağız" kararı için `wontfix` (`--reason "<gerekçe>"` zorunlu; bulgu dosyasına `## Kapanış` olarak yazılır). Birden çok bulgu aynı durumdaysa tek komut: `vlad finding set <id1> <id2> … <durum> [--reason …] [--by …]` (hepsi ya da hiçbiri). Uzun süredir açık bulgu yığınını toplu taramak için `/bulgu-tarama`.
 4. Kritik/yüksek bulguları kullanıcıya ayrıca belirt.
 
 ## 5. Kararlar

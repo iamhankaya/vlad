@@ -1,9 +1,15 @@
 import type { Command } from "commander";
 import { join } from "node:path";
-import { addFinding, listFindingsWithWarnings, parseFilter, setFindingState, SEVERITIES, STATES } from "../../findings/store.js";
+import { addFinding, listFindingsWithWarnings, parseFilter, setFindingStates, SEVERITIES, STATES } from "../../findings/store.js";
 import { readInput } from "../../kb/input.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
+
+const parseDays = (v: unknown): number => {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`geçersiz --older-than: "${v}" (gün sayısı, ≥ 0)`);
+  return n;
+};
 
 export function registerFinding(program: Command, k: Kit): void {
   const { out, def } = k;
@@ -28,6 +34,8 @@ export function registerFinding(program: Command, k: Kit): void {
       project: o.project as string | undefined,
       state: o.state ? parseFilter(String(o.state), STATES, "durum") : undefined,
       severity: o.severity ? parseFilter(String(o.severity), SEVERITIES, "önem") : undefined,
+      olderThanDays: o.olderThan !== undefined ? parseDays(o.olderThan) : undefined,
+      source: o.source as string | undefined,
     });
     out(
       o,
@@ -37,9 +45,18 @@ export function registerFinding(program: Command, k: Kit): void {
   })
     .option("--project <slug>", "proje slug'ı")
     .option("--state <durumlar>", `virgülle ayrılmış: ${STATES.join(", ")}`)
-    .option("--severity <önemler>", `virgülle ayrılmış: ${SEVERITIES.join(", ")}`);
-  def(finding, "set <id> <state>", "Bulgunun durumunu değiştirir", (id: string, state: string, o: Opts) => {
-    const f = setFindingState(id, state, o.by as string | undefined);
-    out(o, { id, state: f.data.state, fixed_by: f.data.fixed_by ?? null }, `${id} -> ${f.data.state}`);
-  }).option("--by <görev>", "düzelten görev (yalnızca fixed)");
+    .option("--severity <önemler>", `virgülle ayrılmış: ${SEVERITIES.join(", ")}`)
+    .option("--older-than <gün>", "yalnız bu kadar günden eski (created) bulgular")
+    .option("--source <görev>", "yalnız bu görevin raporladığı bulgular");
+  def(finding, "set <args...>", "Bulgu(lar)ın durumunu değiştirir: set <id...> <durum> (hepsi ya da hiçbiri)", (args: string[], o: Opts) => {
+    if (args.length < 2) throw new Error("kullanım: finding set <id...> <durum>");
+    const state = args[args.length - 1]!;
+    const ids = args.slice(0, -1);
+    const fs = setFindingStates(ids, state, { by: o.by as string | undefined, reason: o.reason as string | undefined });
+    const rows = fs.map((f) => ({ id: f.data.id, state: f.data.state, fixed_by: f.data.fixed_by ?? null }));
+    // one id keeps the original single-object shape (desktop console and scripts read it)
+    out(o, rows.length === 1 ? rows[0]! : { updated: rows }, rows.map((r) => `${r.id} -> ${r.state}`).join("\n"));
+  })
+    .option("--by <görev>", "düzelten görev (yalnızca fixed)")
+    .option("--reason <metin>", "gerekçe (wontfix'te zorunlu); bulgu dosyasına ## Kapanış olarak yazılır");
 }

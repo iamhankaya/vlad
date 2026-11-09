@@ -92,7 +92,7 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 ### Kabul kriterleri
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
-(ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir)
+(ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir. **Görevin amacı bulgu çözmekse** (Tanım/Bağlam bir `F-…`'yi kapatıyor) maddeyi etiketle: `- [önem] [regresyon] başlık — …` (senin getirdiğin regresyon), `- [önem] [kalan F-…] başlık — …` (çözdüğün bulgunun kalan kısmı; yeni bulgu açılmaz, mevcut açık kalır); etiketsiz ve kritik/yüksek olmayan maddeler raporda kalır, bulgu olmaz)
 ### Test itirazı (hızlı yol)
 (yalnız developer rolünde ve yalnız hızlı yolla mekanik test düzeltmesi yaptıysan: `- <test yol:satır> — ne değişti, gerekçe, commit`; yoksa bölümü yazma)
 ### CLAUDE.md komut satırı önerisi

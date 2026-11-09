@@ -115,3 +115,21 @@ describe("kb lint cache refresh (F-vlad-182)", () => {
     expect(night, "morning report step in the night-mode section").toMatch(/Sabah raporu[\s\S]*vlad kb lint --json/);
   });
 });
+
+describe("bulgu hijyeni (T20261109-24)", () => {
+  it("bulgu-tarama has name == dir, trigger, 4 steps and the never-auto-close list", () => {
+    const t = read(".claude/skills/bulgu-tarama/SKILL.md");
+    expect(field(t, "name")).toBe("bulgu-tarama");
+    expect(field(t, "description")).toMatch(/Kullan/);
+    for (const w of ["## Adım 1", "## Adım 2", "## Adım 3", "## Adım 4", "kör", "kapat-fixed", "kapat-wontfix", "birleştir", "kalsın", "Asla otomatik kapatılmaz", "kritik", "güvenlik etkili", "D-…", "kullanıcının açtığı", "vlad finding set <id...>", "vlad kb commit", "vlad finding set <id> open"]) expect(t, w).toContain(w);
+  });
+  it("D-genel-008 and the finding-resolving-task rule are in digest, status and vlad-worker", () => {
+    for (const f of [".claude/skills/digest/SKILL.md", ".claude/skills/status/SKILL.md"]) {
+      const t = read(f);
+      for (const w of ["D-genel-008", "yalnız kritik/yüksek", "[regresyon]", "[kalan F-…]"]) expect(t, `${f}: ${w}`).toContain(w);
+    }
+    const w = read("global/skills/vlad-worker/SKILL.md");
+    for (const x of ["[regresyon]", "[kalan F-…]", "bulgu çözmekse"]) expect(w, x).toContain(x);
+  });
+});
+
