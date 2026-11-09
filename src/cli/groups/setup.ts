@@ -48,7 +48,7 @@ export function registerSetup(program: Command, k: Kit): void {
       else if (process.stdin.isTTY && process.stdout.isTTY && !o.json) {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
         try { raw = await interviewAnswers(async (p, d) => rl.question(d ? `${p} (${d}): ` : `${p}: `), platform); } finally { rl.close(); }
-      } else if (!o.join || o.only === undefined) return usage("etkileşimsiz ortamda --answers <json|-> gerekli", ["cevap anahtarları: vlad setup --help; örnek: {\"role\":\"brain\",\"machines\":\"single\",\"kb\":{\"mode\":\"local\"},\"roots\":[\"~/dev\"]}"]);
+      } else return usage("etkileşimsiz ortamda --answers <json|-> gerekli", ["cevap anahtarları: vlad setup --help; örnek: {\"role\":\"brain\",\"machines\":\"single\",\"kb\":{\"mode\":\"local\"},\"roots\":[\"~/dev\"]}"]);
       if (raw !== undefined) {
         const v = validateAnswers(raw, { platform, allowUnsupported: !!o.allowUnsupported });
         if (!v.ok) {
