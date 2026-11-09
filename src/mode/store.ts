@@ -1,9 +1,24 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, nowIso, writeFileAtomic } from "../kb/index.js";
+import { getTask } from "../tasks/store.js";
 
 /** Night (authority) window and watch flag, kept in the kb (`mode.json`) so every VLAD session sees the same state. */
-export interface NightMode { until: string; started: string; projects: string[]; note: string | null }
+export interface NightMode {
+  until: string; started: string; projects: string[]; note: string | null;
+  /** master/main merge+push authority (D-genel-013 successor); false = the old rule: push/PR is never part of the mode */
+  push: boolean;
+  /** action classes the window never opens; always includes DEFAULT_EXCEPT */
+  except: string[];
+  /** window also closes once all of these tasks are done/cancelled; `until` stays as the 24 h safety ceiling */
+  untilTasks: string[];
+}
+/** Irreversible classes: always excepted, `--except` can only add to them. */
+export const DEFAULT_EXCEPT = ["deploy", "backfill", "keychain"];
+const list = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+const TERMINAL = ["done", "cancelled"];
+/** Unknown/unreadable task counts as finished: a dangling ID must not keep authority open. */
+const taskOpen = (id: string): boolean => { try { return !TERMINAL.includes(getTask(id).data.state); } catch { return false; } };
 interface ModeFile { night: NightMode | null; watch: boolean }
 
 const file = () => join(kbPaths().kb, "mode.json");
@@ -12,7 +27,9 @@ function read(): ModeFile {
   try {
     const o = JSON.parse(readFileSync(file(), "utf8")) as Partial<ModeFile>;
     const n = o.night;
-    const night = n && typeof n.until === "string" ? { ...n, projects: Array.isArray(n.projects) ? n.projects : [], note: n.note ?? null } : null;
+    const night: NightMode | null = n && typeof n.until === "string"
+      ? { ...n, projects: list(n.projects), note: n.note ?? null, push: n.push === true, except: [...new Set([...DEFAULT_EXCEPT, ...list(n.except)])], untilTasks: list(n.untilTasks) }
+      : null;
     return { night, watch: o.watch === true };
   } catch {
     return { night: null, watch: false }; // missing or corrupt file = mode off
@@ -42,8 +59,16 @@ export function parseUntil(s: string, now: Date): Date {
   return d;
 }
 
-export function setNight(o: { until: string; projects?: string[]; note?: string }, now: Date = new Date()): NightMode {
-  const night: NightMode = { until: nowIso(parseUntil(o.until, now)), started: nowIso(now), projects: o.projects ?? [], note: o.note ?? null };
+export function setNight(
+  o: { until?: string; untilTasks?: string[]; push?: boolean; except?: string[]; projects?: string[]; note?: string },
+  now: Date = new Date(),
+): NightMode {
+  const untilTasks = o.untilTasks ?? [];
+  if (!o.until && !untilTasks.length) throw new Error("--until ya da --until-task ver");
+  for (const id of untilTasks) getTask(id); // throws "görev bulunamadı"
+  const until = o.until ? parseUntil(o.until, now) : new Date(now.getTime() + 24 * 3_600_000); // task-bound window keeps the 24 h ceiling
+  const except = [...new Set([...DEFAULT_EXCEPT, ...(o.except ?? []).map((x) => x.trim()).filter(Boolean)])];
+  const night: NightMode = { until: nowIso(until), started: nowIso(now), projects: o.projects ?? [], note: o.note ?? null, push: o.push === true, except, untilTasks };
   write({ ...read(), night });
   return night;
 }
@@ -56,10 +81,13 @@ export function setOff(): void {
   rmSync(file(), { force: true });
 }
 
-export function modeStatus(now: Date): { night: NightMode | null; watch: boolean; watching: boolean; expired: boolean } {
+export function modeStatus(now: Date): { night: NightMode | null; watch: boolean; watching: boolean; expired: boolean; remaining: string[]; timedOut: boolean } {
   const m = read();
-  const live = !!m.night && Date.parse(m.night.until) > now.getTime();
-  return { night: live ? m.night : null, watch: m.watch, watching: live || m.watch, expired: !!m.night && !live };
+  const remaining = (m.night?.untilTasks ?? []).filter(taskOpen);
+  const timedOut = !!m.night && Date.parse(m.night.until) <= now.getTime();
+  const tasksDone = !!m.night && m.night.untilTasks.length > 0 && remaining.length === 0;
+  const live = !!m.night && !timedOut && !tasksDone;
+  return { night: live ? m.night : null, watch: m.watch, watching: live || m.watch, expired: !!m.night && !live, remaining, timedOut };
 }
 
 /** Drops an elapsed night window (keeps an explicit watch flag); true if there was one. */
@@ -73,9 +101,15 @@ export function expireMode(now: Date): boolean {
 export function modeLine(now: Date): string | null {
   const s = modeStatus(now);
   if (s.night) {
-    const until = s.night.until.slice(5, 16).replace("T", " "); // MM-DD HH:MM: a window that rolled into tomorrow shows
-    return `gece modu etkin (${until}'e kadar${s.night.projects.length ? `; ${s.night.projects.join(", ")}` : ""}${s.night.note ? `; ${s.night.note}` : ""}), bekçi açık`;
+    const n = s.night;
+    const until = n.until.slice(5, 16).replace("T", " "); // MM-DD HH:MM: a window that rolled into tomorrow shows
+    const bound = s.remaining.length ? `${s.remaining.join(", ")} bitene ya da ${until} tavanına kadar` : `${until}'e kadar`;
+    const push = n.push ? `push yetkisi açık (yalnız gate/CI yeşil, açık P1 yok; istisna: ${n.except.join(",")})` : "push yok";
+    return `gece modu etkin (${bound}${n.projects.length ? `; ${n.projects.join(", ")}` : ""}${n.note ? `; ${n.note}` : ""}; ${push}), bekçi açık`;
   }
-  if (s.expired) return "gece modu bitti: yetki penceresi doldu, sormadan merge yok";
+  if (s.expired) {
+    if (s.timedOut && s.remaining.length) return `gece modu bitti: süre doldu, açık görev: ${s.remaining.join(", ")}; devam için kullanıcı yenilemeli, sormadan merge yok`;
+    return `gece modu bitti: ${s.timedOut ? "yetki penceresi doldu" : "görevler bitti"}, sormadan merge yok`;
+  }
   return s.watch ? "bekçi modu açık" : null;
 }
