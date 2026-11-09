@@ -13,6 +13,7 @@ import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js
 import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
+import { registerTaskClose } from "./task-close.js";
 import { registerTaskList } from "./task-list.js";
 import { closedFindingWarnings } from "../../findings/closed-report.js";
 import type { Kit } from "../kit.js";
@@ -165,5 +166,6 @@ export function registerTask(program: Command, k: Kit): void {
     .option("--clear", "tüm bağımlılıkları kaldır");
   registerTaskResume(task, k);
   registerTaskGate(task, k);
+  registerTaskClose(task, k);
   registerTaskList(task, k);
 }

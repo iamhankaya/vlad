@@ -20,6 +20,7 @@
     "clip get": "gerçek panoyu okur",
     "clip set": "gerçek panoya yazar",
     "task repin": "config'te machines ve kartta makine listesi ister; davranış t01-repin testinde",
-    "kb commit": "git commit/push yapar (gerçek kb deposu)"
+    "kb commit": "git commit/push yapar (gerçek kb deposu)",
+    "task close": "gate koşar, merge eder, kb'yi commit/push eder; davranış test/machines/close.test.ts'te"
   }
 }

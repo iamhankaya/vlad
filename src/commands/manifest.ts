@@ -47,6 +47,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["task", "gate"], { console: { kind: "write", timeoutMs: 31 * 60_000 } }),
   c(["task", "merge-preview"], { console: { kind: "read" } }),
   c(["task", "merge"], { console: { kind: "write", timeoutMs: 6 * 60_000 } }),
+  c(["task", "close"], { console: none("merge onayı (--yes) VLAD/kullanıcıdadır; konsoldan açılmadı, ayrı karar") }),
   c(["task", "digested"], { lock: "outer", refresh: true, console: { kind: "write" } }),
   c(["task", "session"], { lock: "outer", worker: { kind: "forward", op: "task.session" }, console: { kind: "write" } }),
   c(["task", "list"], { worker: LOCAL, console: { kind: "read" } }),

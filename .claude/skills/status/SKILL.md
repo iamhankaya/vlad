@@ -91,7 +91,7 @@ Pipeline'da kural entegrasyon branch'ine uyarlanır: `kabul`/`karakterizasyon` f
 **`role: designer` ise:** `tasarım` fazında `docs/design/` dosyalarını ve `### Token'lar` tablosunu göster; entegrasyon branch'ine merge varsayılan öneridir. **Görsel onay kapısı:** `tasarım` kapısında ekran görüntülerini (`### Görsel yönler` ve `### Görsel turlar`) kullanıcıya göstermeden ve açık görsel onay almadan sonraki uygulama fazlarını başlatma; gece modunda da bu kapı kullanıcıya sorulur, otonom geçilmez. `denetim` fazı kod değiştirmez; `### Bulgular` tablosunu göster. Kritik veya yüksek önemde bulgu varsa varsayılan öneri, doğrulamadaki kırmızı test kuralıyla aynıdır: yeni bir `uygulama` fazı (kabul kriteri: o bulguların giderilmesi) ve ona bağlı yeni `doğrulama` + `denetim` fazları. Yalnızca orta/düşük bulgular varsa bunları son kapıdaki açık noktalar listesine ekle.
 
 Sonra seçenekleri sun:
-1. **Merge et:** `integrate` skill'inin 5. adımı (yerel, pipeline fazı, projeler arası, bulut PR). Hedef branch'i kullanıcıya göster, **açık onay** al; merge başarısızsa `done` yapma.
+1. **Merge et:** önce `vlad task close <id> --json` (onaysız: ön kontrol + gate + çakışma, sonra `confirm`'de durur, `summary` hedef/diff'i verir); hedefi kullanıcıya göster, **açık onay** al, sonra `vlad task close <id> --yes --json` (merge, done, cleanup, Kapatılan bulgular, `kb commit --push` tek komutta; ayrıntı `integrate` skill'i). Projeler arası ve bulut PR için `integrate` 5. adım elle. Merge başarısızsa `done` yapma.
 2. **Push + PR aç:** onaydan sonra
    `git -C <worktree> push -u origin vlad/<id>` ve `gh pr create --head vlad/<id> --fill` (worktree'de). PR linkini göster. (Pipeline fazında sunulmaz; PR son kapıda açılır.)
 3. **Değişiklik iste:** istenen değişikliği al →
@@ -100,7 +100,7 @@ Sonra seçenekleri sun:
 4. **Olduğu gibi kabul et** (dışa eylem yok). Pipeline **dev** fazında sunma: merge'süz `done`, bağımlı fazların bu değişikliği görmeden başlaması demektir (spec §2, §6). Kullanıcı yine de isterse bu sonucu açıkça söyle ve bağımlı fazları başlatmadan önce ayrıca onay al.
 5. **İptal et:** gerekçe **zorunludur** (`--reason` olmadan CLI hata verir); kullanıcıdan kısa gerekçeyi al, yoksa sor. `vlad task set <id> cancelled --reason "<gerekçe>" --json` gerekçeyi `## İlerleme`'ye `İptal: <gerekçe>` olarak yazar (`/setup-audit` bunu sayar); ardından `vlad task cleanup <id> --json`.
 
-Seçenek 1, 2 veya 4 tamamlandıktan sonra:
+Seçenek 1 `task close` ile yapıldıysa `done`/`cleanup` zaten bitmiştir (JSON `steps`; durduysa `stopped_at` adımından sonra aynı komut yeniden koşulur). Seçenek 2 veya 4 tamamlandıktan sonra:
 ```
 vlad task set <id> done --json
 vlad task cleanup <id> --json
