@@ -36,6 +36,18 @@ function task(wt: string, o: { role?: string; autonomy?: "commit" | "pr" } = {})
   return t.data.id;
 }
 
+describe("scanTranscript slash commands", () => {
+  it("counts a typed /skill (user-message command markup) by bare name, but not quoted prose", () => {
+    const user = (content: unknown) => JSON.stringify({ type: "user", message: { role: "user", content } });
+    const r = scanTranscript([
+      user("<command-message>status</command-message>\n<command-name>/status</command-name>"),
+      user([{ type: "text", text: "<command-name>/vlad:digest</command-name>" }]),
+      user("bana <command-name>/scan</command-name> yazısını açıkla"),
+    ].join("\n"));
+    expect(r.loaded).toEqual({ status: 1, digest: 1 });
+  });
+});
+
 describe("claudeProjectDir", () => {
   it("maps every non-alphanumeric char to '-' (claude's project dir naming)", () => {
     expect(claudeProjectDir(w("C:", "dev", "x-wt", "T1"))).toBe("C--dev-x-wt-T1");

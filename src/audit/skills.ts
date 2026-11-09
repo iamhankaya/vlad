@@ -15,6 +15,7 @@ export { claudeProjectDir };
 const GATE_SKILLS = ["second-opinion", "integrate"];
 
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
+const SLASH_COMMAND = /^\s*(?:<command-message>[^<]*<\/command-message>\s*)?<command-name>\/([^<\s]+)<\/command-name>/;
 const SKILL_MD = /([^/\\]+)[/\\]SKILL\.md$/i;
 
 // a command line is split at ; && || | and newlines; a segment is a push only if it starts with `git [-C dir] push`
@@ -23,16 +24,25 @@ const GIT_PUSH = /^\s*git\s+(?:-[cC]\s+\S+\s+)*push\b/;
 
 export interface TranscriptScan { loaded: Record<string, number>; pushed: boolean }
 
-/** Counts `Skill` tool calls and `SKILL.md` reads (vendored skills are read, not loaded) by bare skill name; notes a `git push`. */
+/** Counts `Skill` tool calls, typed `/skill` commands and `SKILL.md` reads (vendored skills are read, not loaded) by bare skill name; notes a `git push`. */
 export function scanTranscript(jsonl: string): TranscriptScan {
   const loaded: Record<string, number> = {};
   let pushed = false;
   const count = (n: string) => { loaded[n] = (loaded[n] ?? 0) + 1; };
   for (const raw of jsonl.split(/\r?\n/)) {
-    if (!raw.includes('"tool_use"')) continue;
+    if (!raw.includes('"tool_use"') && !raw.includes("<command-name>")) continue;
     let obj: any;
     try { obj = JSON.parse(raw); } catch { continue; }
     const content = obj?.message?.content;
+    if (obj?.type === "user") {
+      // a typed `/status` is not a Skill tool call: Claude Code records it as command markup in the user message
+      const parts: unknown[] = Array.isArray(content) ? content.map((p: any) => p?.text) : [content];
+      for (const t of parts) {
+        const m = typeof t === "string" ? SLASH_COMMAND.exec(t) : null;
+        if (m) count(bare(m[1]));
+      }
+      continue;
+    }
     if (obj?.type !== "assistant" || !Array.isArray(content)) continue;
     for (const p of content) {
       if (p?.type !== "tool_use") continue;
