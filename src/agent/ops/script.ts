@@ -104,9 +104,9 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
       timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform, killTree: d.killTree,
     });
     const { retryKill, ...res } = out;
-    if (entry.selfUpdate && res.recovery === "pending" && retryKill) {
-      // süreç ağacı hâlâ koşuyor olabilir (npm/tsc node_modules'a yazıyor): geri yükleme ve bayrağı kaldırma ertelenir, Agent sınırsız yeniden dener
-      deferred = true; deferRecovery(st.repo, retryKill, d.retryMs ?? 5000);
+    if (res.recovery === "pending" && retryKill) {
+      // süreç ağacı hâlâ koşuyor olabilir (npm/tsc node_modules'a yazıyor): geri yükleme, bakım bayrağı ve `active` ertelenir, Agent sınırsız yeniden dener
+      deferred = true; deferRecovery(st.repo, retryKill, d.retryMs ?? 5000, entry.selfUpdate);
       return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
     }
     // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed:false iken yalnız çalışan derleme diskteki dist/.build-head'den farklıysa: önceki yardımcı başarısız olduysa yeniden denenebilsin) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
@@ -116,7 +116,7 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     }
     return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
   } finally {
-    active = null;
+    if (!deferred) active = null;
     if (entry.selfUpdate && !restarting && !deferred) {
       recoverSelfUpdate(st.repo); // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar
       maint.leave();
@@ -125,12 +125,12 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
 }
 
 /** Öldürme doğrulanana dek aralıkla yeniden dener; doğrulanınca kurtarmayı yapar ve bakım bayrağını kaldırır. Zamanlayıcı süreci tutmaz (unref). */
-function deferRecovery(repo: string, retryKill: () => Promise<boolean>, everyMs: number): void {
+function deferRecovery(repo: string, retryKill: () => Promise<boolean>, everyMs: number, selfUpdate: boolean): void {
   const tick = (): void => {
     void retryKill().catch(() => false).then((ok) => {
       if (!ok) { setTimeout(tick, everyMs).unref(); return; }
-      recoverSelfUpdate(repo);
-      maint.leave();
+      if (selfUpdate) { recoverSelfUpdate(repo); maint.leave(); }
+      active = null;
     });
   };
   setTimeout(tick, everyMs).unref();

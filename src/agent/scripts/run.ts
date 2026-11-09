@@ -124,7 +124,7 @@ function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
         exit, timedOut, durationMs: Date.now() - t0,
         stdout: capUtf8(outBuf, outTotal, outCap), stderr: capUtf8(extraErr ? Buffer.concat([errBuf, Buffer.from(extraErr)]) : errBuf, errTotal + Buffer.byteLength(extraErr), errCap),
         truncated: { stdout: outTotal > outCap, stderr: errTotal > errCap }, ...parsed,
-        ...(unkilled ? { recovery: "pending" as const, retryKill: () => kill(p) } : {}),
+        ...(unkilled ? { recovery: "pending" as const, retryKill: () => (s.killTree ? kill(p) : killTreeWait(p, { recheck: true })) } : {}),
       });
     };
     // sonucu 'close'u beklemeden ver: torun borulara tutunsa da op asılı kalmaz

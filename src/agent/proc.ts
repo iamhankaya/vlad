@@ -23,6 +23,8 @@ export interface KillDeps {
   /** ölümü bekleme tavanı (varsayılan 10 sn) */
   waitMs?: number;
   pollMs?: number;
+  /** yeniden deneme: POSIX'te tekrar SIGKILL atılmaz (grup ölüp pid başka sürece düşmüş olabilir), yalnız ölüm yoklanır */
+  recheck?: boolean;
 }
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; } };
 const runTaskkill = (pid: number): Promise<number | null> => new Promise((res) => {
@@ -47,7 +49,7 @@ export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "ki
     if (code !== 0 && code !== 128) { try { p.kill(); } catch { /* yok */ } return false; }
   } else {
     target = -pid;
-    try { (d.signalGroup ?? ((g) => process.kill(g, "SIGKILL")))(target); } catch { try { p.kill("SIGKILL"); } catch { /* yok */ } }
+    if (!d.recheck) try { (d.signalGroup ?? ((g) => process.kill(g, "SIGKILL")))(target); } catch { try { p.kill("SIGKILL"); } catch { /* yok */ } }
   }
   for (let waited = 0; ; waited += pollMs) {
     if (!isAlive(target)) return true;
