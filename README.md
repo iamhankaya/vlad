@@ -1,6 +1,6 @@
 # VLAD
 
-Claude Code için dosya tabanlı "ana akıl": tüm projelerinin hafızası ve iş dağıtıcısı. Tek bir kalıcı Claude Code session'ı (`C:\dev\vlad`) projeleri `kb/` dosyalarından tanır, geliştirme işlerini git worktree'lerinde açılan görünür çalışan session'larına devreder ve `vlad` CLI ile takip eder.
+Claude Code için dosya tabanlı "ana akıl": tüm projelerinin hafızası ve iş dağıtıcısı. Tek bir kalıcı Claude Code session'ı (`<vlad-klasörü>`) projeleri `kb/` dosyalarından tanır, geliştirme işlerini git worktree'lerinde açılan görünür çalışan session'larına devreder ve `vlad` CLI ile takip eder.
 
 Tasarım: [`docs/superpowers/specs/2026-10-15-vlad-core-design.md`](docs/superpowers/specs/2026-10-15-vlad-core-design.md)
 
@@ -12,7 +12,7 @@ Tasarım: [`docs/superpowers/specs/2026-10-15-vlad-core-design.md`](docs/superpo
 ## Kurulum
 
 ```
-cd C:\dev\vlad
+cd <vlad-klasörü>
 npm i
 npm run build
 npm link            # vlad komutunu global PATH'e ekler
@@ -37,7 +37,7 @@ Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterH
 
 **1. Tek makine (Mac ya da Windows)**
 ```
-git clone <vlad-repo-url> ~/dev/vlad && cd ~/dev/vlad     # Windows: C:\dev\vlad
+git clone <vlad-repo-url> ~/dev/vlad && cd ~/dev/vlad     # Windows: <vlad-klasörü>
 npm i && npm run build
 node dist/cli.js setup --answers cevaplar.json --yes      # Windows: node dist\cli.js setup ...
 node dist/cli.js setup --check
@@ -61,7 +61,7 @@ TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yer
 ## Günlük kullanım
 
 ```
-cd C:\dev\vlad
+cd <vlad-klasörü>
 claude
 ```
 
@@ -88,9 +88,9 @@ Push, PR ve merge her zaman açık onayınla yapılır.
 
 ## kb deposu (ayrı private repo)
 
-`kb/` ayrı bir private repoda tutulur: `iamhankaya/vlad-kb`. vlad CLI kb'yi şu sırayla bulur: `VLAD_KB_DIR` ortam değişkeni → `vlad.config.json`'daki `kbDir` (VLAD_HOME'a göre göreli ya da mutlak; varsayılan config `"../vlad-kb"`) → geriye uyum için `<VLAD_HOME>/kb`. `schemas/` ve `roles/` VLAD_HOME'da kalır.
+`kb/` ayrı bir private repoda tutulur: `<kullanıcı>/vlad-kb`. vlad CLI kb'yi şu sırayla bulur: `VLAD_KB_DIR` ortam değişkeni → `vlad.config.json`'daki `kbDir` (VLAD_HOME'a göre göreli ya da mutlak; varsayılan config `"../vlad-kb"`) → geriye uyum için `<VLAD_HOME>/kb`. `schemas/` ve `roles/` VLAD_HOME'da kalır.
 
-Kurulum: Windows'ta `git clone https://github.com/iamhankaya/vlad-kb C:\dev\vlad-kb`; Linux/bulutta `git clone https://github.com/iamhankaya/vlad-kb ~/vlad-kb` (VLAD_HOME `~/vlad` ise aynı göreli yol). Klon yoksa CLI "kb deposu bulunamadı" hatası ve klon komutunu verir.
+Kurulum: Windows'ta `git clone https://github.com/<kullanıcı>/vlad-kb <kb-klasörü>`; Linux/bulutta `git clone https://github.com/<kullanıcı>/vlad-kb ~/vlad-kb` (VLAD_HOME `~/vlad` ise aynı göreli yol). Klon yoksa CLI "kb deposu bulunamadı" hatası ve klon komutunu verir.
 
 kb reposunun `.gitignore`'ı şu satırları içermelidir (yoksa `vlad kb commit` uyarır):
 ```

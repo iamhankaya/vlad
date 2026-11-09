@@ -23,7 +23,7 @@ const fake: Runner = (cmd, args, o) => {
   if (cmd === "git" && args[0] === "--version") return { ok: true, code: 0, stdout: "git version 2.50.0", stderr: "" };
   if (cmd === "git" && args[0] === "init") { mkdirSync(join(o?.cwd ?? ".", ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
   if (cmd === "git" && args[0] === "clone") { mkdirSync(join(args[2]!, ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
-  if (cmd === "gh" && args[0] === "repo" && args[1] === "view") return { ok: false, code: 1, stdout: "", stderr: "not found" };
+  if (cmd === "gh" && args[0] === "repo" && args[1] === "view" && args[2]!.startsWith("denied/")) return { ok: false, code: 1, stdout: "", stderr: "not found" };
   if (cmd === "git" && args[0] === "ls-remote") return args[1]!.includes("denied/") ? { ok: false, code: 128, stdout: "", stderr: "no access" } : { ok: true, code: 0, stdout: "", stderr: "" };
   return { ok: true, code: 0, stdout: "x 1.0", stderr: "" };
 };

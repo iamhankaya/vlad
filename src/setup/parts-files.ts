@@ -8,6 +8,7 @@ import { LOCAL_CONFIG_FILE } from "../kb/config-layer.js";
 import { loadConfig } from "../kb/config.js";
 import { resolveKbDir } from "../kb/home.js";
 import { compareDirs, compose, expandHome, newestMtime, readJsonFile, result, run, uniqueBackup, updateJson, upToDate, writeAtomic } from "./io.js";
+import { readLocal } from "../fleet/state.js";
 import { buildOverlay, kbDirFromAnswers } from "./overlay.js";
 import type { ApplyAction, ApplyResult, ItemCheck, PartCheck, Requirement, SetupContext, SetupPart } from "./types.js";
 
@@ -185,6 +186,7 @@ export const permissionsPart: SetupPart = {
 };
 
 // ---- plugins ----
+const KNOWN_MARKET: Record<string, string> = { superpowers: "anthropic-plugin-directory", "frontend-design": "anthropic-plugin-directory" };
 const PLUGIN_NAMES = ["superpowers", "frontend-design", "playwright"];
 export const pluginsPart: SetupPart = {
   id: "plugins",
@@ -198,8 +200,9 @@ export const pluginsPart: SetupPart = {
     }));
   },
   async apply(c) {
-    const want = (c.answers.plugins ?? []).filter((p) => p.includes("@"));
-    const acts: ApplyAction[] = (c.answers.plugins ?? []).filter((p) => !p.includes("@")).map((p) => ({ kind: "print" as const, what: `${p}: claude içinde /plugin ile kur (sihirbaz plugin kurmaz); tam kimlik (ad@market) verilirse etkinleştirilir` }));
+    const full = (p: string) => (p.includes("@") ? p : KNOWN_MARKET[p] ? `${p}@${KNOWN_MARKET[p]}` : null);
+    const want = (c.answers.plugins ?? []).map(full).filter((p): p is string => p !== null);
+    const acts: ApplyAction[] = (c.answers.plugins ?? []).filter((p) => full(p) === null).map((p) => ({ kind: "print" as const, what: `${p}: claude içinde /plugin ile kur (sihirbaz plugin kurmaz); tam kimlik (ad@market) verilirse etkinleştirilir` }));
     if (!want.length) return acts.length ? result("plugins", acts) : upToDate("plugins");
     const r = updateJson(c, settingsPath(c), (d) => { d.enabledPlugins = { ...(d.enabledPlugins ?? {}), ...Object.fromEntries(want.filter((p) => !(d.enabledPlugins ?? {})[p]).map((p) => [p, true])) }; return d; });
     if (r.changed) acts.push({ kind: "write", what: `enabledPlugins: ${want.join(", ")}`, target: settingsPath(c) });
@@ -215,9 +218,15 @@ export const configPart: SetupPart = {
     let evidence: string, status: ItemCheck["status"] = "ok";
     try { loadConfig(c.vladHome); evidence = existsSync(localPath(c)) ? "config + yerel katman geçerli" : "tracked config geçerli (yerel katman yok)"; } catch (e) { status = "çakışan"; evidence = (e as Error).message; }
     const entries: { required: Requirement; item: ItemCheck }[] = [{ required: "zorunlu" as const, item: item("config:valid", status, evidence, "vlad setup --only config") }];
+    if (status === "ok") { // çok makineli config'te bu makinenin kimliği (self) yoksa kurulum tamamlanmamıştır
+      const cfg = loadConfig(c.vladHome);
+      const self = process.env.VLAD_MACHINE || readLocal().self;
+      if (cfg.machines && !(self && cfg.machines.some((m) => m.name === self))) entries.push({ required: "zorunlu" as const, item: item("config:self", "eksik", `bu makine config'te tanımlı değil (self=${self ?? "yok"})`, "vlad setup --answers <json> (machines/machine.name)") });
+    }
     if (status === "ok") {
       const missing = loadConfig(c.vladHome).roots.map((r) => expandHome(r, c.home)).filter((r) => !existsSync(r));
-      entries.push({ required: "isteğe bağlı" as const, item: item("config:roots", missing.length ? "eksik" : "ok", missing.length ? `roots yok: ${missing.join(", ")}` : "roots var", "vlad setup --only config") });
+      const all = loadConfig(c.vladHome).roots.length > 0 && missing.length === loadConfig(c.vladHome).roots.length;
+      entries.push({ required: (all ? "zorunlu" : "isteğe bağlı") as Requirement, item: item("config:roots", missing.length ? "eksik" : "ok", missing.length ? `roots yok: ${missing.join(", ")}` : "roots var", "vlad setup --only config") });
     }
     return compose("config", entries);
   },
@@ -268,7 +277,9 @@ export const kbPart: SetupPart = {
   id: "kb",
   async check(c) {
     const dir = kbTarget(c);
-    if (!existsSync(dir)) return compose("kb", [{ required: "zorunlu", item: item("kb:repo", "eksik", `kb dizini yok: ${dir}`, "vlad setup --only kb") }]);
+    let worker = false; // işçide kb salt okunur klondur: yokluğu uyarıdır (beyin push edince/elle klonlanınca gelir)
+    try { const cfg = loadConfig(c.vladHome); const self = process.env.VLAD_MACHINE || readLocal().self; worker = !!(cfg.machines && self && self !== cfg.brain); } catch { /* config parçası bildirir */ }
+    if (!existsSync(dir)) return compose("kb", [{ required: worker ? "isteğe bağlı" : "zorunlu", item: item("kb:repo", "eksik", `kb dizini yok: ${dir}`, "vlad setup --only kb") }]);
     if (!isGitRepo(dir)) return compose("kb", [{ required: "zorunlu", item: item("kb:repo", "eksik", `kb git deposu değil: ${dir}`, "vlad setup --only kb") }]);
     const f = join(dir, ".gitignore");
     const have = new Set((existsSync(f) ? readFileSync(f, "utf8") : "").split(/\r?\n/).map((l) => l.trim().replace(/^\//, "")));
@@ -284,7 +295,7 @@ export const kbPart: SetupPart = {
     const acts: ApplyAction[] = [];
     if (!existsSync(dir) || !isGitRepo(dir)) {
       if (mode === "existing") {
-        const probe = run("git", ["ls-remote", `https://github.com/${kb.remote}`]);
+        const probe = run("gh", ["repo", "view", kb.remote!]);
         if (!probe.ok) throw new Error(`kb.remote erişilemiyor (${kb.remote}); hiçbir şey yazılmadı`);
         acts.push({ kind: "run", what: `git clone ${kb.remote} -> ${dir}` });
         if (!c.dryRun) { const r = run("git", ["clone", `https://github.com/${kb.remote}`, dir], { timeoutMs: 120_000 }); if (!r.ok) throw new Error(`git clone başarısız: ${r.stderr.trim()}`); }
@@ -292,14 +303,15 @@ export const kbPart: SetupPart = {
         if (!c.confirmed.has("kb-repo-create")) return result("kb", [{ kind: "skip", what: "GitHub repo oluşturma açık onay ister (confirm: kb-repo-create)" }], [], "onay yok");
         acts.push({ kind: "run", what: `gh repo create ${kb.remote} --private` });
         if (!c.dryRun) {
-          const exists = run("gh", ["repo", "view", kb.remote!]).ok; // yeniden koşuda "already exists" ile takılma
-          const r = exists ? { ok: true, stderr: "" } : run("gh", ["repo", "create", kb.remote!, "--private"]);
+          let r = run("gh", ["repo", "create", kb.remote!, "--private"]);
+          if (!r.ok && run("gh", ["repo", "view", kb.remote!]).ok) r = { ...r, ok: true }; // yeniden koşuda repo zaten var
           if (!r.ok) throw new Error(`gh repo create başarısız: ${r.stderr.trim()}`);
           mkdirSync(dir, { recursive: true });
           for (const a of [["init"], ["remote", "add", "origin", `https://github.com/${kb.remote}.git`]]) { const g = run("git", a, { cwd: dir }); if (!g.ok) throw new Error(`repo oluşturuldu ama git ${a[0]} başarısız (${g.stderr.trim()}); elle tamamla: cd ${dir} && git init && git remote add origin https://github.com/${kb.remote}.git`); }
         }
         acts.push({ kind: "print", what: "ilk push ayrı onay ister: cd <kb> && git push -u origin HEAD" });
       } else if (mode === "path") {
+        if (c.answers.role === "worker" && !existsSync(dir)) return result("kb", [{ kind: "print", what: `kb klonu ${dir} yok: işçide kb salt okunur klondur; beyin push ettiğinde/elle klonlayınca gelir` }]);
         if (!existsSync(dir)) throw new Error(`kb.dir yok: ${dir}`);
         throw new Error(`kb.dir git deposu değil: ${dir}`);
       } else {

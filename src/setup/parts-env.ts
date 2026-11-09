@@ -1,6 +1,6 @@
 // Ortam parçaları (T20261110-05): tools, agent, launcher, mac-main, memory. check salt okuma; apply yalnız açık onayla çalıştırır / talimat basar.
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { agentKeygen } from "../agent/start.js";
 import { loadConfig } from "../kb/config.js";
 import { readLocal, writeLocal } from "../fleet/state.js";
@@ -28,8 +28,8 @@ export const toolsPart: SetupPart = {
     ];
     const help = run("claude", ["--help"]);
     entries.push({ required: "zorunlu", item: !help.ok && !help.stdout ? item("tools:claude", "eksik", "claude CLI bulunamadı", "Claude Code kur") : /--autocompact/.test(help.stdout + help.stderr) ? item("tools:claude", "ok", "claude CLI (--autocompact destekli)") : item("tools:claude", "eski", "claude CLI --autocompact bayrağını tanımıyor", "claude'u güncelle") });
-    const gh = run("gh", ["auth", "status"]);
-    entries.push({ required: "bilgi", item: gh.ok ? item("tools:gh", "ok", "gh giriş yapılmış") : item("tools:gh", "eksik", "gh yok ya da giriş yapılmamış (yalnız pr/CI/GitHub kb)", "gh auth login") });
+    const hasGh = (process.env.PATH ?? "").split(delimiter).some((d) => d && ["gh", "gh.exe", "gh.cmd"].some((n) => existsSync(join(d, n)))); // --check gh'yi çalıştırmaz (salt okuma; giriş durumu apply'da sınanır)
+    entries.push({ required: "bilgi", item: hasGh ? item("tools:gh", "ok", "gh kurulu (giriş durumu GitHub kb işlemlerinde sınanır)") : item("tools:gh", "eksik", "gh yok (yalnız pr/CI/GitHub kb için)", "gh kurup `gh auth login`") });
     const codex = run("codex", ["--version"]);
     entries.push({ required: "bilgi", item: codex.ok ? item("tools:codex", "ok", `codex ${codex.stdout.trim()}`) : item("tools:codex", "eksik", "codex yok (3. göz; Fable yedeği)", "isteğe bağlı") });
     return compose("tools", entries);
@@ -47,6 +47,7 @@ export const agentPart: SetupPart = {
     let cfg;
     try { cfg = loadConfig(c.vladHome); } catch (e) { return { part: "agent", status: "n/a", severity: "info", evidence: `config okunamadı: ${(e as Error).message}` }; }
     if (!cfg.machines) return { part: "agent", status: "n/a", severity: "info", evidence: "tek makine: Agent gerekmez" };
+    if (c.platform === "linux") return { part: "agent", status: "n/a", severity: "info", evidence: "Linux: Agent oto-başlatma/anahtar akışı deneysel, kurulmaz" };
     const local = readLocal();
     const self = process.env.VLAD_MACHINE || local.self;
     if (!self) return compose("agent", [{ required: "zorunlu", item: item("agent:self", "eksik", "makine kimliği yok (vlad.local.json self)", "vlad setup --only agent") }]);
@@ -84,6 +85,7 @@ export const launcherPart: SetupPart = {
     let mode = "auto";
     try { mode = loadConfig(c.vladHome).launcher ?? "auto"; } catch { /* config parçası bildirir */ }
     if (mode === "terminal" || mode === "cloud") return { part: "launcher", status: "n/a", severity: "info", evidence: `launcher=${mode}` };
+    if (c.platform !== process.platform) return { part: "launcher", status: "n/a", severity: "info", evidence: `${c.platform} simülasyonu: bu makinede sınanamaz` };
     if (c.platform === "win32") {
       const ps = run("powershell.exe", ["-NoProfile", "-Command", "exit 0"]);
       return compose("launcher", [{ required: "zorunlu", item: ps.ok ? item("launcher:windows-terminal", "ok", "powershell.exe var") : item("launcher:windows-terminal", "eksik", "powershell.exe yok", "Windows PowerShell 5.1+") }]);

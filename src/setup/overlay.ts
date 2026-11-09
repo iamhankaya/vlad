@@ -51,7 +51,14 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
       base = i >= 0 ? base.map((m, n) => (n === i ? { ...m, ...mine, agent: { ...m.agent, ...mine.agent } } : m)) : [...base, { ...mine, agent: { ...mine.agent, port: mine.agent.port ?? 7437 } }];
       o.machines = base;
       if (a.role === "brain") o.brain = me.name;
-      else if (!base.some((m) => m.name === (cur.brain ?? tracked.brain))) throw new Error("role=worker: beyin makinesi config'te yok (vlad setup --join <beyin> --brain-host ...)");
+      else {
+        // işçi: config beyni machines içinde ister; beyin girdisi sonradan `--join` ile değişir. Şimdilik kayıtlı beyin girdisini taşı.
+        const bn = cur.brain ?? tracked.brain;
+        const bm = (tracked.machines ?? []).find((m: MachineEntry) => m.name === bn);
+        if (bn && base.some((m) => m.name === bn)) { /* beyin zaten var */ }
+        else if (bn && bm) o.machines = [bm, ...base];
+        else throw new Error("role=worker: beyin makinesi config'te yok (vlad setup --join <beyin> --brain-host ...)");
+      }
     }
   }
   if (friend) for (const k of ["experiments", "workerAutoCompact", "projects"]) if (!(k in o) && tracked[k] !== undefined) o[k] = null;

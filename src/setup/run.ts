@@ -1,7 +1,7 @@
 // `vlad setup` orkestrasyonu (T20261110-05): check / apply / upgrade / uninstall / join / add-worker. CLI yalnız bu modülü çağırır.
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { agentSetKey } from "../agent/start.js";
+import { agentKeygen, agentSetKey } from "../agent/start.js";
 import { PRIVATE_V4, readLocal, writeLocal } from "../fleet/state.js";
 import { loadConfig } from "../kb/config.js";
 import { exitCodeFor } from "./check.js";
@@ -46,6 +46,7 @@ export async function runCheck(c: SetupContext, o: { only?: PartId[]; strict?: b
 
 export async function runSetup(c: SetupContext, o: { only?: PartId[] } = {}): Promise<ApplyResult[]> {
   const out: ApplyResult[] = [];
+  readJsonFile(join(c.claudeDir, "settings.json")); // bozuksa hiçbir parça yazmadan dur (hata mesajı dosya yolunu içerir)
   for (const p of pick(o.only)) out.push(await p.apply(c));
   return out;
 }
@@ -95,14 +96,15 @@ export async function runJoin(c: SetupContext, j: JoinOptions): Promise<ApplyRes
 }
 
 /** Beyinde: işçiyi machines'e ekler; anahtar üretimi/aktarımı elle (değer çıktıya girmez). */
-export async function runAddWorker(c: SetupContext, name: string, w: { os: MachineEntry["os"]; host: string; port?: number }): Promise<ApplyResult> {
+export async function runAddWorker(c: SetupContext, name: string, w: { os: MachineEntry["os"]; host: string; port?: number; keygen?: boolean }): Promise<ApplyResult> {
   assertName(name, "--add-worker"); assertPrivate(w.host, "--host"); assertPort(w.port, "--port");
   const cur = readJsonFile(join(c.vladHome, "vlad.config.local.json")).data;
   let base: MachineEntry[] = cur.machines ?? loadConfig(c.vladHome).machines ?? [];
   if (!base.length) throw new Error("beyin çok makineli değil: önce `vlad setup --answers` ile machines=multi kur");
-  if (base.some((m) => m.name === name)) return { part: "config", changed: false, actions: [{ kind: "skip", what: `${name} zaten tanımlı` }], backups: [] };
-  base = [...base, { name, os: w.os, agent: { host: w.host, port: w.port ?? 7437 } }];
-  const r = writeOverlay(c, { machines: base });
+  const known = base.some((m) => m.name === name);
+  if (!known) base = [...base, { name, os: w.os, agent: { host: w.host, port: w.port ?? 7437 } }];
+  const r = known ? ({ part: "config", changed: false, actions: [{ kind: "skip", what: `${name} zaten tanımlı` }], backups: [] } as ApplyResult) : writeOverlay(c, { machines: base });
+  if (w.keygen && c.confirmed.has("keygen") && !c.dryRun && !readLocal().keys[name]) { agentKeygen(name, false); r.actions.push({ kind: "write", what: `anahtar üretildi: ${name} (değer basılmaz)` }); }
   r.actions.push({ kind: "print", what: `anahtar: \`vlad agent keygen ${name} --show\` çıktısını işçide \`vlad setup --join <beyin>\` stdin'ine ilet (argv'ye yazma)` });
   return r;
 }

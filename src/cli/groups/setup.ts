@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { getVladHome } from "../../kb/index.js";
 import { readInput } from "../../kb/input.js";
-import { SETUP_EXIT, validateAnswers, type SetupAnswers } from "../../setup/index.js";
+import { CONFIRM_ACTIONS, SETUP_EXIT, validateAnswers, type ConfirmAction, type SetupAnswers } from "../../setup/index.js";
 import { interviewAnswers } from "../../setup/interactive.js";
 import { buildContext, parseOnly, runAddWorker, runCheck, runJoin, runSetup, runUninstall, runUpgrade } from "../../setup/run.js";
 import type { Kit } from "../kit.js";
@@ -24,11 +24,11 @@ export function registerSetup(program: Command, k: Kit): void {
   }
 
   def(program, "setup", "Kurulum sihirbazı: yeni makine/arkadaş kurulumu; --check doktor, --upgrade eşitleme, --join/--add-worker çok makine", async (o: Opts) => {
-    const platform = process.platform as "win32" | "darwin" | "linux";
+    const platform = ((process.env.VLAD_SETUP_PLATFORM && ["win32", "darwin", "linux"].includes(process.env.VLAD_SETUP_PLATFORM) ? process.env.VLAD_SETUP_PLATFORM : process.platform)) as "win32" | "darwin" | "linux";
     const modes = ["check", "upgrade", "uninstall", "join", "addWorker"].filter((m) => o[m] !== undefined && o[m] !== false);
     if (modes.length > 1) usage(`şu bayraklar birlikte kullanılamaz: ${modes.join(", ")}`);
     const only = parseOnly(o.only as string | undefined);
-    const base = { vladHome: getVladHome(), env: ctx.env, dryRun: !!o.dryRun, yes: !!o.yes };
+    const base = { vladHome: getVladHome(), env: ctx.env, dryRun: !!o.dryRun, yes: !!o.yes, platform };
 
     if (o.check) {
       const r = await runCheck(buildContext(base), { only, strict: !!o.strict });
@@ -58,15 +58,21 @@ export function registerSetup(program: Command, k: Kit): void {
         answers = v.answers;
       }
     }
+    let aw: { machine?: { agent?: { host?: string; port?: number } }; keys?: string; confirm?: string[] } = {};
+    if (o.addWorker && o.answers) { const raw = readAnswers(o.answers as string); if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return usage("--answers bir JSON nesnesi olmalı"); aw = raw as typeof aw; answers = { confirm: (Array.isArray(aw.confirm) ? aw.confirm : []).filter((x): x is ConfirmAction => (CONFIRM_ACTIONS as readonly string[]).includes(x)) }; }
     const c = buildContext({ ...base, answers });
+    const warn = platform === "linux" && o.allowUnsupported && answers.role === "brain" ? ["uyarı: Linux'ta beyin desteklenmiyor (deneysel); --allow-unsupported ile devam ediliyor"] : [];
 
     let results;
     if (o.upgrade) results = await runUpgrade(c);
     else if (o.uninstall) { results = []; for (const id of parseOnly(o.uninstall as string)!) results.push(await runUninstall(c, id)); }
     else if (o.addWorker) {
-      if (!o.host || !o.os) return usage("--add-worker için --host <özel IP> ve --os darwin|win32|linux gerekli");
-      if (!(OSES as readonly string[]).includes(o.os as string)) return usage("--os darwin|win32|linux olmalı");
-      results = [await runAddWorker(c, o.addWorker as string, { os: o.os as any, host: o.host as string, port: o.port ? Number(o.port) : undefined })];
+      const nm = o.addWorker as string;
+      const host = (o.host as string | undefined) ?? aw.machine?.agent?.host;
+      const os = (o.os as string | undefined) ?? (/^win/i.test(nm) ? "win32" : /^(mac|darwin)/i.test(nm) ? "darwin" : /^linux/i.test(nm) ? "linux" : undefined);
+      if (!host || !os) return usage("--add-worker için --host <özel IP> (ya da answers.machine.agent.host) ve --os darwin|win32|linux gerekli");
+      if (!(OSES as readonly string[]).includes(os)) return usage("--os darwin|win32|linux olmalı");
+      results = [await runAddWorker(c, nm, { os: os as any, host, port: o.port ? Number(o.port) : aw.machine?.agent?.port, keygen: aw.keys === "generate" })];
     } else if (o.join) {
       if (o.answers === "-") return usage("--join anahtarı stdin'den okur: --answers için dosya yolu ya da satır içi JSON ver ('-' olmaz)");
       const brainKey = process.stdin.isTTY ? undefined : readInput("-").trim() || undefined;
@@ -74,7 +80,7 @@ export function registerSetup(program: Command, k: Kit): void {
     } else results = await runSetup(c, { only });
 
     const lines = results.flatMap((r) => [`${r.changed ? "●" : "○"} ${r.part}${r.skipped ? ` (atlandı: ${r.skipped})` : ""}`, ...r.actions.map((a) => `    ${a.kind}: ${a.what}`), ...r.backups.map((b) => `    yedek: ${b}`)]);
-    out(o, { dryRun: !!o.dryRun, results }, lines.join("\n"));
+    out(o, { dryRun: !!o.dryRun, results }, [...warn, ...lines].join("\n"));
   })
     .option("--check", "salt okuma doktor (çıkış 0 yeşil, 1 hata, 2 kullanım)")
     .option("--strict", "--check: yalnız-uyarıları da hata say")
