@@ -32,7 +32,7 @@ export function registerKb(program: Command, k: Kit): void {
       ...r.gitignore_added.map((g) => `.gitignore: ${g} eklen${r.dry_run ? "ecek" : "di"}`),
     ];
     out(o, r, lines.length ? lines.join("\n") : "yapılacak bakım yok");
-  }).option("--days <n>", "bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 30)")
+  }).option("--days <n>", "bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 14)")
     .option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster");
   def(kb, "get <id>", "Görev (T…) ya da bulguyu (F-…) ID ile okur; arşivdekini de bulur, gerçek yolu verir", (id: string, o: Opts) => {
     const r = getKbRecord(id, o.section as string | undefined);

@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { runGitRaw } from "../git/git.js";
 import { kbPaths, nowIso, readDoc, validate, writeFileAtomic, type InboxRecord } from "../kb/index.js";
@@ -161,6 +161,8 @@ export async function main(stdinText?: string, stdin?: NodeJS.ReadableStream): P
     if (!input || typeof input.session_id !== "string" || typeof input.transcript_path !== "string") {
       throw new Error("hook girdisi geçersiz: session_id/transcript_path eksik");
     }
+    // A session that ended before Claude Code wrote its transcript (e.g. a voice helper) has nothing to report; not an error.
+    if (!existsSync(input.transcript_path)) return;
     const p = kbPaths();
     const record = buildReport(
       { ...input, cwd: input.cwd ?? process.cwd() },
