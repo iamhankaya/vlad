@@ -154,6 +154,8 @@ export interface VladConfig {
   worktreeDir: string;
   /** kb checkout (relative to VLAD_HOME or absolute); default <home>/kb. */
   kbDir?: string;
+  /** kb'nin GitHub deposu `owner/name` (T20261110-03; bulut `add_repo`, skill/README metinleri buradan okur); yoksa kb yalnız yerel. */
+  kbRepo?: string;
   /** Cloud worker kb access; absent → `inline`. */
   cloudKb?: CloudKb;
   /** `claude --autocompact` for workers (e.g. "300k"); absent or "" → no flag. Range 100000–1000000 tokens. */
