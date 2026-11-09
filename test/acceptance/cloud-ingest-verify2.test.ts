@@ -93,11 +93,11 @@ describe("yaşam döngüsü", { timeout: 30_000 }, () => {
   });
 
   it("ASK sonrası cevap + REPORT aynı transcript'te geç işlenirse görev kilitlenmez", () => {
-    // geç ingest: ASK blocked yapar, REPORT blocked'tan geçemez -> en azından uyarı + ikinci tur işlemeli
+    // geç ingest: ASK blocked yapar, REPORT artık blocked'tan da geçer (F-vlad-279) -> görev ilk turda awaiting_approval, ikinci tur idempotent
     const body = JSON.stringify(page([asst("[VLAD:ASK #1] soru?"), asst(report(2))]));
     const r = ingest(body);
     expect(r.code, r.out + r.err).toBe(0);
-    expect(vlad(home, ["task", "answer", id, "c"]).code).toBe(0);
+    expect(taskState(home, id)).toBe("awaiting_approval");
     const r2 = ingest(body);
     expect(r2.code, r2.out + r2.err).toBe(0);
     expect(taskState(home, id)).toBe("awaiting_approval");
