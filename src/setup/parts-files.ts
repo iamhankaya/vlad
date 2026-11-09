@@ -1,14 +1,14 @@
 // Dosya yazan parçalar (T20261110-05): cli, global-skills, repo-skills, hooks, permissions, plugins, config, kb.
 // Kural: apply önce check koşar, ok ise yazmaz; kullanıcı ayarı silinmez/ezilmez (çakışan raporlanır); JSON değişimi yedekli.
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { HOOK_TIMEOUT_S, globalSkillNames, hookCommand, mergeSessionEndHook } from "../install.js";
 import { KB_GITIGNORE } from "../kb/commit.js";
 import { LOCAL_CONFIG_FILE } from "../kb/config-layer.js";
 import { loadConfig } from "../kb/config.js";
 import { resolveKbDir } from "../kb/home.js";
-import { compareDirs, compose, expandHome, newestMtime, readJsonFile, result, run, samePath, updateJson, upToDate, writeAtomic } from "./io.js";
-import { buildOverlay } from "./overlay.js";
+import { compareDirs, compose, expandHome, newestMtime, readJsonFile, result, run, uniqueBackup, updateJson, upToDate, writeAtomic } from "./io.js";
+import { buildOverlay, kbDirFromAnswers } from "./overlay.js";
 import type { ApplyAction, ApplyResult, ItemCheck, PartCheck, Requirement, SetupContext, SetupPart } from "./types.js";
 
 const item = (id: string, status: ItemCheck["status"], evidence: string, fix?: string): ItemCheck => ({ id, status, evidence, ...(fix ? { fix } : {}) });
@@ -51,7 +51,7 @@ export const globalSkillsPart: SetupPart = {
       const src = join(c.vladHome, "global", "skills", n), dst = join(c.claudeDir, "skills", n);
       const st = compareDirs(src, dst);
       if (st === "ok") continue;
-      if (st === "eski" && !c.dryRun) { const bak = `${dst}.bak-${Date.now()}`; cpSync(dst, bak, { recursive: true }); backups.push(bak); acts.push({ kind: "backup", what: `yerel kopya yedeklendi`, target: bak }); }
+      if (st === "eski" && !c.dryRun) { const bak = uniqueBackup(join(c.claudeDir, "vlad-backups", n)); cpSync(dst, bak, { recursive: true }); backups.push(bak); acts.push({ kind: "backup", what: `yerel kopya yedeklendi`, target: bak }); }
       acts.push({ kind: "write", what: `skill kopyala: ${n}`, target: dst });
       if (!c.dryRun) cpSync(src, dst, { recursive: true, force: true });
     }
@@ -59,8 +59,14 @@ export const globalSkillsPart: SetupPart = {
   },
   async uninstall(c) {
     const acts: ApplyAction[] = [];
-    for (const n of globalSkillNames(c.vladHome)) { const d = join(c.claudeDir, "skills", n); if (existsSync(d)) { acts.push({ kind: "write", what: `skill sil: ${n}`, target: d }); if (!c.dryRun) rmSync(d, { recursive: true, force: true }); } }
-    return result("global-skills", acts);
+    const backups: string[] = [];
+    for (const n of globalSkillNames(c.vladHome)) {
+      const d = join(c.claudeDir, "skills", n);
+      if (!existsSync(d)) continue;
+      acts.push({ kind: "write", what: `skill sil: ${n}`, target: d });
+      if (!c.dryRun) { const bak = uniqueBackup(join(c.claudeDir, "vlad-backups", n)); cpSync(d, bak, { recursive: true }); backups.push(bak); rmSync(d, { recursive: true, force: true }); }
+    }
+    return result("global-skills", acts, backups);
   },
 };
 
@@ -143,7 +149,8 @@ export const WORKER_PERMISSIONS = [
 ];
 function kbOutside(c: SetupContext): string | null {
   const kb = resolveKbDir(c.vladHome).dir;
-  return samePath(kb, join(c.vladHome, "kb")) || kb.startsWith(resolve(c.vladHome) + "/") ? null : kb;
+  const rel = relative(resolve(c.vladHome), resolve(kb));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel)) ? null : kb;
 }
 export const permissionsPart: SetupPart = {
   id: "permissions",
@@ -168,6 +175,7 @@ export const permissionsPart: SetupPart = {
     const kb = kbOutside(c);
     const r = updateJson(c, settingsPath(c), (d) => {
       d.permissions = d.permissions ?? {};
+      for (const k of ["allow", "additionalDirectories"]) if (d.permissions[k] !== undefined && !Array.isArray(d.permissions[k])) throw new Error(`settings.json: permissions.${k} bir dizi değil; elle düzeltin`);
       if (wantPerms) d.permissions.allow = [...(d.permissions.allow ?? []), ...WORKER_PERMISSIONS.filter((p) => !(d.permissions.allow ?? []).includes(p))];
       if (wantDirs && kb) d.permissions.additionalDirectories = [...new Set([...(d.permissions.additionalDirectories ?? []), kb])];
       return d;
@@ -221,8 +229,9 @@ export const configPart: SetupPart = {
   },
   async uninstall(c) {
     if (!existsSync(localPath(c))) return result("config", [{ kind: "skip", what: "yerel katman yok" }]);
-    if (!c.dryRun) rmSync(localPath(c), { force: true });
-    return result("config", [{ kind: "write", what: `${LOCAL_CONFIG_FILE} silindi`, target: localPath(c) }]);
+    let bak: string | undefined;
+    if (!c.dryRun) { bak = uniqueBackup(localPath(c)); writeFileSync(bak, readFileSync(localPath(c))); rmSync(localPath(c), { force: true }); }
+    return result("config", [{ kind: "write", what: `${LOCAL_CONFIG_FILE} silindi`, target: localPath(c) }], bak ? [bak] : []);
   },
 };
 
@@ -235,7 +244,7 @@ export function writeOverlay(c: SetupContext, overlay: Record<string, unknown>, 
   if (JSON.stringify(merged) === JSON.stringify(cur.data)) return acts.length ? result("config", acts) : upToDate("config");
   const wrote: ApplyAction = { kind: "write", what: `${LOCAL_CONFIG_FILE}: ${Object.keys(overlay).filter((k) => !blocked.includes(k)).join(", ")}`, target: localPath(c) };
   if (c.dryRun) return result("config", [...acts, wrote]);
-  const bak = cur.exists ? `${localPath(c)}.bak-${Date.now()}` : undefined;
+  const bak = cur.exists ? uniqueBackup(localPath(c)) : undefined;
   if (bak) writeFileSync(bak, readFileSync(localPath(c)));
   writeAtomic(localPath(c), JSON.stringify(merged, null, 2) + "\n");
   try { loadConfig(c.vladHome); } catch (e) {
@@ -246,10 +255,7 @@ export function writeOverlay(c: SetupContext, overlay: Record<string, unknown>, 
 }
 
 // ---- kb ----
-export function kbTarget(c: SetupContext): string {
-  const d = c.answers.kb?.dir;
-  return d ? resolve(c.vladHome, expandHome(d, c.home)) : resolveKbDir(c.vladHome).dir;
-}
+export function kbTarget(c: SetupContext): string { return kbDirFromAnswers(c) ?? resolveKbDir(c.vladHome).dir; }
 const isGitRepo = (d: string) => existsSync(join(d, ".git"));
 function ensureIgnores(dir: string, dry: boolean): string[] {
   const f = join(dir, ".gitignore");
@@ -286,11 +292,11 @@ export const kbPart: SetupPart = {
         if (!c.confirmed.has("kb-repo-create")) return result("kb", [{ kind: "skip", what: "GitHub repo oluşturma açık onay ister (confirm: kb-repo-create)" }], [], "onay yok");
         acts.push({ kind: "run", what: `gh repo create ${kb.remote} --private` });
         if (!c.dryRun) {
-          const r = run("gh", ["repo", "create", kb.remote!, "--private"]);
+          const exists = run("gh", ["repo", "view", kb.remote!]).ok; // yeniden koşuda "already exists" ile takılma
+          const r = exists ? { ok: true, stderr: "" } : run("gh", ["repo", "create", kb.remote!, "--private"]);
           if (!r.ok) throw new Error(`gh repo create başarısız: ${r.stderr.trim()}`);
           mkdirSync(dir, { recursive: true });
-          run("git", ["init"], { cwd: dir });
-          run("git", ["remote", "add", "origin", `https://github.com/${kb.remote}.git`], { cwd: dir });
+          for (const a of [["init"], ["remote", "add", "origin", `https://github.com/${kb.remote}.git`]]) { const g = run("git", a, { cwd: dir }); if (!g.ok) throw new Error(`repo oluşturuldu ama git ${a[0]} başarısız (${g.stderr.trim()}); elle tamamla: cd ${dir} && git init && git remote add origin https://github.com/${kb.remote}.git`); }
         }
         acts.push({ kind: "print", what: "ilk push ayrı onay ister: cd <kb> && git push -u origin HEAD" });
       } else if (mode === "path") {

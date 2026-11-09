@@ -63,18 +63,26 @@ export async function runUninstall(c: SetupContext, id: PartId): Promise<ApplyRe
   return p.uninstall(c);
 }
 
-const assertPrivate = (h: string, label: string) => { if (/^\d+\.\d+\.\d+\.\d+$/.test(h) && !PRIVATE_V4.some((r) => r.test(h))) throw new Error(`${label}: genel adres reddedilir (yalnız loopback/RFC1918/link-local)`); };
+const assertPrivate = (h: string, label: string) => {
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(h)) throw new Error(`${label}: özel ağ IPv4 adresi olmalı (ad/hostname kabul edilmez)`);
+  if (!PRIVATE_V4.some((r) => r.test(h))) throw new Error(`${label}: genel adres reddedilir (yalnız loopback/RFC1918/link-local)`);
+};
+const assertPort = (p: number | undefined, label: string) => { if (p !== undefined && !(Number.isInteger(p) && p >= 1024 && p <= 65535)) throw new Error(`${label}: 1024-65535 tamsayı olmalı`); };
+const assertName = (n: string, label: string) => { if (!/^[a-z][a-z0-9-]*$/.test(n) || n === "self") throw new Error(`${label}: ^[a-z][a-z0-9-]*$ olmalı ('self' ayrılmış)`); };
 
 export interface JoinOptions { brain: string; brainHost?: string; brainPort?: number; brainOs?: MachineEntry["os"]; brainKey?: string }
 /** İkinci makine: beyin girdisini yerel katmana yazar, sonra normal kurulum (config → ... → agent) ve beyinle paylaşılan anahtar. */
 export async function runJoin(c: SetupContext, j: JoinOptions): Promise<ApplyResult[]> {
+  assertName(j.brain, "--join");
   const known = (() => { try { return loadConfig(c.vladHome).machines?.find((m) => m.name === j.brain); } catch { return undefined; } })();
   if (!known) {
     if (!j.brainHost || !j.brainOs) throw new Error(`beyin '${j.brain}' config'te yok: --brain-host <özel IP> ve --brain-os darwin|win32|linux ver`);
-    assertPrivate(j.brainHost, "--brain-host");
+    assertPrivate(j.brainHost, "--brain-host"); assertPort(j.brainPort, "--brain-port");
     const brain: MachineEntry = { name: j.brain, os: j.brainOs, agent: { host: j.brainHost, port: j.brainPort ?? 7437 } };
     const cur = readJsonFile(join(c.vladHome, "vlad.config.local.json")).data;
-    writeOverlay(c, { machines: [...(cur.machines ?? []), brain], brain: j.brain });
+    let existing: MachineEntry[] = cur.machines ?? [];
+    if (!cur.machines) { try { existing = (loadConfig(c.vladHome).machines ?? []) as MachineEntry[]; } catch { /* tek makine */ } } // tracked makineler sığ birleşimde kaybolmasın
+    writeOverlay(c, { machines: [...existing.filter((m) => m.name !== j.brain), brain], brain: j.brain }, cur.brain !== undefined && cur.brain !== j.brain ? ["brain"] : []);
   }
   const out = await runSetup({ ...c, answers: { ...c.answers, role: "worker", machines: "multi" } });
   if (j.brainKey !== undefined && !c.dryRun) {
@@ -88,7 +96,7 @@ export async function runJoin(c: SetupContext, j: JoinOptions): Promise<ApplyRes
 
 /** Beyinde: işçiyi machines'e ekler; anahtar üretimi/aktarımı elle (değer çıktıya girmez). */
 export async function runAddWorker(c: SetupContext, name: string, w: { os: MachineEntry["os"]; host: string; port?: number }): Promise<ApplyResult> {
-  assertPrivate(w.host, "--host");
+  assertName(name, "--add-worker"); assertPrivate(w.host, "--host"); assertPort(w.port, "--port");
   const cur = readJsonFile(join(c.vladHome, "vlad.config.local.json")).data;
   let base: MachineEntry[] = cur.machines ?? loadConfig(c.vladHome).machines ?? [];
   if (!base.length) throw new Error("beyin çok makineli değil: önce `vlad setup --answers` ile machines=multi kur");

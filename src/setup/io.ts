@@ -1,6 +1,6 @@
 // Parça yardımcıları (T20261110-05): dosya/JSON/yedek, komut yürütücü (testte değiştirilebilir), karma, sürüm.
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { stamp } from "../install.js";
 import type { ApplyAction, ApplyResult, ItemCheck, PartCheck, PartId, Requirement, SetupContext } from "./types.js";
@@ -10,7 +10,7 @@ export interface RunResult { ok: boolean; code: number | null; stdout: string; s
 export type Runner = (cmd: string, args: string[], o?: { cwd?: string; input?: string; timeoutMs?: number }) => RunResult;
 const realRunner: Runner = (cmd, args, o = {}) => {
   try {
-    const stdout = execFileSync(cmd, args, { cwd: o.cwd, input: o.input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: o.timeoutMs ?? 20_000, windowsHide: true, shell: process.platform === "win32" && !/\.exe$/i.test(cmd), env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    const stdout = execFileSync(cmd, args, { cwd: o.cwd, input: o.input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: o.timeoutMs ?? 20_000, windowsHide: true, shell: process.platform === "win32" && (cmd === "claude" || cmd === "codex"), env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
     return { ok: true, code: 0, stdout, stderr: "" };
   } catch (e) {
     const x = e as { status?: number | null; stdout?: string; stderr?: string; message: string };
@@ -32,24 +32,35 @@ export function versionAtLeast(out: string, min: string): boolean {
 
 // ---- dosya/JSON ----
 export const expandHome = (p: string, home: string): string => (p === "~" ? home : p.startsWith("~/") || p.startsWith("~\\") ? join(home, p.slice(2)) : p);
+export const isPlainObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+/** `<dosya>.bak-<zaman>`; aynı saniyede ikinci yedek öncekini ezmez (-2, -3 …). */
+export function uniqueBackup(path: string): string {
+  const base = `${path}.bak-${stamp(new Date())}`;
+  let p = base, n = 1;
+  while (existsSync(p)) p = `${base}-${++n}`;
+  return p;
+}
 export function readJsonFile(path: string): { exists: boolean; data: any } {
   if (!existsSync(path)) return { exists: false, data: {} };
   try { return { exists: true, data: JSON.parse(readFileSync(path, "utf8")) }; } catch (e) { throw new Error(`${path} geçerli JSON değil: ${(e as Error).message}`); }
 }
 export function writeAtomic(path: string, text: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.${process.pid}.tmp`;
-  writeFileSync(tmp, text, "utf8");
-  renameSync(tmp, path);
+  let target = path, mode: number | undefined;
+  try { target = realpathSync(path); mode = statSync(target).mode & 0o777; } catch { /* yeni dosya */ } // symlink'li settings.json düz dosyaya dönmez, izin korunur
+  mkdirSync(dirname(target), { recursive: true });
+  const tmp = `${target}.${process.pid}.tmp`;
+  writeFileSync(tmp, text, { encoding: "utf8", ...(mode !== undefined ? { mode } : {}) });
+  renameSync(tmp, target);
 }
 /** JSON dosyasını yapısal günceller: değişmediyse yazmaz (idempotens), değiştiyse önce `<dosya>.bak-<stamp>` yedeği alır. */
 export function updateJson(ctx: SetupContext, path: string, mutate: (d: any) => any): { changed: boolean; backup?: string } {
   const cur = readJsonFile(path);
+  if (cur.exists && !isPlainObject(cur.data)) throw new Error(`${path} bir JSON nesnesi değil`);
   const next = mutate(structuredClone(cur.data));
   if (JSON.stringify(next) === JSON.stringify(cur.data)) return { changed: false };
   let backup: string | undefined;
   if (!ctx.dryRun) {
-    if (cur.exists) { backup = `${path}.bak-${stamp(new Date())}`; copyFileSync(path, backup); }
+    if (cur.exists) { backup = uniqueBackup(path); copyFileSync(path, backup); }
     writeAtomic(path, JSON.stringify(next, null, 2) + "\n");
   } else if (cur.exists) backup = `${path}.bak-<zaman>`;
   return { changed: true, backup };

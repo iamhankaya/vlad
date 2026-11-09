@@ -62,12 +62,13 @@ export function registerSetup(program: Command, k: Kit): void {
 
     let results;
     if (o.upgrade) results = await runUpgrade(c);
-    else if (o.uninstall) { const p = parseOnly(o.uninstall as string); results = [await runUninstall(c, p![0]!)]; }
+    else if (o.uninstall) { results = []; for (const id of parseOnly(o.uninstall as string)!) results.push(await runUninstall(c, id)); }
     else if (o.addWorker) {
       if (!o.host || !o.os) return usage("--add-worker için --host <özel IP> ve --os darwin|win32|linux gerekli");
       if (!(OSES as readonly string[]).includes(o.os as string)) return usage("--os darwin|win32|linux olmalı");
       results = [await runAddWorker(c, o.addWorker as string, { os: o.os as any, host: o.host as string, port: o.port ? Number(o.port) : undefined })];
     } else if (o.join) {
+      if (o.answers === "-") return usage("--join anahtarı stdin'den okur: --answers için dosya yolu ya da satır içi JSON ver ('-' olmaz)");
       const brainKey = process.stdin.isTTY ? undefined : readInput("-").trim() || undefined;
       results = await runJoin(c, { brain: o.join as string, brainHost: o.brainHost as string | undefined, brainPort: o.brainPort ? Number(o.brainPort) : undefined, brainOs: o.brainOs as any, brainKey });
     } else results = await runSetup(c, { only });

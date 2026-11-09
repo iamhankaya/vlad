@@ -23,6 +23,7 @@ const fake: Runner = (cmd, args, o) => {
   if (cmd === "git" && args[0] === "--version") return { ok: true, code: 0, stdout: "git version 2.50.0", stderr: "" };
   if (cmd === "git" && args[0] === "init") { mkdirSync(join(o?.cwd ?? ".", ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
   if (cmd === "git" && args[0] === "clone") { mkdirSync(join(args[2]!, ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
+  if (cmd === "gh" && args[0] === "repo" && args[1] === "view") return { ok: false, code: 1, stdout: "", stderr: "not found" };
   if (cmd === "git" && args[0] === "ls-remote") return args[1]!.includes("denied/") ? { ok: false, code: 128, stdout: "", stderr: "no access" } : { ok: true, code: 0, stdout: "", stderr: "" };
   return { ok: true, code: 0, stdout: "x 1.0", stderr: "" };
 };
@@ -138,13 +139,41 @@ describe("senaryo 6/7: yükseltme drift'i ve eksik build", () => {
   });
 });
 
+describe("inceleme düzeltmeleri", () => {
+  it("aynı saniyede ikinci settings yedeği öncekini ezmez", async () => {
+    w(settings(), JSON.stringify({ permissions: { allow: ["Bash(ls)"] } }));
+    const a = ans({ perms: true, confirm: ["permissions-write"] });
+    const r1 = await runSetup(ctx(a, { yes: true }), { only: ["permissions"] });
+    w(settings(), JSON.stringify({ permissions: { allow: ["Bash(pwd)"] } }));
+    const r2 = await runSetup(ctx(a, { yes: true }), { only: ["permissions"] });
+    const b = [...r1[0]!.backups, ...r2[0]!.backups];
+    expect(new Set(b).size).toBe(b.length);
+    expect(b.length).toBe(2);
+  });
+  it("permissions.allow dizi değilse yazmadan hata verir", async () => {
+    w(settings(), JSON.stringify({ permissions: { allow: "x" } }));
+    await expect(runSetup(ctx(ans({ perms: true, confirm: ["permissions-write"] }), { yes: true }), { only: ["permissions"] })).rejects.toThrow(/dizi/);
+    expect(jr(settings()).permissions.allow).toBe("x");
+  });
+  it("--join: ad/hostname reddedilir, port aralığı doğrulanır", async () => {
+    await expect(runJoin(ctx(ans({ confirm: ["keygen"] }), { yes: true }), { brain: "boss", brainHost: "boss.example.com", brainPort: 7437, brainOs: "darwin" } as never)).rejects.toThrow(/IPv4/);
+    await expect(runJoin(ctx(ans({ confirm: ["keygen"] }), { yes: true }), { brain: "boss", brainHost: "192.168.1.5", brainPort: 80, brainOs: "darwin" } as never)).rejects.toThrow(/1024/);
+  });
+  it("--uninstall config silmeden önce yedek bırakır", async () => {
+    await runSetup(ctx(ans(), { yes: true }), { only: ["config"] });
+    const u = await runUninstall(ctx(ans(), { yes: true }), "config");
+    expect(u.backups.length).toBe(1);
+    expect(existsSync(u.backups[0]!)).toBe(true);
+  });
+});
+
 describe("senaryo 11: kb modları", () => {
   it("github-new onay yoksa repo oluşturulmaz; onayla gh repo create --private, push yok", async () => {
     const a = ans({ kb: { mode: "github-new", dir: join(root, "kb2"), remote: "me/vlad-kb" } });
     const r = await runSetup(ctx(a, { yes: true }), { only: ["kb"] });
     expect(r[0]!.skipped).toBeTruthy(); expect(calls.some((c) => c[0] === "gh")).toBe(false); expect(existsSync(join(root, "kb2"))).toBe(false);
     await runSetup(ctx({ ...a, confirm: ["kb-repo-create"] }, { yes: true }), { only: ["kb"] });
-    expect(calls.find((c) => c[0] === "gh")).toEqual(["gh", "repo", "create", "me/vlad-kb", "--private"]);
+    expect(calls.find((c) => c[0] === "gh" && c[2] === "create")).toEqual(["gh", "repo", "create", "me/vlad-kb", "--private"]);
     expect(calls.some((c) => c[0] === "git" && c[1] === "push")).toBe(false);
     expect(existsSync(join(root, "kb2", ".git"))).toBe(true);
   });
