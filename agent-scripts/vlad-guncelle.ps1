@@ -3,7 +3,9 @@
 # dist, derlendigi HEAD'i dist\.build-head'e yazar: HEAD ilerlemis ama derleme onceki kosuda basarisizsa tekrar derlenir.
 # Basari: ok:true. Agent bunun uzerine (exit 0 + data.ok true) kendini yeniden baslatir. Yalniz ASCII (PS 5.1 BOM'suz dosyayi ANSI okur).
 # $ErrorActionPreference Stop DEGIL: PS 5.1'de yerel komutun stderr'i hata olur; sonuc $LASTEXITCODE ile okunur.
-# Not: `npm ci` node_modules'i siler; ortasinda kesilirse docs/agent-scripts.md "Kurtarma" adimlari uygulanir.
+# Geri alma: npm ci oncesi node_modules -> node_modules-old (isaret: .vlad-npm-ci-running); basarisizlikta ya da yarida kesilmede (sonraki kosunun
+# basinda) eski node_modules geri gelir. dist-old ve node_modules-old BASARIDA SILINMEZ: yeni surec dinleyince Agent'in yardimci betigi siler,
+# dinlemezse ayni yardimci dist + node_modules'i yedekten geri yukler.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Continue'
 $env:GIT_TERMINAL_PROMPT = '0'
@@ -16,12 +18,29 @@ $repo = $env:VLAD_REPO
 if (-not $repo -or -not (Test-Path -LiteralPath (Join-Path $repo '.git'))) { Fail 'setup' 'VLAD_REPO yok ya da git deposu degil' }
 Set-Location -LiteralPath $repo
 
+# yarida kalan npm ci kurtarma (her seyden once): eski node_modules geri
+if (Test-Path -LiteralPath '.vlad-npm-ci-running') {
+    if (Test-Path -LiteralPath 'node_modules-old') {
+        try { if (Test-Path -LiteralPath 'node_modules') { Remove-Item -LiteralPath 'node_modules' -Recurse -Force -ErrorAction Stop }; Rename-Item -LiteralPath 'node_modules-old' -NewName 'node_modules' -ErrorAction Stop }
+        catch { Fail 'setup' 'yarim node_modules yedekten geri yuklenemedi' }
+    }
+    Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
+}
+
 $st = Invoke-Git @('status', '--porcelain', '--untracked-files=no')
 if ($st) { Fail 'dirty' 'izlenen dosyalarda yerel degisiklik var; temizlenmeden guncellenmez' }
 [void](Invoke-Git @('symbolic-ref', '-q', 'HEAD'))
 if ($script:gitCode -ne 0) { Fail 'detached' 'HEAD detached; bir dala gec' }
-[void](Invoke-Git @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'))
+$up = Invoke-Git @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}')
 if ($script:gitCode -ne 0) { Fail 'no_upstream' 'dalin upstream''i yok' }
+# yalniz varsayilan dal (origin/HEAD; yoksa main|master) ve upstream'i origin/<ayni dal> olan klon guncellenir
+$cur = Invoke-Git @('symbolic-ref', '-q', '--short', 'HEAD')
+$def = Invoke-Git @('symbolic-ref', '-q', '--short', 'refs/remotes/origin/HEAD')
+if ($script:gitCode -eq 0 -and $def) {
+    $def = $def -replace '^origin/', ''
+    if ($cur -ne $def) { Fail 'branch' "dal '$cur' varsayilan dal ('$def') degil" }
+} elseif ($cur -ne 'main' -and $cur -ne 'master') { Fail 'branch' "dal '$cur' varsayilan dal degil (main/master)" }
+if ($up -ne "origin/$cur") { Fail 'branch' "upstream '$up', beklenen 'origin/$cur'" }
 
 $from = Invoke-Git @('rev-parse', '--short', 'HEAD')
 [void](Invoke-Git @('fetch', '--prune'))
@@ -36,8 +55,21 @@ if (($from -eq $to) -and (Test-Path -LiteralPath $stamp) -and ((Get-Content -Lit
     Emit ([ordered]@{ ok = $true; changed = $false; from = $from; to = $to; summary = "vlad zaten guncel ($to)" }); exit 0
 }
 
+if (Test-Path -LiteralPath 'node_modules-old') { Remove-Item -LiteralPath 'node_modules-old' -Recurse -Force -ErrorAction SilentlyContinue }
+if (Test-Path -LiteralPath 'node_modules-old') { Fail 'install' 'eski node_modules-old silinemedi (dosya kilidi?); hicbir sey degismedi' }
+if (Test-Path -LiteralPath 'node_modules') {
+    try { Rename-Item -LiteralPath 'node_modules' -NewName 'node_modules-old' -ErrorAction Stop }
+    catch { Fail 'install' 'node_modules yedeklenemedi (kilit?); hicbir sey degismedi' }
+}
+[System.IO.File]::WriteAllText((Join-Path $repo '.vlad-npm-ci-running'), '')
 & npm.cmd ci --ignore-scripts --no-audit --no-fund 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
-if ($LASTEXITCODE -ne 0) { Fail 'install' 'npm ci basarisiz; node_modules bozulmus olabilir (docs/agent-scripts.md Kurtarma)' }
+if ($LASTEXITCODE -ne 0) {
+    if (Test-Path -LiteralPath 'node_modules') { Remove-Item -LiteralPath 'node_modules' -Recurse -Force -ErrorAction SilentlyContinue }
+    if (Test-Path -LiteralPath 'node_modules-old') { Rename-Item -LiteralPath 'node_modules-old' -NewName 'node_modules' -ErrorAction SilentlyContinue }
+    Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
+    Fail 'install' 'npm ci basarisiz; eski node_modules geri yuklendi'
+}
+Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
 
 if (Test-Path -LiteralPath 'dist-next') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force }
 & npx.cmd --no-install tsc --outDir dist-next 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
@@ -58,6 +90,5 @@ catch {
     if (Test-Path -LiteralPath 'dist-old') { Rename-Item -LiteralPath 'dist-old' -NewName 'dist' -ErrorAction SilentlyContinue }
     Fail 'swap' "dist-next dist'e tasinamadi; eski dist geri yuklendi"
 }
-if (Test-Path -LiteralPath 'dist-old') { Remove-Item -LiteralPath 'dist-old' -Recurse -Force -ErrorAction SilentlyContinue }  # kilitliyse hata sayilmaz
 
 Emit ([ordered]@{ ok = $true; changed = $true; from = $from; to = $to; summary = "vlad guncellendi: $from -> $to, dist yenilendi" })

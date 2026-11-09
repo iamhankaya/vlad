@@ -8,3 +8,5 @@ dist-old/
 /kb/
 /vlad.local.json
 /.vlad-agent/
+node_modules-old/
+.vlad-npm-ci-running
