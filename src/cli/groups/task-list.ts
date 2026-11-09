@@ -7,6 +7,9 @@ import { listTasksWithWarnings, modelInfo, getTask, markDigested, readyWithLimit
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
+/** `task list --json` varsayılan alanları: vlad-desktop (src/models/task.ts) ve skill'lerin okuduğu kısa küme. */
+const SHORT_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "created", "updated", "error", "role", "parent", "depends_on", "phase", "machine", "effective_model"];
+
 export function registerTaskList(task: Command, k: Kit): void {
   const { ctx, out, def, taskLine, withModel, integrationInfo, TASK_FIELDS, DERIVED_FIELDS } = k;
   def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {
@@ -28,7 +31,9 @@ export function registerTaskList(task: Command, k: Kit): void {
     const limit = o.limit === undefined ? undefined : Number(o.limit);
     if (limit !== undefined && !(limit >= 1)) throw new Error(`geçersiz --limit: ${o.limit}`);
     const shown = limit === undefined ? tasks : tasks.slice(-limit); // ids are date-ordered: the newest N
-    const fields = o.fields ? String(o.fields).split(",").map((f) => f.trim()).filter(Boolean) : undefined;
+    if (o.full && o.fields) throw new Error("--full ve --fields birlikte verilemez");
+    // Varsayılan --json kısa: nadir/hesaplanan alanlar (role_model, integration_worktrees, model_reason…) yalnız --full ya da --fields ile (T20261110-14)
+    const fields = o.fields ? String(o.fields).split(",").map((f) => f.trim()).filter(Boolean) : o.full ? undefined : SHORT_FIELDS;
     let rows: unknown[];
     if (fields) {
       const bad = fields.filter((f) => !DERIVED_FIELDS.includes(f) && !TASK_FIELDS.includes(f));
@@ -55,6 +60,7 @@ export function registerTaskList(task: Command, k: Kit): void {
     .option("--undigested", "yalnızca kapanış raporu /digest'te işlenmemiş done görevler")
     .option("--parent <id>", "yalnızca bu pipeline'ın fazları")
     .option("--fields <alanlar>", "--json çıktısını bu alanlarla sınırla (virgülle; role_model, effective_model, integration_worktrees yalnız istenirse hesaplanır)")
+    .option("--full", "--json çıktısı tüm alanlarla (role_model, integration_worktrees, model_reason, … dahil)")
     .option("--limit <n>", "en yeni n görev");
   def(task, "idle", "Uzun süredir güncellenmeyen running/blocked görevler (bekçi modu dürtmesi için)", (o: Opts) => {
     const minutes = Number(o.minutes);

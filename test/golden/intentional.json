@@ -38,6 +38,15 @@
         "finding list --help",
         "finding set --help"
       ]
+    },
+    {
+      "id": "T20261110-14",
+      "keys": [
+        "task list --help",
+        "single :: task list",
+        "brain :: task list",
+        "forwarded :: task list"
+      ]
     }
   ]
 }

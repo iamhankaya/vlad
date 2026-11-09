@@ -130,7 +130,7 @@ vlad task ready --parent <çatı-id> --json
 - **Çok makineli gate:** çatının projesinin kartında `machines` ≥2 ise son kapıdan önce gate her makinede koşmuş olmalı (`integrate` skill'inin "Çok makineli proje" paragrafı): beyinde yerel gate, diğerlerinde `vlad task gate`; her makine için `vlad task log <çatı-id> "Gate <makine>: yeşil|kırmızı"` satırı yoksa önce koştur. Biri kırmızıysa ya da erişilemiyorsa merge/PR önerme.
 - **Codex tur ölçümü:** son kapıda (karar sunulmadan önce) çatıya yapısal satırı yaz: `vlad task log <çatı-id> "Codex turları: ara=<n> son=<n>"` (`ara` = çatıdaki `Codex ara turu:` notlarının sayısı, `son` = bu son kapıdaki düzeltme turları (her biri için `Codex son turu` notu); tur olmadıysa `0`). Satır tam bu biçimde olmalı: `vlad audit setup` yalnız bu yapısal satırı sayar (`signals.codex_turlari`), şablon/alıntı metni sayılmaz. Tur eklenirse satırı yeniden yaz (sonuncusu geçerli).
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
-- Çatı birden çok projede faz çalıştırdıysa (`integration_worktrees` birden fazla satır) kapı doğrulamasını, diff özetini ve merge/PR'ı **her projenin** entegrasyon worktree'sinde ayrı ayrı yap ve sun; son kapı onayı projeler arası ortak tek karardır.
+- Çatı birden çok projede faz çalıştırdıysa (`vlad task list --json --full` → `integration_worktrees` birden fazla satır) kapı doğrulamasını, diff özetini ve merge/PR'ı **her projenin** entegrasyon worktree'sinde ayrı ayrı yap ve sun; son kapı onayı projeler arası ortak tek karardır.
 - Diff özeti: `git -C <çatı worktree> log --oneline main..HEAD` ve `git -C <çatı worktree> diff --stat main...HEAD`.
 
 Seçenekler (açık onay):
@@ -139,7 +139,7 @@ Seçenekler (açık onay):
 3. **Değişiklik iste:** çatı altına yeni faz aç (`/delegate` adım 4); çatıyı `vlad task set <çatı-id> running --json` ile geri al.
 4. **İptal et:** aşağıdaki "pipeline'ı iptal et".
 
-1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
+1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki (`vlad task list --json --full`; kısa çıktıda yok) her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
 
 **Faz kapısı ve son kapı digest'i:** her faz `done` olunca (adım 2'deki gibi) o faz görevi, çatı `done` olunca çatı görevi için "Görevi digest et" bölümünü uygula (çatının kapanış raporu yoktur; `/digest` pipeline kuralıyla fazların açık noktalarını işler). Son kapıda retrodan önce çalıştır.
 
