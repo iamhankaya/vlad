@@ -5,6 +5,7 @@
     "agent keygen": "rastgele anahtar üretir, çıktı deterministik değil",
     "agent setkey": "anahtarı stdin'den yazar; anahtar maddesi golden/küme testlerinde kapsanır",
     "agent install": "işletim sistemi hizmeti kurar",
+    "vlad setup": "makine durumuna (araçlar, ~/.claude, kb) bağlı kurulum sihirbazı; çıktı deterministik değil, davranış test/setup/*'da",
     "queue list": "yerel Agent'a bağlanır (ağ)",
     "queue flush": "yerel Agent'a bağlanır (ağ)",
     "queue drop": "yerel Agent'a bağlanır (ağ)",

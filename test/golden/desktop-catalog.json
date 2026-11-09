@@ -882,6 +882,16 @@
     "kind": "none",
     "reason": "yerel kurulum; konsol kataloğundan hariç"
    }
+  },
+  {
+   "path": [
+    "setup"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel kurulum sihirbazı; konsol kataloğundan hariç"
+   }
   }
  ]
 }

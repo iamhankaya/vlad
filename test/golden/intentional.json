@@ -38,6 +38,13 @@
         "finding list --help",
         "finding set --help"
       ]
+    },
+    {
+      "id": "T20261110-05",
+      "keys": [
+        "(root) --help",
+        "setup --help"
+      ]
     }
   ]
 }
