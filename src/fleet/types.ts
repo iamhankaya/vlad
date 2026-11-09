@@ -44,7 +44,8 @@ export type AgentOp =
   | "gate-run" | "merge-preview" | "merge"
   | "apply-write" | "exec" | "kb-head"
   | "forward-write" | "queue-list" | "queue-flush" | "queue-drop"
-  | "xfer-begin" | "xfer-chunk" | "xfer-commit" | "xfer-abort" | "clip-push"; // aktarım (T20261105-03 sözleşmesi)
+  | "xfer-begin" | "xfer-chunk" | "xfer-commit" | "xfer-abort" | "clip-push" // aktarım (T20261105-03 sözleşmesi)
+  | "script-list" | "script-run"; // kayıtlı bakım betikleri (T20261109-03 sözleşmesi, T20261109-05)
 
 export type AgentCode =
   | "ok" | "bad_request" | "auth" | "clock_skew" | "proto_mismatch" | "forbidden" | "not_found" | "conflict"
@@ -135,3 +136,91 @@ export interface MergePreviewResult { log: string; diffStat: string; conflicts: 
 /** `merge`: faz → vlad/<çatı> ya da son kapıda ana dal; yalnız brain'den, görev/makine eşleşmeli. */
 export interface MergeArgs { taskId: string; project: string; repoName: string; from: string; into: string; message?: string }
 export interface MergeResult { head: string; merged: boolean }
+
+// Kayıtlı bakım betikleri (T20261109-03 çatısı, sözleşme T20261109-05). Davranış yok; uygulama fazları bu şekle bağlanır.
+// Yeni AgentCode eklenmez: neden, hata mesajında köşeli parantezle taşınır (`forbidden [dirty]`); istemci tanımadığı kodu geçersiz sayar.
+export type ScriptPlatform = Os;
+export type ScriptClass = "read" | "write";
+
+export const SCRIPT_PARAM_TYPES = ["string", "enum", "int", "bool", "root"] as const;
+export type ScriptParamType = (typeof SCRIPT_PARAM_TYPES)[number];
+
+/** Hata mesajındaki makine okunur neden: `<AgentCode> [<neden>]`; `bad_param` için `[bad_param:<ad>]`. */
+export const SCRIPT_REASONS = [
+  "bad_name", "bad_param", "unregistered", "no_variant",
+  "dirty", "hash_mismatch", "not_regular", "not_in_head", "unpushed", "no_upstream", "approval",
+  "bad_manifest", "no_repo",
+] as const;
+export type ScriptReason = (typeof SCRIPT_REASONS)[number];
+
+/** ad: `^[a-z][a-z0-9-]{0,47}$`; manifest araması `Map` ile yapılır (`__proto__` anahtar olmaz). */
+export const SCRIPT_NAME_RE = /^[a-z][a-z0-9-]{0,47}$/;
+/** Düz `agent-scripts/` dizini; yorumlayıcı uzantıdan türer (`.ps1` yalnız win32, `.sh` yalnız darwin|linux). */
+export const SCRIPT_FILE_RE = /^agent-scripts\/[a-z0-9][a-z0-9._-]{0,63}\.(ps1|sh)$/;
+/** Yapılandırılmış sonuç satırı: stdout'un son 20 satırında, sondan ilk eşleşme `@@VLAD-RESULT@@ {json}`. */
+export const SCRIPT_RESULT_SENTINEL = "@@VLAD-RESULT@@";
+/**
+ * Ham metin tavanları (KiB). JSON serileştirme (kaçışlar) bayt boyutunu şişirebilir ve `data` stdout'ta da yer alır, bu yüzden 64 KiB
+ * journal tavanı GARANTİ değildir: `script-run` journal'da SUMMARIZED_OPS'tadır (tavan aşılırsa exit/timedOut/durationMs/truncated/dataError
+ * gibi skaler alanlar korunur, replay `__journalSummary` görür) ve ayrıca MUTATING + KEEP_ARGS'tadır; `script-list` READ_ONLY (günlüksüz).
+ */
+export const SCRIPT_LIMITS = {
+  manifestMaxBytes: 64 * 1024, stdoutKb: 32, stderrKb: 16, resultJsonKb: 16, timeoutSecMax: 3600, outputMaxKbMax: 32, paramMaxLen: 256,
+} as const;
+
+export type ScriptParamSpec =
+  /**
+   * pattern: isteğe bağlı, tam eşleşme (^…$), ReDoS'a karşı basit tutulur; yoksa varsayılan ^[A-Za-z0-9._-]+$ (baştaki "-" ve ".." YASAK:
+   * betik yazarı değeri `--` ve tırnakla kullanır; değer env'den (VLAD_PARAM_<AD>) gelir, argv/komut metnine enjekte edilmez).
+   * maxLen ≤ SCRIPT_LIMITS.paramMaxLen (yoksa o). `default` verilmişse `required` anlamsızdır (varsayılan uygulanır).
+   */
+  | { name: string; type: "string"; required?: boolean; default?: string; pattern?: string; maxLen?: number }
+  | { name: string; type: "enum"; required?: boolean; default?: string; values: string[] }
+  | { name: string; type: "int"; required?: boolean; default?: number; min?: number; max?: number }
+  | { name: string; type: "bool"; required?: boolean; default?: boolean }
+  /** değer işçinin config'indeki `machines[].roots` girişlerinden biri; yol Agent'ta çözülür */
+  | { name: string; type: "root"; required?: boolean; default?: string };
+
+/** `agent-scripts/manifest.json` giriş satırı; (name, platform) tekil. */
+export interface ScriptEntry {
+  name: string;
+  /** yalnız gösterim */
+  title: string;
+  platform: ScriptPlatform;
+  file: string;
+  /** blob baytlarının (git cat-file, filtresiz) küçük harf hex SHA-256'sı */
+  sha256: string;
+  class: ScriptClass;
+  /** 1..SCRIPT_LIMITS.timeoutSecMax */
+  timeoutSec: number;
+  /** stdout tavanı (KiB), 1..SCRIPT_LIMITS.outputMaxKbMax; stderr tavanı sabit SCRIPT_LIMITS.stderrKb. */
+  outputMaxKb: number;
+  selfUpdate: boolean;
+  params: ScriptParamSpec[];
+}
+/** Doğrulayıcı (validateScriptManifest) ayrıca `.ps1` ⇒ platform win32, `.sh` ⇒ darwin|linux denetler; ihlal `failed [bad_manifest]`. */
+export interface ScriptManifest { version: 1; scripts: ScriptEntry[] }
+
+export type ScriptIntegrity = "ok" | "hash_mismatch" | "dirty" | "not_regular" | "not_in_head";
+/** `script-list` sonucundaki giriş: manifest satırı + bütünlük durumu. */
+export interface ScriptInfo extends ScriptEntry { integrity: ScriptIntegrity }
+/** `script-list`: args `{}`; salt okuma, günlüksüz. */
+export interface ScriptListResult { head: string; platform: ScriptPlatform; scripts: ScriptInfo[] }
+
+/** `script-run`: write sınıfı için `approval.planId` zorunlu (plan-id bağlı onay; Agent kendi manifestinden hesaplayıp karşılaştırır). */
+export interface ScriptRunArgs { name: string; params?: Record<string, string>; approval?: { planId: string } }
+/**
+ * Betik başladıktan sonra hiçbir yol fırlatmaz (journal `aborted` olup aynı opId yeniden koşmasın): zaman aşımı, exit≠0,
+ * sentinel eksikliği ve yeniden başlatma isteği sonuç alanıdır. `restart` yalnız Agent koyar (betiğin JSON'undaki yok sayılır).
+ */
+export interface ScriptRunResult {
+  name: string; platform: ScriptPlatform; head: string; sha256: string;
+  /** zaman aşımında 124 */
+  exit: number; timedOut: boolean; durationMs: number;
+  stdout: string; stderr: string; truncated: { stdout: boolean; stderr: boolean };
+  /** sentinel satırındaki JSON nesnesi (≤ resultJsonKb) ya da null */
+  data: Record<string, unknown> | null;
+  dataError?: "no_result_line" | "bad_json" | "too_large";
+  /** yalnız selfUpdate && exit==0 && data.ok==true iken */
+  restart?: "scheduled";
+}

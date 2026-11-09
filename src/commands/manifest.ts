@@ -92,6 +92,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["machine", "list"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["machine", "ping"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["machine", "probe-window"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
+  c(["machine", "scripts"], { console: none("uzak bakım betiği konsoldan çalıştırılamaz") }),
+  c(["machine", "run"], { console: none("uzak bakım betiği konsoldan çalıştırılamaz") }),
   c(["send"], { worker: LOCAL, console: none("yerel pano/dosya aktarımı; konsol kataloğunda yok") }),
   c(["clip", "on"], { worker: LOCAL, console: none("yerel pano/dosya aktarımı; konsol kataloğunda yok") }),
   c(["clip", "off"], { worker: LOCAL, console: none("yerel pano/dosya aktarımı; konsol kataloğunda yok") }),

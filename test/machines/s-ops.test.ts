@@ -10,7 +10,7 @@ describe("machines:S ops table (role -> allowed ops)", () => {
   const XFER: AgentOp[] = ["xfer-begin", "xfer-chunk", "xfer-commit", "xfer-abort", "clip-push"]; // aktarım (T20261105-05)
   const WORKER_ON_BRAIN: AgentOp[] = ["ping", "apply-write", ...XFER];
   it("brain may call these on a worker agent", () => {
-    expect([...allowedOps("worker-agent", "brain")].sort()).toEqual(["cleanup", "clip-push", "close", "gate-run", "kb-sync", "launch", "liveness", "merge", "merge-preview", "op-status", "ping", "probe-window", "resume", "xfer-abort", "xfer-begin", "xfer-chunk", "xfer-commit"]);
+    expect([...allowedOps("worker-agent", "brain")].sort()).toEqual(["cleanup", "clip-push", "close", "gate-run", "kb-sync", "launch", "liveness", "merge", "merge-preview", "op-status", "ping", "probe-window", "resume", "script-list", "script-run", "xfer-abort", "xfer-begin", "xfer-chunk", "xfer-commit"]);
   });
   it("worker may call only ping/apply-write on the brain agent", () => {
     expect([...allowedOps("brain-agent", "worker")].sort()).toEqual(WORKER_ON_BRAIN.slice().sort());

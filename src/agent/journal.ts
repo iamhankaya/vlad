@@ -7,7 +7,7 @@ import { JOURNAL_RETENTION_DAYS, type AgentOp, type OpMeta, type OpRecord } from
 const MAX_RESULT_BYTES = 64 * 1024;
 
 /** Yan etkili işlemler: sonucu kırpılıp "bilinmiyor" bırakılırsa tekrar uygulanabilir; bunlar kırpma yerine küçük sabit özet saklar (F-vlad-152). */
-const SUMMARIZED_OPS: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "merge", "apply-write"]);
+const SUMMARIZED_OPS: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "merge", "apply-write", "script-run"]);
 const SUMMARY_STR_MAX = 256;
 /** Skaler alanlar (exit, branch, worktree…) korunur, uzun dizgiler kısaltılır, iç içe/büyük değerler düşer. */
 function summarize(result: unknown, bytes: number): Record<string, unknown> {
