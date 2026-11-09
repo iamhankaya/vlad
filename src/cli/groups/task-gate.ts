@@ -4,6 +4,7 @@ import { loadConfig, withKbLock } from "../../kb/index.js";
 import { brainTransport, gateMachineOf, syncKb, recordGreenGate, defaultGateTarget, remoteGateRun, baseBranchOf, remoteMerge, remoteMergePreview } from "../../machines/remote.js";
 import { selfName } from "../../fleet/state.js";
 import { getTask } from "../../tasks/index.js";
+import { listProjects } from "../../projects/store.js";
 import { compareBase, fileBaseCache } from "../../tasks/gate-compare.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -30,7 +31,7 @@ export function registerTaskGate(task: Command, k: Kit): void {
       const c = await compareBase({
         runTask: () => remoteGateRun(transport, machine, t, target),
         runBase: (cachedHead) => remoteGateRun(transport, machine, t, "base", cachedHead),
-        ...fileBaseCache(machine, t.data.project, base),
+        ...fileBaseCache(machine, t.data.project, base, listProjects().find((p) => p.slug === t.data.project)?.gate ?? ""),
       });
       await withKbLock(() => recordGreenGate(id, c.task, target));
       const { task: r, ...cmp } = c;

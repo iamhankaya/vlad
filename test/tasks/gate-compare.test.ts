@@ -3,12 +3,14 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { UNPARSED_RED, compareBase, parseRedTests, type BaseEntry } from "../../src/tasks/gate-compare.js";
+import { UNPARSED_RED, compareBase, fileBaseCache, parseRedTests, type BaseEntry } from "../../src/tasks/gate-compare.js";
+import { makeHome } from "../helpers.js";
 import { runBaseGate } from "../../src/agent/ops/gate.js";
 import type { GateRunResult } from "../../src/fleet/types.js";
 
 const H1 = "a".repeat(40), H2 = "b".repeat(40);
-const red = (...names: string[]): string => names.map((n) => ` FAIL  ${n}`).join("\n");
+/** vitest çıktısı: FAIL satırları + özet ("Tests N failed"); özet adlarla tutarlı olmalı. */
+const red = (...names: string[]): string => [...names.map((n) => ` FAIL  ${n}`), ` Tests  ${names.length} failed | 5 passed (${names.length + 5})`].join("\n");
 const res = (exit: number, stdout = "", head?: string, extra: Partial<GateRunResult> = {}): GateRunResult => ({ exit, stdout, stderr: "", ...(head ? { head } : {}), ...extra });
 
 /** Bellek içi önbellek + sayaçlı sahte koşucular. */
@@ -101,6 +103,23 @@ describe("compareBase", () => {
     expect(r.baselineRed).toEqual([]);
   });
 
+  it("özet 'Tests N failed' ayrıştırılan adlarla uyuşmazsa (adı okunamayan kırmızı) yeşil sayılmaz", async () => {
+    const out = [" FAIL  t.ts > a", " Tests  2 failed | 5 passed (7)"].join("\n");
+    const h = harness(res(1, out, H1), () => res(1, red("t.ts > a"), H2));
+    const r = await compareBase(h.deps);
+    expect(r.newRed).toContain(UNPARSED_RED);
+    expect(r.exit).toBe(1);
+  });
+
+  it("test özeti yoksa (lint/tsc adımı, bail) ya da Unhandled Errors varsa yeşil sayılmaz", async () => {
+    const noSummary = harness(res(1, " FAIL  t.ts > a", H1), () => res(1, red("t.ts > a"), H2));
+    expect((await compareBase(noSummary.deps)).newRed).toContain(UNPARSED_RED);
+    const unhandled = harness(res(1, `${red("t.ts > a")}\n Unhandled Errors \nError: boom`, H1), () => res(1, red("t.ts > a"), H2));
+    const r = await compareBase(unhandled.deps);
+    expect(r.newRed).toContain(UNPARSED_RED);
+    expect(r.exit).toBe(1);
+  });
+
   it("işçi tabanda head vermezse (ör. HEAD değişti) hata", async () => {
     const h = harness(res(1, red("x"), H1), () => res(1, red("x")));
     await expect(compareBase(h.deps)).rejects.toThrow(/taban/);
@@ -141,6 +160,21 @@ describe("runBaseGate (işçi tarafı, geçici git deposunda)", () => {
     } finally { rmSync(d, { recursive: true, force: true }); }
   });
 
+  it("işçideki dal upstream'in gerisindeyse taban koşulmaz (bayat uç yanlış taban verirdi)", async () => {
+    const d = repo();
+    const origin = realpathSync(mkdtempSync(join(tmpdir(), "vlad-gcb-o-")));
+    const other = realpathSync(mkdtempSync(join(tmpdir(), "vlad-gcb-c-")));
+    try {
+      const g = (cwd: string, ...a: string[]) => execFileSync("git", a, { cwd, stdio: "pipe" });
+      g(origin, "init", "-q", "--bare", "-b", "master");
+      g(d, "remote", "add", "origin", origin); g(d, "push", "-q", "-u", "origin", "master");
+      g(other, "clone", "-q", origin, "."); g(other, "config", "user.email", "t@t"); g(other, "config", "user.name", "t");
+      writeFileSync(join(other, "g"), "2"); g(other, "add", "."); g(other, "commit", "-qm", "c2"); g(other, "push", "-q");
+      g(d, "fetch", "-q");
+      await expect(runBaseGate(d, "master", undefined, "echo hi")).rejects.toThrow(/geride/);
+    } finally { for (const x of [d, origin, other]) rmSync(x, { recursive: true, force: true }); }
+  });
+
   it("dizin hedef dalda değilse ya da izlenen dosya kirliyse reddeder (başkasının işine dokunma)", async () => {
     const d = repo();
     try {
@@ -148,5 +182,15 @@ describe("runBaseGate (işçi tarafı, geçici git deposunda)", () => {
       writeFileSync(join(d, "f"), "kirli");
       await expect(runBaseGate(d, "master", undefined, "echo hi")).rejects.toThrow(/kirli/);
     } finally { rmSync(d, { recursive: true, force: true }); }
+  });
+});
+
+describe("fileBaseCache anahtarı", () => {
+  it("kartın gate komutu değişince önceki taban önbelleği kullanılmaz", () => {
+    makeHome();
+    const e: BaseEntry = { head: H1, exit: 1, red: ["x"], at: "2026-11-10T00:00:00Z" };
+    fileBaseCache("m", "p", "master", "npm test").writeCache(e);
+    expect(fileBaseCache("m", "p", "master", "npm test").readCache()).toEqual(e);
+    expect(fileBaseCache("m", "p", "master", "npm run gate").readCache()).toBeNull();
   });
 });
