@@ -24,7 +24,9 @@ const isInt = (v: unknown, lo: number, hi: number): v is number => typeof v === 
 const noCtl = (s: string) => !/[\0\r\n]/.test(s);
 
 /** Tam eşleşmeli desen; geçersizse null. */
-const fullRe = (p: string): RegExp | null => { try { return new RegExp(`^(?:${p})$`); } catch { return null; } };
+// shortcut: yalnız yaygın ReDoS biçimi (niceleyicili/dallı grubun kendisi niceleniyor: (a+)+, (a|aa)*) reddedilir; tam analiz değil, güvenli-regex kütüphanesine geçiş gerekirse yükselt.
+const QUANTIFIED_COMPLEX_GROUP = /\((?:[^()\\]|\\.)*(?:[+*|]|\{\d*,)(?:[^()\\]|\\.)*\)(?:[+*]|\{)/;
+const fullRe = (p: string): RegExp | null => { if (QUANTIFIED_COMPLEX_GROUP.test(p)) return null; try { return new RegExp(`^(?:${p})$`); } catch { return null; } };
 
 function checkParam(p: unknown, at: string): ScriptParamSpec {
   if (!isObj(p)) throw badManifest(`${at}: param nesne olmalı`);

@@ -64,6 +64,6 @@ export interface XferReceiver {
 }
 export type LedgerRecord =
   | { state: "committing"; planned: string[]; published: string[] }
-  | { state: "committed"; items: XferItem[] }
+  | { state: "committed"; items: XferItem[]; manifestHash?: string }
   | { state: "aborted" };
 export interface Ledger { get(key: string): Promise<LedgerRecord | undefined>; put(key: string, r: LedgerRecord): Promise<void> }

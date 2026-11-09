@@ -154,16 +154,24 @@ export function diskBuildHead(repo: string): string | undefined {
  * node_modules-old → node_modules, dist yoksa dist-old → dist, dist-next silinir, işaret kalkar. İşaret yoksa (betik kendi temizledi ya da
  * yedek önceki başarılı güncellemeye ait) hiçbir şeye dokunmaz. Hata yutulur: bayrak yine kalkmalı, kurtarma elle yapılabilir.
  */
-export function recoverSelfUpdate(repo: string): void {
+export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) => void = renameSync): void {
   const mark = join(repo, ".vlad-npm-ci-running");
   if (!existsSync(mark)) return;
   try {
     const nm = join(repo, "node_modules"), nmOld = join(repo, "node_modules-old");
-    if (existsSync(nmOld)) { rmSync(nm, { recursive: true, force: true }); renameSync(nmOld, nm); }
+    // F-vlad-281: eskiyi geri koymadan önce mevcut olanı silme; rename patlarsa mevcut geri konur
+    const restore = (cur: string, old: string): void => {
+      const trash = `${cur}-recover`;
+      rmSync(trash, { recursive: true, force: true });
+      if (existsSync(cur)) rename(cur, trash);
+      try { rename(old, cur); } catch (e) { if (existsSync(trash)) rename(trash, cur); throw e; }
+      rmSync(trash, { recursive: true, force: true });
+    };
+    if (existsSync(nmOld)) restore(nm, nmOld);
     const dist = join(repo, "dist"), distOld = join(repo, "dist-old");
     // işaret "swap" ise dist değişimi başlamıştı: dist-old ile eş geri yükle (yeni dist + eski node_modules tutarsız); işaretsiz/boş işarette dist-old önceki güncellemeden kalmış olabilir, dokunulmaz
     const swapped = readFileSync(mark, "utf8").trim() === "swap";
-    if (existsSync(distOld) && (swapped || !existsSync(dist))) { rmSync(dist, { recursive: true, force: true }); renameSync(distOld, dist); }
+    if (existsSync(distOld) && (swapped || !existsSync(dist))) restore(dist, distOld);
     rmSync(join(repo, "dist-next"), { recursive: true, force: true });
     rmSync(mark, { force: true });
   } catch { /* geri yükleme başarısızsa işaret kalır; sonraki vlad-guncelle koşusu başında yeniden dener */ }
