@@ -120,7 +120,7 @@ describe("projeler arası pipeline: launch → list → cleanup (F-vlad-063, uç
     expect(r.code, r.err).toBe(0);
     return JSON.parse(r.out).id as string;
   }
-  const list = () => (JSON.parse(vlad(home, ["task", "list", "--json"]).out) as { tasks: Array<Record<string, any>> }).tasks;
+  const list = () => (JSON.parse(vlad(home, ["task", "list", "--json", "--full"]).out) as { tasks: Array<Record<string, any>> }).tasks;
   const finish = (id: string) => {
     for (const s of ["awaiting_approval", "done"]) expect(vlad(home, ["task", "set", id, s]).code).toBe(0);
   };

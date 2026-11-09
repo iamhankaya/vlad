@@ -52,6 +52,15 @@
         "task --help",
         "task (bare)"
       ]
+    },
+    {
+      "id": "T20261110-14",
+      "keys": [
+        "task list --help",
+        "single :: task list",
+        "brain :: task list",
+        "forwarded :: task list"
+      ]
     }
   ]
 }
