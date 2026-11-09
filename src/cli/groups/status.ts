@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { RemoteStallPlan } from "../../tasks/liveness.js";
 import { lintAgeNote, refreshLintCacheIfStale } from "../../audit/lint-cache.js";
 import { loadConfig } from "../../kb/index.js";
-import { staleSummaryText } from "../../projects/status.js";
+import { staleSummaryText, undigestedNote } from "../../projects/status.js";
 import { statusSummary } from "../../tasks/index.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -19,6 +19,7 @@ export function registerStatus(program: Command, k: Kit): void {
       const line =
         `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
         `(${s.counts.awaiting_approval} onay bekliyor, ${s.counts.stalled} takıldı, ${s.counts.blocked} soru soruyor, ${s.failed.length} hatalı)` +
+        (s.undigested ? `, ${undigestedNote(s.undigested, s.oldestUndigested)}` : "") +
         (s.staleSummaries.length ? `, ${s.staleSummaries.length} bayat/eksik proje özeti: ${staleSummaryText(s.staleSummaries)}` : "") +
         (s.pendingDigest ? `, ${s.pendingDigest} onay bekleyen digest maddesi` : "") +
         (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +

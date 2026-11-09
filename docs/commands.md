@@ -48,7 +48,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad task ask` — `task ask <id> "<soru>"`: `## Sorular`'a soru yazar, görev `blocked` olur. İşçide beyne iletilir. _(beyne iletilir; konsol: yazma; --json)_
 - `vlad task answer` — `task answer <id> "<cevap>"`: soruya `**Cevap:**` yazar. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task report` — `task report <id> --file <md>`: kapanış raporunu yazar, görev `awaiting_approval` olur. Rapordaki `### Kapatılan bulgular` satırlarında kısaltılmış/bilinmeyen/kapalı ID için uyarır. İşçide beyne iletilir. _(beyne iletilir; konsol: yazma; --json)_
-- `vlad task set` — `task set <id> <durum>`: durumu değiştirir (geçersiz geçiş reddedilir). `cancelled` için `--reason "<metin>"` zorunlu (gerekçesiz hata verir); `## İlerleme`'ye `İptal: <metin>` yazılır. `done` sonrası ilgili kart bloğu tazelenir. _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad task set` — `task set <id> <durum>`: durumu değiştirir (geçersiz geçiş reddedilir). `cancelled` için `--reason "<metin>"` zorunlu (gerekçesiz hata verir); `## İlerleme`'ye `İptal: <metin>` yazılır. `done` sonrası ilgili kart bloğu tazelenir; `done` çıktısı kartın durum özeti bayatsa (ya da yoksa) `summaryStale: true` ve `warnings` verir (özet güncelse `false`, kart okunamazsa alan yok). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task deps` — `task deps <id>`: queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task resume` — Kesilen (`running`/`stalled`) çalışanı sürdürür. `--external`: aynı alanlarla devam prompt'lu betik; kayıtlı `session_id` varsa `claude --resume <id>`, yoksa worktree'deki tek transcript, o da yoksa taze oturum (`--continue` kullanılmaz); `--model` korunur. Durumu değiştirmez (`stalled` ise önce `task set <id> running`); açık pencereyi kapatmaz, çift çalışan olmasın diye önce `close-window`. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task close-window` — Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree'ye dokunmaz. _(yerel; konsol: yazma; --json)_
@@ -64,7 +64,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 
 ## status
 
-- `vlad status` — `vlad status [--summary] [--no-mark]`: aktif görevler. `--no-mark`: yan etkisiz okuma — stalled işaretlemez, mod penceresini temizlemez; aynı JSON şekli. `--summary` satırı "N kb çelişkisi" ekler ve JSON'da `kbLint: {count, byCode, at}` verir — son tam `vlad kb lint` koşusunun önbelleği `kb/logs/kb-lint.json`, `summary_stale` sayılmaz, hook lint çalıştırmaz. _(yerel; konsol: okuma; --json)_
+- `vlad status` — `vlad status [--summary] [--no-mark]`: aktif görevler. `--summary` digest edilmemiş `done` görev varsa "N done görev digest edilmedi (en eski: <tarih>)" ekler; JSON'da `undigested` ve `oldestUndigested`. `--no-mark`: yan etkisiz okuma — stalled işaretlemez, mod penceresini temizlemez; aynı JSON şekli. `--summary` satırı "N kb çelişkisi" ekler ve JSON'da `kbLint: {count, byCode, at}` verir — son tam `vlad kb lint` koşusunun önbelleği `kb/logs/kb-lint.json`, `summary_stale` sayılmaz, hook lint çalıştırmaz. _(yerel; konsol: okuma; --json)_
 
 ## mode
 

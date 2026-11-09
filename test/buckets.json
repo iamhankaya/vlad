@@ -48,6 +48,7 @@
     "test/memory/project-status.test.ts",
     "test/memory/search.test.ts",
     "test/memory/stale-summary.test.ts",
+    "test/memory/summary-reliability.test.ts",
     "test/mode/mode.test.ts",
     "test/mode/review.test.ts",
     "test/projects/derived.test.ts",

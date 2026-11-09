@@ -131,13 +131,13 @@ Karar yazmadan önce projenin geçerli kararlarına bak (`vlad decision list --p
 - Süreli karar (gece yetkisi, "…'e kadar" izni, geçici istisna): `--until <YYYY-MM-DD | YYYY-MM-DDTHH:MM>` ekle. Süre geçince `vlad status`, `project status` ve `kb lint` kararı "süresi dolmuş geçerli karar" diye işaretler; metne tarih gömmek yerine bunu kullan.
 Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?" diye sor.
 
-### 5b. Proje durum özeti
+### 5b. Proje durum özeti (atlanamaz son adım)
 
-Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
+**Bu adım atlanamaz:** 6. adımdan (`inbox done`, `task digested`) önce, raporlarla etkilenen her proje için çalışır. Özet yazılmadan görev "digested" işaretlenmez; yazılamıyorsa (emin olunmayan içerik, otomatik mod, hata) o proje için `vlad digest pending add --text "<proje> özeti yazılamadı: <neden>" --task <id> --project <slug> --json` ekle ve kullanıcıya söyle (sessizce geçme). Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
 ```
 vlad project summary <slug> --file <geçici.md> --json
 ```
-Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Bu adımı işlemediğin projede özeti güncelleme (bayat kalması doğrudur). Eski kayıtlar için gerekirse önce `vlad kb search`.
+Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Doğrulama `bayat`/`yok` dönerse özeti yeniden yaz ya da yukarıdaki `digest pending add` ile onaya taşı; "bayat kalması doğrudur" diye geçme. `vlad task set <id> done` zaten `summaryStale: true` + uyarı verir; bu adım o uyarının kapanışıdır. Eski kayıtlar için gerekirse önce `vlad kb search`.
 
 ### 5c. kb çelişki denetimi (lint)
 
