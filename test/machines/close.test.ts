@@ -116,6 +116,21 @@ describe("task close: yerel tek görev", () => {
     expect(getTask(id).data.state).toBe("awaiting_approval");
   });
 
+  it("gece modunda bile raporun Açık noktalar'ında kritik/yüksek varsa sorar", async () => {
+    setNight({ until: new Date(Date.now() + 3_600_000).toISOString() });
+    const id = await ready({ report: REPORT("### Açık noktalar\n- [yüksek] kaldı — x\n") });
+    const r = await closeTask(id, {}, deps());
+    expect(r).toMatchObject({ ok: false, stopped_at: "confirm" });
+  });
+
+  it("görev worktree'sinde commit'siz değişiklik varsa gate koşmaz (yeşil sahte olmasın)", async () => {
+    const id = await ready();
+    writeFileSync(join(getTask(id).data.worktree!, "b.txt"), "kirli");
+    const r = await closeTask(id, { yes: true }, deps());
+    expect(r).toMatchObject({ ok: false, stopped_at: "gate" });
+    expect(r.reason).toMatch(/commit'siz/);
+  });
+
   it("kırmızı gate'te durur; merge/done yok, çıktı gate özetini taşır", async () => {
     card(RED);
     const id = await ready();

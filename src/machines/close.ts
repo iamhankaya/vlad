@@ -160,13 +160,16 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         ranOn = d.self ?? "yerel";
         const wt = t0.data.worktree;
         if (!wt || !existsSync(wt)) stop("gate", `görev worktree'si yok (${wt ?? "null"}); gate koşulamaz`);
+        if (g(wt!, ["status", "--porcelain"]).out.trim()) stop("gate", `görev worktree'sinde commit'siz değişiklik var (${wt}); gate yeşili merge edilecek kodu yansıtmaz, çalışandan commit iste`);
+        const wb = g(wt!, ["branch", "--show-current"]).out.trim();
+        if (wb !== `vlad/${id}`) stop("gate", `görev worktree'si vlad/${id} dalında değil (${wb || "detached"})`);
         const gr = spawnSync(gateCmd, { cwd: wt!, shell: true, encoding: "utf8", timeout: 25 * 60_000, maxBuffer: 64 << 20 });
         if (gr.status !== 0) stop("gate", `gate kırmızı (çıkış ${gr.status ?? "zaman aşımı"}):\n${tail(`${gr.stdout ?? ""}\n${gr.stderr ?? ""}`)}`);
       }
       // several platforms: every listed machine needs a green gate line ("Gate <makine>: yeşil")
       if ((card.machines?.length ?? 0) >= 2) {
         if (!d.self && !remoteMachine) stop("gate", "kart ≥2 makineli ama bu makinenin kimliği belirsiz (VLAD_MACHINE / vlad.local.json self)");
-        logTask(id, `Gate ${ranOn}: yeşil`);
+        await withKbLock(() => { if (!new RegExp(`Gate ${ranOn}: yeşil`).test(getTask(id).body)) logTask(id, `Gate ${ranOn}: yeşil`); });
         const logs = `${getTask(id).body}\n${parent ? getTask(parent).body : ""}`;
         const missing = card.machines!.filter((m) => m !== ranOn && !new RegExp(`Gate ${m}: yeşil`).test(logs));
         if (missing.length) stop("gate", `${missing.join(", ")} için yeşil gate yok: o makinede \`vlad task gate ${id} --target ${target} --json\` koş, sonra \`vlad task log ${id} "Gate <makine>: yeşil"\``);
@@ -200,7 +203,10 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (!how) {
         const night = modeStatus(d.now()).night;
         const p1 = listFindingsWithWarnings({ source: id, state: [...UNRESOLVED], severity: ["kritik", "yüksek"] }).findings.length;
-        if (night && gateGreen && (night.projects.length === 0 || night.projects.includes(t0.data.project)) && p1 === 0) how = "gece modu";
+        // the night window never covers: a pipeline's final gate and design gates (status skill), or a report that itself lists a critical/high open point
+        const reportP1 = /^\s*-\s*\[(kritik|yüksek)\]/mi.test(sub(report, "Açık noktalar"));
+        const nightOk = t0.data.kind !== "pipeline" && t0.data.role !== "designer" && !reportP1;
+        if (night && nightOk && gateGreen && (night.projects.length === 0 || night.projects.includes(t0.data.project)) && p1 === 0) how = "gece modu";
       }
       if (!how) {
         add("confirm", "stopped", "onay gerekli");
@@ -223,7 +229,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         if (g(targetDir, ["status", "--porcelain"]).out.trim()) stop("merge", `hedef ağaç temiz değil: ${targetDir}`);
         const mr = g(targetDir, ["-c", "user.name=VLAD", "-c", "user.email=vlad@localhost", "merge", "--no-ff", "-m", `Merge ${from}: ${t0.data.title}`, from], 5 * 60_000);
         if (mr.code !== 0) {
-          g(targetDir, ["merge", "--abort"]);
+          if (g(targetDir, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code === 0) g(targetDir, ["merge", "--abort"]); // not when the failure was e.g. index.lock held by another merge
           stop("merge", `merge başarısız, geri alındı: ${tail(mr.out, 5)}`);
         }
         r.merged_head = g(targetDir, ["rev-parse", "HEAD"]).out.trim(); merged = true;
