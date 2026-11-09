@@ -33,6 +33,7 @@ for root in ${roots[@]+"${roots[@]}"}; do
   [ -d "$root" ] || { echo "root yok: $root" >&2; continue; }
   for dir in "$root"/*/; do
     dir=${dir%/}
+    [ -L "$dir" ] && continue   # symlink alt dizin: kok disina cikis, atla
     [ -e "$dir/.git" ] || continue
     name=$(basename "$dir")
     real=$(cd "$dir" && pwd -P)

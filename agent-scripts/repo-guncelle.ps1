@@ -35,6 +35,7 @@ foreach ($root in $roots) {
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { [Console]::Error.WriteLine("root yok: $root"); continue }
     foreach ($d in (Get-ChildItem -LiteralPath $root -Directory)) {
         $dir = $d.FullName
+        if ($d.Attributes -band [System.IO.FileAttributes]::ReparsePoint) { continue }  # symlink/junction alt dizin: kok disina cikis, atla
         if (-not (Test-Path -LiteralPath (Join-Path $dir '.git'))) { continue }
         $name = $d.Name
         $real = (Resolve-Path -LiteralPath $dir).ProviderPath.TrimEnd('\')

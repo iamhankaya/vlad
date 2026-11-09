@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { interpreterFor, parseResultLine, runScript, scriptEnv, sweepScriptDir } from "../../src/agent/scripts/run.js";
+import { capUtf8, interpreterFor, parseResultLine, runScript, scriptEnv, sweepScriptDir } from "../../src/agent/scripts/run.js";
 import { SCRIPT_RESULT_SENTINEL } from "../../src/fleet/types.js";
 
 // Çalıştırma katmanı (T20261109-07): ortam allowlist'i, yorumlayıcı, çıktı sınırı, sentinel, zaman aşımı.
@@ -122,6 +122,13 @@ describe("runScript (POSIX)", () => {
     expect(r.stdout).toContain(S);
     expect(r.data).toEqual({ ok: true });
   });
+  posix("tavan UTF-8 bayttır: Türkçe çıktı ≤ tavan bayt, karakter ortadan kesilmez, truncated doğru", async () => {
+    const r = await run(`for i in $(seq 1 3000); do printf 'ğüşiöç'; done; echo; echo '${S} {"ok":true}'`, { stdoutCapKb: 1 });
+    expect(r.truncated.stdout).toBe(true);
+    expect(Buffer.byteLength(r.stdout)).toBeLessThanOrEqual(1024);
+    expect(r.stdout).not.toContain("\uFFFD");
+    expect(r.data).toEqual({ ok: true });
+  });
   posix("geçici betik dosyası bitince silinir ve çalışan bayt'lar verilen bayt'lardır", async () => {
     const d = tmp();
     const dir = join(d, "scripts-run");
@@ -142,5 +149,16 @@ describe("runScript (POSIX)", () => {
     writeFileSync(join(dir, "kalinti.sh"), "x");
     sweepScriptDir(dir);
     expect(readdirSync(dir)).toEqual([]);
+  });
+});
+
+describe("capUtf8", () => {
+  it("tavan altı aynen; üstü marker dahil ≤ cap bayt ve geçerli UTF-8", () => {
+    const b = Buffer.from("ğ".repeat(100));
+    expect(capUtf8(Buffer.from("abc"), 3, 10)).toBe("abc");
+    const out = capUtf8(b, b.length, 51);
+    expect(Buffer.byteLength(out)).toBeLessThanOrEqual(51);
+    expect(out).not.toContain("\uFFFD");
+    expect(out).toContain("bayt kırpıldı");
   });
 });

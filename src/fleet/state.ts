@@ -46,16 +46,17 @@ export function ensurePrivateDir(dir: string): void {
  * Anahtar dosyası yalnız sahibine açık: POSIX'te 0600, Windows'ta icacls ile miras kesilir ve yalnız geçerli kullanıcıya (SID ile) tam yetki
  * verilir. Araçlar PATH'ten değil `%SystemRoot%\System32`'den çağrılır. Kilitlenemezse yazma düşmez ama uyarı stderr'e basılır (F-vlad-151).
  */
-export function lockDownFile(f: string, o: { platform?: NodeJS.Platform; systemRoot?: string; exec?: (file: string, args: string[]) => string | void; warn?: (m: string) => void } = {}): void {
+export function lockDownFile(f: string, o: { /** başarısızlıkta uyarı yerine fırlat (fail-closed) */ strict?: boolean; /** dizin: POSIX 0700, Windows'ta (OI)(CI) miras */ dir?: boolean; platform?: NodeJS.Platform; systemRoot?: string; exec?: (file: string, args: string[]) => string | void; warn?: (m: string) => void } = {}): void {
   try {
-    if ((o.platform ?? process.platform) !== "win32") { chmodSync(f, 0o600); return; }
+    if ((o.platform ?? process.platform) !== "win32") { chmodSync(f, o.dir ? 0o700 : 0o600); return; }
     const sys32 = win32.join(o.systemRoot ?? process.env.SystemRoot ?? "C:\\Windows", "System32");
     const run = o.exec ?? ((file, args) => execFileSync(file, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], windowsHide: true }));
     const csv = String(run(win32.join(sys32, "whoami.exe"), ["/user", "/fo", "csv", "/nh"]) ?? "").trim();
     const sid = /^"(?:[^"]*)","(S-1-\d+(?:-\d+)+)"$/.exec(csv.split(/\r?\n/)[0] ?? "")?.[1]; // SID yalnız 2. alan ve tam eşleşme (ad alanına düşülmez)
     if (!sid) throw new Error("kullanıcı SID'i alınamadı");
-    run(win32.join(sys32, "icacls.exe"), [f, "/inheritance:r", "/grant:r", `*${sid}:F`]);
+    run(win32.join(sys32, "icacls.exe"), [f, "/inheritance:r", "/grant:r", o.dir ? `*${sid}:(OI)(CI)F` : `*${sid}:F`]);
   } catch (e) {
+    if (o.strict) throw e;
     (o.warn ?? ((m) => process.stderr.write(m + "\n")))(`uyarı: ${f} erişim izni kısıtlanamadı (${(e as Error).message}); anahtar dosyası başka yerel kullanıcılara açık olabilir, ACL'i elle sıkılaştır`);
   }
 }

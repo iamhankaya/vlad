@@ -193,6 +193,7 @@
     "test/machines/script-cli.test.ts",
     "test/machines/script-contract.test.ts",
     "test/machines/script-e2e.test.ts",
+    "test/machines/script-hardening.test.ts",
     "test/machines/script-integrity.test.ts",
     "test/machines/script-manifest.test.ts",
     "test/machines/script-ops.test.ts",

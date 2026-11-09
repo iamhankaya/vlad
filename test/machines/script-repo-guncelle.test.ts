@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -83,5 +83,17 @@ describe("repo-guncelle.sh", () => {
     const root = tmp();
     mkRepo(root, 'q"uo\\te');
     expect(run({ VLAD_PARAM_ROOT: root }).byName['q"uo\\te']).toMatchObject({ status: "current" });
+  });
+  posix("symlink alt dizin atlanır (kök dışına çıkış), gerçek depo güncellenir", () => {
+    const root = tmp(), outside = tmp();
+    const real = mkRepo(outside, "dis"); real.remoteCommit();
+    symlinkSync(real.dir, join(root, "baglanti"));
+    const ok = mkRepo(root, "ic"); ok.remoteCommit();
+    const before = git(real.dir, "rev-parse", "HEAD");
+    const { byName } = run({ VLAD_PARAM_ROOT: root });
+    expect(byName.baglanti).toBeUndefined();
+    expect(byName.ic.status).toBe("updated");
+    expect(git(real.dir, "rev-parse", "HEAD")).toBe(before); // dış depo dokunulmadı (pull yok)
+    expect(git(real.dir, "rev-parse", "origin/main")).toBe(before); // fetch de yok
   });
 });

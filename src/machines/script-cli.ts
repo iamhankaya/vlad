@@ -79,10 +79,13 @@ export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>): string {
   ].join("\n");
 }
 
+/** Uzak betik çıktısı terminale gitmeden kontrol karakterleri (ESC dizileri, imleç/başlık oynatma) ayıklanır; \n ve \t kalır. */
+export const stripCtl = (t: string): string => t.replace(/\r(?!\n)/g, "\n").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "");
+
 export function formatRun(r: Extract<RunOutcome, { kind: "result" }>): string {
   const x = r.result;
   const head = `${x.name} exit=${x.exit}${x.timedOut ? " (zaman aşımı)" : ""} ${x.durationMs}ms${r.replayed ? " [önceki sonuç, tekrar koşmadı]" : ""}${r.uncertain ? " [belirsiz]" : ""}`;
   const summary = typeof x.data?.summary === "string" ? x.data.summary : x.dataError ? `(sonuç satırı yok/bozuk: ${x.dataError})` : "";
   const tail = !summary && x.stdout.trim() ? x.stdout.trim() : "";
-  return [head, summary, tail].filter(Boolean).join("\n");
+  return stripCtl([head, summary, tail].filter(Boolean).join("\n"));
 }

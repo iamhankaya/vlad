@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RemoteError, type AgentOp, type RemoteTransport, type ScriptInfo, type ScriptListResult, type ScriptRunResult } from "../../src/fleet/types.js";
 import { scriptPlanId } from "../../src/agent/scripts/manifest.js";
-import { formatScripts, parseParamFlags, runRemoteScript } from "../../src/machines/script-cli.js";
+import { formatRun, formatScripts, parseParamFlags, runRemoteScript, stripCtl } from "../../src/machines/script-cli.js";
 
 // `vlad machine scripts|run` mantığı (T20261109-07): sahte taşıma ile çağrı sırası, plan-id ve hata biçimleri.
 
@@ -111,5 +111,15 @@ describe("formatScripts", () => {
   });
   it("kayıtlı betik yoksa bunu söyler", () => {
     expect(formatScripts(list())).toMatch(/kayıtlı betik yok/);
+  });
+});
+
+describe("stripCtl / formatRun", () => {
+  it("ESC ve kontrol karakterleri ayıklanır; \n ve \t kalır, tek \r satır başı olur", () => {
+    expect(stripCtl("a\x1b[31mkırmızı\x1b]0;başlık\x07b\tc\nd\re\0")).toBe("a[31mkırmızı]0;başlıkb\tc\nd\ne");
+  });
+  it("formatRun uzak çıktının kontrol karakterlerini terminale taşımaz", () => {
+    const out = formatRun({ kind: "result", opId: "o", replayed: false, uncertain: false, result: res({ stdout: "x\x1b[2Jy\n", data: null }) });
+    expect(out).not.toContain("\x1b");
   });
 });

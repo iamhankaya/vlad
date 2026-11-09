@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { loadConfig } from "../../kb/index.js";
 import type { VladConfig } from "../../kb/index.js";
 import { brainTransport } from "../../machines/remote.js";
-import { formatPlan, formatRun, formatScripts, listScripts, parseParamFlags, runRemoteScript } from "../../machines/script-cli.js";
+import { formatPlan, formatRun, formatScripts, listScripts, parseParamFlags, runRemoteScript, stripCtl } from "../../machines/script-cli.js";
 import { selfName } from "../../fleet/state.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -49,7 +49,7 @@ export function registerMachine(program: Command, k: Kit): void {
     if (r.kind === "plan") return out(o, r, formatPlan(r));
     out(o, { ...r.result, opId: r.opId, meta: { replayed: r.replayed, uncertain: r.uncertain } }, formatRun(r));
     if (r.result.exit !== 0) {
-      if (!o.json && r.result.stderr.trim()) k.ctx.stderr.write(r.result.stderr.trim() + "\n");
+      if (!o.json && r.result.stderr.trim()) k.ctx.stderr.write(stripCtl(r.result.stderr.trim()) + "\n");
       k.ctx.exit(1); // betik hatası: çıkış kodu 1 (geçici RemoteError'lar 75 ile zaten failWith'ten çıkar)
     }
   })

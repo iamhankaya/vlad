@@ -2,10 +2,8 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, win32 } from "node:path";
-import { StringDecoder } from "node:string_decoder";
 import { ensurePrivateDir, lockDownFile } from "../../fleet/state.js";
 import { RemoteError, SCRIPT_LIMITS, SCRIPT_RESULT_SENTINEL, type ScriptRunResult } from "../../fleet/types.js";
-import { capText } from "../ops/gate.js";
 import { killTree } from "../proc.js";
 
 // Betik çalıştırma: bayt'lar özel geçici dosyaya yazılır (TOCTOU/çalışırken `git pull`/autocrlf), allowlist ortamı, parametre env'den
@@ -77,10 +75,29 @@ export async function runScript(s: RunSpec): Promise<RunOut> {
   ensurePrivateDir(s.dir);
   const file = join(s.dir, `${s.opId.replace(/[^A-Za-z0-9._-]/g, "_")}-${s.name}-${randomBytes(4).toString("hex")}.${s.ext}`);
   try {
+    lockDownFile(s.dir, { strict: true, dir: true }); // kilitlenemezse betik çalışmaz (fail-closed); dosya yazılmadan önce
+  } catch (e) { throw new RemoteError("failed", `failed: betik dizini kilitlenemedi, çalıştırılmadı: ${(e as Error).message}`); }
+  try {
     writeFileSync(file, s.bytes, { flag: "wx", mode: 0o600 });
-    lockDownFile(file);
+    try { lockDownFile(file, { strict: true }); } catch (e) { throw new RemoteError("failed", `failed: betik dosyası kilitlenemedi, çalıştırılmadı: ${(e as Error).message}`); }
     return await spawnScript(interp.file, interp.args(file), s);
   } finally { try { rmSync(file, { force: true }); } catch { /* Windows: süreç dosyayı tutuyorsa; açılışta süpürülür */ } }
+}
+
+/** Son `max` bayt, UTF-8 karakter sınırından başlayarak (devam baytları 10xxxxxx atılır; çok baytlı karakter ortadan kesilmez). */
+export function tailUtf8(b: Buffer, max: number): string {
+  if (b.length <= max) return b.toString("utf8");
+  let i = b.length - max;
+  while (i < b.length && (b[i]! & 0xc0) === 0x80) i++;
+  return b.subarray(i).toString("utf8");
+}
+/** Tavan BAYT cinsindendir (marker dahil ≤ cap); kırpılınca başa kaç baytın atıldığı yazılır. */
+export function capUtf8(b: Buffer, total: number, cap: number): string {
+  if (total <= cap) return b.toString("utf8");
+  const mark = (n: number) => `[…ilk ${n} bayt kırpıldı]\n`;
+  const room = cap - Buffer.byteLength(mark(total));
+  const body = tailUtf8(b, Math.max(0, room));
+  return mark(total - Buffer.byteLength(body)) + body;
 }
 
 function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
@@ -88,18 +105,17 @@ function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
   return new Promise((resolve, reject) => {
     const t0 = Date.now();
     const p = spawn(cmd, args, { cwd: s.cwd, env: s.env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
-    let stdout = "", stderr = "", outTotal = 0, errTotal = 0, started = false, finished = false;
-    const dec = [new StringDecoder("utf8"), new StringDecoder("utf8")];
+    let outBuf = Buffer.alloc(0), errBuf = Buffer.alloc(0), outTotal = 0, errTotal = 0, started = false, finished = false;
     p.once("spawn", () => { started = true; });
-    p.stdout.on("data", (d: Buffer) => { const t = dec[0]!.write(d); outTotal += t.length; stdout = (stdout + t).slice(-2 * outCap); }); // bellek sınırı 2×tavan
-    p.stderr.on("data", (d: Buffer) => { const t = dec[1]!.write(d); errTotal += t.length; stderr = (stderr + t).slice(-2 * errCap); });
+    p.stdout.on("data", (d: Buffer) => { outTotal += d.length; outBuf = Buffer.concat([outBuf, d]).subarray(-2 * outCap); }); // bellek sınırı 2×tavan (bayt)
+    p.stderr.on("data", (d: Buffer) => { errTotal += d.length; errBuf = Buffer.concat([errBuf, d]).subarray(-2 * errCap); });
     const done = (exit: number, timedOut: boolean, extraErr = "") => {
       if (finished) return;
       finished = true; clearTimeout(timer);
-      const parsed = parseResultLine(stdout);
+      const parsed = parseResultLine(tailUtf8(outBuf, outBuf.length));
       resolve({
         exit, timedOut, durationMs: Date.now() - t0,
-        stdout: capText(stdout, outCap), stderr: capText(stderr + extraErr, errCap),
+        stdout: capUtf8(outBuf, outTotal, outCap), stderr: capUtf8(extraErr ? Buffer.concat([errBuf, Buffer.from(extraErr)]) : errBuf, errTotal + Buffer.byteLength(extraErr), errCap),
         truncated: { stdout: outTotal > outCap, stderr: errTotal > errCap }, ...parsed,
       });
     };

@@ -12,7 +12,7 @@ const SHA_RE = /^[0-9a-f]{64}$/;
 const DEFAULT_STRING_RE = /^[A-Za-z0-9._-]+$/;
 const ENTRY_KEYS = ["name", "title", "platform", "file", "sha256", "class", "timeoutSec", "outputMaxKb", "selfUpdate", "params"];
 const PARAM_KEYS: Record<string, readonly string[]> = {
-  string: ["name", "type", "required", "default", "pattern", "maxLen"], enum: ["name", "type", "required", "default", "values"],
+  string: ["name", "type", "required", "default", "pattern", "maxLen", "allowLeadingDash"], enum: ["name", "type", "required", "default", "values"],
   int: ["name", "type", "required", "default", "min", "max"], bool: ["name", "type", "required", "default"], root: ["name", "type", "required", "default"],
 };
 const PATTERN_MAX = 128; // shortcut: desen uzunluğu sınırlı, iç içe niceleyici taraması yok; manifest incelenmiş repo kodu
@@ -36,6 +36,7 @@ function checkParam(p: unknown, at: string): ScriptParamSpec {
   if (p.required !== undefined && typeof p.required !== "boolean") throw badManifest(`${at}.${p.name}: required bool olmalı`);
   const w = `${at}.${p.name}`;
   if (type === "string") {
+    if (p.allowLeadingDash !== undefined && typeof p.allowLeadingDash !== "boolean") throw badManifest(`${w}: allowLeadingDash bool olmalı`);
     if (p.pattern !== undefined && (typeof p.pattern !== "string" || p.pattern.length > PATTERN_MAX || !fullRe(p.pattern))) throw badManifest(`${w}: pattern geçersiz`);
     if (p.maxLen !== undefined && !isInt(p.maxLen, 1, SCRIPT_LIMITS.paramMaxLen)) throw badManifest(`${w}: maxLen 1..${SCRIPT_LIMITS.paramMaxLen}`);
   } else if (type === "enum") {
@@ -99,8 +100,10 @@ function checkValue(p: ScriptParamSpec, v: string): void {
   if (p.type === "string") {
     const max = p.maxLen ?? SCRIPT_LIMITS.paramMaxLen;
     if (v.length > max) no(`en çok ${max} karakter`);
-    if (p.pattern !== undefined) { if (!fullRe(p.pattern)!.test(v)) no("desene uymuyor"); }
-    else if (!DEFAULT_STRING_RE.test(v) || v.startsWith("-") || v.includes("..")) no("izinli karakterler [A-Za-z0-9._-], baştaki '-' ve '..' yasak");
+    if (p.pattern !== undefined) {
+      if (!fullRe(p.pattern)!.test(v)) no("desene uymuyor");
+      if (v.startsWith("-") && !p.allowLeadingDash) no("baştaki '-' yasak (allowLeadingDash yok)");
+    } else if (!DEFAULT_STRING_RE.test(v) || v.startsWith("-") || v.includes("..")) no("izinli karakterler [A-Za-z0-9._-], baştaki '-' ve '..' yasak");
   } else if (p.type === "enum") {
     if (!p.values.includes(v)) no(`izinli değerler: ${p.values.join("|")}`);
   } else if (p.type === "int") {

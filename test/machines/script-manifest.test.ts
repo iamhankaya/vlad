@@ -72,6 +72,8 @@ describe("normalizeParams", () => {
       { name: "n", type: "int", min: 1, max: 9 },
       { name: "b", type: "bool" },
       { name: "pat", type: "string", pattern: "[a-z]+" },
+      { name: "dash", type: "string", pattern: "[a-z-]+" },
+      { name: "dash-ok", type: "string", pattern: "[a-z-]+", allowLeadingDash: true },
     ]);
     const ok = { req: "x" };
     const cases: [string, Record<string, string>, string][] = [
@@ -82,6 +84,7 @@ describe("normalizeParams", () => {
       ["int aralık dışı", { ...ok, n: "10" }, "n"],
       ["bool değil", { ...ok, b: "yes" }, "b"],
       ["regex tam eşleşme (kısmi değil)", { ...ok, pat: "ab1" }, "pat"],
+      ["desenli string baştaki tire", { ...ok, dash: "-rf" }, "dash"],
       ["satır sonu", { ...ok, req: "a\nb" }, "req"],
       ["NUL", { ...ok, req: "a\0b" }, "req"],
       ["yol çıkışı", { ...ok, req: ".." }, "req"],
@@ -94,6 +97,10 @@ describe("normalizeParams", () => {
       expect(x.code, why).toBe("bad_request");
       expect(x.message, why).toContain(`[bad_param:${name}]`);
     }
+  });
+  it("allowLeadingDash true ise desenli parametrede baştaki tire geçer", () => {
+    const e = spec([{ name: "d", type: "string", pattern: "[a-z-]+", allowLeadingDash: true }]);
+    expect(normalizeParams(e, { d: "-x" })).toEqual({ d: "-x" });
   });
   it("__proto__ gibi anahtarlar nesne anahtarı olmaz", () => {
     const x = err(spec([]), JSON.parse('{"__proto__":"x"}'));
