@@ -473,7 +473,10 @@ const PRIOR = "## Önceki raporlar";
 
 /** The report being replaced is kept as `### Önceki rapor #n` under its own section, so dependants still get only the latest. */
 export function reportTask(id: string, md: string): Task {
+  // F-vlad-279: a worker that asked and then finished (answer never came) may report from blocked
+  const unanswered = getTask(id).data.state === "blocked";
   return transitionWith(id, "awaiting_approval", (b) => {
+    if (unanswered) b = appendToSection(b, "## İlerleme", `- ${nowIso()} Rapor açık soru varken yazıldı (soru cevapsız; Sorular'a bak)`);
     const old = getSection(b, "## Kapanış raporu");
     // the same text re-sent (CLI retry) is not a new round
     if (old && old !== md.trim()) {

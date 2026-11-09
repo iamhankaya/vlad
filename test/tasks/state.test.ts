@@ -5,7 +5,7 @@ import type { TaskState } from "../../src/kb/index.js";
 const ALLOWED: Record<string, string[]> = {
   queued: ["running", "cancelled"],
   running: ["blocked", "awaiting_approval", "failed", "stalled", "cancelled"],
-  blocked: ["running", "cancelled"],
+  blocked: ["running", "awaiting_approval", "cancelled"],
   stalled: ["running", "cancelled"],
   awaiting_approval: ["done", "running", "cancelled"],
   failed: ["queued", "cancelled"],

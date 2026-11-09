@@ -87,6 +87,21 @@ describe("task store", () => {
     expect(answerTask(t.data.id, "bu").data.state).toBe("running");
     expect(getSection(getTask(t.data.id).body, "## Sorular")).toContain("**Cevap:** bu");
   });
+  it("reportTask from blocked (open question) awaits approval and notes the unanswered question in İlerleme (F-vlad-279)", () => {
+    const t = mk();
+    setState(t.data.id, "running");
+    askTask(t.data.id, "push edeyim mi?");
+    const r = reportTask(t.data.id, "### Yapılanlar\nx");
+    expect(r.data.state).toBe("awaiting_approval");
+    const got = getTask(t.data.id);
+    expect(getSection(got.body, "## Kapanış raporu")).toContain("Yapılanlar");
+    expect(getSection(got.body, "## İlerleme")).toMatch(/Rapor açık soru varken yazıldı/);
+    // a report from running leaves no such note
+    const u = mk();
+    setState(u.data.id, "running");
+    reportTask(u.data.id, "bitti");
+    expect(getSection(getTask(u.data.id).body, "## İlerleme") ?? "").not.toMatch(/açık soru/);
+  });
   it("reportTask writes report and awaits approval", () => {
     const t = mk();
     setState(t.data.id, "running");

@@ -4,7 +4,7 @@ import type { TaskState } from "../kb/index.js";
 export const TRANSITIONS: Record<TaskState, TaskState[]> = {
   queued: ["running", "cancelled"],
   running: ["blocked", "awaiting_approval", "failed", "stalled", "cancelled"],
-  blocked: ["running", "cancelled"],
+  blocked: ["running", "awaiting_approval", "cancelled"],
   stalled: ["running", "cancelled"],
   awaiting_approval: ["done", "running", "cancelled"],
   failed: ["queued", "cancelled"],
