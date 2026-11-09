@@ -60,5 +60,22 @@ describe("project refresh + automatic refresh", () => {
     expect(vlad(["decision", "set", "D-alpha-002", "yerine-geçti", "--superseded-by", "D-beta-001"]).code).toBe(0);
     expect(cardText()).not.toContain("D-alpha-002 Ikinci");
   });
+  it("task digested, decision migrate and kb maintain also refresh Son aktivite (F-vlad-181)", () => {
+    const body = join(home, "b.md");
+    writeFileSync(body, "## Tanım\nx\n");
+    const tid = JSON.parse(vlad(["task", "new", "--project", "alpha", "--title", "Bitecek", "--kind", "dev", "--body-file", body, "--json"]).out).id as string;
+    for (const s of ["running", "awaiting_approval", "done"]) expect(vlad(["task", "set", tid, s]).code).toBe(0);
+    expect(vlad(["project", "refresh", "alpha"]).code).toBe(0); // adds the Son aktivite block
+    const stale = () => writeFileSync(join(home, "kb", "projects", "alpha.md"), cardText().replace(/(<!-- vlad:derived recent-activity -->)[\s\S]*?(<!-- \/vlad:derived -->)/, "$1\nbozuk\n$2"));
+    for (const args of [["task", "digested", tid], ["decision", "migrate"], ["kb", "maintain"]]) {
+      stale();
+      expect(cardText()).toContain("bozuk");
+      expect(vlad(args).code, args.join(" ")).toBe(0);
+      expect(cardText(), args.join(" ")).not.toContain("bozuk");
+      expect(cardText()).toContain(`${tid} Bitecek`);
+    }
+    stale();
+    expect(vlad(["kb", "maintain", "--dry-run"]).code).toBe(0);
+    expect(cardText()).toContain("bozuk"); // dry run changes nothing
+  });
 });
-

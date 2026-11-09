@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import { kbPaths } from "../kb/index.js";
 import { getFinding } from "../findings/store.js";
 import { kbWriteKeys, refreshKeys } from "../commands/accessors.js";
 import { activityListsId } from "../projects/derived.js";
@@ -30,9 +32,15 @@ export function targetsOf(key: string, args: any[]): { slugs: (string | undefine
       if (p && args[1] !== "geçerli" && !activityListsId(p, id)) return null;
       return { slugs: [p], only: "activity" };
     }
+    // `task digested` re-stamps `updated` (moves the date in Son aktivite); `decision migrate` / `kb maintain` (decisions.md split) change the decision list. A dry run writes nothing.
+    case "task digested": return { slugs: (args[0] as string[]).map((id) => getTask(id).data.project), only: "activity" };
+    case "decision migrate":
+    case "kb maintain": return o.dryRun ? null : { slugs: allCardSlugs(), only: "activity" };
     case "task set": return String(args[1]) === "done" ? { slugs: [getTask(String(args[0])).data.project], only: "activity" } : null;
   }
   return null;
 }
 /** `D-<proje>-NNN` → proje slug'ı (kimlik değilse undefined). */
 const decisionProject = (id: unknown): string | undefined => /^D-([a-z0-9][a-z0-9-]*)-\d{3,}$/.exec(String(id ?? ""))?.[1];
+/** Every project card's slug (the hook skips cards that do not exist or whose block is missing). */
+const allCardSlugs = (): string[] => { try { return readdirSync(kbPaths().projects).filter((n) => n.endsWith(".md")).map((n) => n.slice(0, -3)); } catch { return []; } };
