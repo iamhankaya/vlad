@@ -59,8 +59,8 @@ describe("(d) undigested done tasks warning", () => {
     expect(s2.undigested).toBe(1);
     expect(s2.oldestUndigested).toBe(getTask(newer.data.id).data.updated.slice(0, 10));
   });
-  it("oldestUndigested is null when nothing is waiting", () => {
-    expect(statusSummary(defaultConfig(), now(), undefined, "linux", { mark: false }).oldestUndigested).toBeNull();
+  it("oldestUndigested is absent when nothing is waiting", () => {
+    expect(statusSummary(defaultConfig(), now(), undefined, "linux", { mark: false })).not.toHaveProperty("oldestUndigested");
   });
   it("undigestedNote words the opening warning", () => {
     expect(undigestedNote(2, "2026-11-08")).toBe("2 done görev digest edilmedi (en eski: 2026-11-08)");

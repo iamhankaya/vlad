@@ -99,7 +99,7 @@ export function doneSummaryNote(task: Task): { summaryStale: boolean | null; war
 }
 
 /** Opening warning for done tasks that /digest has not processed ("" when none). */
-export function undigestedNote(count: number, oldest: string | null): string {
+export function undigestedNote(count: number, oldest: string | undefined | null): string {
   return count > 0 ? `${count} done görev digest edilmedi${oldest ? ` (en eski: ${oldest})` : ""}` : "";
 }
 

@@ -720,7 +720,7 @@ export function statusSummary(
   opts: { mark?: boolean; /** machines C3: remote probe results, applied here under the kb lock */ remotePlans?: RemoteStallPlan[] } = {},
 ): {
   counts: Record<TaskState, number>; active: Task[]; failed: Task[]; newlyStalled: string[]; inbox: number;
-  undigested: number; /** YYYY-MM-DD of the oldest done task /digest has not processed */ oldestUndigested: string | null; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number; kbLint: LintSummary; kbDirty?: KbDirty;
+  undigested: number; /** YYYY-MM-DD of the oldest done task /digest has not processed; absent when none (keeps the idle JSON byte-identical, K4 golden) */ oldestUndigested?: string; openSevereFindings: number; mode: string | null; staleSummaries: StaleSummary[]; pendingDigest: number; kbLint: LintSummary; kbDirty?: KbDirty;
 } {
   const mark = opts.mark !== false;
   // a read-only/locked kb must not take the startup summary (SessionStart hook) down: marking is best effort (F-vlad-052)
@@ -744,7 +744,7 @@ export function statusSummary(
     newlyStalled,
     inbox: countInbox(),
     undigested: undigested.length,
-    oldestUndigested: undigested.map((t) => t.data.updated).sort()[0]?.slice(0, 10) ?? null,
+    ...(undigested.length ? { oldestUndigested: undigested.map((t) => t.data.updated).sort()[0].slice(0, 10) } : {}),
     openSevereFindings: countOpenSevere(),
     mode,
     pendingDigest: (() => { try { return countPending(); } catch { return 0; } })(),
