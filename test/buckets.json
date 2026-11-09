@@ -58,13 +58,13 @@
     "test/stdout-epipe.test.ts",
     "test/tasks/blocks.test.ts",
     "test/tasks/deps.test.ts",
-    "test/tasks/gate-compare.test.ts",
     "test/tasks/idle.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
     "test/tasks/transitions-consistency.test.ts"
   ],
   "process": [
+    "test/tasks/gate-compare.test.ts",
     "test/acceptance/cloud-ingest-real-shape.test.ts",
     "test/acceptance/cloud-ingest-verify2.test.ts",
     "test/acceptance/cloud-ingest.test.ts",
