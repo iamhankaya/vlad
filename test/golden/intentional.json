@@ -85,6 +85,12 @@
         "brain :: project status",
         "forwarded :: project status"
       ]
+    },
+    {
+      "id": "T20261110-12",
+      "keys": [
+        "task new --help"
+      ]
     }
   ]
 }

@@ -62,6 +62,7 @@
     "test/tasks/denials.test.ts",
     "test/tasks/deps.test.ts",
     "test/tasks/idle.test.ts",
+    "test/tasks/pipeline.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
     "test/tasks/transitions-consistency.test.ts"
@@ -153,6 +154,7 @@
     "test/small/u4d-branch-delete-hardening.test.ts",
     "test/support/**/*.test.ts",
     "test/tasks/experiment.test.ts",
+    "test/tasks/pipeline-cli.test.ts",
     "test/tasks/launch.test.ts",
     "test/tasks/resume-window.test.ts",
     "test/tasks/resume.test.ts",
