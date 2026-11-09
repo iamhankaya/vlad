@@ -1,5 +1,6 @@
 export * from "./state.js";
 export * from "./store.js";
+export * from "./pipeline.js";
 export * from "./launch.js";
 export * from "./cloud.js";
 export * from "./ingest.js";

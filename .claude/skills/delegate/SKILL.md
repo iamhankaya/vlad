@@ -147,17 +147,14 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
 ```
 Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle. Rol bulunamazsa veya türle uyumsuzsa CLI hata verir ve görev oluşmaz; hatayı göster, taslağı düzelt. Sonra adım 5a (dev) veya 5b (research).
 
-**Pipeline:**
-1. Çatı görev — taslağın gövdesi (faz tablosu ve kapılar `## Bağlam` altında `###` başlıklarıyla):
+**Pipeline:** çatı ve fazlar **tek komutla**, hepsi-ya-hiç oluşturulur (hata olursa oluşanlar geri alınır; tek tek `task new` döngüsü kurma):
+1. Çatı gövdesini (taslağın `## Tanım`/`## Kabul kriterleri`/`## Bağlam`'ı; faz tablosu ve kapılar `### Fazlar`/`### Kapılar` altında) geçici dosyaya yaz; özel faz gövdeleri varsa ayrı dosyalara:
    ```
-   vlad task new --project <slug> --title "<başlık>" --kind pipeline --body-file <çatı.md> --json
+   vlad task new --pipeline --project <slug> --title "<başlık>" --cycle <tam|özellik|kısa> [--ui] [--prova] [--skip sözleşme --skip-reason "<gerekçe>"] --body-file <çatı.md> [--phase-body <faz>=<dosya>]... --json
    ```
-   Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`).
-2. Fazlar, tablodaki **sırayla**. Her faz için gövde: `## Tanım` (fazın payı), `## Kabul kriterleri` (rolün `## Çıktı`'sı ve işin kriterlerinden bu faza düşenler), `## Bağlam` (çatı ID'si; "girdi: bağımlı olduğun görevlerin `## Kapanış raporu`"). Bağımlılık yalnızca **daha önce oluşturulmuş** fazlara verilir; tablodaki numaraları oluşan ID'lere çevir (sonradan değiştirmek gerekirse `vlad task deps <id> --set|--add|--remove|--clear`, yalnız `queued` fazda):
-   ```
-   vlad task new --project <slug> --title "<başlık> — <faz>" --kind <dev|research> --role <slug> [--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]] --parent <çatı-id> [--depends-on <id1,id2>] --phase <faz> --body-file <faz.md> --json
-   ```
-   Bir faz hata verirse dur, hatayı göster; oluşanları kullanıcıya söyle (gerekirse `cancelled` yapılır).
+   Döngü şablonundaki fazlar (rol, tür, bağımlılık, faz adı) §2 tablosundan gelir: `--ui` designer fazlarını (`tasarım`, `denetim`), `--prova` devops `prova` fazını ekler, `--skip sözleşme` sözleşme fazını atlar (gerekçe çatı gövdesine yazılır; bağımlılıklar yeniden bağlanır). Gövdesi verilmeyen faza çatı `## Tanım`'ından türetilmiş standart gövde girer (UI'lı `uygulama`'ya tarayıcı öz-kontrolü satırı dahil); ek yönerge gereken faz için `--phase-body`. Çıktı: `{"id": <çatı>, "cycle", "phases": [{id, phase, role, kind, depends_on}], ...}`. Şablonun dışına çıkan faz (ara denetim, dilim fazları, `danışma`, model sapması) için ya komutu şablonla çalıştırıp eksiği ayrıca `vlad task new --kind <dev|research> --role <slug> [--model …] --parent <çatı-id> [--depends-on …] --phase <faz> --body-file <faz.md> --json` ile ekle ya da fazı sonradan `vlad task deps` ile bağla.
+   Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`). Faz `## Tanım`'ına taslaktaki özel notları (güvenlik incelemesi, ara Codex kapısı, dış API fixture'ı) `--phase-body` ile ver. Komut hata verirse hiçbir görev oluşmamıştır; hatayı göster.
+2. Oluşan çatı ve faz ID'lerini kullanıcıya söyle (bağımlılıklar `vlad task deps <id> --set|--add|--remove|--clear` ile, yalnız `queued` fazda değiştirilir).
 3. Başlatılabilir fazları al:
    ```
    vlad task ready --parent <çatı-id> --json

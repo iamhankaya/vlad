@@ -10,7 +10,7 @@ import { brainTransport, makeRemote } from "../../machines/remote.js";
 import { selfName } from "../../fleet/state.js";
 import { AgentClient } from "../../agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js";
-import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
+import { TRANSITIONS, answerTask, askTask, cancelTask, createPipeline, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskList } from "./task-list.js";
@@ -23,6 +23,27 @@ export function registerTask(program: Command, k: Kit): void {
   const task = program.command("task").description("Görevler");
   def(task, "new", "queued görev oluşturur", (o: Opts) => {
     const body = o.bodyFile ? readInput(o.bodyFile as string) : "";
+    if (!o.pipeline) {
+      const stray = ["cycle", "ui", "prova", "skip", "skipReason", "phaseBody"].filter((k) => o[k] !== undefined);
+      if (stray.length) throw new Error("--cycle/--ui/--prova/--skip/--phase-body yalnız --pipeline ile kullanılır");
+    } else {
+      if (!o.cycle) throw new Error("--pipeline için --cycle gerekli (tam | özellik | kısa)");
+      const phaseBodies: Record<string, string> = {};
+      for (const spec of (o.phaseBody as string[] | undefined) ?? []) {
+        const i = spec.indexOf("=");
+        if (i < 1) throw new Error(`--phase-body <faz>=<dosya> biçiminde olmalı: ${spec}`);
+        phaseBodies[spec.slice(0, i)] = readInput(spec.slice(i + 1));
+      }
+      const r = createPipeline({
+        project: o.project as string, title: o.title as string, cycle: o.cycle as string, body, ui: !!o.ui, prova: !!o.prova,
+        skip: o.skip as string[] | undefined, skipReason: o.skipReason as string | undefined, phaseBodies,
+      });
+      const warnings = unknownTaskRefs(body).map((id) => `gövdede kb'de olmayan görev ID'si: ${id}`);
+      out(o, { id: r.id, cycle: r.cycle, phases: r.phases, warnings },
+        [`${r.id} (${r.cycle})`, ...r.phases.map((p) => `  ${p.id} ${p.phase} (${p.role})${p.depends_on.length ? ` <- ${p.depends_on.join(",")}` : ""}`),
+          ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+      return;
+    }
     const dependsOn = o.dependsOn ? String(o.dependsOn).split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     const t = createTask({
       project: o.project as string, title: o.title as string, kind: o.kind as TaskKind, body, role: o.role as string | undefined,
@@ -41,7 +62,14 @@ export function registerTask(program: Command, k: Kit): void {
     .requiredOption("--project <slug>", "proje slug'ı")
     .requiredOption("--title <başlık>", "görev başlığı")
     .option("--kind <kind>", "dev | research | pipeline", "dev")
-    .option("--body-file <md>", "görev gövdesi (- = stdin)");
+    .option("--body-file <md>", "görev gövdesi (- = stdin)")
+    .option("--pipeline", "çatı + döngü şablonundaki fazları tek seferde, hepsi-ya-hiç oluşturur (--cycle zorunlu)")
+    .option("--cycle <döngü>", "--pipeline ile: tam | özellik | kısa")
+    .option("--ui", "--pipeline ile: designer fazları (tasarım, denetim)")
+    .option("--prova", "--pipeline ile: devops prova fazı")
+    .option("--skip <faz>", "--pipeline ile: fazı atla (yalnız sözleşme; --skip-reason zorunlu)", (v: string, a: string[] = []) => [...a, v])
+    .option("--skip-reason <gerekçe>", "--skip gerekçesi (çatı gövdesine yazılır)")
+    .option("--phase-body <faz=dosya>", "--pipeline ile: o fazın gövdesi (- = stdin); verilmeyen faza çatı Tanım'ından türetilir", (v: string, a: string[] = []) => [...a, v]);
 
   def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {
     const cfg = loadConfig();
