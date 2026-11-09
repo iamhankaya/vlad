@@ -171,3 +171,6 @@ export function untrustWorktree(dir: string, file = claudeJsonPath(), o: TrustOp
     return true;
   }, o);
 }
+
+/** One-liner for `node -e` (argv[1] = file URL of this module, argv[2] = dir): re-asserts the trust record right before claude starts (F-vlad-261/267). No double quotes: Windows PowerShell 5.1 would cut the argument there. */
+export const TRUST_JS = `import(process.argv[1]).then(m=>{const w=m.trustWorktree(process.argv[2]);if(w)console.error('uyarı: '+w)}).catch(()=>{})`;

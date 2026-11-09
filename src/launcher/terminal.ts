@@ -2,10 +2,12 @@ import { execFile, execFileSync } from "node:child_process";
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { assertRealLauncherAllowed } from "./mode.js";
 import { closePosixWorker, externalPosixLaunch } from "./posix.js";
 import type { LaunchRequest, LaunchResult, Launcher } from "./types.js";
 import { resumeFlags } from "./resume.js";
+import { TRUST_JS } from "../tasks/trust.js";
 
 // PowerShell treats typographic single quotes as quote characters too; double each one.
 const SQ = /['‘’‚‛]/g;
@@ -43,6 +45,8 @@ export function buildScript(req: LaunchRequest): string {
     ...(req.autoCompact === undefined ? [] : ["--autocompact", q(req.autoCompact)]),
     ...(req.resume ? resumeFlags(req.resume.sessionId ?? null).map((f, i) => (i ? q(f) : f)) : []),
   ];
+  // F-vlad-267 (same as POSIX F-vlad-261): write the trust record again right before claude reads it; needs the built dist
+  lines.push(`& ${q(process.execPath)} -e ${q(TRUST_JS)} ${q(pathToFileURL(join(import.meta.dirname, "..", "tasks", "trust.js")).href)} ${q(req.cwd)}`);
   lines.push(["claude", ...flags, "$p"].join(" "));
   return lines.join("\n") + "\n";
 }

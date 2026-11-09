@@ -61,6 +61,20 @@ describe("PS 5.1 argument escaping (F-vlad-189)", () => {
   });
 });
 
+describe("trust preflight (F-vlad-267)", () => {
+  it("re-asserts the worktree trust record right before claude starts, without double quotes in the JS argument", () => {
+    const s = buildScript(req());
+    const at = s.indexOf("trust.js");
+    expect(at).toBeGreaterThan(-1);
+    expect(at).toBeLessThan(s.indexOf("\nclaude "));
+    expect(s).toContain("trustWorktree");
+    const line = s.split("\n").find((l) => l.includes("trustWorktree"))!;
+    expect(line.startsWith("& ")).toBe(true);
+    expect(line).toContain("'C:\\dev\\my proj'");
+    expect(line).not.toContain('"'); // PS 5.1 would cut a native argument at an unescaped quote (T20261103-26)
+  });
+});
+
 describe("buildCommand", () => {
   it("wt", () => {
     expect(buildCommand(req(), "wt", "C:\\t\\s.ps1")).toEqual({
