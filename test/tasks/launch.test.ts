@@ -166,6 +166,21 @@ describe("launchTask", () => {
     expect(existsSync(wt)).toBe(false);
   });
 
+  // F-vlad-179: a rolled-back launch must not leave its desktop queue file behind (vlad-desktop would open a worker for a cancelled task)
+  it("task cancelled while the launcher ran: the pending desktop queue file is removed", async () => {
+    const t = mk();
+    const qfile = join(dirname(repo), `${t.data.id}.json`);
+    const launcher: Launcher = {
+      async launch() {
+        writeFileSync(qfile, "{}");
+        setState(t.data.id, "cancelled");
+        return { ok: true, method: "desktop-queue", queued: qfile };
+      },
+    };
+    await expect(launchTask(t.data.id, { launcher, cfg, closeWorker: () => {} })).rejects.toThrow(/cancelled yapıldı/);
+    expect(existsSync(qfile)).toBe(false);
+  });
+
   const writeRole = (slug: string) => {
     mkdirSync(join(process.env.VLAD_HOME!, "roles"), { recursive: true });
     const file = join(process.env.VLAD_HOME!, "roles", `${slug}.md`);
