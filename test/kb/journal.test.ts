@@ -42,6 +42,14 @@ describe("appendJournal", () => {
     expect(text.indexOf("- c")).toBeLessThan(text.indexOf("## diğer"));
     expect(text.indexOf("- x")).toBeGreaterThan(text.indexOf("- c"));
   });
+  it("when the day already has the same heading twice (older files), merges into the LAST one", () => {
+    appendJournal("2026-10-15", "## watchparty\n- a\n\n## diğer\n- x\n\n## watchparty\n- b");
+    appendJournal("2026-10-15", "## watchparty\n- c");
+    const text = readFileSync(join(home, "kb", "journal", "2026-10-15.md"), "utf8");
+    expect(text.match(/^## watchparty$/gm)).toHaveLength(2);
+    expect(text.indexOf("- c")).toBeGreaterThan(text.indexOf("- b"));
+    expect(text.indexOf("- c")).toBeGreaterThan(text.lastIndexOf("## watchparty"));
+  });
   it("merges several sections of one append (existing ones merged, new ones appended)", () => {
     appendJournal("2026-10-15", "## a\n- 1\n\n## b\n- 2");
     appendJournal("2026-10-15", "## b\n- 3\n\n## c\n- 4");
