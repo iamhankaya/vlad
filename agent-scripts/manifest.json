@@ -54,6 +54,30 @@
           "required": false
         }
       ]
+    },
+    {
+      "name": "vlad-guncelle",
+      "title": "Vlad guncelle (pull + npm ci + derleme + dist degisimi; Agent yeniden baslar)",
+      "platform": "win32",
+      "file": "agent-scripts/vlad-guncelle.ps1",
+      "sha256": "30d95c5f4be2901afbeb52da98547003465ce62916926fe98a95f489058a2b95",
+      "class": "write",
+      "timeoutSec": 1800,
+      "outputMaxKb": 32,
+      "selfUpdate": true,
+      "params": []
+    },
+    {
+      "name": "vlad-guncelle",
+      "title": "Vlad guncelle (pull + npm ci + derleme + dist degisimi; Agent yeniden baslar)",
+      "platform": "darwin",
+      "file": "agent-scripts/vlad-guncelle.sh",
+      "sha256": "1c78672bca0b8d8fe584965928b45a50aa2bd406ed666cf147902f88b7bc60c1",
+      "class": "write",
+      "timeoutSec": 1800,
+      "outputMaxKb": 32,
+      "selfUpdate": true,
+      "params": []
     }
   ]
 }
