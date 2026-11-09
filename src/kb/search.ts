@@ -1,8 +1,7 @@
-import { readFileSync } from "node:fs";
 import { basename, relative } from "node:path";
 import { listMdFiles } from "./archive.js";
 import { scanDecisions } from "./decisions.js";
-import { parseDoc } from "./doc.js";
+import { parseDoc, readText } from "./doc.js";
 import { kbPaths } from "./home.js";
 
 export const SEARCH_TYPES = ["task", "finding", "decision", "journal"] as const;
@@ -77,7 +76,7 @@ function sections(body: string): { heading: string; text: string }[] {
 function* taskUnits(): Generator<Unit> {
   for (const path of listMdFiles(kbPaths().tasks)) {
     try {
-      const { data, body } = parseDoc<{ id?: string; project?: string; title?: string; state?: string; updated?: string }>(readFileSync(path, "utf8"));
+      const { data, body } = parseDoc<{ id?: string; project?: string; title?: string; state?: string; updated?: string }>(readText(path));
       for (const s of sections(body)) {
         yield { id: data.id ?? basename(path, ".md"), type: "task", project: data.project ?? null, status: data.state ?? null, date: data.updated ?? null, section: s.heading || undefined, title: data.title ?? "", text: s.text, path };
       }
@@ -88,7 +87,7 @@ function* taskUnits(): Generator<Unit> {
 function* findingUnits(): Generator<Unit> {
   for (const path of listMdFiles(kbPaths().findings)) {
     try {
-      const { data, body } = parseDoc<{ id?: string; project?: string; title?: string; state?: string; updated?: string }>(readFileSync(path, "utf8"));
+      const { data, body } = parseDoc<{ id?: string; project?: string; title?: string; state?: string; updated?: string }>(readText(path));
       yield { id: data.id ?? basename(path, ".md"), type: "finding", project: data.project ?? null, status: data.state ?? null, date: data.updated ?? null, title: data.title ?? "", text: body, path };
     } catch { /* see above */ }
   }
@@ -104,7 +103,9 @@ function* decisionUnits(project?: string): Generator<Unit> {
 function* journalUnits(): Generator<Unit> {
   for (const path of listMdFiles(kbPaths().journal)) {
     const date = basename(path, ".md");
-    for (const s of sections(readFileSync(path, "utf8"))) {
+    let text: string;
+    try { text = readText(path); } catch { continue; } // a symlink (or unreadable file) is skipped, not fatal
+    for (const s of sections(text)) {
       if (!s.heading) continue; // the `# date` title only
       const project = s.heading.slice(3).trim();
       yield { id: `journal:${date}#${project}`, type: "journal", project, status: null, date, section: s.heading, title: "", text: s.text, path };

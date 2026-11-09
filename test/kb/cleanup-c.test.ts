@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { getJournal } from "../../src/kb/journal.js";
+import { searchKb } from "../../src/kb/search.js";
+import { refsOf } from "../../src/kb/refs.js";
 import { addDecision, listDecisions, setDecisionStatus } from "../../src/kb/decisions.js";
 import { readDoc, validate } from "../../src/kb/index.js";
 import { commitKb } from "../../src/kb/commit.js";
@@ -147,6 +149,35 @@ describe("F-vlad-036 kb okuma symlink izlemez", () => {
     try { symlinkSync(target, link, "file"); } catch { return; } // Windows'ta ayrıcalık yoksa atla
     expect(() => readDoc(link)).toThrow(/symlink/);
     expect(readDoc(target).data).toEqual({ a: 1 });
+  });
+  // T20261109-28: journal get, search and refs read files directly; they must not follow a link out of the kb either
+  const linkedJournal = (): boolean => {
+    const outside = mkdtempSync(join(tmpdir(), "vlad-out-"));
+    const secret = join(outside, "s.md");
+    writeFileSync(secret, "# 2026-11-09\n\n## vlad\nGIZLI-ICERIK F-vlad-001\n");
+    writeFileSync(join(home, "kb", "journal", "2026-11-08.md"), "# 2026-11-08\n\n## vlad\nGIZLI-ICERIK normal F-vlad-001\n");
+    try { symlinkSync(secret, join(home, "kb", "journal", "2026-11-09.md"), "file"); return true; } catch { return false; }
+  };
+  it("getJournal symlink'li günlüğü reddeder", () => {
+    if (!linkedJournal()) return;
+    expect(() => getJournal("2026-11-09")).toThrow(/symlink/);
+  });
+  it("search ve refs arşivdeki symlink'li kaydın içeriğini döndürmez, gerçek kayıt çalışır", () => {
+    const outside = mkdtempSync(join(tmpdir(), "vlad-out-"));
+    const secret = join(outside, "s.md");
+    writeFileSync(secret, "---\nid: T20261101-77\nproject: vlad\nstate: done\nupdated: 2026-11-01\n---\n\n## Not\nGIZLI-ICERIK F-vlad-001\n");
+    const arch = join(home, "kb", "tasks", "archive", "2026-11");
+    mkdirSync(arch, { recursive: true });
+    writeFileSync(join(arch, "T20261101-78.md"), "---\nid: T20261101-78\nproject: vlad\nstate: done\nupdated: 2026-11-01\n---\n\n## Not\nGIZLI-ICERIK normal F-vlad-001\n");
+    try { symlinkSync(secret, join(arch, "T20261101-77.md"), "file"); } catch { return; }
+    mkdirSync(join(home, "kb", "findings"), { recursive: true });
+    writeFileSync(join(home, "kb", "findings", "F-vlad-001.md"), "---\nid: F-vlad-001\nproject: vlad\nstate: open\nupdated: 2026-11-08\n---\n\nx\n");
+    const hits = JSON.stringify(searchKb({ query: "GIZLI-ICERIK" }));
+    expect(hits).toContain("T20261101-78");
+    expect(hits).not.toContain("T20261101-77");
+    const refs = JSON.stringify(refsOf("F-vlad-001"));
+    expect(refs).toContain("T20261101-78");
+    expect(refs).not.toContain("T20261101-77");
   });
 });
 

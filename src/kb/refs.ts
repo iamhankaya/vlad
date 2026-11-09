@@ -1,9 +1,9 @@
-import { readFileSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { basename, join, relative } from "node:path";
 import { listMdFiles } from "./archive.js";
 import { loadConfig } from "./config.js";
 import { scanDecisions } from "./decisions.js";
-import { parseDoc, readDoc } from "./doc.js";
+import { parseDoc, readDoc, readText } from "./doc.js";
 import { getKbRecord } from "./get.js";
 import { kbPaths } from "./home.js";
 import { fencedLines } from "./sections.js";
@@ -54,13 +54,13 @@ function* sources(): Generator<Source> {
   const p = kbPaths();
   for (const path of listMdFiles(p.tasks)) {
     try {
-      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readFileSync(path, "utf8"));
+      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readText(path));
       yield { type: "task", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path, project: data.project };
     } catch { /* unreadable files are reported by `task list` */ }
   }
   for (const path of listMdFiles(p.findings)) {
     try {
-      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readFileSync(path, "utf8"));
+      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readText(path));
       yield { type: "finding", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path, project: data.project };
     } catch { /* see above */ }
   }
@@ -68,10 +68,12 @@ function* sources(): Generator<Source> {
   for (const { rec, text } of scanDecisions()) {
     yield { type: "decision", id: rec.id || `${rec.file}#${rec.date}#${n++}`, status: rec.id ? rec.status : null, date: rec.date, text, path: rec.path };
   }
-  for (const path of listMdFiles(p.journal)) yield { type: "journal", id: `journal:${basename(path, ".md")}`, status: null, date: basename(path, ".md"), text: readFileSync(path, "utf8"), path };
+  for (const path of listMdFiles(p.journal)) {
+    try { yield { type: "journal", id: `journal:${basename(path, ".md")}`, status: null, date: basename(path, ".md"), text: readText(path), path }; } catch { /* symlink or unreadable: skipped */ }
+  }
   for (const path of listMdFiles(p.projects)) {
     try {
-      const { data, body } = parseDoc<{ slug?: string; last_activity?: string | null }>(readFileSync(path, "utf8"));
+      const { data, body } = parseDoc<{ slug?: string; last_activity?: string | null }>(readText(path));
       yield { type: "project", id: data.slug ?? basename(path, ".md"), status: null, date: data.last_activity ?? null, text: body, path };
     } catch { /* see above */ }
   }

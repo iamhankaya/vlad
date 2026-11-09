@@ -1,13 +1,14 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { writeFileAtomic } from "./atomic.js";
+import { readText } from "./doc.js";
 import { kbPaths } from "./home.js";
 import { fencedLines } from "./sections.js";
 
 /** Appends `text` to `file`, keeping exactly one blank line between existing content and the new block. */
 function appendBlock(file: string, text: string, initial = ""): void {
   mkdirSync(dirname(file), { recursive: true });
-  const cur = existsSync(file) ? readFileSync(file, "utf8") : initial;
+  const cur = existsSync(file) ? readText(file) : initial;
   const base = cur.replace(/\s+$/, "");
   writeFileAtomic(file, `${base ? base + "\n\n" : ""}${text.replace(/\s+$/, "")}\n`);
 }
@@ -33,7 +34,7 @@ export function getJournal(date: string): { date: string; file: string; content:
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error(`geçersiz tarih: "${date}" (YYYY-MM-DD bekleniyor)`);
   const file = join(kbPaths().journal, `${date}.md`);
   if (!existsSync(file)) throw new Error(`günlük yok: ${date}`);
-  const content = readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+  const content = readText(file).replace(/\r\n/g, "\n");
   const sections: JournalSection[] = [];
   const lines = content.split("\n");
   const fenced = fencedLines(lines); // a "## " line inside a code fence is text, not a heading (F-vlad-098)
