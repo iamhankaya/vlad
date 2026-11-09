@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -126,5 +126,23 @@ describe("script-run selfUpdate", () => {
     deps.stateDir = "/dev/null/yok"; // ensurePrivateDir fırlatır
     await scriptRun(args, deps, ctx).catch(() => undefined);
     expect(maint.on).toBe(false);
+  });
+  posix("betik zaman aşımıyla öldürülür (npm ci/swap ortasında): Agent node_modules-old/dist-old'u kendisi geri yükler, sonra bayrak kalkar (Codex P1)", async () => {
+    const body = `cd "$VLAD_REPO"\ntouch .vlad-npm-ci-running\nmv node_modules node_modules-old\nmkdir node_modules\necho YENI > node_modules/f\nmv dist dist-old\nexec sleep 30\n`;
+    const { f, deps, args } = setup(body, { timeoutSec: 1 });
+    for (const [n, c] of [["dist", "OLD"], ["node_modules", "OLDM"]] as const) { mkdirSync(join(f.dir, n)); writeFileSync(join(f.dir, n, "f"), c); }
+    const r = await scriptRun(args, deps, ctx);
+    expect(r.timedOut).toBe(true);
+    const rd = (p: string) => readFileSync(join(f.dir, p), "utf8");
+    expect([rd("dist/f"), rd("node_modules/f")]).toEqual(["OLD", "OLDM"]);
+    expect([existsSync(join(f.dir, "dist-old")), existsSync(join(f.dir, "node_modules-old")), existsSync(join(f.dir, ".vlad-npm-ci-running"))]).toEqual([false, false, false]);
+    expect(maint.on).toBe(false);
+  }, 20_000);
+  posix("exit≠0 ama işaret yok (betik kendi temizledi / yedek önceki güncellemeye ait): yedeğe dokunulmaz", async () => {
+    const { f, deps, args } = setup(`echo '${S} {"ok":false,"step":"install"}'\nexit 1\n`);
+    mkdirSync(join(f.dir, "node_modules")); writeFileSync(join(f.dir, "node_modules", "f"), "GUNCEL");
+    mkdirSync(join(f.dir, "node_modules-old")); writeFileSync(join(f.dir, "node_modules-old", "f"), "YEDEK");
+    await scriptRun(args, deps, ctx);
+    expect([readFileSync(join(f.dir, "node_modules", "f"), "utf8"), readFileSync(join(f.dir, "node_modules-old", "f"), "utf8")]).toEqual(["GUNCEL", "YEDEK"]);
   });
 });

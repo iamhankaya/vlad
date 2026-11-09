@@ -188,4 +188,32 @@ describe("watchdog (gerçek süreç, gerçek soket, geçici dizin)", () => {
     await new Promise((r) => old.close(r));
     expect([f(d, "dist"), existsSync(join(d, "dist-old"))]).toEqual(["NEW", true]);
   }, 20_000);
+  const child = () => spawn(process.execPath, ["-e", "setInterval(()=>{},1000)"], { stdio: "ignore" });
+  it("WD_PID: yeni süreç eski pid çıkmadan porta oturmuş olsa bile (port hiç kapanmadı) eski pid ölünce yedekler silinir (Codex P2)", async () => {
+    const d = repo(), port = await freePort();
+    const oldAgent = child();
+    const fresh = await listen(port); // launchd yenisini hızla açtı: port 'kapandı' görülmedi
+    const done = wd(d, port, { WD_PID: String(oldAgent.pid) });
+    await sleep(700);
+    oldAgent.kill("SIGKILL");
+    expect(await done).toBe(0);
+    await new Promise((r) => fresh.close(r));
+    expect([existsSync(join(d, "dist-old")), existsSync(join(d, "node_modules-old")), f(d, "dist")]).toEqual([false, false, "NEW"]);
+  }, 20_000);
+  it("WD_PID: eski pid yaşıyorsa dokunmaz", async () => {
+    const d = repo(), port = await freePort();
+    const oldAgent = child();
+    const fresh = await listen(port);
+    expect(await wd(d, port, { WD_PID: String(oldAgent.pid), WD_WAIT_MS: "1200" })).toBe(0);
+    oldAgent.kill("SIGKILL"); await new Promise((r) => fresh.close(r));
+    expect([f(d, "dist"), existsSync(join(d, "dist-old"))]).toEqual(["NEW", true]);
+  }, 20_000);
+  it("WD_PID: eski pid öldü, yeni hiç dinlemiyor → geri yükleme", async () => {
+    const d = repo(), port = await freePort();
+    const oldAgent = child();
+    const done = wd(d, port, { WD_PID: String(oldAgent.pid), WD_WAIT_MS: "2000" });
+    await sleep(500); oldAgent.kill("SIGKILL");
+    expect(await done).toBe(0);
+    expect([f(d, "dist"), f(d, "node_modules")]).toEqual(["OLD", "OLDM"]);
+  }, 20_000);
 });

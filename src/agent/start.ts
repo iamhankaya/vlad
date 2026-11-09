@@ -136,7 +136,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
         if (process.platform === "darwin" && !existsSync(plist)) throw new Error(`${plist} yok (launchd kurulu değil); Agent'ı elle yeniden başlat`);
         // sağlık bekçisi: yeni dist dinlemezse dist/node_modules yedekten geri yüklenir ve launchd yeniden tetiklenir
         const kick = process.platform === "darwin" && process.getuid ? JSON.stringify(["launchctl", "kickstart", "-k", `gui/${process.getuid()}/com.vlad.agent`]) : "";
-        spawn(process.execPath, ["-e", WATCHDOG_JS], { detached: true, stdio: "ignore", env: { PATH: process.env.PATH ?? "", WD_HOST: wdHost, WD_PORT: String(port), WD_REPO: getVladHome(), ...(kick ? { WD_KICK: kick } : {}) } }).unref();
+        spawn(process.execPath, ["-e", WATCHDOG_JS], { detached: true, stdio: "ignore", env: { PATH: process.env.PATH ?? "", WD_HOST: wdHost, WD_PORT: String(port), WD_REPO: getVladHome(), WD_PID: String(process.pid), ...(kick ? { WD_KICK: kick } : {}) } }).unref();
         return;
       }
       const startCmd = winStartCmd(getVladHome());

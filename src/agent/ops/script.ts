@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { getVladHome } from "../../kb/home.js";
 import { agentDir } from "../../fleet/state.js";
@@ -107,7 +107,10 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out };
   } finally {
     active = null;
-    if (entry.selfUpdate && !restarting) maint.leave(); // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
+    if (entry.selfUpdate && !restarting) {
+      recoverSelfUpdate(st.repo); // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar
+      maint.leave();
+    } // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
   }
 }
 
@@ -122,4 +125,22 @@ export function reconcileScriptRun(rec: JournalRecord): Verdict {
 /** Diskteki dist/.build-head (yoksa undefined). */
 export function diskBuildHead(repo: string): string | undefined {
   try { return readFileSync(join(repo, "dist", ".build-head"), "utf8").trim() || undefined; } catch { return undefined; }
+}
+
+/**
+ * selfUpdate betiği `.vlad-npm-ci-running` işaretini bıraktıysa (başarıyla bitmedi: zaman aşımı/öldürme/çökme) yarım güncellemeyi geri alır:
+ * node_modules-old → node_modules, dist yoksa dist-old → dist, dist-next silinir, işaret kalkar. İşaret yoksa (betik kendi temizledi ya da
+ * yedek önceki başarılı güncellemeye ait) hiçbir şeye dokunmaz. Hata yutulur: bayrak yine kalkmalı, kurtarma elle yapılabilir.
+ */
+export function recoverSelfUpdate(repo: string): void {
+  const mark = join(repo, ".vlad-npm-ci-running");
+  if (!existsSync(mark)) return;
+  try {
+    const nm = join(repo, "node_modules"), nmOld = join(repo, "node_modules-old");
+    if (existsSync(nmOld)) { rmSync(nm, { recursive: true, force: true }); renameSync(nmOld, nm); }
+    const dist = join(repo, "dist"), distOld = join(repo, "dist-old");
+    if (!existsSync(dist) && existsSync(distOld)) renameSync(distOld, dist);
+    rmSync(join(repo, "dist-next"), { recursive: true, force: true });
+    rmSync(mark, { force: true });
+  } catch { /* geri yükleme başarısızsa işaret kalır; sonraki vlad-guncelle koşusu başında yeniden dener */ }
 }
