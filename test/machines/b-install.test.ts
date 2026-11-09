@@ -4,6 +4,7 @@ import { lstatSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rotateLog } from "../../src/agent/start.js";
+import { canSymlink } from "../helpers.js";
 
 describe("machines:B agent install (print-only)", () => {
   it("launchd plist keeps the Agent alive and does not kill tmux workers when it restarts", () => {
@@ -66,7 +67,7 @@ describe("agent install sertleştirme (T20261109-26)", () => {
     expect(stableNodePath(cellar, () => false)).toBe(cellar);
     expect(stableNodePath("/usr/local/bin/node", () => true)).toBe("/usr/local/bin/node");
   });
-  it("F-vlad-159: rotateLog .1 symlink'ini izlemez ve yedeği 0600 yapar", () => {
+  it.skipIf(!canSymlink())("F-vlad-159: rotateLog .1 symlink'ini izlemez ve yedeği 0600 yapar", () => {
     const d = mkdtempSync(join(tmpdir(), "vlad-rot-"));
     const f = join(d, "agent.log"), victim = join(d, "victim.txt");
     writeFileSync(f, "x".repeat(50)); writeFileSync(victim, "KEEP");
