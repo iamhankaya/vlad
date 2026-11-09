@@ -38,7 +38,7 @@ function splitSections(md: string): { pre: string; sections: { heading: string; 
 function mergeIntoSection(text: string, heading: string, body: string): string | null {
   const lines = text.split("\n");
   const fenced = fencedLines(lines);
-  const start = lines.findIndex((l, i) => !fenced[i] && l.trimEnd() === heading);
+  const start = lines.findLastIndex((l, i) => !fenced[i] && l.trimEnd() === heading); // last match: older files may repeat a heading
   if (start < 0) return null;
   let end = lines.findIndex((l, i) => i > start && !fenced[i] && /^## /.test(l));
   if (end < 0) end = lines.length;
