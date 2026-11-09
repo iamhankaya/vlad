@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runScript } from "../../src/agent/scripts/run.js";
+import { validateScriptManifest } from "../../src/agent/scripts/manifest.js";
 import { describe, expect, it } from "vitest";
 import { taskkillPath } from "../../src/agent/proc.js";
 import { lockDownFile } from "../../src/fleet/state.js";
@@ -30,5 +35,37 @@ describe("taskkillPath", () => {
   it("PATH'ten değil SystemRoot\\System32'den; SystemRoot yoksa C:\\Windows", () => {
     expect(taskkillPath("D:\\WIN")).toBe("D:\\WIN\\System32\\taskkill.exe");
     expect(taskkillPath(undefined)).toMatch(/System32\\taskkill\.exe$/);
+  });
+});
+
+// T20261109-26 sertleştirme testleri (Agent/betik).
+const posix = it.skipIf(process.platform === "win32");
+const manifestWith = (pattern: string) => ({ version: 1, scripts: [{
+  name: "x", title: "X", platform: "win32", file: "agent-scripts/x.ps1", sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", class: "write", timeoutSec: 60, outputMaxKb: 32, selfUpdate: false,
+  params: [{ name: "tag", type: "string", pattern, maxLen: 8 }],
+}] });
+
+describe("F-vlad-268: string param deseni ReDoS ön taraması", () => {
+  it.each(["^(a+)+$", "^(a*)*$", "^(\\w+\\s?)+$", "^(a|aa)+$"])("iç içe niceleyici %s reddedilir", (p) => {
+    expect(() => validateScriptManifest(manifestWith(p))).toThrow(/pattern geçersiz/);
+  });
+  it("düz desen kabul edilir", () => {
+    expect(() => validateScriptManifest(manifestWith("^[a-z0-9-]+$"))).not.toThrow();
+    expect(() => validateScriptManifest(manifestWith("^(v[0-9]+|main)$"))).not.toThrow();
+  });
+});
+
+describe("F-vlad-280: zaman aşımı sürerken gelen error olayı zaman aşımını ezmez", () => {
+  posix("error olayı → yine timedOut:true, exit 124", async () => {
+    const d = mkdtempSync(join(tmpdir(), "vlad-t26-"));
+    try {
+      const r = await runScript({
+        bytes: Buffer.from("sleep 30"), name: "t", ext: "sh", opId: "o", cwd: d, dir: join(d, "run"), env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+        timeoutMs: 200, stdoutCapKb: 32,
+        killTree: async (p) => { p.emit("error", new Error("EPIPE")); p.kill("SIGKILL"); return true; },
+      });
+      expect(r.timedOut).toBe(true);
+      expect(r.exit).toBe(124);
+    } finally { rmSync(d, { recursive: true, force: true }); }
   });
 });

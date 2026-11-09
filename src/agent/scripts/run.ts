@@ -133,6 +133,7 @@ function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
     let timing = false; // öldürme sürerken gelen 'close' sonucu zaman aşımı olarak raporlanır
     const timer = setTimeout(() => { timing = true; void kill(p).catch(() => false).then((ok) => done(124, true, "\nbetik zaman aşımına uğradı" + (ok ? "" : "; süreç ağacı sonlandırılamadı, geri yükleme ertelendi"), !ok)); }, s.timeoutMs);
     p.on("error", (e) => {
+      if (timing) return; // zaman aşımı sürerken gelen hata zaman aşımı sonucunu ezmez (kill yolu done'ı çağırır)
       if (started) return done(1, false, `\n${e.message}`);
       finished = true; clearTimeout(timer);
       reject(new RemoteError("failed", `failed: betik başlatılamadı: ${e.message}`));
