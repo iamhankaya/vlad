@@ -7,7 +7,7 @@ import {
 } from "../../fleet/types.js";
 import { checkEntry, checkPushed, loadRepoState, scriptFail } from "../scripts/integrity.js";
 import { normalizeParams, scriptPlanId } from "../scripts/manifest.js";
-import { runScript, scriptEnv } from "../scripts/run.js";
+import { runScript, scriptEnv, type RunSpec } from "../scripts/run.js";
 import type { Journal, JournalRecord } from "../journal.js";
 import type { Verdict } from "../reconcile.js";
 import { machineDef } from "../../fleet/registry.js";
@@ -36,6 +36,10 @@ export interface ScriptDeps {
   restart?: () => void;
   /** Çalışan sürecin açılışta okuduğu dist/.build-head; yoksa bilinmiyor (yeniden başlatma uygun sayılır) */
   runningBuildHead?: string;
+  /** zaman aşımı öldürmesi (testler için); varsayılan killTreeWait */
+  killTree?: RunSpec["killTree"];
+  /** süreç ağacı doğrulanamayan selfUpdate zaman aşımında yeniden deneme aralığı (varsayılan 5 sn) */
+  retryMs?: number;
 }
 export const defaultScriptDeps = (): ScriptDeps => {
   // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
@@ -92,26 +96,44 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     maint.enter();
   }
   active = entry.name;
-  let restarting = false;
+  let restarting = false, deferred = false;
   try {
     const out = await runScript({
       bytes: chk.bytes!, name: entry.name, ext: entry.file.endsWith(".ps1") ? "ps1" : "sh", opId: ctx.opId, cwd: st.repo, dir: join(d.stateDir, "scripts-run"),
       env: scriptEnv(d.env, { home: d.home, repo: st.repo, machine: d.machine, opId: ctx.opId, script: entry.name, params, roots: d.roots }),
-      timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform,
+      timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform, killTree: d.killTree,
     });
+    const { retryKill, ...res } = out;
+    if (entry.selfUpdate && res.recovery === "pending" && retryKill) {
+      // süreç ağacı hâlâ koşuyor olabilir (npm/tsc node_modules'a yazıyor): geri yükleme ve bayrağı kaldırma ertelenir, Agent sınırsız yeniden dener
+      deferred = true; deferRecovery(st.repo, retryKill, d.retryMs ?? 5000);
+      return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
+    }
     // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed:false iken yalnız çalışan derleme diskteki dist/.build-head'den farklıysa: önceki yardımcı başarısız olduysa yeniden denenebilsin) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
     if (entry.selfUpdate && out.exit === 0 && out.data?.ok === true && (out.data.changed !== false || diskBuildHead(st.repo) !== d.runningBuildHead || d.runningBuildHead === undefined) && d.restart) {
       d.restart(); restarting = true;
-      return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out, restart: "scheduled" };
+      return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res, restart: "scheduled" };
     }
-    return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out };
+    return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
   } finally {
     active = null;
-    if (entry.selfUpdate && !restarting) {
+    if (entry.selfUpdate && !restarting && !deferred) {
       recoverSelfUpdate(st.repo); // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar
       maint.leave();
     } // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
   }
+}
+
+/** Öldürme doğrulanana dek aralıkla yeniden dener; doğrulanınca kurtarmayı yapar ve bakım bayrağını kaldırır. Zamanlayıcı süreci tutmaz (unref). */
+function deferRecovery(repo: string, retryKill: () => Promise<boolean>, everyMs: number): void {
+  const tick = (): void => {
+    void retryKill().catch(() => false).then((ok) => {
+      if (!ok) { setTimeout(tick, everyMs).unref(); return; }
+      recoverSelfUpdate(repo);
+      maint.leave();
+    });
+  };
+  setTimeout(tick, everyMs).unref();
 }
 
 /**
@@ -139,7 +161,9 @@ export function recoverSelfUpdate(repo: string): void {
     const nm = join(repo, "node_modules"), nmOld = join(repo, "node_modules-old");
     if (existsSync(nmOld)) { rmSync(nm, { recursive: true, force: true }); renameSync(nmOld, nm); }
     const dist = join(repo, "dist"), distOld = join(repo, "dist-old");
-    if (!existsSync(dist) && existsSync(distOld)) renameSync(distOld, dist);
+    // işaret "swap" ise dist değişimi başlamıştı: dist-old ile eş geri yükle (yeni dist + eski node_modules tutarsız); işaretsiz/boş işarette dist-old önceki güncellemeden kalmış olabilir, dokunulmaz
+    const swapped = readFileSync(mark, "utf8").trim() === "swap";
+    if (existsSync(distOld) && (swapped || !existsSync(dist))) { rmSync(dist, { recursive: true, force: true }); renameSync(distOld, dist); }
     rmSync(join(repo, "dist-next"), { recursive: true, force: true });
     rmSync(mark, { force: true });
   } catch { /* geri yükleme başarısızsa işaret kalır; sonraki vlad-guncelle koşusu başında yeniden dener */ }

@@ -24,6 +24,10 @@ if (Test-Path -LiteralPath '.vlad-npm-ci-running') {
         try { if (Test-Path -LiteralPath 'node_modules') { Remove-Item -LiteralPath 'node_modules' -Recurse -Force -ErrorAction Stop }; Rename-Item -LiteralPath 'node_modules-old' -NewName 'node_modules' -ErrorAction Stop }
         catch { Fail 'setup' 'yarim node_modules yedekten geri yuklenemedi' }
     }
+    if (((Get-Content -LiteralPath '.vlad-npm-ci-running' -Raw -ErrorAction SilentlyContinue) -replace '\s', '') -eq 'swap' -and (Test-Path -LiteralPath 'dist-old')) {
+        try { if (Test-Path -LiteralPath 'dist') { Remove-Item -LiteralPath 'dist' -Recurse -Force -ErrorAction Stop }; Rename-Item -LiteralPath 'dist-old' -NewName 'dist' -ErrorAction Stop }
+        catch { Fail 'setup' 'yarim dist yedekten geri yuklenemedi' }
+    }
     Remove-Item -LiteralPath '.vlad-npm-ci-running' -Force -ErrorAction SilentlyContinue
 }
 
@@ -82,6 +86,7 @@ if (($LASTEXITCODE -ne 0) -or -not (Test-Path -LiteralPath 'dist-next\cli.js')) 
 
 if (Test-Path -LiteralPath 'dist-old') { Remove-Item -LiteralPath 'dist-old' -Recurse -Force -ErrorAction SilentlyContinue }
 if (Test-Path -LiteralPath 'dist-old') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue; Restore-Nm; Fail 'swap' 'eski dist-old silinemedi (dosya kilidi?); eski dist ve node_modules korundu' }
+[System.IO.File]::WriteAllText((Join-Path $repo '.vlad-npm-ci-running'), 'swap') # asama isareti: sonrasi kesilirse kurtarma dist'i de dist-old'dan geri yukler
 if (Test-Path -LiteralPath 'dist') {
     try { Rename-Item -LiteralPath 'dist' -NewName 'dist-old' -ErrorAction Stop }
     catch { Remove-Item -LiteralPath 'dist-next' -Recurse -Force -ErrorAction SilentlyContinue; Restore-Nm; Fail 'swap' "dist dist-old'a tasinamadi (EPERM/kilit?); eski dist ve node_modules korundu" }

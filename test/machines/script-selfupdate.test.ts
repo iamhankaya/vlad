@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAINT_FREE_OPS, maint } from "../../src/agent/maintenance.js";
 import { scriptRun, type ScriptDeps } from "../../src/agent/ops/script.js";
 import { scriptPlanId } from "../../src/agent/scripts/manifest.js";
@@ -137,6 +137,25 @@ describe("script-run selfUpdate", () => {
     expect([rd("dist/f"), rd("node_modules/f")]).toEqual(["OLD", "OLDM"]);
     expect([existsSync(join(f.dir, "dist-old")), existsSync(join(f.dir, "node_modules-old")), existsSync(join(f.dir, ".vlad-npm-ci-running"))]).toEqual([false, false, false]);
     expect(maint.on).toBe(false);
+  }, 20_000);
+  posix("F-vlad-270: zaman aşımında süreç ağacının ölümü doğrulanamazsa geri yükleme YAPILMAZ; bayrak + işaret açık, sonuç recovery:'pending'; sonra öldürme doğrulanınca Agent geri yükler", async () => {
+    const body = `cd "$VLAD_REPO"\ntouch .vlad-npm-ci-running\nmv node_modules node_modules-old\nmkdir node_modules\necho YENI > node_modules/f\nexec sleep 30\n`;
+    let verified = false;
+    const kills: number[] = [];
+    // gerçek öldürme yapılır (test süreci artmasın) ama ilk iki deneme "doğrulanamadı" döner
+    const killTree = async (p: { pid?: number; kill: (s?: NodeJS.Signals) => boolean }) => { kills.push(1); try { process.kill(-p.pid!, "SIGKILL"); } catch { /* bitmiş */ } return verified; };
+    const { f, deps, args } = setup(body, { timeoutSec: 1 }, { killTree, retryMs: 50 });
+    mkdirSync(join(f.dir, "node_modules")); writeFileSync(join(f.dir, "node_modules", "f"), "ESKI");
+    const r = await scriptRun(args, deps, ctx);
+    expect(r).toMatchObject({ timedOut: true, recovery: "pending" });
+    expect(readFileSync(join(f.dir, "node_modules", "f"), "utf8").trim(), "süreç ölü doğrulanmadan geri yükleme olmaz").toBe("YENI");
+    expect(existsSync(join(f.dir, ".vlad-npm-ci-running"))).toBe(true);
+    expect(maint.on, "bakım bayrağı açık kalır").toBe(true);
+    verified = true; // sonraki deneme doğrular
+    await vi.waitFor(() => expect(maint.on).toBe(false), { timeout: 5_000 });
+    expect(readFileSync(join(f.dir, "node_modules", "f"), "utf8")).toBe("ESKI");
+    expect(existsSync(join(f.dir, ".vlad-npm-ci-running"))).toBe(false);
+    expect(kills.length).toBeGreaterThanOrEqual(2);
   }, 20_000);
   posix("exit≠0 ama işaret yok (betik kendi temizledi / yedek önceki güncellemeye ait): yedeğe dokunulmaz", async () => {
     const { f, deps, args } = setup(`echo '${S} {"ok":false,"step":"install"}'\nexit 1\n`);
