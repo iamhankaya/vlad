@@ -204,6 +204,16 @@
   {
    "path": [
     "task",
+    "deny"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "task",
     "ask"
    ],
    "json": true,
