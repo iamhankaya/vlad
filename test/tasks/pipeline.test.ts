@@ -82,6 +82,10 @@ describe("createPipeline", () => {
     expect(() => run("kısa", { phaseBodies: { spec: "x" } })).toThrow(/faz yok: spec/);
     expect(taskFiles().length).toBe(before);
   });
+  it("free-text çatı body (no ## Tanım) is used whole as the definition", () => {
+    const r = run("kısa", { body: "sadece serbest metin" });
+    expect(getTask(r.phases[0]!.id).body).toContain("sadece serbest metin");
+  });
   it("rejects an unknown cycle", () => {
     expect(() => run("tek")).toThrow(/geçersiz döngü/);
     expect(taskFiles()).toEqual([]);

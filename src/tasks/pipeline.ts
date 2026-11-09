@@ -52,7 +52,7 @@ function section(body: string, heading: string): string {
 }
 
 function defaultBody(spec: PhaseSpec, chatiId: string, chatiBody: string, ui: boolean): string {
-  const tanim = section(chatiBody, "## Tanım");
+  const tanim = section(chatiBody, "## Tanım") || chatiBody.trim(); // serbest metin gövde: hepsi tanım sayılır
   const kabul = section(chatiBody, "## Kabul kriterleri");
   const selfCheck = ui && spec.phase === "uygulama" ? `\n${UI_SELF_CHECK}` : "";
   return [

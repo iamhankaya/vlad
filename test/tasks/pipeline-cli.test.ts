@@ -40,4 +40,12 @@ describe("task new --pipeline", { timeout: 30_000 }, () => {
     expect(vlad(["task", "new", "--project", "p", "--title", "T", "--cycle", "tam", "--body-file", "-"], BODY).code).toBe(1);
     expect(files()).toEqual([]);
   });
+  it("rejects ignored flags, duplicate --phase-body and double stdin", () => {
+    expect(vlad([...base, "--cycle", "kısa", "--model", "opus"], BODY).code).toBe(1);
+    expect(vlad([...base, "--cycle", "kısa", "--phase-body", "uygulama=-"], BODY).code).toBe(1);
+    const f = join(home, "u.md");
+    writeFileSync(f, "## Tanım\nx\n");
+    expect(vlad([...base, "--cycle", "kısa", "--phase-body", `uygulama=${f}`, "--phase-body", `uygulama=${f}`], BODY).code).toBe(1);
+    expect(files()).toEqual([]);
+  });
 });

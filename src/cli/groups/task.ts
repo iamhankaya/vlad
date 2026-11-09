@@ -28,11 +28,16 @@ export function registerTask(program: Command, k: Kit): void {
       if (stray.length) throw new Error("--cycle/--ui/--prova/--skip/--phase-body yalnız --pipeline ile kullanılır");
     } else {
       if (!o.cycle) throw new Error("--pipeline için --cycle gerekli (tam | özellik | kısa)");
+      const ignored = ["role", "model", "modelReason", "parent", "dependsOn", "phase"].filter((k) => o[k] !== undefined);
+      if (ignored.length) throw new Error("--pipeline ile --role/--model/--parent/--depends-on/--phase kullanılamaz (fazların rolü şablondan gelir)");
       const phaseBodies: Record<string, string> = {};
       for (const spec of (o.phaseBody as string[] | undefined) ?? []) {
         const i = spec.indexOf("=");
         if (i < 1) throw new Error(`--phase-body <faz>=<dosya> biçiminde olmalı: ${spec}`);
-        phaseBodies[spec.slice(0, i)] = readInput(spec.slice(i + 1));
+        const name = spec.slice(0, i), src = spec.slice(i + 1);
+        if (name in phaseBodies) throw new Error(`--phase-body ${name} birden fazla verildi`);
+        if (src === "-" && o.bodyFile === "-") throw new Error("stdin (-) hem --body-file hem --phase-body için verilemez");
+        phaseBodies[name] = readInput(src);
       }
       const r = createPipeline({
         project: o.project as string, title: o.title as string, cycle: o.cycle as string, body, ui: !!o.ui, prova: !!o.prova,
