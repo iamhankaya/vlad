@@ -54,6 +54,13 @@ describe("buildScript", () => {
   });
 });
 
+describe("PS 5.1 argument escaping (F-vlad-189)", () => {
+  it("doubles trailing backslashes only when the argument gets quoted (contains whitespace)", () => {
+    // PowerShell 5.1 quotes a native argument only for whitespace; unquoted, a doubled trailing `\\` would reach claude doubled
+    expect(buildScript(req())).toContain("if ($p -match '\\s') { $p = [regex]::Replace($p, '(\\\\+)\\z', '$1$1') }");
+  });
+});
+
 describe("buildCommand", () => {
   it("wt", () => {
     expect(buildCommand(req(), "wt", "C:\\t\\s.ps1")).toEqual({

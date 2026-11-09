@@ -145,7 +145,7 @@ export function closePosixWorker(
   const self = o.selfPid ?? process.pid;
   try { run("tmux", ["kill-session", "-t", tmuxSession(taskId)]); } catch { /* no session or no tmux */ }
   let found = "";
-  try { found = String(run("pgrep", ["-f", "--", `bash .*/vlad/${taskId.replace(/[^\w-]/g, "\\$&")}\\.sh$`]) ?? ""); } catch { /* pgrep exits 1 on no match */ }
+  try { found = String(run("pgrep", ["-f", "--", `^(/[^ ]*/)?bash .*/vlad/${taskId.replace(/[^\w-]/g, "\\$&")}\\.sh$`]) ?? ""); } catch { /* pgrep exits 1 on no match */ }
   const killed: number[] = [];
   for (const pid of found.split(/\r?\n/).map((l) => Number(l.trim())).filter((n) => n > 0 && n !== self && n !== process.ppid)) {
     try { run("pkill", ["-TERM", "-P", String(pid)]); } catch { /* no children */ }

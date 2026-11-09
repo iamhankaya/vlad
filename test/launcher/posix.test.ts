@@ -171,10 +171,20 @@ describe.skipIf(WIN)("closePosixWorker", () => {
       selfPid: 222,
     });
     expect(calls[0]).toBe("tmux kill-session -t vlad-T20261101-18");
-    expect(calls).toContain(String.raw`pgrep -f -- bash .*/vlad/T20261101-18\.sh$`);
+    expect(calls).toContain(String.raw`pgrep -f -- ^(/[^ ]*/)?bash .*/vlad/T20261101-18\.sh$`);
     expect(calls).toContain("pkill -TERM -P 111");
     expect(killed).toEqual([111]);
     expect(out).toEqual([111]);
+  });
+  it("F-vlad-234: pgrep pattern is anchored at the command start, so editors/tail naming the script are not killed", () => {
+    let pat = "";
+    closePosixWorker("T20261101-18", { run: (f, a) => { if (f === "pgrep") pat = a[a.length - 1]!; return ""; }, kill: () => {} });
+    const re = new RegExp(pat);
+    expect(re.test("bash /var/folders/ab/T/vlad/T20261101-18.sh")).toBe(true);
+    expect(re.test("/bin/bash /tmp/vlad/T20261101-18.sh")).toBe(true);
+    expect(re.test("vim bash /tmp/vlad/T20261101-18.sh")).toBe(false);
+    expect(re.test("tail -f x/vlad/T20261101-18.sh")).toBe(false);
+    expect(re.test("less /tmp/bash /vlad/T20261101-18.sh")).toBe(false);
   });
   it("a missing tmux session or no process is not an error", () => {
     const out = closePosixWorker("T1", { run: (f) => { if (f === "tmux") throw new Error("can't find session"); return ""; }, kill: () => {} });

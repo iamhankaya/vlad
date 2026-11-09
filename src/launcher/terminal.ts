@@ -17,11 +17,11 @@ const MODEL = /^[A-Za-z0-9][A-Za-z0-9._[\]-]*$/;
 
 // Windows PowerShell 5.1 (and pwsh < 7.3) pass a native argument without escaping embedded double quotes, so the
 // argument ended at the first `"` (T20261103-26). Apply the CommandLineToArgvW rules by hand there: backslashes before
-// a quote are doubled and the quote escaped, trailing backslashes are doubled (the argument is quoted for its spaces).
+// a quote are doubled and the quote escaped, trailing backslashes are doubled only when the argument is quoted (it has whitespace; F-vlad-189).
 const PS51_ARG_ESCAPE =
   // Legacy pins the argument mode (pwsh >= 7.3 would otherwise escape on its own, or not at all for .cmd shims / a profile setting)
   "$PSNativeCommandArgumentPassing = 'Legacy'; " +
-  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); $p = [regex]::Replace($p, '(\\\\+)\\z', '$1$1')";
+  "$p = [regex]::Replace($p, '(\\\\*)\"', '$1$1\\\"'); if ($p -match '\\s') { $p = [regex]::Replace($p, '(\\\\+)\\z', '$1$1') }";
 // CreateProcess limit is 32767 chars for the whole command line; leave room for the executable and flags.
 const MAX_ARG = 30000;
 
