@@ -24,13 +24,21 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad finding list` — Bulguları listeler. Ek süzgeçler: `--older-than <gün>`, `--source <görev>`. _(yerel; konsol: okuma; --json)_
 - `vlad finding set` — `finding set <id...> <durum> [--reason "<metin>"] [--by <görev>]`: çoklu ID, hepsi-ya-hiç (durum: open|deferred|fixed|wontfix). `wontfix`'te `--reason` zorunlu; gerekçe bulgu dosyasının `## Kapanış` bölümüne yazılır. _(işçide reddedilir; konsol: yazma; --json)_
 
+## idea
+
+- `vlad idea add` — `idea add --project <slug> --title "<t>" [--detail-file] [--source <id>]`: fikir kaydı açar (`kb/ideas/I-<proje>-NNN.md`); fikirler bulgu değildir, kartın açık bulgu bloğuna girmez. _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad idea list` — `idea list [--project] [--state open|promoted|dropped] --json`: fikirleri listeler. _(yerel; konsol: okuma; --json)_
+- `vlad idea set` — `idea set <id...> dropped --reason "<metin>"`: fikri bırakır (gerekçe zorunlu, hepsi-ya-hiç). _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad idea promote` — `idea promote <id> --task <T-id>`: fikri göreve bağlar (state promoted). _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad idea from-finding` — `idea from-finding <F-id...>`: bulguları fikre taşır; bulgu `wontfix` ("fikir deposuna taşındı: I-…") olur, hepsi-ya-hiç. _(işçide reddedilir; konsol: yazma; --json)_
+
 ## role
 
 - `vlad role list` — Uzman rolleri listeler (`roles/`). _(yerel; konsol: okuma; --json)_
 
 ## task
 
-- `vlad task new` — queued görev oluşturur (pipeline için `--kind pipeline`, faz için `--parent`, `--depends-on`, `--phase`, `--role`; `--model`: Opus için `--model-reason` zorunlu). _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad task new` — queued görev oluşturur (pipeline için `--kind pipeline`, faz için `--parent`, `--depends-on`, `--phase`, `--role`; `--model`: Opus için `--model-reason` zorunlu). Pipeline iskeleti tek komutta: `--pipeline --cycle tam|özellik|kısa [--ui] [--prova] [--skip <faz> --skip-reason <r>] [--phase-body <faz>=<dosya>]` çatı + döngü fazlarını hepsi-ya-hiç oluşturur. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task launch` — Worktree + branch açar, `running` yapar, Launcher'ı çağırır (güven kaydı dahil). `--external`: terminal AÇMAZ, betik yazar ve JSON'da `script`, `command`, `cwd` döner; bulut modunda reddedilir. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task release` — `task release <id> [--force]`: belirsiz uzak launch rezervasyonunu (ve çatı makine pin'ini) bırakır; işçi launch'ı görmediyse iptal işareti yazılır; ölü makinedeki rezervasyon için de kullanılır. `--force` işçi ulaşılamazken kullanılır; yetim pencere riski var. _(işçide reddedilir; konsolda yok; --json)_
 - `vlad task repin` — `task repin <çatı-id> <makine> [--force] [--json]`: pipeline çatısının makine pin'ini başka makineye taşır (yalnız `pipeline`; hedef config'te ve kartın `machines` listesinde olmalı; eski makinede running faz varsa `--force` ister). `warnings`: entegrasyon dalı hedefte olmayabilir. İlerlemeye `Repin: <eski> → <yeni>` yazılır. _(işçide reddedilir; konsolda yok; --json)_
