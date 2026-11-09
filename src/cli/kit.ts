@@ -67,12 +67,13 @@ export function createKit(ctx: CliCtx) {
   async function runAndRefresh(key: string, args: any[], fn: (...a: any[]) => void | Promise<void>): Promise<void> {
     await fn(...args);
     if (!REFRESH_KEYS.has(key)) return;
-    try {
-      const t = targetsOf(key, args);
-      for (const slug of new Set(t?.slugs)) {
+    let t: ReturnType<typeof targetsOf>;
+    try { t = targetsOf(key, args); } catch (e) { ctx.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); return; }
+    for (const slug of new Set(t?.slugs)) {
+      try { // one broken card must not stop the others (kb maintain / decision migrate visit every card)
         if (slug && /^[a-z0-9-]+$/.test(slug) && existsSync(join(kbPaths().projects, `${slug}.md`))) refreshProject(slug, { create: false, only: t!.only, fast: t!.fast });
-      }
-    } catch (e) { ctx.stderr.write(`uyarı: kart blokları tazelenemedi: ${(e as Error).message}\n`); }
+      } catch (e) { ctx.stderr.write(`uyarı: kart blokları tazelenemedi (${slug}): ${(e as Error).message}\n`); }
+    }
   }
 
   function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
