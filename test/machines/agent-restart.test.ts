@@ -13,13 +13,13 @@ const mk = (o: Partial<Parameters<typeof scheduleRestart>[0]> = {}) => {
 };
 
 describe("scheduleRestart", () => {
-  it("Mac: gecikmeden sonra çıkışı (stop) çağırır, yardımcı süreç yok", async () => {
+  it("Mac: gecikmeden sonra doğrulama + çıkış (stop)", async () => {
     const { d, log } = mk();
     scheduleRestart(d);
     await vi.advanceTimersByTimeAsync(1900);
     expect(log).toEqual([]);
     await vi.advanceTimersByTimeAsync(200);
-    expect(log).toEqual(["stop"]);
+    expect(log).toEqual(["helper", "stop"]);
   });
   it("uçuşta op varsa bekler; bitince çıkar", async () => {
     let n = 1;
@@ -29,13 +29,13 @@ describe("scheduleRestart", () => {
     expect(log).toEqual([]);
     n = 0;
     await vi.advanceTimersByTimeAsync(200);
-    expect(log).toEqual(["stop"]);
+    expect(log).toEqual(["helper", "stop"]);
   });
   it("uçuştaki op takılırsa maxWait sonunda yine çıkar (Agent sonsuza kadar bakımda kalmaz)", async () => {
     const { d, log } = mk({ inflight: () => 1 });
     scheduleRestart(d);
     await vi.advanceTimersByTimeAsync(2000 + 5100);
-    expect(log).toEqual(["stop"]);
+    expect(log).toEqual(["helper", "stop"]);
   });
   it("Windows: önce yardımcı süreç, sonra çıkış", async () => {
     const { d, log } = mk({ platform: "win32" });
@@ -53,7 +53,25 @@ describe("scheduleRestart", () => {
     const { d, log } = mk();
     scheduleRestart(d); scheduleRestart(d);
     await vi.advanceTimersByTimeAsync(2500);
-    expect(log).toEqual(["stop"]);
+    expect(log).toEqual(["helper", "stop"]);
+  });
+  it("Mac: doğrulama (launchd yok) başarısızsa Agent çıkmaz", async () => {
+    const { d, log } = mk({ helper: async () => { throw new Error("plist yok"); } });
+    scheduleRestart(d);
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(log).toEqual(["fail:plist yok"]);
+  });
+  it("başarısız denemeden sonra aynı deps ile yeni zamanlama yeniden denenir (kalıcı sessiz yutma yok)", async () => {
+    let ok = false;
+    const { d, log } = mk({ helper: async () => { if (!ok) throw new Error("x"); log2.push("helper"); } });
+    const log2: string[] = [];
+    scheduleRestart(d);
+    await vi.advanceTimersByTimeAsync(2100);
+    ok = true;
+    scheduleRestart(d);
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(log).toEqual(["fail:x", "stop"]);
+    expect(log2).toEqual(["helper"]);
   });
 });
 

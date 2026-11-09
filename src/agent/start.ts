@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { rmSync, writeFileSync, existsSync, readFileSync, statSync, copyFileSync, truncateSync } from "node:fs";
 import { createServer } from "node:net";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../kb/config.js";
 import { getVladHome } from "../kb/home.js";
@@ -121,6 +122,12 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const restartDeps: RestartDeps = {
     platform: process.platform, delayMs: 2000, pollMs: 250, maxWaitMs: 5 * 60_000, inflight: () => maint.inflight(), stop,
     helper: async () => {
+      if (process.platform !== "win32") {
+        // Mac: yalnız launchd KeepAlive geri getirir; elle başlatılmış Agent çıkarsa kimse başlatmaz
+        const plist = join(homedir(), "Library", "LaunchAgents", "com.vlad.agent.plist");
+        if (process.platform === "darwin" && !existsSync(plist)) throw new Error(`${plist} yok (launchd kurulu değil); Agent'ı elle yeniden başlat`);
+        return;
+      }
       const startCmd = winStartCmd(getVladHome());
       if (!existsSync(startCmd)) throw new Error(`${startCmd} yok (vlad agent install --apply ile kurulmamış); Agent'ı elle yeniden başlat`);
       const h = winRestartHelper({ pidFile: pidFile(), startCmd, systemRoot: process.env.SystemRoot });

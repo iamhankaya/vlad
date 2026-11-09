@@ -32,7 +32,7 @@ if [ "$from" = "$to" ] && [ -f dist/.build-head ] && [ "$(cat dist/.build-head)"
   exit 0
 fi
 
-npm ci --no-audit --no-fund >&2 || fail install "npm ci basarisiz; node_modules bozulmus olabilir (docs/agent-scripts.md Kurtarma)"
+npm ci --ignore-scripts --no-audit --no-fund >&2 || fail install "npm ci basarisiz; node_modules bozulmus olabilir (docs/agent-scripts.md Kurtarma)"
 
 rm -rf dist-next
 if ! npx --no-install tsc --outDir dist-next >&2 || [ ! -f dist-next/cli.js ]; then

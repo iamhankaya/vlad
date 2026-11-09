@@ -10,33 +10,33 @@ $env:GIT_TERMINAL_PROMPT = '0'
 
 function Emit($Obj) { Write-Output ('@@VLAD-RESULT@@ ' + (ConvertTo-Json -InputObject $Obj -Compress)) }
 function Fail($Step, $Summary) { Emit ([ordered]@{ ok = $false; step = $Step; summary = $Summary }); exit 1 }
-function Git([string[]]$GitArgs) { $o = & git @GitArgs 2>&1; $script:gitCode = $LASTEXITCODE; return (@($o) -join "`n").Trim() }
+function Invoke-Git([string[]]$GitArgs) { $o = & git.exe @GitArgs 2>&1; $script:gitCode = $LASTEXITCODE; return (@($o) -join "`n").Trim() }
 
 $repo = $env:VLAD_REPO
 if (-not $repo -or -not (Test-Path -LiteralPath (Join-Path $repo '.git'))) { Fail 'setup' 'VLAD_REPO yok ya da git deposu degil' }
 Set-Location -LiteralPath $repo
 
-$st = Git @('status', '--porcelain', '--untracked-files=no')
+$st = Invoke-Git @('status', '--porcelain', '--untracked-files=no')
 if ($st) { Fail 'dirty' 'izlenen dosyalarda yerel degisiklik var; temizlenmeden guncellenmez' }
-[void](Git @('symbolic-ref', '-q', 'HEAD'))
+[void](Invoke-Git @('symbolic-ref', '-q', 'HEAD'))
 if ($script:gitCode -ne 0) { Fail 'detached' 'HEAD detached; bir dala gec' }
-[void](Git @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'))
+[void](Invoke-Git @('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'))
 if ($script:gitCode -ne 0) { Fail 'no_upstream' 'dalin upstream''i yok' }
 
-$from = Git @('rev-parse', '--short', 'HEAD')
-[void](Git @('fetch', '--prune'))
+$from = Invoke-Git @('rev-parse', '--short', 'HEAD')
+[void](Invoke-Git @('fetch', '--prune'))
 if ($script:gitCode -ne 0) { Fail 'fetch' 'git fetch basarisiz' }
-[void](Git @('pull', '--ff-only'))
+[void](Invoke-Git @('pull', '--ff-only'))
 if ($script:gitCode -ne 0) { Fail 'pull' 'git pull --ff-only basarisiz (ayrisik dal ya da catisma)' }
-$to = Git @('rev-parse', '--short', 'HEAD')
-$full = Git @('rev-parse', 'HEAD')
+$to = Invoke-Git @('rev-parse', '--short', 'HEAD')
+$full = Invoke-Git @('rev-parse', 'HEAD')
 
 $stamp = Join-Path $repo 'dist\.build-head'
 if (($from -eq $to) -and (Test-Path -LiteralPath $stamp) -and ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $full)) {
     Emit ([ordered]@{ ok = $true; changed = $false; from = $from; to = $to; summary = "vlad zaten guncel ($to)" }); exit 0
 }
 
-& npm.cmd ci --no-audit --no-fund 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
+& npm.cmd ci --ignore-scripts --no-audit --no-fund 2>&1 | ForEach-Object { [Console]::Error.WriteLine($_) }
 if ($LASTEXITCODE -ne 0) { Fail 'install' 'npm ci basarisiz; node_modules bozulmus olabilir (docs/agent-scripts.md Kurtarma)' }
 
 if (Test-Path -LiteralPath 'dist-next') { Remove-Item -LiteralPath 'dist-next' -Recurse -Force }

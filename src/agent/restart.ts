@@ -14,7 +14,7 @@ export interface RestartDeps {
   inflight(): number;
   /** Agent'ı temiz kapatır ve süreci sonlandırır */
   stop(): void;
-  /** yalnız Windows: yeniden başlatma yardımcısını iş nesnesi dışında başlatır */
+  /** çıkıştan önce: yeniden başlatmayı sağlayacak yolu doğrular/başlatır (Mac: launchd plist'i var mı; Windows: WMI yardımcısı). Fırlatırsa Agent çıkmaz. */
   helper(): Promise<void>;
   onFail(msg: string): void;
 }
@@ -27,7 +27,7 @@ export function scheduleRestart(d: RestartDeps): void {
   seen.add(d);
   const t0 = Date.now();
   const fire = async () => {
-    try { if (d.platform === "win32") await d.helper(); } catch (e) { d.onFail((e as Error).message); return; }
+    try { await d.helper(); } catch (e) { seen.delete(d); d.onFail((e as Error).message); return; } // seen silinir: sonraki selfUpdate yeniden deneyebilsin (bayrak onFail'de kalkar)
     d.stop();
   };
   const tick = () => {

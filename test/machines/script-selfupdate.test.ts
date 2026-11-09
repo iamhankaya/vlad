@@ -65,6 +65,12 @@ describe("script-run selfUpdate", () => {
     expect(n).toBe(0);
     expect(maint.on).toBe(false);
   });
+  posix("data.changed false (zaten güncel) → gereksiz yeniden başlatma yok, bayrak kalkar", async () => {
+    const { deps, args } = setup(`echo '${S} {"ok":true,"changed":false}'\n`, {}, { restart: () => { throw new Error("çağrılmamalı"); } });
+    const r = await scriptRun(args, deps, ctx);
+    expect([r.restart, r.data?.ok]).toEqual([undefined, true]);
+    expect(maint.on).toBe(false);
+  });
   posix("data.ok 'true' (dize) ya da yok → restart yok", async () => {
     for (const j of ['{"ok":"true"}', '{"summary":"x"}']) {
       const { deps, args } = setup(`echo '${S} ${j}'\n`, {}, { restart: () => { throw new Error("çağrılmamalı"); } });

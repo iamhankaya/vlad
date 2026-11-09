@@ -96,8 +96,8 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
       env: scriptEnv(d.env, { home: d.home, repo: st.repo, machine: d.machine, opId: ctx.opId, script: entry.name, params, roots: d.roots }),
       timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform,
     });
-    // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
-    if (entry.selfUpdate && out.exit === 0 && out.data?.ok === true && d.restart) {
+    // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed !== false; zaten güncelse yeniden başlatma gereksiz) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
+    if (entry.selfUpdate && out.exit === 0 && out.data?.ok === true && out.data.changed !== false && d.restart) {
       d.restart(); restarting = true;
       return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...out, restart: "scheduled" };
     }
