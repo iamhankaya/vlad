@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,7 +79,7 @@ describe("buildPosixScript run by a real bash", () => {
     const script = join(dir, "w.sh");
     writeFileSync(script, buildPosixScript(req({ cwd: dir, prompt })));
     const out = join(dir, "out.txt");
-    const res = spawnSync("bash", [script], { env: { ...isolatedEnv(), PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
+    const res = spawnGuarded("bash", [script], { env: { ...isolatedEnv(), PATH: `${dir}:${process.env.PATH}`, OUT: out }, encoding: "utf8" });
     expect(res.status).toBe(0);
     expect(readFileSync(out, "utf8")).toBe(prompt);
   });

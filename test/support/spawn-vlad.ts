@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptions } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,3 +87,10 @@ export function spawnVlad(o: SpawnOpts): SpawnResult {
   const { args, ...rest } = o;
   return runSpawn(process.execPath, [CLI, ...args], rest);
 }
+
+/**
+ * Drop-in `spawnSync` for tests that need their own env/argv (F-vlad-258): same signature and result, but a hung child is
+ * SIGKILLed after 30 s and output is capped at 10 MB unless the caller sets its own `timeout`/`killSignal`/`maxBuffer`.
+ */
+export const spawnGuarded = ((file: string, argv?: readonly string[], opts?: SpawnSyncOptions) =>
+  spawnSync(file, argv ?? [], { timeout: 30_000, killSignal: "SIGKILL", maxBuffer: 10 * 1024 * 1024, ...opts })) as typeof spawnSync;

@@ -1,5 +1,6 @@
 import { isolatedEnv } from "../isolate-env.js";
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { randomBytes } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import net from "node:net";
@@ -80,7 +81,7 @@ export function makeHomePair(o: { config?: object; brain?: string; worker?: stri
 
 export interface SpawnResult { code: number | null; out: string; err: string }
 export function spawnVlad(side: Side, argv: string[], o: { stdin?: string; env?: Record<string, string> } = {}): SpawnResult {
-  const r = spawnSync(process.execPath, [CLI, ...argv], { encoding: "utf8", input: o.stdin, env: { ...isolatedEnv(), ...side.env, ...o.env } });
+  const r = spawnGuarded(process.execPath, [CLI, ...argv], { encoding: "utf8", input: o.stdin, env: { ...isolatedEnv(), ...side.env, ...o.env } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 

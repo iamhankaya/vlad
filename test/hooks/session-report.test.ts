@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { validate } from "../../src/kb/index.js";
 import { PassThrough } from "node:stream";
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { resolve } from "node:path";
 import { afterAll, beforeAll } from "vitest";
 import { buildReport, loadProjects, main, readStdin } from "../../src/hooks/report.js";
@@ -142,7 +142,7 @@ describe("entry process", () => {
   const out = resolve(import.meta.dirname, "..", "..", "dist");
   afterAll(() => {});
   it("exits 0 on invalid stdin and logs", () => {
-    const r = spawnSync("node", [join(out, "hooks", "session-report.js")], {
+    const r = spawnGuarded("node", [join(out, "hooks", "session-report.js")], {
       input: "not json", encoding: "utf8", env: { ...isolatedEnv(), VLAD_HOME: home },
     });
     expect(r.status).toBe(0);
@@ -153,7 +153,7 @@ describe("entry process", () => {
     copyFileSync(join(out, "hooks", "session-report.js"), join(d, "session-report.js"));
     writeFileSync(join(d, "report.js"), "import \"./does-not-exist.js\";");
     writeFileSync(join(d, "package.json"), '{"type":"module"}');
-    const r = spawnSync("node", [join(d, "session-report.js")], {
+    const r = spawnGuarded("node", [join(d, "session-report.js")], {
       input: "x", encoding: "utf8", env: { ...isolatedEnv(), VLAD_HOME: home },
     });
     expect(r.status).toBe(0);

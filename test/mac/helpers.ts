@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 
 export const SCRIPTS = join(process.cwd(), "scripts", "mac");
 
@@ -24,6 +24,6 @@ export function stub(s: Sandbox, name: string, body = "exit 0"): void {
 }
 
 export function run(script: string, args: string[], s: Sandbox, env: Record<string, string> = {}, input?: string) {
-  const r = spawnSync("/bin/bash", [join(SCRIPTS, script), ...args], { env: { ...s.env, ...env }, input, encoding: "utf8", timeout: 20_000 });
+  const r = spawnGuarded("/bin/bash", [join(SCRIPTS, script), ...args], { env: { ...s.env, ...env }, input, encoding: "utf8", timeout: 20_000 });
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
 }

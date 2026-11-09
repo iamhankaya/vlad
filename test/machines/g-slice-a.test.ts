@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import * as fs from "node:fs";
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -251,7 +251,7 @@ describe("F-vlad-136: kuyruk geçici okuma hatasında sağlam girdiyi failed/'e 
 });
 
 describe("F-vlad-141: merge uzlaştırıcısı (ata kontrolü)", () => {
-  const git = (cwd: string, ...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, encoding: "utf8" });
+  const git = (cwd: string, ...a: string[]) => spawnGuarded("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...a], { cwd, encoding: "utf8" });
   function repo(): string {
     const d = tmp();
     git(d, "init", "-q", "-b", "main");
