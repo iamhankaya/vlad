@@ -30,7 +30,11 @@ export interface SetupAudit {
   since: string;
   tasks: { total: number; ids: string[]; by_role: Record<string, number>; by_phase: Record<string, number>; by_model: Record<string, number> };
   /** `by_ponytail`: the same sums split by the task's `experiment.ponytail` arm (T20261102-16); tasks outside the experiment, or started before PONYTAIL_AB_VALID_FROM, are in neither. */
-  measures: { tasks_with_measure: number; sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
+  measures: {
+    tasks_with_measure: number;
+    /** done developer/game-developer tasks (the roles whose closing report carries an Ölçüm line) and how many of them have one: read `tasks_with_measure` against this, not against `tasks.total` (F-vlad-164). */
+    expected_tasks: number; expected_with_measure: number;
+    sums: Record<string, number>; by_ponytail: { on: ArmMeasure; off: ArmMeasure } };
   open_points: { total: number; by_severity: Record<string, number> };
   signals: { test_itirazi: Signal; degisiklik_istegi: Signal; karar: Signal; izin_reddi: Signal; codex_turlari: CodexRounds };
   cancelled: { total: number; with_reason: number; without_reason_ids: string[] };
@@ -74,7 +78,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   const out: SetupAudit = {
     since,
     tasks: { total: tasks.length, ids: tasks.map((t) => t.data.id).sort(), by_role: {}, by_phase: {}, by_model: {} },
-    measures: { tasks_with_measure: 0, sums: {}, by_ponytail: { on: { tasks: 0, tasks_with_measure: 0, sums: {} }, off: { tasks: 0, tasks_with_measure: 0, sums: {} } } },
+    measures: { tasks_with_measure: 0, expected_tasks: 0, expected_with_measure: 0, sums: {}, by_ponytail: { on: { tasks: 0, tasks_with_measure: 0, sums: {} }, off: { tasks: 0, tasks_with_measure: 0, sums: {} } } },
     open_points: { total: 0, by_severity: {} },
     signals: {
       test_itirazi: { tasks: 0, count: 0, examples: [] }, degisiklik_istegi: { tasks: 0, count: 0, examples: [] },
@@ -105,8 +109,11 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     const arm = Date.parse(t.data.created) >= Date.parse(PONYTAIL_AB_VALID_FROM) ? t.data.experiment?.ponytail : undefined;
     const armOut = arm ? out.measures.by_ponytail[arm] : undefined;
     if (armOut) armOut.tasks++;
+    const expectsMeasure = t.data.state === "done" && (t.data.role === "developer" || t.data.role === "game-developer");
+    if (expectsMeasure) out.measures.expected_tasks++;
     if (m) {
       out.measures.tasks_with_measure++;
+      if (expectsMeasure) out.measures.expected_with_measure++;
       if (armOut) armOut.tasks_with_measure++;
       const add = (k: string, v: string) => { for (const sums of [out.measures.sums, armOut?.sums]) if (sums) sums[k] = (sums[k] ?? 0) + Number(v); };
       for (const [, k, v] of m[1].matchAll(/([a-zçğıöşü_]+)=(\d+)/gi)) add(k, v);

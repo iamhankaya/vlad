@@ -78,6 +78,17 @@ describe("auditSetup", () => {
     expect(r.open_points.by_severity).toEqual({ yüksek: 1, düşük: 2, orta: 1 });
   });
 
+  it("measures.expected_tasks counts done developer tasks, so tasks_with_measure reads against the right denominator (F-vlad-164)", () => {
+    role("developer"); role("tester");
+    task({ at: "2026-10-28", role: "developer", closing: report("Ölçüm: dosya=3") });
+    task({ at: "2026-10-28", role: "developer", closing: report("(ölçüm yok)") });
+    task({ at: "2026-10-28", role: "developer", state: "cancelled", closing: report("(ölçüm yok)") }); // cancelled: no report expected
+    task({ at: "2026-10-28", role: "tester", closing: report("(ölçüm yok)") }); // tester roles do not write Ölçüm
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.tasks.total).toBe(4);
+    expect(r.measures).toMatchObject({ tasks_with_measure: 1, expected_tasks: 2, expected_with_measure: 1 });
+  });
+
   it("counts test objections, change rounds, [KARAR] and permission denials with example ids", () => {
     // only the **Soru:** line counts: the answer, the report text and earlier reports quote the phrase too
     const a = task({
