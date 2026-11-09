@@ -33,13 +33,13 @@ describe("config", () => {
     const cfg = loadConfig(repo);
     // roots/brain/machines are per-machine (Mac brain + Windows worker, D-vlad-055); only the machine-independent fields are pinned.
     expect(cfg).toMatchObject({
-      ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit",
+      ignore: ["*-wt", "node_modules", "vlad"], defaultAutonomy: "commit", experiments: { ponytail: "ab" },
       staleAfterHours: 6, launcher: "auto", kbDir: "../vlad-kb", workerAutoCompact: "300k", worktreeDir: "{repo}-wt",
       projects: { watchparty: { autonomy: "commit" }, "ashen-bastion": { autonomy: "pr" } },
     });
     expect(cfg.roots.length).toBeGreaterThan(0);
     expect(Object.keys(cfg).filter((k) => !["roots", "brain", "machines"].includes(k)).sort())
-      .toEqual(["defaultAutonomy", "ignore", "kbDir", "launcher", "projects", "staleAfterHours", "workerAutoCompact", "worktreeDir"]);
+      .toEqual(["defaultAutonomy", "experiments", "ignore", "kbDir", "launcher", "projects", "staleAfterHours", "workerAutoCompact", "worktreeDir"]);
   });
   it("uses schemas of the given home, not VLAD_HOME", () => {
     process.env.VLAD_HOME = mkdtempSync(join(tmpdir(), "vlad-empty-"));
