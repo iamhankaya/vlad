@@ -68,14 +68,20 @@ export function formatScripts(l: ScriptListResult): string {
   return [`${l.platform}  HEAD ${shortSha(l.head)}`, ...rows].join("\n");
 }
 
-export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>): string {
+/** Önerilen komutu yerel kabuğa göre tırnaklar (root=C:\dev zsh'de bozulmasın, boşluklu kök bölünmesin); güvenli karakterler tırnaksız kalır. */
+const shq = (v: string, platform: NodeJS.Platform): string => {
+  if (/^[A-Za-z0-9._\/:=@%+,-]+$/.test(v) && !v.includes("\\")) return v;
+  return platform === "win32" ? `"${v.replace(/"/g, '\\"')}"` : `'${v.replace(/'/g, `'\\''`)}'`;
+};
+
+export function formatPlan(p: Extract<RunOutcome, { kind: "plan" }>, platform: NodeJS.Platform = process.platform): string {
   const ps = Object.entries(p.params).map(([k, v]) => `${k}=${v}`).join(" ") || "(yok)";
   return [
     `plan: ${p.name} @ ${p.machine} (${p.platform}, HEAD ${shortSha(p.head)}, sha ${shortSha(p.sha256)})`,
     `sınıf: ${p.class}${p.class === "write" ? " (kullanıcı onayı gerekir)" : ""}  zaman aşımı: ${p.timeoutSec}s  bütünlük: ${p.integrity}`,
     `parametreler: ${ps}`,
     `plan-id: ${p.planId}`,
-    ...(p.class === "write" ? [`onaydan sonra: vlad machine run ${p.machine} ${p.name} ${Object.entries(p.params).map(([k, v]) => `--param ${k}=${v}`).join(" ")} --confirmed ${p.planId}`.replace(/ {2,}/g, " ")] : []),
+    ...(p.class === "write" ? [["onaydan sonra: vlad machine run", p.machine, p.name, ...Object.entries(p.params).map(([k, v]) => `--param ${shq(`${k}=${v}`, platform)}`), "--confirmed", p.planId].join(" ")] : []),
   ].join("\n");
 }
 

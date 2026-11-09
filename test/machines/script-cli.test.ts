@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RemoteError, type AgentOp, type RemoteTransport, type ScriptInfo, type ScriptListResult, type ScriptRunResult } from "../../src/fleet/types.js";
 import { scriptPlanId } from "../../src/agent/scripts/manifest.js";
-import { formatRun, formatScripts, parseParamFlags, runRemoteScript, stripCtl } from "../../src/machines/script-cli.js";
+import { formatPlan, formatRun, formatScripts, parseParamFlags, runRemoteScript, stripCtl } from "../../src/machines/script-cli.js";
 
 // `vlad machine scripts|run` mantığı (T20261109-07): sahte taşıma ile çağrı sırası, plan-id ve hata biçimleri.
 
@@ -121,5 +121,21 @@ describe("stripCtl / formatRun", () => {
   it("formatRun uzak çıktının kontrol karakterlerini terminale taşımaz", () => {
     const out = formatRun({ kind: "result", opId: "o", replayed: false, uncertain: false, result: res({ stdout: "x\x1b[2Jy\n", data: null }) });
     expect(out).not.toContain("\x1b");
+  });
+});
+
+describe("formatPlan: önerilen onay komutu yerel kabuğa göre tırnaklanır (Codex P2)", () => {
+  const plan = (params: Record<string, string>) => ({ kind: "plan" as const, machine: "windows", name: "repo-guncelle", platform: "win32" as const, head: "b".repeat(40), sha256: H, class: "write" as const, integrity: "ok" as const, timeoutSec: 900, params, planId: "p".repeat(16) });
+  const cmd = (t: string) => t.split("\n").find((l) => l.startsWith("onaydan sonra:"))!;
+  it("POSIX: tek tırnak; ters bölü ve boşluk bölünmez, gömülü tek tırnak kaçar", () => {
+    expect(cmd(formatPlan(plan({ root: "C:\\dev" }), "darwin"))).toContain("--param 'root=C:\\dev'");
+    expect(cmd(formatPlan(plan({ root: "/a b/c" }), "darwin"))).toContain("--param 'root=/a b/c'");
+    expect(cmd(formatPlan(plan({ x: "it's" }), "darwin"))).toContain("--param 'x=it'\\''s'");
+  });
+  it("Windows: çift tırnak", () => {
+    expect(cmd(formatPlan(plan({ root: "C:\\my dev" }), "win32"))).toContain('--param "root=C:\\my dev"');
+  });
+  it("güvenli değerler tırnaksız kalır", () => {
+    expect(cmd(formatPlan(plan({ n: "3" }), "darwin"))).toContain("--param n=3 --confirmed");
   });
 });

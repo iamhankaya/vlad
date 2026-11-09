@@ -122,6 +122,13 @@ describe("runScript (POSIX)", () => {
     expect(r.stdout).toContain(S);
     expect(r.data).toEqual({ ok: true });
   });
+  posix("sonuç satırı gösterim tavanından bağımsız: outputMaxKb=1 iken 3 KiB'lık geçerli sentinel JSON'u kaybolmaz (Codex P2)", async () => {
+    const r = await run(`yes xxxxxxxxxxxxxxxx | head -c 50000; echo; printf '${S} {"ok":true,"blob":"%s"}\\n' "$(head -c 3000 /dev/zero | tr '\\0' 'b')"`, { stdoutCapKb: 1 });
+    expect(r.truncated.stdout).toBe(true);
+    expect(r.dataError).toBeUndefined();
+    expect((r.data as { blob: string }).blob).toHaveLength(3000);
+    expect(Buffer.byteLength(r.stdout)).toBeLessThanOrEqual(1024); // gösterim tavanı değişmez
+  });
   posix("tavan UTF-8 bayttır: Türkçe çıktı ≤ tavan bayt, karakter ortadan kesilmez, truncated doğru", async () => {
     const r = await run(`for i in $(seq 1 3000); do printf 'ğüşiöç'; done; echo; echo '${S} {"ok":true}'`, { stdoutCapKb: 1 });
     expect(r.truncated.stdout).toBe(true);
