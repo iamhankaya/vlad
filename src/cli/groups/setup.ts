@@ -90,7 +90,7 @@ export function registerSetup(program: Command, k: Kit): void {
     } else if (o.join) {
       if (o.answers === "-") return usage("--join anahtarı stdin'den okur: --answers için dosya yolu ya da satır içi JSON ver ('-' olmaz)");
       const brainKey = process.stdin.isTTY ? undefined : readInput("-").trim() || undefined;
-      results = await runJoin(c, { brain: o.join as string, brainHost: o.brainHost as string | undefined, brainPort: o.brainPort ? Number(o.brainPort) : undefined, brainOs: o.brainOs as any, brainKey });
+      results = await runJoin(c, { only, brain: o.join as string, brainHost: o.brainHost as string | undefined, brainPort: o.brainPort ? Number(o.brainPort) : undefined, brainOs: o.brainOs as any, brainKey });
     } else results = await runSetup(c, { only });
 
     const lines = results.flatMap((r) => [`${r.changed ? "●" : "○"} ${r.part}${r.skipped ? ` (atlandı: ${r.skipped})` : ""}`, ...r.actions.map((a) => `    ${a.kind}: ${a.what}`), ...r.backups.map((b) => `    yedek: ${b}`)]);

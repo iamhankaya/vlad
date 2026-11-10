@@ -51,7 +51,7 @@ export const agentPart: SetupPart = {
     const local = readLocal();
     const self = process.env.VLAD_MACHINE || local.self;
     if (!self) return compose("agent", [{ required: "zorunlu", item: item("agent:self", "eksik", "makine kimliği yok (vlad.local.json self)", "vlad setup --only agent") }]);
-    const need = self === cfg.brain ? [self, ...cfg.machines.map((m) => m.name).filter((n) => n !== self)] : [self, cfg.brain!];
+    const need = self === cfg.brain ? [self, ...cfg.machines.map((m) => m.name).filter((n) => n !== self)] : [cfg.brain!]; // işçi yalnız beyinle paylaşılan anahtarı tutar (D-vlad-057)
     return compose("agent", need.map((n) => ({ required: "zorunlu" as const, item: item(`agent:key:${n}`, local.keys[n] ? "ok" : "eksik", local.keys[n] ? `${n} anahtarı var` : `${n} anahtarı yok`, n === self ? `vlad agent keygen ${n}` : self === cfg.brain ? `vlad agent keygen ${n}` : `vlad setup --join ${n}`) })));
   },
   async apply(c) {
