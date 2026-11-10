@@ -2,7 +2,7 @@
 // Kural: apply önce check koşar, ok ise yazmaz; kullanıcı ayarı silinmez/ezilmez (çakışan raporlanır); JSON değişimi yedekli.
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { HOOK_TIMEOUT_S, globalSkillNames, hookCommand, mergeSessionEndHook } from "../install.js";
+import { HOOK_TIMEOUT_S, globalSkillNames, hookCommand, isSessionReportHook, mergeSessionEndHook } from "../install.js";
 import { KB_GITIGNORE } from "../kb/commit.js";
 import { LOCAL_CONFIG_FILE } from "../kb/config-layer.js";
 import { loadConfig } from "../kb/config.js";
@@ -52,7 +52,7 @@ export const globalSkillsPart: SetupPart = {
       const src = join(c.vladHome, "global", "skills", n), dst = join(c.claudeDir, "skills", n);
       const st = compareDirs(src, dst);
       if (st === "ok") continue;
-      if (st === "eski" && !c.dryRun) { const bak = uniqueBackup(join(c.claudeDir, "vlad-backups", n)); cpSync(dst, bak, { recursive: true }); backups.push(bak); acts.push({ kind: "backup", what: `yerel kopya yedeklendi`, target: bak }); }
+      if (existsSync(dst) && !c.dryRun) { const bak = uniqueBackup(join(c.claudeDir, "vlad-backups", n)); cpSync(dst, bak, { recursive: true }); backups.push(bak); acts.push({ kind: "backup", what: `yerel kopya yedeklendi`, target: bak }); }
       acts.push({ kind: "write", what: `skill kopyala: ${n}`, target: dst });
       if (!c.dryRun) cpSync(src, dst, { recursive: true, force: true });
     }
@@ -86,23 +86,24 @@ export const repoSkillsPart: SetupPart = {
     return compose("repo-skills", entries);
   },
   async apply(c) {
-    const acts: ApplyAction[] = [];
+    const acts: ApplyAction[] = [], backups: string[] = [];
     for (const n of DESIGNER) {
       const src = join(c.vladHome, ".claude", "skills", n), dst = join(c.claudeDir, "skills", n);
       if (!existsSync(src)) continue;
       const st = compareDirs(src, dst);
       if (st === "ok") continue;
       if (st === "eski") { acts.push({ kind: "skip", what: `${n}: yerel kopya farklı, dokunulmadı (--upgrade ile eşitlenir)`, target: dst }); continue; }
+      if (existsSync(dst) && !c.dryRun) { const bak = uniqueBackup(join(c.claudeDir, "vlad-backups", n)); cpSync(dst, bak, { recursive: true }); backups.push(bak); acts.push({ kind: "backup", what: `yerel kopya yedeklendi`, target: bak }); }
       acts.push({ kind: "write", what: `designer skill kopyala: ${n}`, target: dst });
       if (!c.dryRun) cpSync(src, dst, { recursive: true });
     }
-    return acts.length ? result("repo-skills", acts) : upToDate("repo-skills");
+    return acts.length ? result("repo-skills", acts, backups) : upToDate("repo-skills");
   },
 };
 
 // ---- hooks ----
 function sessionEndState(data: any, command: string): "ok" | "eksik" | "çakışan" {
-  const hooks = (data?.hooks?.SessionEnd ?? []).flatMap((e: any) => (Array.isArray(e?.hooks) ? e.hooks : [])).filter((h: any) => h?.command === command);
+  const hooks = (data?.hooks?.SessionEnd ?? []).flatMap((e: any) => (Array.isArray(e?.hooks) ? e.hooks : [])).filter((h: any) => h?.command === command || isSessionReportHook(h?.command));
   if (!hooks.length) return "eksik";
   return hooks.some((h: any) => typeof h.timeout === "number" && h.timeout >= HOOK_TIMEOUT_S) ? "ok" : "çakışan";
 }
@@ -128,6 +129,8 @@ export const hooksPart: SetupPart = {
     const cmd = hookCommand(c.vladHome);
     const st = sessionEndState(s.data, cmd);
     if (st === "ok") return upToDate("hooks");
+    // Bağlı worktree'nin yolu hook'a gömülürse worktree silinince hook kırılır: yalnız ana çalışma kopyasından kurulur.
+    if (existsSync(join(c.vladHome, ".git")) && statSync(join(c.vladHome, ".git")).isFile()) return result("hooks", [{ kind: "print", what: "VLAD kökü bir git worktree'si: SessionEnd hook'u yazılmadı (yolu worktree'ye gömülür); setup'ı ana çalışma kopyasından çalıştırın" }]);
     if (st === "çakışan") return result("hooks", [{ kind: "skip", what: "SessionEnd hook'u farklı timeout ile kayıtlı: değiştirilmedi (çakışan)", target: settingsPath(c) }]);
     const r = updateJson(c, settingsPath(c), (d) => mergeSessionEndHook(d, cmd));
     return result("hooks", [{ kind: "write", what: `SessionEnd hook ekle: ${cmd}`, target: settingsPath(c) }], r.backup ? [r.backup] : []);
@@ -244,8 +247,8 @@ export const configPart: SetupPart = {
   async apply(c) {
     const cur = readJsonFile(localPath(c));
     const tracked = readJsonFile(join(c.vladHome, "vlad.config.json")).data;
-    const { overlay, conflicts } = buildOverlay(c, cur.data, tracked, cur.exists);
-    return writeOverlay(c, overlay, conflicts);
+    const { overlay, conflicts, warnings } = buildOverlay(c, cur.data, tracked, cur.exists);
+    return writeOverlay(c, overlay, conflicts, warnings);
   },
   async uninstall(c) {
     if (!existsSync(localPath(c))) return result("config", [{ kind: "skip", what: "yerel katman yok" }]);
@@ -256,11 +259,11 @@ export const configPart: SetupPart = {
 };
 
 /** Yerel katmana birleştirir; çakışan (farklı mevcut) anahtar `--yes` olmadan ezilmez. Yazımdan sonra birleşim doğrulanır, geçersizse geri alınır. */
-export function writeOverlay(c: SetupContext, overlay: Record<string, unknown>, conflicts: string[] = []): ApplyResult {
+export function writeOverlay(c: SetupContext, overlay: Record<string, unknown>, conflicts: string[] = [], warnings: string[] = []): ApplyResult {
   const cur = readJsonFile(localPath(c));
   const blocked = conflicts.filter(() => !c.yes);
   const merged = { ...cur.data, ...Object.fromEntries(Object.entries(overlay).filter(([k]) => !blocked.includes(k))) };
-  const acts: ApplyAction[] = blocked.map((k) => ({ kind: "skip" as const, what: `${k}: yerel katmandaki mevcut değer farklı, dokunulmadı (çakışan; --yes ile ezilir)` }));
+  const acts: ApplyAction[] = [...warnings.map((w) => ({ kind: "print" as const, what: w })), ...blocked.map((k) => ({ kind: "skip" as const, what: `${k}: yerel katmandaki mevcut değer farklı, dokunulmadı (çakışan; --yes ile ezilir)` }))];
   if (JSON.stringify(merged) === JSON.stringify(cur.data)) return acts.length ? result("config", acts) : upToDate("config");
   const wrote: ApplyAction = { kind: "write", what: `${LOCAL_CONFIG_FILE}: ${Object.keys(overlay).filter((k) => !blocked.includes(k)).join(", ")}`, target: localPath(c) };
   if (c.dryRun) return result("config", [...acts, wrote]);

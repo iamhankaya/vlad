@@ -245,7 +245,7 @@ describe("senaryo 8: çok makine ve anahtar", () => {
     await expect(runAddWorker(ctx(), "x", { os: "win32", host: "8.8.8.8" })).rejects.toThrow(/genel adres/);
   });
   it("tek makine: agent parçası n/a", async () => {
-    await runSetup(ctx(ans(), { yes: true }));
+    await runSetup(ctx(ans({ fresh: true }), { yes: true }));
     expect((await runCheck(ctx(), { only: ["agent"] })).parts[0]!.status).toBe("n/a");
   });
 });
@@ -316,7 +316,7 @@ describe("güvenlik kararları (değişiklik turu)", () => {
     const t = jr(join(vladHome, "vlad.config.json"));
     t.machines[1] = { ...t.machines[1], bind: "192.168.1.34", roots: ["C:\\dev"], kbDir: "C:\\dev\\vlad-kb" };
     w(join(vladHome, "vlad.config.json"), JSON.stringify(t));
-    await runSetup(ctx(ans({ role: "worker", machines: "multi", machine: { name: "windows", agent: { host: "192.168.1.77", port: 7437 } } }), { yes: true }), { only: ["config"] });
+    await runSetup(ctx(ans({ fresh: true, role: "worker", machines: "multi", machine: { name: "windows", agent: { host: "192.168.1.77", port: 7437 } } }), { yes: true }), { only: ["config"] });
     const mine = jr(join(vladHome, "vlad.config.local.json")).machines.find((m: { name: string }) => m.name === "windows");
     expect(mine).toEqual({ name: "windows", os: "darwin", agent: { host: "192.168.1.77", port: 7437 } });
   });
@@ -340,5 +340,97 @@ describe("sihirbaz (P1-2, G-bilgi-9)", () => {
     expect(out.role).toBe("brain"); expect(out.machines).toBe("single"); expect(out.kb?.mode).toBe("local");
     expect(prompts.find(([p]) => p.startsWith("kbDir"))![1]).toBeUndefined();
     expect(out.confirm).toEqual(["permissions-write"]);
+  });
+});
+
+// ---- T20261110-21: son kapı P1/P2 ----
+describe("sihirbaz varsayılanları mevcut config'ten tohumlanır (P1)", () => {
+  const enter = async () => "";
+  it("boş Enter sihirbazı sahibin çok makineli tracked config'inde machines/brain'i null'lamaz", async () => {
+    vi.stubEnv("VLAD_MACHINE", "mac");
+    const { interviewAnswers, wizardSeed } = await import("../../src/setup/interactive.js");
+    const raw = await interviewAnswers(enter, "darwin", wizardSeed(vladHome));
+    expect(raw.machines).toBe("multi"); expect(raw.role).toBe("brain"); expect(raw.machine?.name).toBe("mac");
+    await runSetup(ctx({ ...raw, kb: { mode: "local", dir: join(root, "kb") } }, { yes: true }), { only: ["config"] });
+    const lp = join(vladHome, "vlad.config.local.json");
+    const l = existsSync(lp) ? jr(lp) : {};
+    expect(l.machines).not.toBeNull(); expect(l.brain).not.toBeNull(); expect(l.consoles).not.toBeNull();
+  });
+  it("işçi makinede (self≠brain) Enter role=worker verir", async () => {
+    vi.stubEnv("VLAD_MACHINE", "windows");
+    const { interviewAnswers, wizardSeed } = await import("../../src/setup/interactive.js");
+    const raw = await interviewAnswers(enter, "win32", wizardSeed(vladHome));
+    expect(raw.role).toBe("worker"); expect(raw.machines).toBe("multi");
+  });
+  it("tracked çok makineli + machines:single + fresh yok: machines/brain null'lanmaz, uyarı basılır", async () => {
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["config"] });
+    const lp = join(vladHome, "vlad.config.local.json");
+    const l = existsSync(lp) ? jr(lp) : {};
+    expect("machines" in l).toBe(false); expect("brain" in l).toBe(false);
+    expect(rs[0]!.actions.some((a) => a.kind === "print" && /machines/.test(a.what))).toBe(true);
+  });
+  it("fresh:true ile tek makine arkadaş kurulumu hâlâ çalışır (machines/brain null) ve yüksek sesli uyarı verir", async () => {
+    const rs = await runSetup(ctx(ans({ fresh: true }), { yes: true }), { only: ["config"] });
+    const l = jr(join(vladHome, "vlad.config.local.json"));
+    expect(l.machines).toBeNull(); expect(l.brain).toBeNull();
+    expect(rs[0]!.actions.some((a) => a.kind === "print" && /machines/.test(a.what))).toBe(true);
+  });
+});
+
+describe("overlay: host değişiminde sahibin alanları (P2-2)", () => {
+  it("fresh olmadan DHCP ile host değişti: roots/kbDir/bind korunur, host güncellenir, adres değişikliği bildirilir", async () => {
+    const t = jr(join(vladHome, "vlad.config.json"));
+    t.machines[1] = { ...t.machines[1], agent: { ...t.machines[1].agent, bind: "192.168.1.34" }, roots: ["C:\\dev"], kbDir: "C:\\dev\\vlad-kb" };
+    w(join(vladHome, "vlad.config.json"), JSON.stringify(t));
+    const rs = await runSetup(ctx(ans({ role: "worker", machines: "multi", machine: { name: "windows", agent: { host: "192.168.1.77", port: 7437 } } }), { yes: true }), { only: ["config"] });
+    const mine = jr(join(vladHome, "vlad.config.local.json")).machines.find((m: { name: string }) => m.name === "windows");
+    expect(mine.roots).toEqual(["C:\\dev"]); expect(mine.kbDir).toBe("C:\\dev\\vlad-kb"); expect(mine.agent.bind).toBe("192.168.1.34");
+    expect(mine.agent.host).toBe("192.168.1.77");
+    expect(rs[0]!.actions.some((a) => a.kind === "print" && /192\.168\.1\.34/.test(a.what) && /192\.168\.1\.77/.test(a.what))).toBe(true);
+  });
+});
+
+describe("compareDirs / yedek (P2-3)", () => {
+  it("eksik + düzenlenmiş dosya birlikteyse 'eski' döner", async () => {
+    const { compareDirs } = await import("../../src/setup/io.js");
+    w(join(root, "s", "a.md"), "A"); w(join(root, "s", "b.md"), "B");
+    w(join(root, "d", "b.md"), "B-edit"); // a.md eksik (önce gelir), b.md düzenlenmiş
+    expect(compareDirs(join(root, "s"), join(root, "d"))).toBe("eski");
+  });
+  it("global skill: kısmi + düzenlenmiş yerel kopya ezilmeden önce yedeklenir", async () => {
+    const src = join(vladHome, "global", "skills", "vlad-worker");
+    const files = readdirSync(src);
+    expect(files.length).toBeGreaterThan(0);
+    const dst = join(claudeDir, "skills", "vlad-worker");
+    w(join(dst, "SKILL.md"), "BENİM DÜZENLEMEM");
+    await runSetup(ctx(ans(), { yes: true }), { only: ["global-skills"] });
+    const baks = readdirSync(join(claudeDir, "vlad-backups"));
+    expect(baks.length).toBe(1);
+    expect(readFileSync(join(claudeDir, "vlad-backups", baks[0]!, "SKILL.md"), "utf8")).toBe("BENİM DÜZENLEMEM");
+  });
+  it("repo-skills: eksik ama var olan hedef yedeklenir", async () => {
+    const dst = join(claudeDir, "skills", "impeccable");
+    w(join(vladHome, ".claude", "skills", "impeccable", "extra.md"), "E");
+    w(join(dst, "SKILL.md"), "impeccable");
+    await runSetup(ctx(ans(), { yes: true }), { only: ["repo-skills"] });
+    const baks = existsSync(join(claudeDir, "vlad-backups")) ? readdirSync(join(claudeDir, "vlad-backups")) : [];
+    expect(baks.length).toBeGreaterThan(0);
+    expect(existsSync(join(dst, "extra.md"))).toBe(true);
+  });
+});
+
+describe("hook eşleşmesi sonekle, worktree'de reddet (P2-4)", () => {
+  it("başka kök için kayıtlı session-report hook'u varsa ikinci hook eklenmez", async () => {
+    const other = 'node "/baska/yer/vlad/dist/hooks/session-report.js"';
+    w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: other, timeout: 60 }] }] } }));
+    await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    const cmds = jr(settings()).hooks.SessionEnd.flatMap((e: any) => e.hooks.map((h: any) => h.command));
+    expect(cmds).toEqual([other]);
+  });
+  it("vladHome bir git worktree'siyse (.git dosyası) hook yazılmaz, açıklama basılır", async () => {
+    w(join(vladHome, ".git"), "gitdir: /x/.git/worktrees/y");
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    expect(existsSync(settings()) ? JSON.stringify(jr(settings())) : "").not.toContain("session-report");
+    expect(rs[0]!.actions.some((a) => /worktree/i.test(a.what))).toBe(true);
   });
 });

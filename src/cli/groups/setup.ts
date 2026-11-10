@@ -4,7 +4,7 @@ import { createInterface } from "node:readline/promises";
 import { getVladHome } from "../../kb/index.js";
 import { readInput } from "../../kb/input.js";
 import { CONFIRM_ACTIONS, SETUP_EXIT, validateAnswers, type ConfirmAction, type SetupAnswers } from "../../setup/index.js";
-import { interviewAnswers } from "../../setup/interactive.js";
+import { interviewAnswers, wizardSeed } from "../../setup/interactive.js";
 import { buildContext, parseOnly, runAddWorker, runCheck, runJoin, runSetup, runUninstall, runUpgrade } from "../../setup/run.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -57,7 +57,7 @@ export function registerSetup(program: Command, k: Kit): void {
       if (o.answers) raw = readAnswers(o.answers as string);
       else if (process.stdin.isTTY && process.stdout.isTTY && !o.json) {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
-        try { raw = await interviewAnswers(async (p, d) => rl.question(d ? `${p} (${d}): ` : `${p}: `), platform); } finally { rl.close(); }
+        try { raw = await interviewAnswers(async (p, d) => rl.question(d ? `${p} (${d}): ` : `${p}: `), platform, wizardSeed(base.vladHome)); } finally { rl.close(); }
         wizard = true;
       } else return usage("etkileşimsiz ortamda --answers <json|-> gerekli", ["cevap anahtarları: vlad setup --help; örnek: {\"role\":\"brain\",\"machines\":\"single\",\"kb\":{\"mode\":\"local\"},\"roots\":[\"~/dev\"]}"]);
       if (raw !== undefined) {
@@ -89,8 +89,10 @@ export function registerSetup(program: Command, k: Kit): void {
       results = [await runAddWorker(c, nm, { os: os as any, host, port: o.port ? Number(o.port) : aw.machine?.agent?.port, keygen: aw.keys === "generate" })];
     } else if (o.join) {
       if (o.answers === "-") return usage("--join anahtarı stdin'den okur: --answers için dosya yolu ya da satır içi JSON ver ('-' olmaz)");
-      const brainKey = process.stdin.isTTY ? undefined : readInput("-").trim() || undefined;
+      // Anahtar stdin'i yalnız açık --key-stdin ile okunur (yazarı olmayan pipe'ta sonsuz beklemesin).
+      const brainKey = o.keyStdin ? readInput("-").trim() || undefined : undefined;
       results = await runJoin(c, { only, brain: o.join as string, brainHost: o.brainHost as string | undefined, brainPort: o.brainPort ? Number(o.brainPort) : undefined, brainOs: o.brainOs as any, brainKey });
+      if (!o.keyStdin) results.push({ part: "agent", changed: false, actions: [{ kind: "print", what: `beyin anahtarı yazılmadı: anahtarı stdin'den vermek için --key-stdin ekleyin (ör. printf %s "$ANAHTAR" | vlad setup --join ${o.join} --key-stdin ...)` }], backups: [] });
     } else results = await runSetup(c, { only });
 
     const lines = results.flatMap((r) => [`${r.changed ? "●" : "○"} ${r.part}${r.skipped ? ` (atlandı: ${r.skipped})` : ""}`, ...r.actions.map((a) => `    ${a.kind}: ${a.what}`), ...r.backups.map((b) => `    yedek: ${b}`)]);
@@ -105,6 +107,7 @@ export function registerSetup(program: Command, k: Kit): void {
     .option("--upgrade", "git pull sonrası eşitleme (build bilgisi, global skill'ler, hook)")
     .option("--uninstall <parça>", "yalnız VLAD'ın yazdığı girdileri geri al (hooks|global-skills|config)")
     .option("--join <beyin>", "ikinci makine: işçi kurulumu; beyinle paylaşılan anahtar stdin'den")
+    .option("--key-stdin", "--join: beyinle paylaşılan anahtarı stdin'den oku (verilmezse stdin okunmaz, anahtar yazılmaz)")
     .option("--brain-host <ip>", "--join: beyin config'te yoksa özel adresi")
     .option("--brain-port <n>", "--join: beyin Agent portu (7437)")
     .option("--brain-os <os>", "--join: beyin işletim sistemi")

@@ -19,7 +19,7 @@ export function mergeSessionEndHook(settings: any, command: string): any {
   for (const e of end) {
     if (!Array.isArray(e?.hooks)) continue;
     for (const h of e.hooks) {
-      if (h?.command !== command) continue;
+      if (h?.command !== command && !isSessionReportHook(h?.command)) continue;
       found = true;
       if (typeof h.timeout !== "number" || h.timeout < HOOK_TIMEOUT_S) h.timeout = HOOK_TIMEOUT_S;
     }
@@ -47,6 +47,8 @@ function changedInstalledFiles(src: string, dst: string, rel = ""): string[] {
 }
 
 /** SessionEnd hook command for a VLAD root (shared by `vlad install` and `vlad setup`'s hooks part). */
+/** Hook komutu hangi VLAD köküne işaret ederse etsin aynı hook sayılır (worktree'den kurulum ikinci hook eklemesin). */
+export const isSessionReportHook = (command: unknown): boolean => typeof command === "string" && /\/dist\/hooks\/session-report\.js"$/.test(command.replace(/\\/g, "/"));
 export const hookCommand = (home: string): string => `node "${join(home, "dist", "hooks", "session-report.js").replace(/\\/g, "/")}"`;
 
 /** Worker skills of `global/skills/*` (every dir with a SKILL.md). */

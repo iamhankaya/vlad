@@ -23,8 +23,8 @@ export function kbDirFromAnswers(c: SetupContext): string | null {
   return resolve(c.vladHome, kb.dir ? expandHome(kb.dir, c.home) : resolve(c.vladHome, "..", "vlad-kb"));
 }
 
-export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExists: boolean): { overlay: Obj; conflicts: string[] } {
-  const a = c.answers, o: Obj = {};
+export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExists: boolean): { overlay: Obj; conflicts: string[]; warnings: string[] } {
+  const a = c.answers, o: Obj = {}, warnings: string[] = [];
   if (a.roots) o.roots = a.roots.map((r) => resolve(expandHome(r, c.home)));
   const kbDir = kbDirFromAnswers(c);
   if (kbDir) o.kbDir = kbDir;
@@ -38,7 +38,16 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
   if (a.limits?.maxParallel) o.maxParallel = a.limits.maxParallel;
   if (a.experiments?.ponytail) o.experiments = { ponytail: a.experiments.ponytail };
 
-  if (a.machines === "single") for (const k of ["machines", "brain", "consoles"]) if ((cur[k] ?? tracked[k]) !== undefined) o[k] = null;
+  if (a.machines === "single") {
+    // Sahibin çok makineli tracked filosu yalnız açık `fresh: true` ile kapatılır; sihirbaz varsayılanı ("single") filoyu sessizce düşüremez.
+    const trackedFleet = (tracked.machines?.length ?? 0) > 0;
+    if (trackedFleet && a.fresh !== true) warnings.push("machines: 'single' cevabı tracked config'teki çok makineli filoyu kapatmaz (machines/brain/consoles yerel katmana null yazılmadı); arkadaş kurulumu için 'fresh': true verin");
+    else {
+      const nulled = ["machines", "brain", "consoles"].filter((k) => (cur[k] ?? tracked[k]) !== undefined);
+      for (const k of nulled) o[k] = null;
+      if (nulled.length) warnings.push(`UYARI: ${nulled.join("/")} yerel katmanda null'landı (bu makine tek makine olarak çalışır; çok makineli filodan çıkıldı)`);
+    }
+  }
   // Tracked dosyadaki kişisel değerler (experiments/workerAutoCompact/projects) yalnız açık `fresh: true` ile nötrlenir (sezgi yok).
   const friend = a.fresh === true && !localExists;
   if (a.machines === undefined && !localExists && (tracked.machines?.length ?? 0) > 0) {
@@ -53,7 +62,9 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
       const i = base.findIndex((m) => m.name === me.name);
       const mine = { ...me, agent: Object.fromEntries(Object.entries(me.agent).filter(([, v]) => v !== undefined)) as MachineEntry["agent"] };
       // Başkasının makinesi: adres farklıysa ya da fresh ise sahibin kişisel alanları (roots/kbDir/bind/host) kopyalanmaz (F-vlad-294).
-      const foreign = i >= 0 && inTracked && cur.machines === undefined && (a.fresh === true || (!!base[i]!.agent?.host && !!mine.agent.host && base[i]!.agent.host !== mine.agent.host));
+      const foreign = i >= 0 && inTracked && cur.machines === undefined && a.fresh === true;
+      const oldHost = i >= 0 ? base[i]!.agent?.host : undefined;
+      if (!foreign && oldHost && mine.agent.host && oldHost !== mine.agent.host) warnings.push(`${me.name}: agent.host ${oldHost} → ${mine.agent.host} (adres değişti; roots/kbDir/bind korundu; beyin/işçi config'lerindeki adresi de güncelleyin)`);
       base = i >= 0 ? base.map((m, n) => (n === i ? (foreign ? { ...mine, agent: { ...mine.agent, port: mine.agent.port ?? 7437 } } : { ...m, ...mine, agent: { ...m.agent, ...mine.agent } }) : m)) : [...base, { ...mine, agent: { ...mine.agent, port: mine.agent.port ?? 7437 } }];
       o.machines = base;
       if (a.role === "brain") o.brain = me.name;
@@ -71,5 +82,5 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
 
   for (const k of ["machines", "brain"]) if (o[k] !== null && k in o && eq(o[k], tracked[k])) delete o[k]; // tracked ile birebir aynıysa yerel katmana yazma
   const conflicts = Object.keys(o).filter((k) => k in cur && !eq(cur[k], o[k]));
-  return { overlay: o, conflicts };
+  return { overlay: o, conflicts, warnings };
 }
