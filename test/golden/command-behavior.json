@@ -129,7 +129,7 @@
     },
     "single :: kb maintain": {
       "code": 0,
-      "stdout": "{\"dry_run\":true,\"days\":30,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
+      "stdout": "{\"dry_run\":true,\"days\":14,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -426,7 +426,7 @@
     },
     "brain :: kb maintain": {
       "code": 0,
-      "stdout": "{\"dry_run\":true,\"days\":30,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
+      "stdout": "{\"dry_run\":true,\"days\":14,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,
@@ -1614,7 +1614,7 @@
     },
     "forwarded :: kb maintain": {
       "code": 0,
-      "stdout": "{\"dry_run\":true,\"days\":30,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
+      "stdout": "{\"dry_run\":true,\"days\":14,\"decisions\":[],\"tasks\":[],\"findings\":[],\"gitignore_added\":[]}\n",
       "stderr": "",
       "lockTimeout": false,
       "forwardAttempt": false,

@@ -9,7 +9,7 @@ import { kbPaths } from "./home.js";
 import { fencedLines } from "./sections.js";
 import { runGitRaw, isRepo } from "../git/git.js";
 
-export type RefType = "task" | "finding" | "decision" | "journal" | "project";
+export type RefType = "task" | "finding" | "idea" | "decision" | "journal" | "project";
 
 export interface RefMention {
   type: RefType;
@@ -31,7 +31,7 @@ export interface RefCommit { sha: string; date: string; subject: string; repo: s
 export interface RefFlag { code: "fixed_but_open_in_report" | "open_but_done_in_report"; message: string; evidence: string[] }
 export interface RefsResult {
   id: string;
-  type: "task" | "finding" | "decision";
+  type: "task" | "finding" | "idea" | "decision";
   status: string | null;
   project: string | null;
   mentions: RefMention[];
@@ -40,7 +40,7 @@ export interface RefsResult {
   warnings: string[];
 }
 
-const ID_RE = /^(T\d{8}-\d{2,}|F-[a-z0-9-]+-\d+|D-[a-z0-9-]+-\d+)$/;
+const ID_RE = /^(T\d{8}-\d{2,}|F-[a-z0-9-]+-\d+|I-[a-z0-9-]+-\d+|D-[a-z0-9-]+-\d+)$/;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** The id as a whole token: F-vlad-10 must not match inside F-vlad-100 or xF-vlad-10. */
 const tokenRe = (id: string) => new RegExp(`(?<![A-Za-z0-9-])${escapeRe(id)}(?![A-Za-z0-9])`);
@@ -64,6 +64,12 @@ function* sources(): Generator<Source> {
       yield { type: "finding", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path, project: data.project };
     } catch { /* see above */ }
   }
+  for (const path of listMdFiles(p.ideas)) {
+    try {
+      const { data, body } = parseDoc<{ id?: string; state?: string; updated?: string; project?: string }>(readText(path));
+      yield { type: "idea", id: data.id ?? basename(path, ".md"), status: data.state ?? null, date: data.updated ?? null, text: body, path, project: data.project };
+    } catch { /* see above */ }
+  }
   let n = 0;
   for (const { rec, text } of scanDecisions()) {
     yield { type: "decision", id: rec.id || `${rec.file}#${rec.date}#${n++}`, status: rec.id ? rec.status : null, date: rec.date, text, path: rec.path };
@@ -79,14 +85,14 @@ function* sources(): Generator<Source> {
   }
 }
 
-export interface RecordState { type: "task" | "finding" | "decision"; status: string | null; project: string | null }
+export interface RecordState { type: "task" | "finding" | "idea" | "decision"; status: string | null; project: string | null }
 
 /** State of every task, finding and (id'd) decision, archive included, keyed by id. */
 export function recordStates(): Map<string, RecordState> {
   const out = new Map<string, RecordState>();
   for (const s of sources()) {
     if (s.type === "journal" || s.type === "project") break; // sources() yields tasks, findings, decisions first; the rest is not needed (and slow to read)
-    if (s.type === "task" || s.type === "finding") out.set(s.id, { type: s.type, status: s.status, project: s.project ?? null });
+    if (s.type === "task" || s.type === "finding" || s.type === "idea") out.set(s.id, { type: s.type, status: s.status, project: s.project ?? null });
     else if (s.type === "decision" && s.id.startsWith("D-")) out.set(s.id, { type: "decision", status: s.status, project: s.id.replace(/^D-(.+)-\d+$/, "$1") });
   }
   return out;
@@ -181,7 +187,7 @@ function flagsOf(rec: { type: string; status: string | null; updated: string | n
 
 /** Structured reference index of one id: who mentions it (section, status, date), commits that name it, contradiction flags. */
 export function refsOf(id: string): RefsResult {
-  if (!ID_RE.test(id)) throw new Error(`geçersiz ID: ${id} (görev T<YYYYMMDD>-<NN>, bulgu F-<proje>-<NNN> ya da karar D-<proje>-<NNN>)`);
+  if (!ID_RE.test(id)) throw new Error(`geçersiz ID: ${id} (görev T<YYYYMMDD>-<NN>, bulgu F-<proje>-<NNN>, fikir I-<proje>-<NNN> ya da karar D-<proje>-<NNN>)`);
   let type: RefsResult["type"];
   let status: string | null;
   let project: string | null;

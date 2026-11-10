@@ -11,6 +11,12 @@ function sectionLines(md: string): string[] {
   return (end < 0 ? rest : rest.slice(0, end)).split("\n").filter((l) => l.trim().startsWith("-"));
 }
 
+/** First token (the finding id) of each `### Kapatılan bulgular` line; may be abbreviated, callers validate it. */
+export function closedFindingTokens(md: string): string[] {
+  return sectionLines(md).map((line) => line.replace(/^\s*-\s*/, "").split(/\s+[—–-]\s+|\s+—\s+/)[0]!.trim().replace(/[`*]/g, "")).filter(Boolean);
+}
+export const isFullFindingId = (s: string): boolean => FULL_ID.test(s);
+
 /**
  * Warnings for a worker report's `### Kapatılan bulgular` lines: abbreviated/range ids (digest cannot close those),
  * ids with no finding file, ids already closed. Warnings only; a report without the section gets none.

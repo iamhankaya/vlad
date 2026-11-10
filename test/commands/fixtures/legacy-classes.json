@@ -5,6 +5,10 @@
   "decision set",
   "finding add",
   "finding set",
+  "idea add",
+  "idea from-finding",
+  "idea promote",
+  "idea set",
   "inbox done",
   "journal append",
   "kb maintain",
@@ -23,6 +27,7 @@
   "task answer",
   "task ask",
   "task cleanup",
+  "task deny",
   "task deps",
   "task digested",
   "task ingest",
@@ -39,6 +44,7 @@
   "decision set",
   "finding add",
   "finding set",
+  "idea from-finding",
   "kb maintain",
   "project write",
   "task digested",
@@ -58,6 +64,7 @@
   "clip status",
   "decision list",
   "finding list",
+  "idea list",
   "inbox count",
   "inbox list",
   "journal get",
@@ -88,6 +95,7 @@
  ],
  "FORWARD": {
   "task ask": "task.ask",
+  "task deny": "task.log",
   "task log": "task.log",
   "task report": "task.report",
   "task session": "task.session"
@@ -231,6 +239,13 @@
    "path": [
     "task",
     "ask"
+   ],
+   "kind": "write"
+  },
+  {
+   "path": [
+    "task",
+    "deny"
    ],
    "kind": "write"
   },
@@ -538,6 +553,44 @@
     "name"
    ],
    "kind": "read"
+  },
+  {
+   "path": [
+    "idea",
+    "add"
+   ],
+   "kind": "write",
+   "fileFlags": [
+    "--detail-file"
+   ]
+  },
+  {
+   "path": [
+    "idea",
+    "from-finding"
+   ],
+   "kind": "write"
+  },
+  {
+   "path": [
+    "idea",
+    "list"
+   ],
+   "kind": "read"
+  },
+  {
+   "path": [
+    "idea",
+    "promote"
+   ],
+   "kind": "write"
+  },
+  {
+   "path": [
+    "idea",
+    "set"
+   ],
+   "kind": "write"
   }
  ]
 }

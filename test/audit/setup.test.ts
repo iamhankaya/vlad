@@ -175,6 +175,25 @@ describe("auditSetup", () => {
     expect(r.skills.unused).not.toContain("digest");
   });
 
+  it("counts skills the VLAD main session loaded (its own project transcripts), so they are not listed unused", () => {
+    skillDir(".claude/skills", "digest");
+    skillDir(".claude/skills", "status");
+    skillDir(".claude/skills", "scan");
+    const dir = join(cfgDir, "projects", claudeProjectDir(home));
+    mkdirSync(dir, { recursive: true });
+    const use = (skill: string) => JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", name: "Skill", input: { skill } }] } });
+    // the user types /status: the transcript has no Skill tool_use, only the command markup in a user message
+    const slash = (name: string) => JSON.stringify({ type: "user", message: { role: "user", content: `<command-message>${name}</command-message>\n<command-name>/${name}</command-name>` } });
+    writeFileSync(join(dir, "main.jsonl"), [use("digest"), slash("status"), slash("resume")].join("\n") + "\n");
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    const byName = Object.fromEntries(r.skills.inventory.map((s) => [s.name, s]));
+    expect(byName.digest.loaded).toBe(1);
+    expect(byName.status.loaded).toBe(1);
+    expect(r.skills.unused).toContain("scan");
+    expect(r.skills.unused).not.toContain("digest");
+    expect(r.skills.unused).not.toContain("status");
+  });
+
   it("lists unresolved findings oldest first with age in days", () => {
     const f1 = addFinding({ project: "alpha", severity: "yüksek", source: "T20261001-01", title: "eski" }, new Date("2026-09-01T10:00:00+03:00"));
     addFinding({ project: "alpha", severity: "düşük", source: "T20261002-01", title: "yeni" }, new Date("2026-10-30T10:00:00+03:00"));
@@ -353,6 +372,16 @@ describe("auditSetup", () => {
       expect(r.rules.roles.developer).toBe("2026-10-30T10:00:00+03:00");
       expect(r.rules.claude_md).toBeNull(); // not committed in the fixture repo
     });
+  });
+
+  it("lists permission-rule candidates: the same tool+pattern denied in >=2 tasks (T20261110-13)", () => {
+    const L = (tool: string, pat: string) => `- 2026-10-29T10:00:00+03:00 [İZİN] ${tool}: ${pat}`;
+    const a = task({ at: "2026-10-29", progress: [L("PowerShell", "powershell -File build.ps1"), L("PowerShell", "powershell -File build.ps1")] });
+    const b = task({ at: "2026-10-29", progress: [L("PowerShell", "powershell  -File build.ps1 — neden")] });
+    task({ at: "2026-10-29", progress: [L("Bash", "git push origin vlad/x")] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.permission_candidates).toEqual([{ tool: "PowerShell", pattern: "powershell -File build.ps1", tasks: 2, count: 3, examples: [a, b] }]);
+    expect(r.signals.izin_reddi.count).toBe(4); // [İZİN] lines also count as the friction signal
   });
 
   it("rejects an invalid since", () => {

@@ -29,6 +29,24 @@ describe("task list --fields/--limit (F-vlad-094)", { timeout: 30_000 }, () => {
   });
 });
 
+describe("task list --json varsayılan kısa çıktı / --full (T20261110-14)", { timeout: 30_000 }, () => {
+  it("varsayılan: ağır/nadir alanlar yok (role_model, model_reason, integration_worktrees…); --full: eski tam çıktı; --fields: öncelikli", () => {
+    json(["task", "new", "--project", "alpha", "--title", "çatı", "--kind", "pipeline", "--body-file", "-"], "## Tanım\nx\n");
+    const short = json(["task", "list"]).tasks[0];
+    const full = json(["task", "list", "--full"]).tasks[0];
+    // desktop (src/models/task.ts) + skill'lerin okuduğu alanlar kısa çıktıda kalır
+    for (const k of ["id", "project", "title", "kind", "state", "autonomy", "branch", "worktree", "session_id", "error", "role", "parent", "depends_on", "phase", "created", "updated", "effective_model"]) {
+      if (k in full) expect(short, k).toHaveProperty(k);
+    }
+    for (const k of ["role_model", "integration_worktrees", "digested", "model", "model_reason", "report_file", "machine_reserved", "launch_op", "released_ops", "last_green_gate", "experiment"]) expect(short, k).not.toHaveProperty(k);
+    expect(full).toHaveProperty("role_model");
+    expect(full).toHaveProperty("integration_worktrees");
+    expect(JSON.stringify(short).length).toBeLessThan(JSON.stringify(full).length);
+    expect(json(["task", "list", "--fields", "id,role_model"]).tasks[0]).toEqual({ id: short.id, role_model: full.role_model });
+    expect(vlad(["task", "list", "--full", "--fields", "id"]).code).toBe(1); // ikisi birlikte belirsiz
+  });
+});
+
 describe("memory CLI", { timeout: 30_000 }, () => {
   it("decision add/list/set/migrate, kb search and project status/summary work end to end", () => {
     const card = join(home, "card.md");

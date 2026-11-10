@@ -128,8 +128,9 @@ export interface HeldByLimit { id: string; reasons: { machine: string; reason: H
 
 // Kapı işlemleri (brain → worker Agent; push YOK). Gövdeleri sonraki fazlar bağlar; şekil sözleşmedir.
 /** `gate-run`: kartın gate komutunu entegrasyon worktree'sinde koşar (yolu işçi kendi hesaplar). */
-export interface GateRunArgs { taskId: string; project: string; repoName: string; target: "integration" | "task" }
-export interface GateRunResult { exit: number; stdout: string; stderr: string; /** commit the gate ran on (F-vlad-139) */ head?: string; /** HEAD before the gate, set only when the gate moved HEAD (F-vlad-154) */ headBefore?: string }
+/** `target: "base"`: hedef dalın (çatı dalı ya da kartın ana dalı) ucunda koşar; `cachedHead` uçla aynıysa koşmadan `cached: true` döner (task gate --compare-base). */
+export interface GateRunArgs { taskId: string; project: string; repoName: string; target: "integration" | "task" | "base"; cachedHead?: string }
+export interface GateRunResult { exit: number; stdout: string; stderr: string; /** commit the gate ran on (F-vlad-139) */ head?: string; /** HEAD before the gate, set only when the gate moved HEAD (F-vlad-154) */ headBefore?: string; /** base target only: the cached result for `head` is still current, the gate was not rerun */ cached?: boolean }
 /** `merge-preview`: log + diff --stat + merge-tree; yazmaz. */
 export interface MergePreviewArgs { taskId: string; project: string; repoName: string; from: string; into: string }
 export interface MergePreviewResult { log: string; diffStat: string; conflicts: string[] }

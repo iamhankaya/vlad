@@ -11,6 +11,7 @@ import { forwardMap, workerLocalKeys } from "../commands/accessors.js";
 import { consoleExecTimeoutMs } from "./console-catalog.js";
 import { resolveSelf } from "../fleet/registry.js";
 import { readLocal, roleOf, selfName } from "../fleet/state.js";
+import { formatDenyLine } from "../tasks/denials.js";
 
 type WorkerState = { kind: "off" } | { kind: "brain" } | { kind: "worker"; ctx: { cfg: VladConfig; self: string } } | { kind: "unknown"; reason: string };
 
@@ -67,7 +68,10 @@ export async function forwardIfWorker(key: string, args: any[]): Promise<boolean
   const cmd = FORWARD[key];
   if (!cmd) throw new Error("bu makine beyin değil; komut beyinde/konsolda çalıştırılmalı");
   const o = args[args.length - 2] as { json?: boolean; file?: string };
-  const [id, val] = args as [string, string];
+  // `task deny` has no positional text: on a worker it travels as the same `[İZİN]` İlerleme line (task.log); denials.jsonl is brain-only, the audit reads the line
+  const [id, val] = key === "task deny"
+    ? [args[0] as string, formatDenyLine({ tool: (o as any).tool, pattern: (o as any).pattern, reason: (o as any).reason })]
+    : (args as [string, string]);
   const w: WriteArgs = cmd === "task.report" ? { cmd, id, text: readInput(o.file!) } : cmd === "task.session" ? { cmd, id, sessionId: val } : { cmd, id, text: val };
   if (o.json) w.json = true;
   const r = await callLocal<ExecResult | { queued: true; seq: number; opId: string; reason?: string }>(ctx.cfg, ctx.self, "forward-write", w);

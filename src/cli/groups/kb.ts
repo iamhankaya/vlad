@@ -29,23 +29,24 @@ export function registerKb(program: Command, k: Kit): void {
       ...r.decisions.map((d) => `karar: decisions/${d.file}.md ← ${d.blocks} blok`),
       ...r.tasks.map((t) => `görev ${verb}: ${t.from} -> ${t.to}`),
       ...r.findings.map((f) => `bulgu ${verb}: ${f.from} -> ${f.to}`),
+      ...r.ideas.map((f) => `fikir ${verb}: ${f.from} -> ${f.to}`),
       ...r.gitignore_added.map((g) => `.gitignore: ${g} eklen${r.dry_run ? "ecek" : "di"}`),
     ];
     out(o, r, lines.length ? lines.join("\n") : "yapılacak bakım yok");
-  }).option("--days <n>", "bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 30)")
+  }).option("--days <n>", "bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 14)")
     .option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster");
-  def(kb, "get <id>", "Görev (T…) ya da bulguyu (F-…) ID ile okur; arşivdekini de bulur, gerçek yolu verir", (id: string, o: Opts) => {
+  def(kb, "get <id>", "Görev (T…), bulgu (F-…) ya da fikri (I-…) ID ile okur; arşivdekini de bulur, gerçek yolu verir", (id: string, o: Opts) => {
     const r = getKbRecord(id, o.section as string | undefined);
     out(o, r, `${r.file}${r.archived ? " (arşiv)" : ""}\n\n${r.content}`);
   }).option("--section <başlık>", "yalnız bu `## ` bölümünü döndür (ör. \"## Kapanış raporu\")");
-  def(kb, "search <sorgu>", "Sınırlı kb araması (görev bölümü, bulgu, karar bloğu, günlük bölümü; arşiv dahil); tüm kelimeler geçmeli", (query: string, o: Opts) => {
+  def(kb, "search <sorgu>", "Sınırlı kb araması (görev bölümü, bulgu, fikir, karar bloğu, günlük bölümü; arşiv dahil); tüm kelimeler geçmeli", (query: string, o: Opts) => {
     const hits = searchKb({ query, project: o.project as string | undefined, type: o.type as string | undefined, limit: o.limit === undefined ? undefined : Number(o.limit) });
     out(o, { hits }, hits.map((h) => `${h.id}  ${h.type}  ${h.status ?? "-"}  ${h.date ?? "-"}${h.section ? `  ${h.section}` : ""}\n  ${h.snippet}\n  ${h.path}`).join("\n") || "eşleşme yok");
   })
     .option("--project <slug>", "yalnız bu proje")
-    .option("--type <tür>", "task | finding | decision | journal")
+    .option("--type <tür>", "task | finding | idea | decision | journal")
     .option("--limit <n>", "en çok bu kadar sonuç", "8");
-  def(kb, "refs <id>", "ID'ye (T…, F-…, D-…) atıf yapan kayıtları bölüm/durum/tarihle, ilgili commit'leri ve çelişki işaretlerini listeler", (id: string, o: Opts) => {
+  def(kb, "refs <id>", "ID'ye (T…, F-…, I-…, D-…) atıf yapan kayıtları bölüm/durum/tarihle, ilgili commit'leri ve çelişki işaretlerini listeler", (id: string, o: Opts) => {
     const r = refsOf(id);
     out(o, r, formatRefs(r));
   });

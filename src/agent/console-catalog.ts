@@ -49,7 +49,7 @@ export function validateConsoleArgv(argv: string[], stdin?: string): { entry: Ca
       if (t.includes("=") || argv[i + 1] !== "-") throw new RemoteError("forbidden", `forbidden: ${name} değeri yalnız '-' olabilir (içerik stdin ile)`);
       if (stdin === undefined) throw new RemoteError("bad_request", `bad_request: ${name} - için stdin gerekli`);
       i++;
-    } else if (/^--[a-z-]*file$/.test(name)) throw new RemoteError("forbidden", `forbidden: ${name} bu komutta kullanılamaz`);
+    } else if (name === "--phase-body" || /^--[a-z-]*file$/.test(name)) throw new RemoteError("forbidden", `forbidden: ${name} bu komutta kullanılamaz`);
   }
   return { entry };
 }

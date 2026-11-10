@@ -124,9 +124,11 @@ function mergeRefs(task: Task, into?: string): { from: string; into: string } {
   return { from: `vlad/${task.data.id}`, into: to };
 }
 
-export async function remoteGateRun(transport: RemoteTransport, machine: string, task: Task, target: "integration" | "task"): Promise<GateRunResult> {
-  return (await transport.call<GateRunResult>(machine, "gate-run", { ...gateIds(task), target }, { timeoutMs: GATE_CALL_TIMEOUT_MS })).result;
+export async function remoteGateRun(transport: RemoteTransport, machine: string, task: Task, target: "integration" | "task" | "base", cachedHead?: string): Promise<GateRunResult> {
+  return (await transport.call<GateRunResult>(machine, "gate-run", { ...gateIds(task), target, ...(cachedHead ? { cachedHead } : {}) }, { timeoutMs: GATE_CALL_TIMEOUT_MS })).result;
 }
+/** Taban dalı (gate --compare-base): faz → vlad/<çatı>, diğerleri → kartın ana dalı; mergeRefs ile aynı eşleme. */
+export const baseBranchOf = (task: Task): string => mergeRefs(task).into;
 export async function remoteMergePreview(transport: RemoteTransport, machine: string, task: Task, o: { into?: string } = {}): Promise<MergePreviewResult> {
   return (await transport.call<MergePreviewResult>(machine, "merge-preview", { ...gateIds(task), ...mergeRefs(task, o.into) })).result;
 }

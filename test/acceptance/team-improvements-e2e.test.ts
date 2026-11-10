@@ -288,13 +288,13 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
   const read = (p: string) => readFileSync(join(root, p), "utf8");
   const help = (args: string[]) => run(home, [...args, "--help"], { env: NO_CLOUD_ENV }).out;
 
-  it("CLAUDE.md komut listesi, `vlad --help` komutlarıyla birebir örtüşür", () => {
-    const line = read("CLAUDE.md").split("\n").find((l) => l.startsWith("Kullanılabilir komutlar:"))!;
+  it("docs/commands.md komut listesi, `vlad --help` komutlarıyla birebir örtüşür", () => {
+    // the list moved out of CLAUDE.md into the generated reference (T20261110-09); one "- `vlad <path>`" bullet per command
     const documented = new Set<string>();
-    for (const m of line.matchAll(/`vlad ([a-z]+)(?: ((?:[a-z-]+\|?)+))?/g)) {
-      const subs = (m[2] ?? "").split("|").filter(Boolean);
-      if (!subs.length) documented.add(m[1]);
-      for (const s of subs) documented.add(`${m[1]} ${s}`);
+    for (const m of read("docs/commands.md").matchAll(/^- `vlad ([a-z -]+)`/gm)) {
+      const parts = m[1].split(" ");
+      // `digest pending add|list|done` are leaves of a nested group; --help below only lists two levels, so compare at that depth
+      documented.add(parts.length > 2 ? parts.slice(0, 2).join(" ") : m[1]);
     }
     const actual = new Set<string>();
     const top = [...help([]).matchAll(/^  ([a-z]+)\b/gm)].map((m) => m[1]).filter((c) => c !== "help");
@@ -302,11 +302,11 @@ describe("doküman tutarlılığı (makinece denetlenebilenler)", () => {
       const sub = [...help([c]).split("Commands:")[1]?.matchAll(/^  ([a-z-]+)\b/gm) ?? []].map((m) => m[1]).filter((s) => s !== "help");
       if (!sub.length) actual.add(c); else for (const s of sub) actual.add(`${c} ${s}`);
     }
-    expect([...actual].filter((c) => !documented.has(c)), "CLI'da olup CLAUDE.md'de olmayan").toEqual([]);
-    expect([...documented].filter((c) => !actual.has(c)), "CLAUDE.md'de olup CLI'da olmayan").toEqual([]);
+    expect([...actual].filter((c) => !documented.has(c)), "CLI'da olup docs/commands.md'de olmayan").toEqual([]);
+    expect([...documented].filter((c) => !actual.has(c)), "docs/commands.md'de olup CLI'da olmayan").toEqual([]);
   }, 120_000); // her komut grubu için ayrı süreç açılır; çok makineli komutlarla 30 sn yetmiyor
-  it("CLAUDE.md `project set` alan listesi, CLI'ın kabul ettiği alanlarla aynı", () => {
-    const m = /`set` alanları: ([^—)]*)/.exec(read("CLAUDE.md"))![1];
+  it("docs/commands.md `project set` alan listesi, CLI'ın kabul ettiği alanlarla aynı", () => {
+    const m = /`vlad project set` — Kart alanını yazar: ([^(]*)/.exec(read("docs/commands.md"))![1];
     const doc = m.split(",").map((x) => x.replace(/[`\s]/g, ""));
     const cli = /\(([a-z_|]+)\); boş/.exec(help(["project", "set"]).replace(/\s+/g, " "))![1].split("|");
     for (const f of cli) expect(doc, f).toContain(f);

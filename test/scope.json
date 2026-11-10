@@ -73,6 +73,7 @@
         "src/menu/**",
         "src/audit/**",
         "src/findings/**",
+        "src/ideas/**",
         "src/hooks/**",
         "src/inbox/**",
         "src/mode/**",

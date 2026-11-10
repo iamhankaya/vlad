@@ -73,7 +73,7 @@ Ardından **bildirim gönder** (adım 7; gönder, olmazsa logla) ve cevabı bekl
 
 **İzin kalıpları:** `settings.json` izin kuralları komutun tamamıyla eşleşir (her biri ayrı kural: `Bash(git push origin vlad/*)`, `Bash(git push -u origin vlad/*)`, `Bash(gh run list *)`, `Bash(gh run view *)`, `Bash(gh run watch *)`, `Bash(gh run rerun *)`, `Bash(gh run download *)`, `Bash(gh workflow run * --ref vlad/*)`; `gh workflow run` yalnız görev istiyorsa). Bu yüzden push ve `gh run`/`gh workflow run` komutlarını tek başına çalıştır; `cd <dizin> &&` ya da `&&`/`;` zinciri kurma (dizin için `git -C <yol>`). Reddedilirse komutu başka biçimde zorlama, `vlad task ask` ile sor; VLAD kullanıcı onayıyla push eder (çalışan kendi izin ayarını değiştirmez). `vlad setup` bu allow kalıplarını yazarken `permissions.deny`'ya `Bash(git push * --force*)`, `Bash(git push * -f *)`, `Bash(git push * --delete*)` ve `Bash(git push *:*)` da ekler (allow `*` ile --force/--delete/çoklu ref'i de eşlerdi); bunlar kullanıcı düzeyindedir ve TÜM Claude oturumlarına geçerlidir. Safeguard/oturum kesintisinde iş kaybolmasın diye checkpoint kuralını (WIP commit + "kaldığım yer") uygula.
 
-**İzin/sınıflayıcı reddi kaydı:** bir komut izin kuralı ya da auto-mode sınıflayıcısı tarafından reddedilir/engellenirse önce `vlad task log <id> "İzin reddi: <komut> — <neden>"` yaz, sonra `vlad task ask` ile sor. `vlad audit setup` bu satırı `izin_reddi` sinyali olarak sayar; kayıtsız ret denetimde görünmez. Açık soru varken işi bitirip rapor yazarsan `vlad task report` yine çalışır (görev `blocked`'tan `awaiting_approval`'a geçer, İlerleme'ye not düşer); yine de bildirimi (adım 7) gönder.
+**İzin/sınıflayıcı reddi kaydı:** bir komut izin kuralı ya da auto-mode sınıflayıcısı tarafından reddedilir/engellenirse önce `vlad task deny <id> --tool <Bash|PowerShell|...> --pattern "<reddedilen komut>" [--reason "<neden>"]` çalıştır (İlerleme'ye `[İZİN]` satırı + `kb/logs/denials.jsonl`; işçide beyne iletilir), sonra `vlad task ask` ile sor. `vlad audit setup` bu satırı `izin_reddi` sinyali olarak sayar ve aynı araç+kalıbın ≥2 görevde reddini "izin kuralı adayı" (`permission_candidates`) listeler; kayıtsız ret denetimde görünmez. `deny` çalışmazsa eski yol: `vlad task log <id> "İzin reddi: <komut> — <neden>"`. Açık soru varken işi bitirip rapor yazarsan `vlad task report` yine çalışır (görev `blocked`'tan `awaiting_approval`'a geçer, İlerleme'ye not düşer); yine de bildirimi (adım 7) gönder.
 
 ## 6. Kapanış raporu
 
@@ -97,8 +97,8 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 (yalnız bu görev bir bulguyu kapattıysa, görevin amacı o olmasa da; launch prompt'undaki "Projenin açık bulguları" listesine bak: dokunduğun alanda düzelttiğin bulgu varsa yaz. Her satır: `- F-<proje>-NNN — fixed|zaten düzelmiş — kanıt (commit <sha> ya da dosya:satır)`. **Tam ID zorunlu**: aralık/kısaltma (`F-014,017-024`, `F-024`, `#24`) yasak; commit mesajlarında da tam ID kullan. Bölüm yoksa digest eski yoldan (rapor metninde ID arama) kapatır; kısaltılmış ID'yi digest kapatmaz, onaya taşır)
 ### Test itirazı (hızlı yol)
 (yalnız developer rolünde ve yalnız hızlı yolla mekanik test düzeltmesi yaptıysan: `- <test yol:satır> — ne değişti, gerekçe, commit`; yoksa bölümü yazma)
-### CLAUDE.md komut satırı önerisi
-(yalnız yeni CLI komutu/alt komutu/bayrağı eklediysen: `CLAUDE.md` "Kullanılabilir komutlar" satırına girecek tam metin; yoksa bölümü yazma. `CLAUDE.md`'yi görev istemedikçe kendin düzenleme)
+### Komut açıklaması
+(yalnız yeni CLI komutu/alt komutu/bayrağı eklediysen: açıklamayı `src/commands/docs-data.ts`'e (gerekirse manifeste) ekle, `npm run build && npm run docs:commands` ile `docs/commands.md`'yi üret; test eksiği yakalar. Raporda yalnız hangi komutların eklendiğini tek satırla yaz; `CLAUDE.md`'yi görev istemedikçe kendin düzenleme)
 ```
 ve:
 ```
