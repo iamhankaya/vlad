@@ -82,9 +82,9 @@ describe("skills/ references and de-duplication", () => {
     }
   });
 
-  it("the tiered security rule lives only in status; delegate and the security-reviewer role refer to it", () => {
-    expect(read(".claude/skills/status/SKILL.md")).toContain("Kademeli güvenlik kuralı");
-    expect(read(".claude/skills/delegate/SKILL.md")).not.toContain("**Kademeli güvenlik kuralı:**");
+  it("the tiered security rule lives only in integrate K1; status, delegate and the security-reviewer role refer to it", () => {
+    expect(read(".claude/skills/integrate/SKILL.md")).toContain("Güvenlik incelemesi (kademeli)");
+    for (const f of ["status", "delegate"]) expect(read(`.claude/skills/${f}/SKILL.md`), f).not.toContain("Kademeli güvenlik kuralı");
     expect(read(".claude/skills/delegate/SKILL.md")).toContain("security-reviewer");
   });
 
@@ -111,9 +111,9 @@ describe("skills/ references and de-duplication", () => {
 describe("kb lint cache refresh (F-vlad-182)", () => {
   it("/digest §5c and the /status morning report both run `vlad kb lint` (the cache `status --summary` reads)", () => {
     expect(read(".claude/skills/digest/SKILL.md")).toMatch(/### 5c[\s\S]*vlad kb lint --json/);
-    const status = read(".claude/skills/status/SKILL.md");
-    const night = status.slice(status.indexOf("### Gece / yetki modu"), status.indexOf("### Retro"));
-    expect(night, "morning report step in the night-mode section").toMatch(/Sabah raporu[\s\S]*vlad kb lint --json/);
+    const integrate = read(".claude/skills/integrate/SKILL.md");
+    expect(integrate.slice(integrate.indexOf("**K8 — ")), "morning report step (integrate K8)").toMatch(/Sabah raporu[\s\S]*vlad kb lint --json/);
+    expect(read(".claude/skills/status/SKILL.md")).toMatch(/\*\*sabah raporu\*\* `integrate` K7–K8/);
   });
 });
 
