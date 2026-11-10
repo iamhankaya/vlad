@@ -1,6 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { getVladHome } from "./home.js";
+import { readConfigLayers } from "./config-layer.js";
 import { validate } from "./schema.js";
 import type { Autonomy, VladConfig } from "./types.js";
 
@@ -22,17 +21,9 @@ export function autoCompactTokens(v: string): number {
   return m ? Number(m[1]) * (m[2] ? (m[2].toLowerCase() === "k" ? 1e3 : 1e6) : 1) : NaN;
 }
 
-/** Defaults overlaid with <home>/vlad.config.json (shallow), then validated. */
+/** Defaults overlaid with <home>/vlad.config.json and the local overlay vlad.config.local.json (shallow, null deletes), then validated. */
 export function loadConfig(home: string = getVladHome()): VladConfig {
-  const file = join(home, "vlad.config.json");
-  let user: object = {};
-  if (existsSync(file)) {
-    try {
-      user = JSON.parse(readFileSync(file, "utf8"));
-    } catch (e) {
-      throw new Error(`config okunamadı (${file}): ${(e as Error).message}`);
-    }
-  }
+  const user = readConfigLayers(home);
   const cfg = { ...defaultConfig(), ...user } as VladConfig;
   validate("config", cfg, home);
   if (cfg.workerAutoCompact) {

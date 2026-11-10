@@ -2,7 +2,7 @@ import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync,
 import { join } from "node:path";
 
 /** Claude Code's default SessionEnd hook timeout is 1.5 s; our hook can need ~6 s. */
-const HOOK_TIMEOUT_S = 10;
+export const HOOK_TIMEOUT_S = 10;
 
 /**
  * Returns a copy of Claude Code `settings` with `{ hooks: [{ type: "command", command, timeout: 10 }] }`
@@ -31,7 +31,7 @@ export function mergeSessionEndHook(settings: any, command: string): any {
 
 const pad = (n: number) => String(n).padStart(2, "0");
 /** Local-time stamp for backup names: YYYYMMDDTHHmmss. */
-function stamp(d: Date): string {
+export function stamp(d: Date): string {
   return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
@@ -44,6 +44,15 @@ function changedInstalledFiles(src: string, dst: string, rel = ""): string[] {
     else if (existsSync(join(dst, r)) && !readFileSync(join(src, r)).equals(readFileSync(join(dst, r)))) out.push(r);
   }
   return out;
+}
+
+/** SessionEnd hook command for a VLAD root (shared by `vlad install` and `vlad setup`'s hooks part). */
+export const hookCommand = (home: string): string => `node "${join(home, "dist", "hooks", "session-report.js").replace(/\\/g, "/")}"`;
+
+/** Worker skills of `global/skills/*` (every dir with a SKILL.md). */
+export function globalSkillNames(home: string): string[] {
+  const dir = join(home, "global", "skills");
+  return existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(dir, d.name, "SKILL.md"))).map((d) => d.name) : [];
 }
 
 export interface InstallOptions {
@@ -61,7 +70,7 @@ export interface InstallOptions {
 export function installGlobal(o: InstallOptions): { actions: string[] } {
   const actions: string[] = [];
   const settingsPath = join(o.claudeDir, "settings.json");
-  const command = `node "${join(o.home, "dist", "hooks", "session-report.js").replace(/\\/g, "/")}"`;
+  const command = hookCommand(o.home);
   const skillsSrc = join(o.home, "global", "skills");
   const workerSrc = join(skillsSrc, "vlad-worker");
 
@@ -97,9 +106,7 @@ export function installGlobal(o: InstallOptions): { actions: string[] } {
   }
 
   // every dir with a SKILL.md is a worker skill (vlad-worker, ci-triage, …)
-  const names = readdirSync(skillsSrc, { withFileTypes: true })
-    .filter((d) => d.isDirectory() && existsSync(join(skillsSrc, d.name, "SKILL.md")))
-    .map((d) => d.name);
+  const names = globalSkillNames(o.home);
   for (const name of names) {
     const src = join(skillsSrc, name);
     const dst = join(o.claudeDir, "skills", name);

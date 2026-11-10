@@ -1,11 +1,12 @@
-// Config overlay okuyucu sözleşmesi (T20261110-03). Gövde uygulama fazında (4a): `vlad.config.json` (tracked) üstüne
-// `vlad.config.local.json` (gitignored) sığ birleşim, `null` anahtarı siler, birleşim `config` şemasıyla doğrulanır.
-// `src/kb/config.ts:27`, `src/kb/home.ts:20`, `src/agent/forward.ts:21` bu tek fonksiyona geçer (üçü aynı sonucu verir).
+// Config overlay okuyucusu (T20261110-03 sözleşmesi, T20261110-05 gövde). Birleşim `src/kb/config-layer.ts`'te (kb katmanı setup'ı import edemez);
+// `src/kb/config.ts:27` loadConfig, `src/kb/home.ts` resolveKbDir ve `src/agent/forward.ts` workerState aynı birleşimi kullanır.
+import { getVladHome } from "../kb/home.js";
+import { loadConfig } from "../kb/config.js";
 import type { VladConfig } from "../kb/types.js";
 
-export const LOCAL_CONFIG_FILE = "vlad.config.local.json";
+export { LOCAL_CONFIG_FILE } from "../kb/config-layer.js";
 
-/** Overlay yokken sonuç bugünkü `loadConfig(home)` ile derin eşit olmalıdır (kullanıcının kurulumu değişmez). */
-export function loadLayeredConfig(_home?: string): VladConfig {
-  throw new Error("not implemented: loadLayeredConfig (uygulama fazı 4a)");
+/** Overlay yokken sonuç bugünkü `loadConfig(home)` ile derin eşit olur (kullanıcının kurulumu değişmez). */
+export function loadLayeredConfig(home: string = getVladHome()): VladConfig {
+  return loadConfig(home);
 }

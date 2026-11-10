@@ -70,16 +70,16 @@ describe("S8: beyin Mac + işçi Windows, çift anahtar", () => {
 });
 
 describe("S9: Linux", () => {
-  it("role=brain: 'desteklenmiyor', çıkış 1; --allow-unsupported ile uyarıyla devam", () => {
+  it("role=brain: 'desteklenmiyor', çıkış 1; bayrak yok (kullanıcı kararı 2026-11-10: Linux'ta beyin hiçbir bayrakla kurulmaz)", () => {
     const sb = makeSandbox({ platform: "linux" });
     const a = sb.answers(s1Answers(sb));
     const r = sb.run(["setup", "--yes", "--answers", a]);
     expect(r.code).toBe(1);
     expect(r.err + r.out).toMatch(/desteklenmiyor/);
     expect(existsSync(join(sb.vladHome, "vlad.config.local.json"))).toBe(false);
-    const ok = sb.run(["setup", "--yes", "--allow-unsupported", "--answers", a]);
-    expect(ok.code, ok.err + ok.out).toBe(0);
-    expect(ok.err + ok.out).toMatch(/desteklenmiyor|deneysel/);
+    const flag = sb.run(["setup", "--yes", "--allow-unsupported", "--answers", a]);
+    expect(flag.code).not.toBe(0); // --allow-unsupported kaldırıldı
+    expect(existsSync(join(sb.vladHome, "vlad.config.local.json"))).toBe(false);
   });
   it("role=worker: Agent oto-başlatma kurulmaz; --check yeşil ama 'deneysel' satırı", () => {
     const sb = makeSandbox({ platform: "linux" });

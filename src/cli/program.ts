@@ -18,6 +18,7 @@ import { registerAgent } from "./groups/agent.js";
 import { registerMachine } from "./groups/machine.js";
 import { registerTransfer } from "./groups/transfer.js";
 import { registerInstall } from "./groups/install.js";
+import { registerSetup } from "./groups/setup.js";
 
 export { failWith, handleParseError, pendingHelpOf } from "./ctx.js";
 export type { CliCtx } from "./ctx.js";
@@ -53,5 +54,6 @@ export function buildProgram(ctx: CliCtx): Command {
   registerMachine(program, kit);
   registerTransfer(program, kit);
   registerInstall(program, kit);
+  registerSetup(program, kit);
   return program;
 }

@@ -1,6 +1,6 @@
 # VLAD
 
-Claude Code için dosya tabanlı "ana akıl": tüm projelerinin hafızası ve iş dağıtıcısı. Tek bir kalıcı Claude Code session'ı (`C:\dev\vlad`) projeleri `kb/` dosyalarından tanır, geliştirme işlerini git worktree'lerinde açılan görünür çalışan session'larına devreder ve `vlad` CLI ile takip eder.
+Claude Code için dosya tabanlı "ana akıl": tüm projelerinin hafızası ve iş dağıtıcısı. Tek bir kalıcı Claude Code session'ı (`<vlad-klasörü>`) projeleri `kb/` dosyalarından tanır, geliştirme işlerini git worktree'lerinde açılan görünür çalışan session'larına devreder ve `vlad` CLI ile takip eder.
 
 Tasarım: [`docs/superpowers/specs/2026-10-15-vlad-core-design.md`](docs/superpowers/specs/2026-10-15-vlad-core-design.md)
 
@@ -12,7 +12,7 @@ Tasarım: [`docs/superpowers/specs/2026-10-15-vlad-core-design.md`](docs/superpo
 ## Kurulum
 
 ```
-cd C:\dev\vlad
+cd <vlad-klasörü>
 npm i
 npm run build
 npm link            # vlad komutunu global PATH'e ekler
@@ -29,10 +29,39 @@ Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterH
 
 `vlad task ready --parent <id>` sınıra uyan fazları `tasks`, sınır yüzünden bekleyenleri `held_by_limit` olarak verir. `vlad task resume <id>` kesilmiş (`running`/`stalled`) bir çalışan için devam bilgisi üretir: yerelde worktree/branch/kirli ağaç kontrolü ve devam prompt'u, bulutta `send_message` argümanları.
 
+## Yeni makine / arkadaş kurulumu (`vlad setup`)
+
+`vlad setup` bir makineyi sıfırdan hazırlar; `vlad setup --check` salt okuma doktordur (hangi parça eksik/eski/çakışan, düzeltme komutu). Kişisel veriler tracked `vlad.config.json`'a değil gitignored `vlad.config.local.json`'a yazılır (tracked dosyanın üstüne sığ birleşir, `null` anahtarı siler); sırlar (`vlad.local.json` anahtarları) git'e ve çıktıya girmez. Arkadaş kurulumu **boş kb** ile başlar; sizin kartlarınız/kararlarınız taşınmaz.
+
+Ön koşul: Node 22+, git 2.38+, `claude`, macOS/Windows için tmux (Mac) / PowerShell (Windows). Linux: işçi deneysel; beyin hiçbir bayrakla kurulmaz.
+
+**1. Tek makine (Mac ya da Windows)**
+```
+git clone <vlad-repo-url> ~/dev/vlad && cd ~/dev/vlad     # Windows: <vlad-klasörü>
+npm i && npm run build
+node dist/cli.js setup --answers cevaplar.json --yes      # Windows: node dist\cli.js setup ...
+node dist/cli.js setup --check
+```
+`cevaplar.json` örneği (anahtarlar `vlad setup --help` ve `src/setup/questions.ts`; sır konmaz):
+```
+{"role":"brain","machines":"single","kb":{"mode":"local","dir":"~/dev/vlad-kb"},"roots":["~/dev"]}
+```
+TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yerel git), `path` (var olan klasör), `existing` (var olan repoyu klonla; `kb.remote`), `github-new` (gh ile yeni **private** repo; yalnız `--confirm kb-repo-create` ile, ilk push ayrıdır).
+
+**2. İkinci makine (beyin + işçi)**
+- Beyinde: `vlad setup --answers beyin.json` (`"machines":"multi","machine":{"name":"mac","agent":{"host":"<özel LAN IP>"}},"keys":"generate"`; komuta `--confirm keygen` ekleyin), sonra `vlad setup --add-worker windows --host <işçi IP> --os win32`, anahtarı `vlad agent keygen windows --show` ile alın.
+- İşçide: `vlad setup --answers isci.json --join mac --brain-host <beyin IP> --brain-os darwin` ve anahtarı stdin'den verin (`printf %s "$ANAHTAR" | vlad setup --answers isci.json --join mac ...`; `--answers` dosya yolu olmalı, `-` stdin'i anahtara bırakın). Agent adresleri yalnız özel ağ (RFC1918/loopback) olabilir.
+- Doğrulama: iki uçta `vlad setup --check`, beyinde `vlad machine list` / `vlad machine ping <ad>`.
+
+**3. Sonradan**
+- `git pull` sonrası: `npm i && npm run build && vlad setup --upgrade` (global skill farkı gösterilir; yerel değişiklik `.bak-` olarak yedeklenir).
+- Geri alma: `vlad setup --uninstall hooks|global-skills|config` (yalnız VLAD'ın yazdığı girdiler; kb, anahtarlar ve kendi izinleriniz dokunulmaz).
+- `--dry-run` hiçbir şeye dokunmaz; yeniden koşu idempotenttir (zaten güncel ise hiçbir şey yazılmaz). `~/.claude/settings.json` değişiminden önce `settings.json.bak-<zaman>` alınır; mevcut ayarlarınız (model, hook, izin, autoMode) silinmez. Çalışan push/CI izinleri ve `additionalDirectories` yalnız `"perms":true`/`"claudedirs":true` **ve** `--confirm permissions-write` ile yazılır; geniş kalıp (`Bash(*)`) yazılmaz. **Dikkat:** bu push kalıpları kullanıcı düzeyindedir, **tüm Claude oturumlarınıza** geçerli olur; `--force`/`--delete`/çoklu ref biçimlerini kapatmak için `permissions.deny`'ya `Bash(git push * --force*)`, `Bash(git push * -f *)`, `Bash(git push * --delete*)`, `Bash(git push *:*)` da eklenir (mevcut deny korunur). Dış etkili eylem onayları (`kb-repo-create`, `keygen`, `agent-install`, `mac-main-install`, `permissions-write`, `plugins-write`) yalnız `--confirm a,b` bayrağı ya da TTY sorusuyla verilir; `--answers` dosyasındaki `confirm` reddedilir. Tracked config'teki kişisel değerleri (`experiments`, `workerAutoCompact`, `projects`) yerel katmanda nötrlemek için cevaba açıkça `"fresh":true` yazın. `vlad install` geri uyum için durur.
+
 ## Günlük kullanım
 
 ```
-cd C:\dev\vlad
+cd <vlad-klasörü>
 claude
 ```
 
@@ -59,9 +88,9 @@ Push, PR ve merge her zaman açık onayınla yapılır.
 
 ## kb deposu (ayrı private repo)
 
-`kb/` ayrı bir private repoda tutulur: `iamhankaya/vlad-kb`. vlad CLI kb'yi şu sırayla bulur: `VLAD_KB_DIR` ortam değişkeni → `vlad.config.json`'daki `kbDir` (VLAD_HOME'a göre göreli ya da mutlak; varsayılan config `"../vlad-kb"`) → geriye uyum için `<VLAD_HOME>/kb`. `schemas/` ve `roles/` VLAD_HOME'da kalır.
+`kb/` ayrı bir private repoda tutulur: `<kullanıcı>/vlad-kb`. vlad CLI kb'yi şu sırayla bulur: `VLAD_KB_DIR` ortam değişkeni → `vlad.config.json`'daki `kbDir` (VLAD_HOME'a göre göreli ya da mutlak; varsayılan config `"../vlad-kb"`) → geriye uyum için `<VLAD_HOME>/kb`. `schemas/` ve `roles/` VLAD_HOME'da kalır.
 
-Kurulum: Windows'ta `git clone https://github.com/iamhankaya/vlad-kb C:\dev\vlad-kb`; Linux/bulutta `git clone https://github.com/iamhankaya/vlad-kb ~/vlad-kb` (VLAD_HOME `~/vlad` ise aynı göreli yol). Klon yoksa CLI "kb deposu bulunamadı" hatası ve klon komutunu verir.
+Kurulum: Windows'ta `git clone https://github.com/<kullanıcı>/vlad-kb <kb-klasörü>`; Linux/bulutta `git clone https://github.com/<kullanıcı>/vlad-kb ~/vlad-kb` (VLAD_HOME `~/vlad` ise aynı göreli yol). Klon yoksa CLI "kb deposu bulunamadı" hatası ve klon komutunu verir.
 
 kb reposunun `.gitignore`'ı şu satırları içermelidir (yoksa `vlad kb commit` uyarır):
 ```

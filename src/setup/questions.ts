@@ -37,7 +37,7 @@ export const QUESTIONS: readonly Question[] = [
 
 const ROLES = ["brain", "worker"], MACHINES = ["single", "multi"], KB_MODES = ["local", "github-new", "existing", "path"], MODELS = ["haiku", "sonnet", "opus"];
 const LAUNCHERS = ["auto", "wt", "powershell", "tmux", "terminal", "cloud"], AUTONOMY = ["plan", "commit", "pr"];
-const NAME = /^[a-z][a-z0-9-]*$/, HOST = /^[A-Za-z0-9][A-Za-z0-9.-]*$/, REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, IPV4 = /^\d+\.\d+\.\d+\.\d+$/;
+const NAME = /^[a-z][a-z0-9-]*$/, HOST = /^[A-Za-z0-9][A-Za-z0-9.-]*$/, REPO = /^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/, IPV4 = /^\d+\.\d+\.\d+\.\d+$/;
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Şekil + çapraz kural doğrulaması; ilk hatada durmaz, hepsini yol ile listeler. Cevap değeri mesaja girmez. */
@@ -57,7 +57,7 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
   const bool = (v: unknown, p: string) => { if (v !== undefined && typeof v !== "boolean") e(p, "boolean olmalı"); };
   const strList = (v: unknown, p: string) => { if (v !== undefined && !(Array.isArray(v) && v.every((x) => typeof x === "string" && x))) e(p, "boş olmayan metin listesi olmalı"); };
 
-  known(raw, ["role", "machines", "machine", "keys", "kb", "cloud", "roots", "worktreeDir", "ignore", "models", "ctx", "limits", "launcher", "autonomy", "experiments", "plugins", "perms", "claudedirs", "mainsession", "agentboot", "digest", "lang", "confirm"], "");
+  known(raw, ["role", "machines", "machine", "keys", "kb", "cloud", "roots", "worktreeDir", "ignore", "models", "ctx", "limits", "launcher", "autonomy", "experiments", "plugins", "perms", "claudedirs", "mainsession", "agentboot", "digest", "lang", "confirm", "fresh"], "");
   oneOf(raw.role, ROLES, "role");
   oneOf(raw.machines, MACHINES, "machines");
   if (raw.keys !== undefined && raw.keys !== "generate" && raw.keys !== "stdin") e("keys", "yalnız 'generate' ya da 'stdin' (anahtar değeri cevap dosyasına konmaz)");
@@ -65,7 +65,7 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
   oneOf(raw.autonomy, AUTONOMY, "autonomy");
   oneOf(raw.lang, ["tr"], "lang");
   strList(raw.roots, "roots"); strList(raw.ignore, "ignore"); strList(raw.plugins, "plugins");
-  bool(raw.perms, "perms"); bool(raw.claudedirs, "claudedirs"); bool(raw.mainsession, "mainsession"); bool(raw.agentboot, "agentboot");
+  bool(raw.fresh, "fresh"); bool(raw.perms, "perms"); bool(raw.claudedirs, "claudedirs"); bool(raw.mainsession, "mainsession"); bool(raw.agentboot, "agentboot");
   if (typeof raw.worktreeDir === "string") { try { checkWorktreeDir(raw.worktreeDir, "worktreeDir"); } catch { e("worktreeDir", "{repo} tam repo yoludur; önüne yol koyma"); } }
   else if (raw.worktreeDir !== undefined) e("worktreeDir", "metin olmalı");
 
@@ -80,6 +80,7 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
           const h = machine.agent[k];
           if (h === undefined) continue;
           if (typeof h !== "string" || !HOST.test(h)) e(`machine.agent.${k}`, "geçerli host/IP olmalı");
+          else if (k === "host" && !IPV4.test(h)) e("machine.agent.host", "özel ağ IPv4 adresi olmalı (ad/hostname kabul edilmez)");
           else if (IPV4.test(h) && !PRIVATE_V4.some((r) => r.test(h))) e(`machine.agent.${k}`, "genel adres reddedilir (yalnız loopback/RFC1918/link-local)");
         }
         const p = machine.agent.port;
@@ -90,7 +91,7 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
   const kb = sub("kb", ["mode", "dir", "remote", "push"]);
   if (kb) {
     oneOf(kb.mode, KB_MODES, "kb.mode");
-    if (kb.remote !== undefined && !(typeof kb.remote === "string" && REPO.test(kb.remote))) e("kb.remote", "owner/name olmalı");
+    if (kb.remote !== undefined && !(typeof kb.remote === "string" && REPO.test(kb.remote) && !kb.remote.includes(".."))) e("kb.remote", "owner/name olmalı");
     if (kb.dir !== undefined && !(typeof kb.dir === "string" && kb.dir)) e("kb.dir", "boş olmayan yol olmalı");
     bool(kb.push, "kb.push");
     if ((kb.mode === "github-new" || kb.mode === "existing") && kb.remote === undefined) e("kb.remote", `kb.mode=${kb.mode} için zorunlu`);
@@ -127,7 +128,7 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
   const multi = raw.machines === "multi";
   if (multi && !(machine && machine.name !== undefined)) e("machine.name", "machines=multi için zorunlu");
   if (raw.role === "worker" && raw.machines !== "multi") e("role", "worker yalnız machines=multi ile (işçi beyne bağlanır)");
-  if (opts.platform === "linux" && raw.role === "brain" && !opts.allowUnsupported) e("role", "linux'ta beyin desteklenmiyor (devam için allowUnsupported)");
+  if (opts.platform === "linux" && raw.role === "brain") e("role", "linux'ta beyin desteklenmiyor (Linux yalnız işçi olarak, deneysel)");
 
   return errors.length ? { ok: false, errors } : { ok: true, answers: raw as SetupAnswers };
 }

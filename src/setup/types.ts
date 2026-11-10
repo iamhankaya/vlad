@@ -44,7 +44,7 @@ export interface SetupCheckResult {
 }
 
 /** Açık onay isteyen eylemler; `--yes` bunları ATLAMAZ, `--answers.confirm` içinde adıyla listelenmeli. */
-export const CONFIRM_ACTIONS = ["kb-repo-create", "keygen", "agent-install", "mac-main-install", "permissions-write"] as const;
+export const CONFIRM_ACTIONS = ["kb-repo-create", "keygen", "agent-install", "mac-main-install", "permissions-write", "plugins-write"] as const;
 export type ConfirmAction = (typeof CONFIRM_ACTIONS)[number];
 
 // ---- Envanter / manifest ---------------------------------------------------
@@ -134,6 +134,8 @@ export interface SetupAnswers {
   agentboot?: boolean;
   digest?: { daily?: boolean };
   lang?: "tr";
+  /** Yalnız bu makinede, açıkça: tracked config'teki kişisel değerleri (experiments/workerAutoCompact/projects) yerel katmanda nötrler. */
+  fresh?: boolean;
   confirm?: ConfirmAction[];
 }
 export type AnswerValidation = { ok: true; answers: SetupAnswers } | { ok: false; errors: string[] };
