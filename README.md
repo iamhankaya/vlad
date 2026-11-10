@@ -46,7 +46,7 @@ node dist/cli.js setup --check
 ```
 {"role":"brain","machines":"single","kb":{"mode":"local","dir":"~/dev/vlad-kb"},"roots":["~/dev"]}
 ```
-TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yerel git), `path` (var olan klasör), `existing` (var olan repoyu klonla; `kb.remote`), `github-new` (gh ile yeni **private** repo; yalnız `"confirm":["kb-repo-create"]` ile, ilk push ayrıdır).
+TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yerel git), `path` (var olan klasör), `existing` (var olan repoyu klonla; `kb.remote`), `github-new` (gh ile yeni **private** repo; yalnız `--confirm kb-repo-create` ile, ilk push ayrıdır).
 
 **2. İkinci makine (beyin + işçi)**
 - Beyinde: `vlad setup --answers beyin.json` (`"machines":"multi","machine":{"name":"mac","agent":{"host":"<özel LAN IP>"}},"keys":"generate","confirm":["keygen"]`), sonra `vlad setup --add-worker windows --host <işçi IP> --os win32`, anahtarı `vlad agent keygen windows --show` ile alın.

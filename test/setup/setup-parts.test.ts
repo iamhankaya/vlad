@@ -22,6 +22,7 @@ const fake: Runner = (cmd, args, o) => {
   if (cmd === "claude") return { ok: true, code: 0, stdout: "usage: claude --autocompact <n>", stderr: "" };
   if (cmd === "git" && args[0] === "--version") return { ok: true, code: 0, stdout: "git version 2.50.0", stderr: "" };
   if (cmd === "git" && args[0] === "init") { mkdirSync(join(o?.cwd ?? ".", ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
+  if (cmd === "gh" && args[0] === "repo" && args[1] === "clone") { mkdirSync(join(args[3]!, ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
   if (cmd === "git" && args[0] === "clone") { mkdirSync(join(args[2]!, ".git"), { recursive: true }); return { ok: true, code: 0, stdout: "", stderr: "" }; }
   if (cmd === "gh" && args[0] === "repo" && args[1] === "view" && args[2]!.startsWith("denied/")) return { ok: false, code: 1, stdout: "", stderr: "not found" };
   if (cmd === "git" && args[0] === "ls-remote") return args[1]!.includes("denied/") ? { ok: false, code: 128, stdout: "", stderr: "no access" } : { ok: true, code: 0, stdout: "", stderr: "" };
@@ -55,7 +56,7 @@ const snapshot = (dir: string): Record<string, string> => {
 
 describe("senaryo 1: tek makine, yerel kb", () => {
   it("settings + skill + overlay + kb yazılır; arkadaşa maintainer'ın makineleri/projeleri taşınmaz; sonra --check yeşil", async () => {
-    await runSetup(ctx(ans(), { yes: true }));
+    await runSetup(ctx(ans({ fresh: true }), { yes: true }));
     expect(jr(settings()).hooks.SessionEnd[0].hooks[0].command).toContain("session-report.js");
     for (const n of ["vlad-worker", "ci-triage"]) expect(existsSync(join(claudeDir, "skills", n, "SKILL.md"))).toBe(true);
     const local = jr(join(vladHome, "vlad.config.local.json"));
@@ -155,9 +156,18 @@ describe("inceleme düzeltmeleri", () => {
     await expect(runSetup(ctx(ans({ perms: true, confirm: ["permissions-write"] }), { yes: true }), { only: ["permissions"] })).rejects.toThrow(/dizi/);
     expect(jr(settings()).permissions.allow).toBe("x");
   });
+  it("--join: machine.name yoksa baştan hata, hiçbir şey yazılmaz (P1-1)", async () => {
+    await expect(runJoin(ctx(ans(), { yes: true }), { brain: "boss", brainHost: "192.168.1.5", brainOs: "darwin" })).rejects.toThrow(/machine\.name/);
+    expect(existsSync(join(vladHome, "vlad.config.local.json"))).toBe(false);
+  });
+  it("agent.apply makine adı yoksa self'e dokunmaz", async () => {
+    const f = join(root, "vlad.local.json"); writeFileSync(f, JSON.stringify({ self: "keep", keys: {} }));
+    await expect(runSetup(ctx({ role: "brain", machines: "multi" } as SetupAnswers, { yes: true }), { only: ["agent"] })).rejects.toThrow();
+    expect(jr(f).self).toBe("keep");
+  });
   it("--join: ad/hostname reddedilir, port aralığı doğrulanır", async () => {
-    await expect(runJoin(ctx(ans({ confirm: ["keygen"] }), { yes: true }), { brain: "boss", brainHost: "boss.example.com", brainPort: 7437, brainOs: "darwin" } as never)).rejects.toThrow(/IPv4/);
-    await expect(runJoin(ctx(ans({ confirm: ["keygen"] }), { yes: true }), { brain: "boss", brainHost: "192.168.1.5", brainPort: 80, brainOs: "darwin" } as never)).rejects.toThrow(/1024/);
+    await expect(runJoin(ctx(ans({ machine: { name: "friend-pc" } }), { yes: true }), { brain: "boss", brainHost: "boss.example.com", brainPort: 7437, brainOs: "darwin" } as never)).rejects.toThrow(/IPv4/);
+    await expect(runJoin(ctx(ans({ machine: { name: "friend-pc" } }), { yes: true }), { brain: "boss", brainHost: "192.168.1.5", brainPort: 80, brainOs: "darwin" } as never)).rejects.toThrow(/1024/);
   });
   it("--uninstall config silmeden önce yedek bırakır", async () => {
     await runSetup(ctx(ans(), { yes: true }), { only: ["config"] });
@@ -181,7 +191,7 @@ describe("senaryo 11: kb modları", () => {
     await expect(runSetup(ctx(ans({ kb: { mode: "existing", dir: join(root, "kb3"), remote: "denied/x" } })), { only: ["kb"] })).rejects.toThrow(/erişilemiyor/);
     expect(existsSync(join(root, "kb3"))).toBe(false);
     await runSetup(ctx(ans({ kb: { mode: "existing", dir: join(root, "kb3"), remote: "me/vlad-kb" } })), { only: ["kb"] });
-    expect(calls.some((c) => c[0] === "git" && c[1] === "clone")).toBe(true);
+    expect(calls.some((c) => c[0] === "gh" && c[1] === "repo" && c[2] === "clone")).toBe(true);
   });
   it("path: git deposu olmayan dizin reddedilir", async () => {
     mkdirSync(join(root, "plain"));
@@ -207,14 +217,14 @@ describe("senaryo 12/dry-run: mevcut kurulum bozulmaz", () => {
 describe("senaryo 8: çok makine ve anahtar", () => {
   const MULTI = (name: string, role: "brain" | "worker", host: string): SetupAnswers => ({ role, machines: "multi", machine: { name, agent: { host } }, kb: { mode: "local", dir: join(root, "kb") }, roots: ["~/dev"], ...(role === "brain" ? { keys: "generate" as const } : {}) });
   it("beyin: işçi eklenir, anahtar yalnız onayla üretilir, çıktıda 64-hex yok, vlad.local.json 0600", async () => {
-    const a = { ...MULTI("mac", "brain", "192.168.1.35"), confirm: ["keygen" as const] };
+    const a = { ...MULTI("mbp", "brain", "192.168.1.35"), confirm: ["keygen" as const] };
     const res = await runSetup(ctx(a, { yes: true }));
-    await runAddWorker(ctx(a, { yes: true }), "windows", { os: "win32", host: "192.168.1.34" });
+    await runAddWorker(ctx(a, { yes: true }), "pc2", { os: "win32", host: "192.168.1.34" });
     const local = jr(join(vladHome, "vlad.config.local.json"));
-    expect(local.brain).toBe("mac"); expect(local.machines.map((m: any) => m.name)).toEqual(["mac", "windows"]);
+    expect(local.brain).toBe("mbp"); expect(local.machines.map((m: any) => m.name)).toEqual(["mbp", "pc2"]);
     await runSetup(ctx(a, { yes: true }), { only: ["agent"] });
     const lf = jr(join(root, "vlad.local.json"));
-    expect(lf.self).toBe("mac"); expect(Object.keys(lf.keys).sort()).toEqual(["mac", "windows"]);
+    expect(lf.self).toBe("mbp"); expect(Object.keys(lf.keys).sort()).toEqual(["mbp", "pc2"]);
     expect(statSync(join(root, "vlad.local.json")).mode & 0o777).toBe(0o600);
     expect(JSON.stringify(res)).not.toMatch(/[0-9a-f]{64}/);
   });
@@ -257,5 +267,62 @@ describe("geri alma ve parça seçimi", () => {
   });
   it("--uninstall desteklemeyen parça hata verir", async () => {
     await expect(runUninstall(ctx(), "kb")).rejects.toThrow(/desteklenmiyor/);
+  });
+});
+
+describe("güvenlik kararları (değişiklik turu)", () => {
+  const perms = () => ans({ perms: true, confirm: ["permissions-write"] });
+  it("izinler: deny kalıpları eklenir, var olan deny korunur", async () => {
+    w(settings(), JSON.stringify({ permissions: { deny: ["Bash(rm -rf *)"] } }));
+    await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+    const d = jr(settings()).permissions.deny;
+    expect(d).toEqual(["Bash(rm -rf *)", "Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)"]);
+  });
+  it("onay metni push kalıbının tüm Claude oturumlarına geçerli olduğunu söyler", async () => {
+    const r = await runSetup(ctx(ans({ perms: true }), { yes: true }), { only: ["permissions"] });
+    expect(r[0]!.actions[0]!.what).toMatch(/TÜM Claude oturumlarına/);
+  });
+  it("plugins: bilinmeyen pazar yeri plugins-write olmadan etkinleşmez", async () => {
+    await runSetup(ctx(ans({ plugins: ["x@bilinmeyen"] }), { yes: true }), { only: ["plugins"] });
+    expect(existsSync(settings()) ? (jr(settings()).enabledPlugins ?? {})["x@bilinmeyen"] : undefined).toBeUndefined();
+    await runSetup(ctx(ans({ plugins: ["x@bilinmeyen"], confirm: ["plugins-write"] }), { yes: true }), { only: ["plugins"] });
+    expect(jr(settings()).enabledPlugins["x@bilinmeyen"]).toBe(true);
+  });
+  it("yerel config yedekleri ve dosyası .gitignore'da (/vlad.config.local.json*)", () => {
+    expect(readFileSync(join(repo, ".gitignore"), "utf8")).toContain("/vlad.config.local.json*");
+  });
+  it("yeni yazılan yerel config 0600", async () => {
+    await runSetup(ctx(ans(), { yes: true }), { only: ["config"] });
+    if (process.platform !== "win32") expect(statSync(join(vladHome, "vlad.config.local.json")).mode & 0o777).toBe(0o600);
+  });
+  it("tracked ile birebir aynı machines/brain yerel katmana yazılmaz (F-P2-5)", async () => {
+    await runSetup(ctx(MULTI_MAC(), { yes: true }), { only: ["config"] });
+    const l = jr(join(vladHome, "vlad.config.local.json"));
+    expect(l.machines).toBeUndefined(); expect(l.brain).toBeUndefined();
+  });
+  it("fresh olmadan tracked kişisel değerler nötrlenmez; fresh:true ile nötrlenir (F-P2-3)", async () => {
+    await runSetup(ctx(ans(), { yes: true }), { only: ["config"] });
+    expect(jr(join(vladHome, "vlad.config.local.json")).projects).toBeUndefined();
+  });
+  it("machines cevapsız + tracked çok makineli + self tanımsız: açık hata (P1-2)", async () => {
+    const a = ans(); delete a.machines;
+    await expect(runSetup(ctx(a, { yes: true }), { only: ["config"] })).rejects.toThrow(/machines/);
+  });
+  it("answers host ad/hostname reddedilir (validateAnswers)", async () => {
+    const { validateAnswers } = await import("../../src/setup/index.js");
+    expect(validateAnswers({ ...SINGLE, machines: "multi", machine: { name: "x", agent: { host: "pc.local" } } }, { platform: "darwin" }).ok).toBe(false);
+    expect(validateAnswers({ ...SINGLE, kb: { mode: "existing", remote: "../x/y" } }, { platform: "darwin" }).ok).toBe(false);
+  });
+});
+const MULTI_MAC = (): SetupAnswers => ({ role: "brain", machines: "multi", machine: { name: "mac", agent: { host: "192.168.1.35", port: 7437 } }, kb: { mode: "local", dir: join(root, "kb") }, roots: ["~/dev"] });
+
+describe("sihirbaz (P1-2, G-bilgi-9)", () => {
+  it("Enter: choice varsayılanı uygulanır; sözde varsayılan parantezle gösterilmez; onay soruları açıkça sorulur", async () => {
+    const { interviewAnswers } = await import("../../src/setup/interactive.js");
+    const prompts: [string, string | undefined][] = [];
+    const out = await interviewAnswers(async (p, d) => { prompts.push([p, d]); return /^Onay: permissions-write/.test(p) ? "e" : p.startsWith("Çalışan push/CI izinleri") ? "e" : ""; }, "darwin");
+    expect(out.role).toBe("brain"); expect(out.machines).toBe("single"); expect(out.kb?.mode).toBe("local");
+    expect(prompts.find(([p]) => p.startsWith("kbDir"))![1]).toBeUndefined();
+    expect(out.confirm).toEqual(["permissions-write"]);
   });
 });

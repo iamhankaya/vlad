@@ -20,8 +20,8 @@ beforeEach(() => {
   writeFileSync(join(vh, ".claude", "settings.json"), JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ command: "x status --summary --hook" }] }] } }));
 });
 afterEach(() => rmTemp(base));
-const vlad = (args: string[], input?: string) => {
-  const r = spawnGuarded("node", [cli, ...args], { encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: vh, VLAD_CLAUDE_DIR: claude, HOME: join(base, "home"), VLAD_LOCAL_FILE: join(base, "vlad.local.json"), VLAD_NO_NATIVE: "1" } });
+const vlad = (args: string[], input?: string, extra: Record<string, string> = {}) => {
+  const r = spawnGuarded("node", [cli, ...args], { encoding: "utf8", input, env: { ...isolatedEnv(), VLAD_HOME: vh, VLAD_CLAUDE_DIR: claude, HOME: join(base, "home"), VLAD_LOCAL_FILE: join(base, "vlad.local.json"), VLAD_NO_NATIVE: "1", ...extra } });
   return { code: r.status, out: r.stdout, err: r.stderr };
 };
 const answers = () => JSON.stringify({ role: "brain", machines: "single", kb: { mode: "local", dir: join(base, "kb") }, roots: [join(base, "home", "dev")] });
@@ -60,5 +60,20 @@ describe("vlad setup CLI", () => {
   it("--dry-run hiçbir şey yazmaz", () => {
     vlad(["setup", "--answers", answers(), "--dry-run"]);
     expect(existsSync(claude)).toBe(false); expect(existsSync(join(vh, "vlad.config.local.json"))).toBe(false);
+  });
+});
+
+describe("güvenlik kararları (T20261110-05 değişiklik turu)", () => {
+  it("--answers içindeki confirm reddedilir (çıkış 2); bilinmeyen --confirm eylemi reddedilir", () => {
+    const a = JSON.parse(answers());
+    const bad = vlad(["setup", "--yes", "--answers", JSON.stringify({ ...a, confirm: ["permissions-write"] })]);
+    expect(bad.code).toBe(2); expect(bad.err).toMatch(/--confirm/);
+    expect(vlad(["setup", "--yes", "--confirm", "rm-rf", "--answers", JSON.stringify(a)]).code).toBe(2);
+  });
+  it("VLAD_SETUP_PLATFORM test ortamı dışında yok sayılır", () => {
+    const r = vlad(["setup", "--check", "--json"], undefined, { VLAD_SETUP_PLATFORM: "linux", VLAD_TEST: "", NODE_ENV: "production" });
+    expect(JSON.parse(r.out).platform).toBe(process.platform);
+    const t = vlad(["setup", "--check", "--json"], undefined, { VLAD_SETUP_PLATFORM: "linux", VLAD_TEST: "1" });
+    expect(JSON.parse(t.out).platform).toBe("linux");
   });
 });

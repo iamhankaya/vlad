@@ -67,7 +67,7 @@ describe("setup sözleşmesi: parça arayüzü", () => {
     expect(typeof p.check).toBe("function");
   });
   it("onay gerektiren eylem kümesi sabit", () => {
-    expect([...CONFIRM_ACTIONS].sort()).toEqual(["agent-install", "kb-repo-create", "keygen", "mac-main-install", "permissions-write"]);
+    expect([...CONFIRM_ACTIONS].sort()).toEqual(["agent-install", "kb-repo-create", "keygen", "mac-main-install", "permissions-write", "plugins-write"]);
   });
 });
 
@@ -123,9 +123,9 @@ describe("setup sözleşmesi: --answers doğrulayıcı", () => {
   it("role=worker tek makineyle çelişir", () => {
     expect(errs(validateAnswers({ ...s1, role: "worker" }, { platform: "darwin" }))).toContain("role");
   });
-  it("Linux'ta role=brain reddedilir (kullanıcı kararı 2026-11-10), allowUnsupported ile geçer; worker geçer", () => {
+  it("Linux'ta role=brain reddedilir (kullanıcı kararı 2026-11-10; allowUnsupported etkisiz); worker geçer", () => {
     expect(errs(validateAnswers(s1, { platform: "linux" }))).toContain("linux");
-    expect(validateAnswers(s1, { platform: "linux", allowUnsupported: true }).ok).toBe(true);
+    expect(validateAnswers(s1, { platform: "linux", allowUnsupported: true }).ok).toBe(false); // bayrak artık etkisiz
     const w = { ...s1, role: "worker", machines: "multi", machine: { name: "pi", agent: { host: "10.0.0.5", port: 7437 } } };
     expect(validateAnswers(w, { platform: "linux" }).ok).toBe(true);
   });

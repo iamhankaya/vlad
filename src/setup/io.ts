@@ -48,8 +48,8 @@ export function writeAtomic(path: string, text: string): void {
   let target = path, mode: number | undefined;
   try { target = realpathSync(path); mode = statSync(target).mode & 0o777; } catch { /* yeni dosya */ } // symlink'li settings.json düz dosyaya dönmez, izin korunur
   mkdirSync(dirname(target), { recursive: true });
-  const tmp = `${target}.${process.pid}.tmp`;
-  writeFileSync(tmp, text, { encoding: "utf8", ...(mode !== undefined ? { mode } : {}) });
+  const tmp = `${target}.${process.pid}.${Date.now()}.tmp`;
+  writeFileSync(tmp, text, { encoding: "utf8", mode: mode ?? 0o600, flag: "wx" }); // yeni dosya yalnız sahibine açık; var olanın izni korunur
   renameSync(tmp, target);
 }
 /** JSON dosyasını yapısal günceller: değişmediyse yazmaz (idempotens), değiştiyse önce `<dosya>.bak-<stamp>` yedeği alır. */

@@ -1,6 +1,7 @@
 // Cevaplardan `vlad.config.local.json` katmanı (T20261110-05). Saf: dosya/ağ yok. Kural: yalnız cevaplanan anahtarlar yazılır;
 // tracked dosyadaki kişisel değerler yalnız ilk kurulumda (yerel katman yokken) ve yalnız cevap vermeyen anahtarlar için nötrlenir.
 import { resolve } from "node:path";
+import { readLocal } from "../fleet/state.js";
 import { expandHome } from "./io.js";
 import type { SetupContext } from "./types.js";
 
@@ -38,13 +39,16 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
   if (a.experiments?.ponytail) o.experiments = { ponytail: a.experiments.ponytail };
 
   if (a.machines === "single") for (const k of ["machines", "brain", "consoles"]) if ((cur[k] ?? tracked[k]) !== undefined) o[k] = null;
-  let friend = false; // ilk kurulumda tracked dosyadaki kişisel değerler yalnız bu makine açıkça başka bir kuruluma geçiyorsa nötrlenir
-  if (a.machines === "single") friend = !localExists && tracked.machines !== undefined;
+  // Tracked dosyadaki kişisel değerler (experiments/workerAutoCompact/projects) yalnız açık `fresh: true` ile nötrlenir (sezgi yok).
+  const friend = a.fresh === true && !localExists;
+  if (a.machines === undefined && !localExists && (tracked.machines?.length ?? 0) > 0) {
+    const self = process.env.VLAD_MACHINE || readLocal().self;
+    if (!self || !tracked.machines.some((m: MachineEntry) => m.name === self)) throw new Error("tracked config çok makineli ve bu makine onda tanımlı değil: 'machines' cevabını (single|multi) açıkça ver");
+  }
   if (a.machines === "multi") {
     const me = selfEntry(c);
     if (me) {
       const inTracked = (tracked.machines ?? []).some((m: MachineEntry) => m.name === me.name);
-      friend = !localExists && !inTracked;
       let base: MachineEntry[] = cur.machines ?? (inTracked ? tracked.machines : []);
       const i = base.findIndex((m) => m.name === me.name);
       const mine = { ...me, agent: Object.fromEntries(Object.entries(me.agent).filter(([, v]) => v !== undefined)) as MachineEntry["agent"] };
@@ -63,6 +67,7 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
   }
   if (friend) for (const k of ["experiments", "workerAutoCompact", "projects"]) if (!(k in o) && tracked[k] !== undefined) o[k] = null;
 
+  for (const k of ["machines", "brain"]) if (o[k] !== null && k in o && eq(o[k], tracked[k])) delete o[k]; // tracked ile birebir aynıysa yerel katmana yazma
   const conflicts = Object.keys(o).filter((k) => k in cur && !eq(cur[k], o[k]));
   return { overlay: o, conflicts };
 }

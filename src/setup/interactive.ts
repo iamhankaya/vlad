@@ -27,12 +27,23 @@ export async function interviewAnswers(ask: Ask, platform: string): Promise<Setu
     if (/^(machine\.|keys)/.test(q.id) && out.machines !== "multi") continue;
     if (q.id === "role" && platform === "linux") { out.role = "worker"; continue; }
     const opts = q.choices ? ` [${q.choices.join("/")}]` : "";
-    const raw = (await ask(`${q.prompt}${opts}`, q.default)).trim();
+    // Gerçek varsayılan yalnız choice tipinde ve geçerli bir seçenekse uygulanır/gösterilir; "hostname (küçük harf)" gibi sözde varsayılanlar parantezsiz.
+    const realDef = q.type === "choice" && q.default !== undefined && q.choices?.includes(q.default) ? q.default : undefined;
+    const raw = (await ask(`${q.prompt}${opts}`, realDef)).trim();
     if (raw) setPath(out, q.id, coerce(q, raw));
+    else if (realDef !== undefined) setPath(out, q.id, realDef);
   }
   if (out.machines === "multi") {
     const host = (await ask("Bu makinenin özel LAN adresi (Agent host)", "")).trim();
     if (host) setPath(out, "machine.agent.host", host);
   }
+  // Dış etkili eylemler tek tek, açıkça sorulur (varsayılan hayır); onay yalnız bu oturum için geçerlidir.
+  const need: [string, boolean][] = [
+    ["kb-repo-create", out.kb?.mode === "github-new"], ["keygen", out.machines === "multi" && out.keys === "generate"], ["agent-install", out.agentboot === true],
+    ["mac-main-install", out.mainsession === true], ["permissions-write", out.perms === true || out.claudedirs === true], ["plugins-write", (out.plugins ?? []).some((p: string) => p.includes("@"))],
+  ];
+  const confirm: string[] = [];
+  for (const [id, wanted] of need) if (wanted && /^(e|evet|y|yes)$/i.test((await ask(`Onay: ${id} (dış etkili eylem; kullanıcı düzeyi ayar/GitHub/servis) — yapılsın mı? e/H`, "")).trim())) confirm.push(id);
+  if (confirm.length) out.confirm = confirm;
   return out as SetupAnswers;
 }

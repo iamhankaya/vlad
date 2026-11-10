@@ -20,11 +20,20 @@ export function registerSetup(program: Command, k: Kit): void {
   /** `--answers`: satır içi JSON, `-` (stdin) ya da dosya yolu. */
   function readAnswers(spec: string): unknown {
     const text = spec.trim().startsWith("{") ? spec : spec === "-" ? readInput("-") : readFileSync(spec, "utf8");
-    try { return JSON.parse(text); } catch (e) { return usage(`--answers JSON değil: ${(e as Error).message}`); }
+    let raw: unknown;
+    try { raw = JSON.parse(text); } catch (e) { return usage(`--answers JSON değil: ${(e as Error).message}`); }
+    if (typeof raw === "object" && raw !== null && "confirm" in raw) return usage("--answers içinde 'confirm' kabul edilmez: onayı --confirm <eylem,...> bayrağıyla ver (dosya sahibi dış eylem onayı veremez)");
+    return raw;
   }
 
   def(program, "setup", "Kurulum sihirbazı: yeni makine/arkadaş kurulumu; --check doktor, --upgrade eşitleme, --join/--add-worker çok makine", async (o: Opts) => {
-    const platform = ((process.env.VLAD_SETUP_PLATFORM && ["win32", "darwin", "linux"].includes(process.env.VLAD_SETUP_PLATFORM) ? process.env.VLAD_SETUP_PLATFORM : process.platform)) as "win32" | "darwin" | "linux";
+    // VLAD_SETUP_PLATFORM yalnız test ortamında (VLAD_TEST=1 ya da NODE_ENV=test) geçerli; üretimde gerçek platform kullanılır.
+    const testEnv = process.env.VLAD_TEST === "1" || process.env.NODE_ENV === "test";
+    const platform = (testEnv && process.env.VLAD_SETUP_PLATFORM && ["win32", "darwin", "linux"].includes(process.env.VLAD_SETUP_PLATFORM) ? process.env.VLAD_SETUP_PLATFORM : process.platform) as "win32" | "darwin" | "linux";
+    // Dış etkili eylem onayı yalnız --confirm bayrağıyla ya da TTY sorusuyla; cevap dosyasındaki confirm reddedilir (dosya sahibi onay veremez).
+    const confirmFlag = o.confirm ? String(o.confirm).split(",").map((s) => s.trim()).filter(Boolean) : [];
+    const badConfirm = confirmFlag.filter((x) => !(CONFIRM_ACTIONS as readonly string[]).includes(x));
+    if (badConfirm.length) return usage(`--confirm yalnız şunlar: ${CONFIRM_ACTIONS.join("|")}`);
     const modes = ["check", "upgrade", "uninstall", "join", "addWorker"].filter((m) => o[m] !== undefined && o[m] !== false);
     if (modes.length > 1) usage(`şu bayraklar birlikte kullanılamaz: ${modes.join(", ")}`);
     const only = parseOnly(o.only as string | undefined);
@@ -41,6 +50,7 @@ export function registerSetup(program: Command, k: Kit): void {
     }
 
     let answers: SetupAnswers = {};
+    let wizard = false;
     const needsAnswers = !o.upgrade && !o.uninstall && !o.addWorker;
     if (needsAnswers) {
       let raw: unknown;
@@ -48,20 +58,24 @@ export function registerSetup(program: Command, k: Kit): void {
       else if (process.stdin.isTTY && process.stdout.isTTY && !o.json) {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
         try { raw = await interviewAnswers(async (p, d) => rl.question(d ? `${p} (${d}): ` : `${p}: `), platform); } finally { rl.close(); }
+        wizard = true;
       } else return usage("etkileşimsiz ortamda --answers <json|-> gerekli", ["cevap anahtarları: vlad setup --help; örnek: {\"role\":\"brain\",\"machines\":\"single\",\"kb\":{\"mode\":\"local\"},\"roots\":[\"~/dev\"]}"]);
       if (raw !== undefined) {
-        const v = validateAnswers(raw, { platform, allowUnsupported: !!o.allowUnsupported });
+        const v = validateAnswers(raw, { platform });
         if (!v.ok) {
           ctx.stderr.write(ctx.argv.includes("--json") ? JSON.stringify({ error: "geçersiz cevaplar", details: v.errors }) + "\n" : ["hata: geçersiz cevaplar", ...v.errors.map((e) => `  ${e}`)].join("\n") + "\n");
           return ctx.exit(v.errors.some((e) => e.startsWith("role:") && /linux/.test(e)) ? SETUP_EXIT.failed : SETUP_EXIT.usage);
         }
         answers = v.answers;
       }
+      if (confirmFlag.length) answers = { ...answers, confirm: confirmFlag as ConfirmAction[] }; // wizard kendi confirm cevaplarını taşır; bayrak ekler
+      else if (!wizard) answers = { ...answers, confirm: [] };
     }
     let aw: { machine?: { agent?: { host?: string; port?: number } }; keys?: string; confirm?: string[] } = {};
-    if (o.addWorker && o.answers) { const raw = readAnswers(o.answers as string); if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return usage("--answers bir JSON nesnesi olmalı"); aw = raw as typeof aw; answers = { confirm: (Array.isArray(aw.confirm) ? aw.confirm : []).filter((x): x is ConfirmAction => (CONFIRM_ACTIONS as readonly string[]).includes(x)) }; }
+    if (o.addWorker && o.answers) { const raw = readAnswers(o.answers as string); if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return usage("--answers bir JSON nesnesi olmalı"); aw = raw as typeof aw; }
+    if (o.addWorker) answers = { confirm: confirmFlag as ConfirmAction[] };
     const c = buildContext({ ...base, answers });
-    const warn = platform === "linux" && o.allowUnsupported && answers.role === "brain" ? ["uyarı: Linux'ta beyin desteklenmiyor (deneysel); --allow-unsupported ile devam ediliyor"] : [];
+    const warn: string[] = [];
 
     let results;
     if (o.upgrade) results = await runUpgrade(c);
@@ -98,5 +112,5 @@ export function registerSetup(program: Command, k: Kit): void {
     .option("--host <ip>", "--add-worker: işçinin özel adresi")
     .option("--os <os>", "--add-worker: işçinin işletim sistemi")
     .option("--port <n>", "--add-worker: Agent portu (7437)")
-    .option("--allow-unsupported", "Linux'ta beyin kurulumuna izin ver (desteklenmiyor)");
+    .option("--confirm <eylem,...>", "dış etkili eylem onayı (kb-repo-create|keygen|agent-install|mac-main-install|permissions-write|plugins-write); --yes ve --answers dosyası onay vermez");
 }

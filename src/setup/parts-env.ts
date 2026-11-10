@@ -58,7 +58,8 @@ export const agentPart: SetupPart = {
     const cfg = loadConfig(c.vladHome);
     if (!cfg.machines || c.answers.machines !== "multi") return result("agent", [{ kind: "skip", what: "tek makine: Agent kurulmaz" }], [], "tek makine");
     const acts: ApplyAction[] = [];
-    const name = c.answers.machine?.name!;
+    const name = c.answers.machine?.name;
+    if (!name) throw new Error("agent: answers.machine.name zorunlu; self değiştirilmedi");
     if (!c.dryRun && readLocal().self !== name) { const l = readLocal(); writeLocal({ ...l, self: name }); acts.push({ kind: "write", what: `vlad.local.json self=${name}` }); }
     if (c.answers.keys === "generate" && c.answers.role === "brain") {
       if (!c.confirmed.has("keygen")) acts.push({ kind: "skip", what: "anahtar üretimi açık onay ister (confirm: keygen)" });

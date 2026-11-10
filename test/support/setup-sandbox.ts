@@ -54,7 +54,7 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
   const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => {
     const e: Record<string, string> = {
       PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`, HOME: home, USERPROFILE: home, VLAD_CLAUDE_DIR: claudeDir, VLAD_HOME: vladHome,
-      VLAD_NO_NATIVE: "1", VLAD_LAUNCHER: "noop", VLAD_CLAUDE_JSON: join(root, "claude.json"), FAKE_LOG: log, CLAUDE_CODE_REMOTE: "",
+      VLAD_NO_NATIVE: "1", VLAD_TEST: "1", VLAD_LAUNCHER: "noop", VLAD_CLAUDE_JSON: join(root, "claude.json"), FAKE_LOG: log, CLAUDE_CODE_REMOTE: "",
       GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t.invalid",
       GIT_CONFIG_GLOBAL: join(home, ".gitconfig"), GIT_CONFIG_NOSYSTEM: "1", ...extra,
     };
@@ -64,7 +64,14 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
   };
   return {
     root, home, claudeDir, vladHome, kbDir, bin, log,
-    run(args, ro = {}) {
+    run(args0, ro = {}) {
+      // Onay artık cevap dosyasında değil `--confirm` bayrağında (T20261110-05 güvenlik kararı): testlerin cevaplarındaki confirm bayrağa taşınır.
+      const args = [...args0];
+      const ai = args.indexOf("--answers");
+      if (ai >= 0 && args[ai + 1]?.trim().startsWith("{")) {
+        const a = JSON.parse(args[ai + 1]!);
+        if (a.confirm !== undefined) { args.push("--confirm", (a.confirm as string[]).join(",")); delete a.confirm; args[ai + 1] = JSON.stringify(a); }
+      }
       const r = spawnSync(process.execPath, [cliJs, ...args], { encoding: "utf8", env: env(ro.env), input: ro.input, cwd: ro.cwd ?? vladHome, timeout: 60_000, killSignal: "SIGKILL" });
       return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
     },

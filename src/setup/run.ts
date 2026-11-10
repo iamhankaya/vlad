@@ -75,14 +75,14 @@ export interface JoinOptions { brain: string; brainHost?: string; brainPort?: nu
 /** İkinci makine: beyin girdisini yerel katmana yazar, sonra normal kurulum (config → ... → agent) ve beyinle paylaşılan anahtar. */
 export async function runJoin(c: SetupContext, j: JoinOptions): Promise<ApplyResult[]> {
   assertName(j.brain, "--join");
+  if (!c.answers.machine?.name) throw new Error("--join: answers.machine.name zorunlu (bu makinenin adı); hiçbir şey yazılmadı");
   const known = (() => { try { return loadConfig(c.vladHome).machines?.find((m) => m.name === j.brain); } catch { return undefined; } })();
   if (!known) {
     if (!j.brainHost || !j.brainOs) throw new Error(`beyin '${j.brain}' config'te yok: --brain-host <özel IP> ve --brain-os darwin|win32|linux ver`);
     assertPrivate(j.brainHost, "--brain-host"); assertPort(j.brainPort, "--brain-port");
     const brain: MachineEntry = { name: j.brain, os: j.brainOs, agent: { host: j.brainHost, port: j.brainPort ?? 7437 } };
     const cur = readJsonFile(join(c.vladHome, "vlad.config.local.json")).data;
-    let existing: MachineEntry[] = cur.machines ?? [];
-    if (!cur.machines) { try { existing = (loadConfig(c.vladHome).machines ?? []) as MachineEntry[]; } catch { /* tek makine */ } } // tracked makineler sığ birleşimde kaybolmasın
+    const existing: MachineEntry[] = cur.machines ?? []; // beyin tracked'te yok (known=false): tracked machines taşınmaz
     writeOverlay(c, { machines: [...existing.filter((m) => m.name !== j.brain), brain], brain: j.brain }, cur.brain !== undefined && cur.brain !== j.brain ? ["brain"] : []);
   }
   const out = await runSetup({ ...c, answers: { ...c.answers, role: "worker", machines: "multi" } });

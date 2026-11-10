@@ -148,6 +148,8 @@ export const hooksPart: SetupPart = {
 export const WORKER_PERMISSIONS = [
   "Bash(git push origin vlad/*)", "Bash(git push -u origin vlad/*)", "Bash(gh run list *)", "Bash(gh run view *)", "Bash(gh run watch *)", "Bash(gh run rerun *)", "Bash(gh run download *)", "Bash(gh workflow run * --ref vlad/*)",
 ];
+/** Geniş push biçimlerini kapatır (allow kalıbı `*` ile --force/--delete/çoklu ref'i de eşler): kullanıcı düzeyi, TÜM Claude oturumlarını kapsar. */
+export const WORKER_DENY = ["Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)"];
 function kbOutside(c: SetupContext): string | null {
   const kb = resolveKbDir(c.vladHome).dir;
   const rel = relative(resolve(c.vladHome), resolve(kb));
@@ -159,25 +161,29 @@ export const permissionsPart: SetupPart = {
     const s = safeSettings(c);
     if (!s.ok) return bad("permissions", s.error);
     const allow: string[] = s.data?.permissions?.allow ?? [];
-    const miss = WORKER_PERMISSIONS.filter((p) => !allow.includes(p));
+    const deny: string[] = s.data?.permissions?.deny ?? [];
+    const miss = [...WORKER_PERMISSIONS.filter((p) => !allow.includes(p)), ...WORKER_DENY.filter((p) => !deny.includes(p))];
     const kb = kbOutside(c);
     const dirs: string[] = s.data?.permissions?.additionalDirectories ?? [];
     return compose("permissions", [
-      { required: "isteğe bağlı", item: item("permissions:worker-push-ci", miss.length ? "eksik" : "ok", miss.length ? `${miss.length}/${WORKER_PERMISSIONS.length} çalışan push/CI kalıbı eksik` : "çalışan push/CI kalıpları var", "vlad setup --only permissions (onay ister)") },
+      { required: "isteğe bağlı", item: item("permissions:worker-push-ci", miss.length ? "eksik" : "ok", miss.length ? `${miss.length}/${WORKER_PERMISSIONS.length + WORKER_DENY.length} çalışan push/CI allow+deny kalıbı eksik` : "çalışan push/CI kalıpları var", "vlad setup --only permissions (onay ister)") },
       { required: "isteğe bağlı", item: kb ? item("permissions:additional-dirs", dirs.includes(kb) ? "ok" : "eksik", dirs.includes(kb) ? "kb additionalDirectories'te" : "kb additionalDirectories'te yok", "vlad setup --only permissions (onay ister)") : item("permissions:additional-dirs", "n/a", "kb VLAD_HOME içinde") },
     ]);
   },
   async apply(c) {
     const wantPerms = c.answers.perms === true, wantDirs = c.answers.claudedirs === true;
     if (!wantPerms && !wantDirs) return result("permissions", [{ kind: "skip", what: "perms/claudedirs seçilmedi" }], [], "seçilmedi");
-    if (!c.confirmed.has("permissions-write")) return result("permissions", [{ kind: "skip", what: "settings.json izinleri açık onay ister (confirm: permissions-write)" }], [], "onay yok");
+    if (!c.confirmed.has("permissions-write")) return result("permissions", [{ kind: "skip", what: "settings.json izinleri açık onay ister (confirm: permissions-write). UYARI: yazılan push kalıpları kullanıcı düzeyindedir, TÜM Claude oturumlarına geçerli olur (deny ile --force/--delete/çoklu ref kapatılır)" }], [], "onay yok");
     const s = safeSettings(c);
     if (!s.ok) throw new Error(s.error);
     const kb = kbOutside(c);
     const r = updateJson(c, settingsPath(c), (d) => {
       d.permissions = d.permissions ?? {};
-      for (const k of ["allow", "additionalDirectories"]) if (d.permissions[k] !== undefined && !Array.isArray(d.permissions[k])) throw new Error(`settings.json: permissions.${k} bir dizi değil; elle düzeltin`);
-      if (wantPerms) d.permissions.allow = [...(d.permissions.allow ?? []), ...WORKER_PERMISSIONS.filter((p) => !(d.permissions.allow ?? []).includes(p))];
+      for (const k of ["allow", "deny", "additionalDirectories"]) if (d.permissions[k] !== undefined && !Array.isArray(d.permissions[k])) throw new Error(`settings.json: permissions.${k} bir dizi değil; elle düzeltin`);
+      if (wantPerms) {
+        d.permissions.allow = [...(d.permissions.allow ?? []), ...WORKER_PERMISSIONS.filter((p) => !(d.permissions.allow ?? []).includes(p))];
+        d.permissions.deny = [...(d.permissions.deny ?? []), ...WORKER_DENY.filter((p) => !(d.permissions.deny ?? []).includes(p))]; // mevcut deny korunur
+      }
       if (wantDirs && kb) d.permissions.additionalDirectories = [...new Set([...(d.permissions.additionalDirectories ?? []), kb])];
       return d;
     });
@@ -186,7 +192,7 @@ export const permissionsPart: SetupPart = {
 };
 
 // ---- plugins ----
-const KNOWN_MARKET: Record<string, string> = { superpowers: "anthropic-plugin-directory", "frontend-design": "anthropic-plugin-directory" };
+const KNOWN_MARKET: Record<string, string> = { superpowers: "anthropic-plugin-directory", "frontend-design": "anthropic-plugin-directory", remember: "claude-plugins-official" };
 const PLUGIN_NAMES = ["superpowers", "frontend-design", "playwright"];
 export const pluginsPart: SetupPart = {
   id: "plugins",
@@ -200,9 +206,10 @@ export const pluginsPart: SetupPart = {
     }));
   },
   async apply(c) {
-    const full = (p: string) => (p.includes("@") ? p : KNOWN_MARKET[p] ? `${p}@${KNOWN_MARKET[p]}` : null);
+    const marketOk = (p: string) => c.confirmed.has("plugins-write") || Object.values(KNOWN_MARKET).includes(p.split("@")[1] ?? "");
+    const full = (p: string) => (p.includes("@") ? (marketOk(p) ? p : null) : KNOWN_MARKET[p] ? `${p}@${KNOWN_MARKET[p]}` : null);
     const want = (c.answers.plugins ?? []).map(full).filter((p): p is string => p !== null);
-    const acts: ApplyAction[] = (c.answers.plugins ?? []).filter((p) => full(p) === null).map((p) => ({ kind: "print" as const, what: `${p}: claude içinde /plugin ile kur (sihirbaz plugin kurmaz); tam kimlik (ad@market) verilirse etkinleştirilir` }));
+    const acts: ApplyAction[] = (c.answers.plugins ?? []).filter((p) => full(p) === null).map((p) => ({ kind: "print" as const, what: `${p}: claude içinde /plugin ile kur (sihirbaz plugin kurmaz); bilinmeyen pazar yeri (ad@market) yalnız confirm: plugins-write ile etkinleştirilir` }));
     if (!want.length) return acts.length ? result("plugins", acts) : upToDate("plugins");
     const r = updateJson(c, settingsPath(c), (d) => { d.enabledPlugins = { ...(d.enabledPlugins ?? {}), ...Object.fromEntries(want.filter((p) => !(d.enabledPlugins ?? {})[p]).map((p) => [p, true])) }; return d; });
     if (r.changed) acts.push({ kind: "write", what: `enabledPlugins: ${want.join(", ")}`, target: settingsPath(c) });
@@ -297,8 +304,8 @@ export const kbPart: SetupPart = {
       if (mode === "existing") {
         const probe = run("gh", ["repo", "view", kb.remote!]);
         if (!probe.ok) throw new Error(`kb.remote erişilemiyor (${kb.remote}); hiçbir şey yazılmadı`);
-        acts.push({ kind: "run", what: `git clone ${kb.remote} -> ${dir}` });
-        if (!c.dryRun) { const r = run("git", ["clone", `https://github.com/${kb.remote}`, dir], { timeoutMs: 120_000 }); if (!r.ok) throw new Error(`git clone başarısız: ${r.stderr.trim()}`); }
+        acts.push({ kind: "run", what: `gh repo clone ${kb.remote} -> ${dir}` });
+        if (!c.dryRun) { const r = run("gh", ["repo", "clone", kb.remote!, dir], { timeoutMs: 120_000 }); if (!r.ok) throw new Error(`gh repo clone başarısız: ${r.stderr.trim()}`); }
       } else if (mode === "github-new") {
         if (!c.confirmed.has("kb-repo-create")) return result("kb", [{ kind: "skip", what: "GitHub repo oluşturma açık onay ister (confirm: kb-repo-create)" }], [], "onay yok");
         acts.push({ kind: "run", what: `gh repo create ${kb.remote} --private` });
