@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { spawnGuarded } from "../support/spawn-vlad.js";
 import { rmTemp } from "../helpers.js";
+import { trustKey } from "../../src/tasks/trust.js";
 
 const DIST = join(import.meta.dirname, "..", "..", "dist");
 
@@ -25,7 +26,7 @@ describe("launch script trust preflight (dist)", () => {
       expect(r.status).toBe(0);
       expect(r.stderr).toBe("");
       const j = JSON.parse(readFileSync(claudeJson, "utf8")) as { projects: Record<string, unknown> };
-      expect(Object.keys(j.projects)).toContain(cwd);
+      expect(Object.keys(j.projects)).toContain(trustKey(cwd)); // ürün anahtarı bilerek `/` ile yazar (Windows'ta `\` değil)
     } finally { rmTemp(tmp); }
   });
 });
