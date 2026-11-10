@@ -10,12 +10,13 @@ import { brainTransport, makeRemote } from "../../machines/remote.js";
 import { selfName } from "../../fleet/state.js";
 import { AgentClient } from "../../agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js";
-import { TRANSITIONS, answerTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies } from "../../tasks/index.js";
+import { TRANSITIONS, answerTask, denyTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies, createPipeline } from "../../tasks/index.js";
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskClose } from "./task-close.js";
 import { registerTaskList } from "./task-list.js";
 import { closedFindingWarnings } from "../../findings/closed-report.js";
+import { doneSummaryNote } from "../../projects/status.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -24,6 +25,39 @@ export function registerTask(program: Command, k: Kit): void {
   const task = program.command("task").description("Görevler");
   def(task, "new", "queued görev oluşturur", (o: Opts) => {
     const body = o.bodyFile ? readInput(o.bodyFile as string) : "";
+    if (!o.pipeline) {
+      const stray = ["cycle", "ui", "prova", "skip", "skipReason", "phaseBody", "phaseModel"].filter((k) => o[k] !== undefined);
+      if (stray.length) throw new Error("--cycle/--ui/--prova/--skip/--phase-body/--phase-model yalnız --pipeline ile kullanılır");
+    } else {
+      if (!o.cycle) throw new Error("--pipeline için --cycle gerekli (tam | özellik | kısa)");
+      const ignored = ["role", "model", "modelReason", "parent", "dependsOn", "phase"].filter((k) => o[k] !== undefined);
+      if (ignored.length) throw new Error("--pipeline ile --role/--model/--parent/--depends-on/--phase kullanılamaz (fazların rolü şablondan gelir)");
+      const phaseBodies: Record<string, string> = {};
+      for (const spec of (o.phaseBody as string[] | undefined) ?? []) {
+        const i = spec.indexOf("=");
+        if (i < 1) throw new Error(`--phase-body <faz>=<dosya> biçiminde olmalı: ${spec}`);
+        const name = spec.slice(0, i), src = spec.slice(i + 1);
+        if (name in phaseBodies) throw new Error(`--phase-body ${name} birden fazla verildi`);
+        if (src === "-" && o.bodyFile === "-") throw new Error("stdin (-) hem --body-file hem --phase-body için verilemez");
+        phaseBodies[name] = readInput(src);
+      }
+      const phaseModels: Record<string, { model: string; reason?: string }> = {};
+      for (const spec of (o.phaseModel as string[] | undefined) ?? []) {
+        const m = /^([^=]+)=([^:]+)(?::(.*))?$/s.exec(spec);
+        if (!m) throw new Error(`--phase-model <faz>=<model>[:<gerekçe>] biçiminde olmalı: ${spec}`);
+        if (m[1]! in phaseModels) throw new Error(`--phase-model ${m[1]} birden fazla verildi`);
+        phaseModels[m[1]!] = { model: m[2]!, ...(m[3] ? { reason: m[3] } : {}) };
+      }
+      const r = createPipeline({
+        project: o.project as string, title: o.title as string, cycle: o.cycle as string, body, ui: !!o.ui, prova: !!o.prova,
+        skip: o.skip as string[] | undefined, skipReason: o.skipReason as string | undefined, phaseBodies, phaseModels,
+      });
+      const warnings = unknownTaskRefs(body).map((id) => `gövdede kb'de olmayan görev ID'si: ${id}`);
+      out(o, { id: r.id, cycle: r.cycle, phases: r.phases, warnings },
+        [`${r.id} (${r.cycle})`, ...r.phases.map((p) => `  ${p.id} ${p.phase} (${p.role})${p.depends_on.length ? ` <- ${p.depends_on.join(",")}` : ""}`),
+          ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
+      return;
+    }
     const dependsOn = o.dependsOn ? String(o.dependsOn).split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     const t = createTask({
       project: o.project as string, title: o.title as string, kind: o.kind as TaskKind, body, role: o.role as string | undefined,
@@ -42,7 +76,15 @@ export function registerTask(program: Command, k: Kit): void {
     .requiredOption("--project <slug>", "proje slug'ı")
     .requiredOption("--title <başlık>", "görev başlığı")
     .option("--kind <kind>", "dev | research | pipeline", "dev")
-    .option("--body-file <md>", "görev gövdesi (- = stdin)");
+    .option("--body-file <md>", "görev gövdesi (- = stdin)")
+    .option("--pipeline", "çatı + döngü şablonundaki fazları tek seferde, hepsi-ya-hiç oluşturur (--cycle zorunlu)")
+    .option("--cycle <döngü>", "--pipeline ile: tam | özellik | kısa")
+    .option("--ui", "--pipeline ile: designer fazları (tasarım, denetim)")
+    .option("--prova", "--pipeline ile: devops prova fazı")
+    .option("--skip <faz>", "--pipeline ile: fazı atla (yalnız sözleşme; --skip-reason zorunlu)", (v: string, a: string[] = []) => [...a, v])
+    .option("--skip-reason <gerekçe>", "--skip gerekçesi (çatı gövdesine yazılır)")
+    .option("--phase-model <faz=model[:gerekçe]>", "--pipeline ile: o fazın modeli (haiku | sonnet | opus; opus için :gerekçe zorunlu); verilmeyen faz rolün modelini kullanır", (v: string, a: string[] = []) => [...a, v])
+    .option("--phase-body <faz=dosya>", "--pipeline ile: o fazın gövdesi (- = stdin); verilmeyen faza çatı Tanım'ından türetilir", (v: string, a: string[] = []) => [...a, v]);
 
   def(task, "launch <id>", "Worktree + branch açar, running yapar, Launcher'ı çağırır", async (id: string, o: Opts) => {
     const cfg = loadConfig();
@@ -128,6 +170,13 @@ export function registerTask(program: Command, k: Kit): void {
     logTask(id, msg);
     out(o, { id }, "eklendi");
   });
+  def(task, "deny <id>", "İzin reddini kaydeder: İlerleme'ye [İZİN] satırı + kb/logs/denials.jsonl (audit setup tekrarlayan kalıpları aday sayar)", (id: string, o: Opts) => {
+    denyTask(id, { tool: o.tool as string, pattern: o.pattern as string, reason: o.reason as string | undefined });
+    out(o, { id }, "kaydedildi");
+  })
+    .requiredOption("--tool <ad>", "reddedilen araç (Bash, PowerShell, ...)")
+    .requiredOption("--pattern <komut>", "reddedilen komut/kalıp")
+    .option("--reason <metin>", "ret nedeni (sınıflayıcı/izin kuralı mesajı)");
   def(task, "ask <id> <soru>", "Soru ekler, blocked yapar", (id: string, q: string, o: Opts) => {
     const t = askTask(id, q);
     out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
@@ -149,7 +198,10 @@ export function registerTask(program: Command, k: Kit): void {
     if (!(state in TRANSITIONS)) throw new Error(`bilinmeyen durum: ${state}; geçerliler: ${Object.keys(TRANSITIONS).join(", ")}`);
     if (o.reason !== undefined && state !== "cancelled") throw new Error("--reason yalnızca cancelled için");
     const t = state === "cancelled" ? cancelTask(id, String(o.reason ?? "")) : setState(id, state as TaskState);
-    out(o, { id, state: t.data.state }, `${id} -> ${t.data.state}`);
+    // a closed task makes the project summary stale: say so now (card `## Durum özeti`; /digest rewrites it)
+    const note = t.data.state === "done" ? doneSummaryNote(t) : null;
+    out(o, note?.summaryStale == null ? { id, state: t.data.state } : { id, state: t.data.state, summaryStale: note.summaryStale, warnings: note.warnings },
+      [`${id} -> ${t.data.state}`, ...(note?.warnings ?? []).map((w) => `uyarı: ${w}`)].join("\n"));
   }).option("--reason <metin>", "iptal gerekçesi (cancelled için zorunlu; İlerleme'ye 'İptal: <metin>' yazılır)");
   def(task, "deps <id>", "queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod)", (id: string, o: Opts) => {
     const ids = (v: unknown) => (v === undefined ? undefined : String(v).split(",").map((x) => x.trim()).filter(Boolean));

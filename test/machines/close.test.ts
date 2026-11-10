@@ -7,7 +7,7 @@ import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import type { Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding, getFinding } from "../../src/findings/store.js";
-import { createTask, getTask, launchTask, reportTask } from "../../src/tasks/index.js";
+import { createTask, getTask, launchTask, logTask, reportTask } from "../../src/tasks/index.js";
 import { setNight } from "../../src/mode/store.js";
 import { closeTask, type CloseDeps } from "../../src/machines/close.js";
 import { makeHome, rmTemp } from "../helpers.js";
@@ -247,5 +247,19 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(r).toMatchObject({ ok: false, stopped_at: "gate" });
     expect(r.reason).toMatch(/win/);
     expect(existsSync(join(repo, "b.txt"))).toBe(false);
+  });
+
+  it("çok makine kanıtı commit'e bağlı: eski sha'lı satır geçersiz, güncel sha'lı satır geçer", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    const wt = getTask(id).data.worktree!;
+    const head = execFileSync("git", ["-C", wt, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    logTask(id, `Gate win: yeşil ${"0".repeat(12)}`);
+    const stale = await closeTask(id, { yes: true }, deps({ self: "mac" }));
+    expect(stale).toMatchObject({ ok: false, stopped_at: "gate" });
+    expect(stale.reason).toMatch(/win/);
+    logTask(id, `Gate win: yeşil ${head.slice(0, 12)}`);
+    const ok = await closeTask(id, { yes: true }, deps({ self: "mac" }));
+    expect(ok.ok).toBe(true);
   });
 });

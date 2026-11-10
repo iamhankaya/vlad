@@ -51,7 +51,7 @@ describe("s-types: filled manifest and accessors (U1 replaced the S stub)", () =
   it("COMMANDS is filled and the accessors answer from it (the S-time throw is gone)", () => {
     expect(COMMANDS.length).toBeGreaterThan(60);
     for (const f of [kbWriteKeys, refreshKeys, workerLocalKeys]) expect(f().size).toBeGreaterThan(0);
-    expect(Object.keys(forwardMap())).toHaveLength(4);
+    expect(Object.keys(forwardMap())).toHaveLength(5);
     expect(Object.keys(consoleCatalog())).toHaveLength(COMMANDS.length);
     expect(lockPolicyFor("task log", () => ({}))).toBe("outer");
     expect(lockPolicyFor("vlad scan", () => ({}))).toBe("none");
@@ -61,7 +61,7 @@ describe("s-types: filled manifest and accessors (U1 replaced the S stub)", () =
 describe("s-types: KB_WRITES / REFRESH_KEYS are exported and consistent", () => {
   it("export real, non-empty sets", () => {
     expect(KB_WRITES.size).toBeGreaterThan(30);
-    expect(REFRESH_KEYS.size).toBe(9);
+    expect(REFRESH_KEYS.size).toBe(10);
   });
   it("every refresh key writes the kb", () => {
     for (const k of REFRESH_KEYS) expect(KB_WRITES.has(k)).toBe(true);

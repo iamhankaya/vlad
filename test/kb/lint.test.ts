@@ -23,6 +23,10 @@ const task = (id: string, state: string, updated = "2026-11-01T10:00:00+03:00", 
 const finding = (id: string, state: string, project = "vlad") => {
   writeFileSync(kb("findings", `${id}.md`), `---\nid: ${id}\nproject: ${project}\ntitle: f\nseverity: orta\nstate: ${state}\nsource_task: T20261001-01\ncreated: "2026-10-01T10:00:00+03:00"\nupdated: "2026-11-01T10:00:00+03:00"\n---\n\nbody\n`);
 };
+const idea = (id: string, state: string, project = "vlad") => {
+  mkdirSync(kb("ideas"), { recursive: true });
+  writeFileSync(kb("ideas", `${id}.md`), `---\nid: ${id}\nproject: ${project}\ntitle: i\nstate: ${state}\ncreated: "2026-10-01T10:00:00+03:00"\nupdated: "2026-11-01T10:00:00+03:00"\n---\n\n## Ayrıntı\n`);
+};
 const codes = (r: ReturnType<typeof lintKb>) => r.flags.map((f) => f.code);
 const FRESH = "## Durum özeti\n_Güncel: 2026-11-03T11:00:00+03:00_\n\n";
 
@@ -31,6 +35,15 @@ beforeEach(() => {
   mkdirSync(kb("findings"), { recursive: true });
   mkdirSync(kb("decisions"), { recursive: true });
   writeCfg();
+});
+
+describe("closed_idea_listed_open", () => {
+  it("flags a dropped idea under Açık konular; an open idea and a closing note are fine", () => {
+    idea("I-vlad-001", "dropped"); idea("I-vlad-002", "open"); idea("I-vlad-003", "promoted");
+    writeCard("vlad", "## Açık konular\n- I-vlad-001 eski fikir\n- I-vlad-002 sürüyor\n\n" + FRESH + "I-vlad-003 kapandı (göreve alındı).\n");
+    const r = lintKb({ now: NOW });
+    expect(r.flags.map((f) => [f.code, f.id])).toEqual([["closed_idea_listed_open", "I-vlad-001"]]);
+  });
 });
 
 describe("closed_finding_listed_open", () => {

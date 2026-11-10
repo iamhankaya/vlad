@@ -63,6 +63,7 @@ vlad project list --json
 - **Varsayılan:** rolün modeli; sütuna rolün modelini yaz, `--model` geçirme.
 - **Haiku:** mekanik/basit fazlarda (belge, eşitleme, arama, özet) seçebilirsin; **kod yazan fazda (developer `sözleşme`/`uygulama`, düzeltme) seçme**.
 - **Opus:** yalnızca en kritik işlerde (ör. güvenlik etkili tasarım, geri alınamaz veri işlemi). Gerekçesini taslakta yaz ve kullanıcının **açık onayını** al; gerekçesiz `--model opus` CLI'da reddedilir (`--model-reason` zorunlu). Onay yoksa Opus seçme.
+- Pipeline'da faz başına model sapması `--phase-model <faz>=<haiku|sonnet|opus>[:<gerekçe>]` ile verilir (opus için gerekçe zorunlu; modeli rolünkiyle aynı olan faza yazma).
 - Seçilen model rolün modelinden farklıysa `vlad task new` komutuna `--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]` ekle; aynıysa ekleme.
 
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
@@ -147,17 +148,14 @@ vlad task new --project <slug> --title "<başlık>" --kind <dev|research> [--rol
 ```
 Çıktı: `{"id": "T20261015-01", ...}`. ID'yi kullanıcıya söyle. Rol bulunamazsa veya türle uyumsuzsa CLI hata verir ve görev oluşmaz; hatayı göster, taslağı düzelt. Sonra adım 5a (dev) veya 5b (research).
 
-**Pipeline:**
-1. Çatı görev — taslağın gövdesi (faz tablosu ve kapılar `## Bağlam` altında `###` başlıklarıyla):
+**Pipeline:** çatı ve fazlar **tek komutla**, hepsi-ya-hiç oluşturulur (hata olursa oluşanlar geri alınır; tek tek `task new` döngüsü kurma):
+1. Çatı gövdesini (taslağın `## Tanım`/`## Kabul kriterleri`/`## Bağlam`'ı; faz tablosu ve kapılar `### Fazlar`/`### Kapılar` altında) geçici dosyaya yaz; özel faz gövdeleri varsa ayrı dosyalara:
    ```
-   vlad task new --project <slug> --title "<başlık>" --kind pipeline --body-file <çatı.md> --json
+   vlad task new --pipeline --project <slug> --title "<başlık>" --cycle <tam|özellik|kısa> [--ui] [--prova] [--skip sözleşme --skip-reason "<gerekçe>"] --body-file <çatı.md> [--phase-body <faz>=<dosya>]... [--phase-model <faz>=<model>[:<gerekçe>]]... --json
    ```
-   Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`).
-2. Fazlar, tablodaki **sırayla**. Her faz için gövde: `## Tanım` (fazın payı), `## Kabul kriterleri` (rolün `## Çıktı`'sı ve işin kriterlerinden bu faza düşenler), `## Bağlam` (çatı ID'si; "girdi: bağımlı olduğun görevlerin `## Kapanış raporu`"). Bağımlılık yalnızca **daha önce oluşturulmuş** fazlara verilir; tablodaki numaraları oluşan ID'lere çevir (sonradan değiştirmek gerekirse `vlad task deps <id> --set|--add|--remove|--clear`, yalnız `queued` fazda):
-   ```
-   vlad task new --project <slug> --title "<başlık> — <faz>" --kind <dev|research> --role <slug> [--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]] --parent <çatı-id> [--depends-on <id1,id2>] --phase <faz> --body-file <faz.md> --json
-   ```
-   Bir faz hata verirse dur, hatayı göster; oluşanları kullanıcıya söyle (gerekirse `cancelled` yapılır).
+   Döngü şablonundaki fazlar (rol, tür, bağımlılık, faz adı) §2 tablosundan gelir: `--ui` designer fazlarını (`tasarım`, `denetim`), `--prova` devops `prova` fazını ekler, `--skip sözleşme` sözleşme fazını atlar (gerekçe çatı gövdesine yazılır; bağımlılıklar yeniden bağlanır). Gövdesi verilmeyen faza çatı `## Tanım`'ından türetilmiş standart gövde girer (UI'lı `uygulama`'ya tarayıcı öz-kontrolü satırı dahil); ek yönerge gereken faz için `--phase-body`. Çıktı: `{"id": <çatı>, "cycle", "phases": [{id, phase, role, kind, depends_on}], ...}`. Şablonun dışına çıkan faz (ara denetim, dilim fazları, `danışma`, model sapması) için ya komutu şablonla çalıştırıp eksiği ayrıca `vlad task new --kind <dev|research> --role <slug> [--model …] --parent <çatı-id> [--depends-on …] --phase <faz> --body-file <faz.md> --json` ile ekle ya da fazı sonradan `vlad task deps` ile bağla.
+   Çatı görev rol almaz ve `launch` edilmez; durumunu sen yönetirsin (ilk faz başlayınca `running`, tüm fazlar `done` olunca `awaiting_approval`, son kapıdan sonra `done`). Faz `## Tanım`'ına taslaktaki özel notları (güvenlik incelemesi, ara Codex kapısı, dış API fixture'ı) `--phase-body` ile ver. Komut hata verirse hiçbir görev oluşmamıştır; hatayı göster.
+2. Oluşan çatı ve faz ID'lerini kullanıcıya söyle (bağımlılıklar `vlad task deps <id> --set|--add|--remove|--clear` ile, yalnız `queued` fazda değiştirilir).
 3. Başlatılabilir fazları al:
    ```
    vlad task ready --parent <çatı-id> --json
@@ -220,7 +218,7 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 2. **Taslak:** architect rolüyle arka plan agent'ı (5b'deki rol, skill ve `depends_on` cümleleriyle; girdi spec fazının raporu). Rolün `## Çıktı` başlıklarıyla taslak plan döndürür. Taslağı geçici dosyada tut; `vlad task log <id> "Plan taslağı hazır"`.
    Bu adımdaki tüm arka plan agent'larını (taslak, eleştiri, son plan) kullandıkları rolün modeliyle başlat, plan görevinin kendi `model`'i varsa (`effective_model`) onunla (Agent aracının `model` parametresi); ikisi de boşsa varsayılan.
 3. **Eleştiri:** iki arka plan agent'ı paralel — biri `roles/developer.md`, biri `roles/tester.md` rol dosyasıyla. Prompt: spec raporu + taslak plan; "Rol dosyasından yalnızca rolün bakış açısını al; Yetki, iş akışı ve commit kuralları bu görevde geçerli değil. Kendi rolünün gözüyle eleştir: uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde. Kod yazma, dosya değiştirme, skill yükleme." Her biri için `vlad task log <id> "<Developer|Tester> eleştirisi: <kısa özet>"`.
-   **Codex eleştirisi (3. göz):** iki agent'la paralel, `second-opinion` skill'ini **Skill aracıyla yükle**, mod `plan` ile uygula (komutu elle kopyalama; komut, model, yedek ve loglama orada). Skill yüklenemezse eleştiri adımı durur ve kullanıcıya söylenir.
+   **Codex eleştirisi (3. göz):** iki agent'la paralel, `second-opinion` skill'ini **Skill aracıyla yükle**, mod `plan` ile uygula (komutu elle kopyalama; komut, model, yedek ve loglama orada; Codex yoksa/limit/hata → `second-opinion`'daki "Codex yedeği" reviewer agent'ı). Skill yüklenemezse eleştiri adımı durur ve kullanıcıya söylenir.
 4. **Son plan:** architect agent'ına taslak + eleştirileri (developer, tester, varsa Codex) ver; son planı ve `### Eleştiriler ve nasıl ele alındı` bölümünü yazdır.
 5. Rapora yalnızca son plan girer (ara ürünler log'da kalır): `vlad task report <id> --file <plan.md> --json`, sonra 5b adım 5.
 

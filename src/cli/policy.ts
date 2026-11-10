@@ -23,6 +23,7 @@ export function targetsOf(key: string, args: any[]): { slugs: (string | undefine
   switch (key) {
     case "project write": return { slugs: [String(args[0])], only: "findings" }; // the card was replaced: the findings block is cheap, activity waits for `project refresh`
     case "finding add": return { slugs: [String(o.project)], only: "findings" };
+    case "idea from-finding": return { slugs: [...new Set((args[0] as string[]).map((id) => getFinding(id).data.project))], only: "findings" };
     case "finding set": return { slugs: [...new Set((args[0] as string[]).slice(0, -1).map((id) => getFinding(id).data.project))], only: "findings" };
     // an added decision only pushes entries out of the list: no task scan (fast). One that leaves the valid list (`set`, or the superseded one) matters only when the block shows it, and then needs the scan.
     // the superseded decision may belong to another project: that card's block still lists it (F-vlad-190)

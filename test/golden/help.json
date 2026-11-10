@@ -394,7 +394,7 @@
     },
     "kb maintain --help": {
       "code": 0,
-      "stdout": "Usage: vlad kb maintain [options]\n\nkb bakımı: decisions.md'yi projelere böler, eski kapalı görev/bulguları\narchive/'e taşır (silme yok)\n\nOptions:\n  --json      makine okunur çıktı\n  --days <n>  bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 30)\n  --dry-run   hiçbir şeye dokunmadan yapılacakları göster\n  -h, --help  display help for command\n",
+      "stdout": "Usage: vlad kb maintain [options]\n\nkb bakımı: decisions.md'yi projelere böler, eski kapalı görev/bulguları\narchive/'e taşır (silme yok)\n\nOptions:\n  --json      makine okunur çıktı\n  --days <n>  bu kadar günden eski kapalı kayıtlar arşivlenir (varsayılan 14)\n  --dry-run   hiçbir şeye dokunmadan yapılacakları göster\n  -h, --help  display help for command\n",
       "stderr": ""
     },
     "kb get --help": {

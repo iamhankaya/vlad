@@ -151,11 +151,13 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (!gateCmd) return stop("gate", `gate tanımlı değil — kart için: vlad project set ${t0.data.project} gate "<komut>"`);
       const target = defaultGateTarget(t0);
       let ranOn: string;
+      let gatedHead = "";
       if (remoteMachine) {
         ranOn = remoteMachine;
         const gr = await d.remote.gate(t0, target, remoteMachine);
         if (gr.exit !== 0) stop("gate", `gate kırmızı (${remoteMachine}, çıkış ${gr.exit}):\n${tail(`${gr.stdout}\n${gr.stderr}`)}`);
         await withKbLock(() => recordGreenGate(id, gr, target));
+        gatedHead = gr.head ?? "";
       } else {
         ranOn = d.self ?? "yerel";
         const wt = t0.data.worktree;
@@ -163,16 +165,21 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         if (g(wt!, ["status", "--porcelain"]).out.trim()) stop("gate", `görev worktree'sinde commit'siz değişiklik var (${wt}); gate yeşili merge edilecek kodu yansıtmaz, çalışandan commit iste`);
         const wb = g(wt!, ["branch", "--show-current"]).out.trim();
         if (wb !== `vlad/${id}`) stop("gate", `görev worktree'si vlad/${id} dalında değil (${wb || "detached"})`);
+        gatedHead = g(wt!, ["rev-parse", "HEAD"]).out.trim();
         const gr = spawnSync(gateCmd, { cwd: wt!, shell: true, encoding: "utf8", timeout: 25 * 60_000, maxBuffer: 64 << 20 });
         if (gr.status !== 0) stop("gate", `gate kırmızı (çıkış ${gr.status ?? "zaman aşımı"}):\n${tail(`${gr.stdout ?? ""}\n${gr.stderr ?? ""}`)}`);
       }
       // several platforms: every listed machine needs a green gate line ("Gate <makine>: yeşil")
       if ((card.machines?.length ?? 0) >= 2) {
         if (!d.self && !remoteMachine) stop("gate", "kart ≥2 makineli ama bu makinenin kimliği belirsiz (VLAD_MACHINE / vlad.local.json self)");
-        await withKbLock(() => { if (!new RegExp(`Gate ${ranOn}: yeşil`).test(getTask(id).body)) logTask(id, `Gate ${ranOn}: yeşil`); });
+        if (!/^[0-9a-f]{40}$/.test(gatedHead)) stop("gate", "gate head'i (sha) belirlenemedi; çok makine kanıtı sha'ya bağlanır");
+        const short = gatedHead.slice(0, 12);
+        // evidence is bound to the gated commit: "Gate <makine>: yeşil <sha>" (sha ≥7 hex prefix of the head)
+        const has = (text: string, m: string) => [...text.matchAll(new RegExp(`Gate ${m}: yeşil ([0-9a-f]{7,40})\\b`, "g"))].some((x) => gatedHead.startsWith(x[1]));
+        await withKbLock(() => { if (!has(getTask(id).body, ranOn)) logTask(id, `Gate ${ranOn}: yeşil ${short}`); });
         const logs = `${getTask(id).body}\n${parent ? getTask(parent).body : ""}`;
-        const missing = card.machines!.filter((m) => m !== ranOn && !new RegExp(`Gate ${m}: yeşil`).test(logs));
-        if (missing.length) stop("gate", `${missing.join(", ")} için yeşil gate yok: o makinede \`vlad task gate ${id} --target ${target} --json\` koş, sonra \`vlad task log ${id} "Gate <makine>: yeşil"\``);
+        const missing = card.machines!.filter((m) => m !== ranOn && !has(logs, m));
+        if (missing.length) stop("gate", `${missing.join(", ")} için bu commit'te (${short}) yeşil gate yok: o makinede \`vlad task gate ${id} --target ${target} --json\` koş, sonra \`vlad task log ${id} "Gate <makine>: yeşil ${short}"\``);
       }
       gateGreen = true;
       add("gate", "ok", ranOn);

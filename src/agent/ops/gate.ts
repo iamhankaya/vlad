@@ -81,14 +81,26 @@ async function mustGit(cwd: string, args: string[]): Promise<string> {
 }
 
 export async function gateRun(args: unknown): Promise<GateRunResult> {
-  const a = argObject(args, ["taskId", "project", "repoName", "target"]);
+  const a = argObject(args, ["taskId", "project", "repoName", "target", "cachedHead"]);
   const id = taskIdArg(a);
   const project = projectArg(a);
   const repoName = repoNameArg(a);
-  if (a.target !== "integration" && a.target !== "task") throw bad("target geçersiz");
+  if (a.target !== "integration" && a.target !== "task" && a.target !== "base") throw bad("target geçersiz");
+  if (a.cachedHead !== undefined && (a.target !== "base" || typeof a.cachedHead !== "string" || !/^[0-9a-f]{40}$/.test(a.cachedHead))) throw bad("cachedHead yalnız base hedefinde ve 40 haneli sha olabilir");
   const ctx = workerCtx();
   const front = taskFront(ctx, id, project);
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
+  let gate: string | undefined;
+  try { gate = readDoc<{ gate?: string }>(join(workerKbDir(ctx.def), "projects", `${project}.md`)).data.gate; } catch { /* kart yok → aşağıda */ }
+  if (gate !== undefined && gate !== null && typeof gate !== "string") throw failed(`projenin gate alanı metin olmalı: ${project}`);
+  if (!gate?.trim()) throw failed(`projede gate tanımlı değil: ${project}`);
+  if (a.target === "base") {
+    // hedef dal: faz → çatı dalı (çatının worktree'sinde), çatı/tek görev → kartın ana dalı (proje reposunda); mergeCtx ile aynı eşleme
+    const branch = front.parent ? `vlad/${front.parent}` : defaultBranchOf(ctx, project);
+    if (!branch || !validRef(branch)) throw failed(`taban dalı belirlenemedi (kartta default_branch yok): ${project}`);
+    const baseCwd = front.parent ? integrationWorktree(ctx, repo, front.parent) : repo;
+    return serialized(baseCwd, () => runBaseGate(baseCwd, branch, a.cachedHead as string | undefined, gate));
+  }
   let cwd = wt;
   if (a.target === "integration") {
     const integ = front.parent ?? (front.kind === "pipeline" ? id : null);
@@ -96,11 +108,25 @@ export async function gateRun(args: unknown): Promise<GateRunResult> {
     cwd = integrationWorktree(ctx, repo, integ);
   }
   if (!existsSync(cwd)) throw new RemoteError("not_found", `not_found: worktree yok: ${cwd}`);
-  let gate: string | undefined;
-  try { gate = readDoc<{ gate?: string }>(join(workerKbDir(ctx.def), "projects", `${project}.md`)).data.gate; } catch { /* kart yok → aşağıda */ }
-  if (gate !== undefined && gate !== null && typeof gate !== "string") throw failed(`projenin gate alanı metin olmalı: ${project}`);
-  if (!gate?.trim()) throw failed(`projede gate tanımlı değil: ${project}`);
   return serialized(cwd, () => runGate(gate, cwd));
+}
+
+/**
+ * Taban koşusu (task gate --compare-base): cwd hedef dalda ve izlenen dosyalar temizse dal ucunda gate'i koşar.
+ * cachedHead uçla aynıysa koşmaz (`cached: true`); ilerlemişse koşar, böylece bayat taban yanlış yeşil vermez.
+ */
+export async function runBaseGate(cwd: string, branch: string, cachedHead: string | undefined, gate: string): Promise<GateRunResult> {
+  if (!existsSync(cwd)) throw new RemoteError("not_found", `not_found: worktree yok: ${cwd}`);
+  const cur = (await runGit(cwd, ["branch", "--show-current"])).stdout.trim();
+  if (cur !== branch) throw failed(`${cwd} dizini ${branch} dalında değil (${cur || "bilinmiyor"}); taban koşulamadı`);
+  const dirty = (await runGit(cwd, ["status", "--porcelain", "-uno"])).stdout.trim();
+  if (dirty) throw failed(`${cwd} kirli (izlenen dosyalarda değişiklik); taban koşulmadı:\n${dirty.slice(0, 500)}`);
+  // işçideki dal upstream'in gerisindeyse uç bayat: gate yanlış tabanı koşar; fetch sonrası ilerletmeyi işçi yapar
+  const behind = await runGit(cwd, ["rev-list", "--count", `${branch}..${branch}@{u}`]);
+  if (behind.code === 0 && Number(behind.stdout.trim()) > 0) throw failed(`${branch} işçide upstream'in ${behind.stdout.trim()} commit geride; taban koşulmadı (önce işçide güncelle)`);
+  const tip = (await mustGit(cwd, ["rev-parse", "HEAD"])).trim();
+  if (cachedHead === tip) return { exit: 0, stdout: "", stderr: "", head: tip, cached: true };
+  return runGate(gate, cwd);
 }
 
 /** cwd başına sıra: aynı worktree'de gate ve merge birbirinin altında dosya değiştirmesin. */

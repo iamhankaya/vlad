@@ -131,17 +131,17 @@ Karar yazmadan önce projenin geçerli kararlarına bak (`vlad decision list --p
 - Süreli karar (gece yetkisi, "…'e kadar" izni, geçici istisna): `--until <YYYY-MM-DD | YYYY-MM-DDTHH:MM>` ekle. Süre geçince `vlad status`, `project status` ve `kb lint` kararı "süresi dolmuş geçerli karar" diye işaretler; metne tarih gömmek yerine bunu kullan.
 Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?" diye sor.
 
-### 5b. Proje durum özeti
+### 5b. Proje durum özeti (atlanamaz son adım)
 
-Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
+**Bu adım atlanamaz:** 6. adımdan (`inbox done`, `task digested`) önce, raporlarla etkilenen her proje için çalışır. Özet yazılmadıkça görev özet borcu açık kalır: özet yazılamıyorsa (emin olunmayan içerik, otomatik mod, hata) borç kaybolmasın diye o proje için `vlad digest pending add --text "<proje> özeti yazılamadı: <neden>" --task <id> --project <slug> --json` ekle ve kullanıcıya söyle (sessizce geçme); bu durumda görev yine `task digested` olabilir, özet borcu pending listesinde izlenir. Paused/archived projede 5b zorunlu değildir (`staleSummaries` yalnız aktif projeleri sayar). Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
 ```
 vlad project summary <slug> --file <geçici.md> --json
 ```
-Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Bu adımı işlemediğin projede özeti güncelleme (bayat kalması doğrudur). Eski kayıtlar için gerekirse önce `vlad kb search`.
+Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Doğrulama `bayat`/`yok` dönerse özeti yeniden yaz ya da yukarıdaki `digest pending add` ile onaya taşı; "bayat kalması doğrudur" diye geçme. `vlad task set <id> done` zaten `summaryStale: true` + uyarı verir; bu adım o uyarının kapanışıdır. Eski kayıtlar için gerekirse önce `vlad kb search`.
 
 ### 5c. kb çelişki denetimi (lint)
 
-Kartlar, özetler, kararlar ve hafıza yazıldıktan sonra tüm kb için bir kez `vlad kb lint --json` çalıştır (büyük kb'de ~75 sn; arka plan agent'ına verilebilir; sonucu `kb/logs/kb-lint.json` önbelleğine yazar ve `vlad status --summary` satırındaki "N kb çelişkisi" buradan gelir). Her işareti (`flags[]`: `code`, `file:line`, `id`, `suggestion`) CLI ile düzelt:
+Kartlar, özetler, kararlar ve hafıza yazıldıktan sonra tüm kb için bir kez `vlad kb lint --json` çalıştır (Mac'te <1 sn; arka plan agent'ı gerekmez; sonucu `kb/logs/kb-lint.json` önbelleğine yazar ve `vlad status --summary` satırındaki "N kb çelişkisi" buradan gelir). Her işareti (`flags[]`: `code`, `file:line`, `id`, `suggestion`) CLI ile düzelt:
 - `closed_finding_listed_open` / `finished_task_listed_active`: kart `## Açık konular`/sürüyor satırı elle yazılmış → `vlad project refresh <slug>`; blok dışı metinde satırı geçmişe çeviren düzeltmeyi `vlad project write` ile yap.
 - `inactive_decision_listed_valid`: özet/kart listesinden kaldır (`vlad project summary`); geçerli liste `vlad decision list`.
 - `expired_decision_valid`: süre gerçekten dolduysa `vlad decision set <id> geçersiz`; sürüyorsa kararı yeni `--until` ile yenile (`decision add --supersedes <id>`).
@@ -157,6 +157,8 @@ vlad inbox done <dosya1> <dosya2> ... --json
 vlad task digested <id1> <id2> ... --json
 ```
 Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak ve kullanıcıya söyle.
+
+**Arşiv (adım 7'den önce):** `vlad kb maintain --days 14 --json` (varsayılan zaten 14 gün; arşiv şeffaftır, silme yok; `digested` boş `done` görev arşivlenmez, adım 6'da işlenmiş işaretlenenler yaşı dolmuşsa taşınır). Hata verirse kullanıcıya söyle, commit'e devam et.
 
 ## 7. Hafızayı commit'le
 

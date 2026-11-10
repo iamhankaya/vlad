@@ -17,6 +17,7 @@ export interface MaintainResult {
   decisions: { file: string; blocks: number }[];
   tasks: { id: string; from: string; to: string }[];
   findings: { id: string; from: string; to: string }[];
+  ideas: { id: string; from: string; to: string }[];
   gitignore_added: string[];
 }
 
@@ -95,13 +96,16 @@ function ensureObsidianIgnore(dry: boolean): string[] {
   return [OBSIDIAN];
 }
 
+/** Closed records older than this many days are archived unless `--days` says otherwise. */
+export const DEFAULT_ARCHIVE_DAYS = 14;
+
 /**
- * kb upkeep: splits decisions.md per project, archives closed tasks (done|cancelled) and settled findings
- * (fixed|wontfix) not updated for `days` days, keeps Obsidian state out of git. Idempotent; never deletes
+ * kb upkeep: splits decisions.md per project, archives closed tasks (done|cancelled), settled findings
+ * (fixed|wontfix) and settled ideas (promoted|dropped) not updated for `days` days, keeps Obsidian state out of git. Idempotent; never deletes
  * content; `dryRun` only reports. The stores read the archive transparently.
  */
 export function maintainKb(o: { days?: number; dryRun?: boolean; now?: Date } = {}): MaintainResult {
-  const days = o.days ?? 30;
+  const days = o.days ?? DEFAULT_ARCHIVE_DAYS;
   if (!Number.isFinite(days) || days < 0) throw new Error(`geçersiz --days: ${o.days}`);
   const dry = !!o.dryRun;
   const cutoff = (o.now ?? new Date()).getTime() - days * DAY_MS;
@@ -112,6 +116,7 @@ export function maintainKb(o: { days?: number; dryRun?: boolean; now?: Date } = 
     decisions: splitDecisions(dry),
     tasks: archiveDir(p.tasks, ["done", "cancelled"], cutoff, dry),
     findings: archiveDir(p.findings, ["fixed", "wontfix"], cutoff, dry),
+    ideas: archiveDir(p.ideas, ["promoted", "dropped"], cutoff, dry),
     gitignore_added: ensureObsidianIgnore(dry),
   };
 }

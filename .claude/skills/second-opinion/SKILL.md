@@ -9,6 +9,8 @@ Windows'ta tüm `codex` çağrılarına `-c 'windows.sandbox="unelevated"'` ekle
 
 **Yedek (her mod):** model yoksa ya da komut model nedeniyle başarısızsa model ve efor `-c`'leri olmadan (varsayılan modelle) **bir kez** daha dene ve bunu `vlad task log`'a yaz. Codex kurulu değilse (`codex --version` hata verir), yine başarısız olursa ya da bulut modunda Codex oturumu yoksa atla; `vlad task log <id> "Codex alınamadı: <neden>"` yaz ve kullanıcıya/plan raporuna "Codex eleştirisi (review) alınamadı: <neden>" de. Sessiz atlama yok.
 
+**Codex yedeği (resmi kural):** Codex kurulu değilse, limite takıldıysa ya da yukarıdaki yeniden denemeden sonra hâlâ hata veriyorsa atlamak yerine aynı moda karşılık **bağımsız reviewer agent'ı** çalıştır: Agent aracı, `reviewer` tipi, model `fable` (kullanılamıyorsa `sonnet`). Agent'a yalnız diff (`review`), plan metni (`plan`) ya da iki çıktı (`blind-compare`) verilir; VLAD'ın önceki kararları, kendi yargısı ve bağlam özeti verilmez. Sonuç bir **taslak girdidir**: bulguları VLAD doğrular; karar yine VLAD'ındır (P1 durdurma ve tur kuralları aynen geçerli). Çalıştırdığında önce `vlad task log <çatı-id> "Codex yedeği: <neden> → <model> reviewer"` yaz; son kapıda ölçüm satırındaki tur sayısı (`Codex turları: ara=<n> son=<n>`) yedek reviewer turlarını da sayar (aynı `Codex ara turu`/`Codex son turu` notları yazılır). Reviewer agent'ı da çalışmazsa eski kural: atla, `Codex alınamadı: <neden>` yaz, kullanıcıya söyle.
+
 ## Mod `plan` — plan eleştirisi
 
 Developer ve tester eleştirileriyle paralel. Taslağı ve spec raporunu geçici bir dosyaya yaz, eleştiri talimatını ver (uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde; kod yazma):

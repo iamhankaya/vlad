@@ -107,6 +107,15 @@ describe("archive", () => {
     expect(existsSync(join(kbPaths().tasks, `${old.data.id}.md`))).toBe(false);
     for (const t of [recent, oldRunning, oldFailed]) expect(existsSync(t.file)).toBe(true);
   });
+  it("defaults to 14 days: a 15-day-old done task moves, a 10-day-old one stays", () => {
+    const old = mk(); const fresh = mk();
+    ageTask(old.data.id, "done", daysAgo(15));
+    ageTask(fresh.data.id, "done", daysAgo(10));
+    const r = maintainKb({ now: NOW });
+    expect(r.days).toBe(14);
+    expect(r.tasks.map((t) => t.id)).toEqual([old.data.id]);
+    expect(existsSync(fresh.file)).toBe(true);
+  });
   it("does not overwrite when the same id already sits in the archive", () => {
     const t = mk(); ageTask(t.data.id, "done", daysAgo(40));
     const dup = join(kbPaths().tasks, "archive", "2026-09");

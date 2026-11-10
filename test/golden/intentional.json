@@ -40,6 +40,59 @@
       ]
     },
     {
+      "id": "T20261110-11",
+      "keys": [
+        "task gate --help"
+      ]
+    },
+    {
+      "id": "T20261110-13",
+      "keys": [
+        "task deny --help",
+        "task --help",
+        "task (bare)"
+      ]
+    },
+    {
+      "id": "T20261110-14",
+      "keys": [
+        "task list --help",
+        "single :: task list",
+        "brain :: task list",
+        "forwarded :: task list"
+      ]
+    },
+    {
+      "id": "T20261110-08",
+      "keys": [
+        "idea (bare)",
+        "idea --help",
+        "idea add --help",
+        "idea from-finding --help",
+        "idea list --help",
+        "idea promote --help",
+        "idea set --help",
+        "kb get --help",
+        "kb search --help",
+        "kb refs --help",
+        "single :: kb maintain",
+        "brain :: kb maintain",
+        "forwarded :: kb maintain",
+        "(root) --help",
+        "kb --help",
+        "kb (bare)",
+        "single :: project status",
+        "brain :: project status",
+        "forwarded :: project status"
+      ]
+    },
+    {
+      "id": "T20261110-12",
+      "keys": [
+        "task new --help"
+      ]
+    },
+    {
       "id": "T20261110-10",
       "keys": [
         "task close --help",

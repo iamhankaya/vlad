@@ -1,9 +1,11 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/store.js";
+import { countOpenIdeas } from "../ideas/store.js";
 import { getSection, isDecisionExpired, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
 import type { DecisionRecord, ProjectCard } from "../kb/index.js";
 import { listTasksWithWarnings } from "../tasks/store.js";
+import type { Task } from "../tasks/store.js";
 import { listProjects } from "./store.js";
 
 const SUMMARY = "## Durum özeti";
@@ -39,6 +41,8 @@ export interface ProjectStatus {
     /** kritik/yüksek/orta only, at most LIST_MAX (the full list: `vlad finding list`) */
     open: { id: string; severity: string; state: string; title: string }[];
   };
+  /** idea store (kept out of the findings counts and the card's open-findings block) */
+  ideas: { open: number };
   decisions: {
     total: number;
     /** newest LIST_MAX valid decisions (the full list: `vlad decision list --project`) */
@@ -86,6 +90,19 @@ export function staleSummaryText(list: StaleSummary[]): string {
   return list.map((x) => (x.state === "yok" ? `${x.slug} (özet yok)` : `${x.slug} (${x.newer >= 20 ? "20+" : x.newer} kayıt)`)).join(", ");
 }
 
+/** `task set <id> done` follow-up: is the project's `## Durum özeti` stale now that this task closed? `null` = cannot tell (no/unreadable card). */
+export function doneSummaryNote(task: Task): { summaryStale: boolean | null; warnings: string[] } {
+  let state: ProjectStatus["summary"]["state"];
+  try { state = projectStatus(task.data.project).summary.state; } catch { return { summaryStale: null, warnings: [] }; }
+  if (state === "güncel") return { summaryStale: false, warnings: [] };
+  return { summaryStale: true, warnings: [`${task.data.project} proje özet bayat (${state === "yok" ? "özet yok" : "özetten sonra kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
+}
+
+/** Opening warning for done tasks that /digest has not processed ("" when none). */
+export function undigestedNote(count: number, oldest: string | undefined | null): string {
+  return count > 0 ? `${count} done görev digest edilmedi${oldest ? ` (en eski: ${oldest})` : ""}` : "";
+}
+
 /** Counts, open records and valid decisions come from the records; only the narrative comes from the card. */
 export function projectStatus(slug: string): ProjectStatus {
   const { data, body } = cardOf(slug);
@@ -128,6 +145,7 @@ export function projectStatus(slug: string): ProjectStatus {
         .slice(0, LIST_MAX)
         .map((f) => ({ id: f.data.id, severity: f.data.severity, state: f.data.state, title: f.data.title })),
     },
+    ideas: { open: countOpenIdeas(slug) },
     decisions: {
       total: decisions.length,
       recent: [...decisions].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id)).slice(0, LIST_MAX).map((d) => ({ id: d.id, date: d.date, title: d.title, ...(d.until ? { until: d.until } : {}), ...(isDecisionExpired(d) ? { expired: true as const } : {}) })),

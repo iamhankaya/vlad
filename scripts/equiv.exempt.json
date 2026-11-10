@@ -4,6 +4,7 @@
     "agent start": "uzun ömürlü süreç, ağ portu dinler",
     "agent keygen": "rastgele anahtar üretir, çıktı deterministik değil",
     "agent setkey": "anahtarı stdin'den yazar; anahtar maddesi golden/küme testlerinde kapsanır",
+    "task deny": "yeni komut (T20261110-13): tabanda yok, eski/yeni CLI eşdeğerliği anlamsız; davranış test/tasks/denials.test.ts",
     "agent install": "işletim sistemi hizmeti kurar",
     "queue list": "yerel Agent'a bağlanır (ağ)",
     "queue flush": "yerel Agent'a bağlanır (ağ)",
@@ -21,6 +22,11 @@
     "clip set": "gerçek panoya yazar",
     "task repin": "config'te machines ve kartta makine listesi ister; davranış t01-repin testinde",
     "kb commit": "git commit/push yapar (gerçek kb deposu)",
-    "task close": "gate koşar, merge eder, kb'yi commit/push eder; davranış test/machines/close.test.ts'te"
+    "task close": "gate koşar, merge eder, kb'yi commit/push eder; davranış test/machines/close.test.ts'te",
+    "idea add": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
+    "idea list": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
+    "idea set": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
+    "idea promote": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
+    "idea from-finding": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında"
   }
 }

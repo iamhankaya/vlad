@@ -40,6 +40,7 @@ describe("machines:B console catalog", () => {
     expect(bad(["decision", "add", "--body-file", "../x"], "x").code).toBe("forbidden");
     expect(bad(["task", "ingest", "--events-file", "/tmp/e"]).code).toBe("forbidden");
     expect(bad(["finding", "add", "--detail-file"]).code).toBe("forbidden"); // değersiz bayrak
+    expect(bad(["task", "new", "--pipeline", "--phase-body", "uygulama=/etc/passwd"]).code).toBe("forbidden"); // brain dosyası okutulamaz
   });
   it("`-` as a file flag value needs stdin", () => {
     expect(bad(["task", "report", "T1", "--file", "-"]).code).toBe("bad_request");

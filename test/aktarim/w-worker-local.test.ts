@@ -77,7 +77,7 @@ describe("--notify: def/forward düzeyindeki hatalar da bildirilir (F-vlad-237)"
 // Sözleşme: cli.ts'deki her def() anahtarı WORKER_LOCAL, FORWARD ya da açık "yalnız beyin" listesinde olmalı.
 const BRAIN_ONLY = new Set([
   "project write", "project set", "project note", "project summary", "project refresh",
-  "finding add", "finding set",
+  "finding add", "finding set", "idea add", "idea set", "idea promote", "idea from-finding",
   "task new", "task launch", "task release", "task repin", "task ingest", "task answer", "task set", "task deps", "task resume", "task cleanup", "task close", "task gate", "task merge-preview", "task merge", "task digested",
   "mode night", "mode watch", "mode off", "mode status",
   "audit setup",
