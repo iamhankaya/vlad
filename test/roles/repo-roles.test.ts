@@ -10,12 +10,12 @@ const dir = resolve(import.meta.dirname, "..", "..", "roles");
 describe("repo roles/", () => {
   beforeEach(() => { makeHome(); }); // schemas come from the throwaway home (a copy of the repo's)
 
-  it("the twelve roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
+  it("the ten roles pass the schema with the spec's kinds, skills, model and all four sections", () => {
     const { roles, warnings } = listRolesWithWarnings(dir);
     expect(warnings).toEqual([]);
     expect(Object.fromEntries(roles.map((r) => [r.slug, r.kind]))).toEqual({
-      analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor", finans: "advisory",
-      "game-developer": "executor", "game-director": "executor", growth: "advisory", pazarlama: "advisory", "security-reviewer": "advisory", tester: "executor",
+      advisor: "advisory", analyst: "advisory", architect: "advisory", designer: "executor", developer: "executor", devops: "executor",
+      "game-developer": "executor", "game-director": "executor", "security-reviewer": "advisory", tester: "executor",
     });
     for (const r of roles) {
       expect(Array.isArray(r.skills), `${r.slug} skills`).toBe(true);
@@ -225,9 +225,9 @@ describe("game/mobile roles and short-writing rule", () => {
     }
   });
 
-  it("growth only drafts: no accounts, posts or contact", () => {
-    const body = read("roles/growth.md");
-    for (const w of ["ASO", "SEO", "Discord", "TikTok", "haftalık", "hesap açmaz", "paylaşım yapmaz", "iletişime geçmez"]) expect(body, w).toContain(w);
+  it("advisor keeps the three foci; growth focus only drafts: no accounts, posts or contact", () => {
+    const body = read("roles/advisor.md");
+    for (const w of ["`finans`", "`pazarlama`", "`growth`", "ASO", "SEO", "Discord", "TikTok", "haftalık", "hesap açmaz", "paylaşım yapmaz", "iletişime geçmez", "varsayım", "kaynak linki"]) expect(body, w).toContain(w);
   });
 
   it("designer carries the visual quality bar and status has the visual approval gate", () => {
@@ -239,11 +239,11 @@ describe("game/mobile roles and short-writing rule", () => {
     expect(read(".claude/skills/integrate/SKILL.md")).toContain("`tasarım` kapısı (görsel onay");
   });
 
-  it("designer keeps the web rules and gains a mobile section; pazarlama gains a game section split with growth", () => {
+  it("designer keeps the web rules and gains a mobile section; advisor keeps the pazarlama game section split with growth", () => {
     const d = read("roles/designer.md");
     for (const w of ["docs/design/", "`tasarım`", "`denetim`", "Jetpack Compose", "Material 3", "48dp", "edge-to-edge", "TalkBack", "Roborazzi", "Paparazzi", ".claude/skills"]) expect(d, w).toContain(w);
-    const p = read("roles/pazarlama.md");
-    for (const w of ["konumlandırma", "lansman", "monetizasyon", "`growth`"]) expect(p, w).toContain(w);
+    const p = read("roles/advisor.md");
+    for (const w of ["konumlandırma", "lansman", "monetizasyon", "`growth`", "Oyun/mobil projeler"]) expect(p, w).toContain(w);
   });
 
   it("vlad-worker carries the short-writing rule without changing the report template; CLAUDE.md lists the new roles", () => {
@@ -253,7 +253,7 @@ describe("game/mobile roles and short-writing rule", () => {
     for (const h of ["### Yapılanlar", "### Test sonuçları", "### Kabul kriterleri", "### Açık noktalar"]) expect(w, h).toContain(h);
     expect(read("src/tasks/cloud.ts")).toContain("Kısa yaz");
     const c = read("CLAUDE.md");
-    for (const r of ["game-developer", "game-director", "growth"]) expect(c, r).toContain(r);
+    for (const r of ["game-developer", "game-director"]) expect(c, r).toContain(r);
   });
 });
 

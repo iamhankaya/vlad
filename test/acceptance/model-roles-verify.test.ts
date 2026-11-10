@@ -111,7 +111,7 @@ describe("model dağıtımı: uçtan uca", { timeout: 30_000 }, () => {
 });
 
 describe("roller: vlad role list --json", { timeout: 30_000 }, () => {
-  it("game-developer, game-director, growth listelenir; uyarı yok; kind'lar CLAUDE.md ile uyumlu", () => {
+  it("game-developer, game-director, advisor listelenir; eski danışman slug'ları listelenmez; uyarı yok; kind'lar CLAUDE.md ile uyumlu", () => {
     const r = vlad(["role", "list", "--json"]);
     expect(r.code, r.err).toBe(0);
     const j = JSON.parse(r.out) as { roles: Array<{ slug: string; kind: string; model?: string }>; warnings: string[] };
@@ -119,13 +119,14 @@ describe("roller: vlad role list --json", { timeout: 30_000 }, () => {
     const by = Object.fromEntries(j.roles.map((x) => [x.slug, x]));
     expect(by["game-developer"].kind).toBe("executor");
     expect(by["game-director"].kind).toBe("executor");
-    expect(by["growth"].kind).toBe("advisory");
-    for (const s of ["game-developer", "game-director", "growth"]) expect(by[s].model, s).toBe("sonnet");
+    expect(by["advisor"].kind).toBe("advisory");
+    for (const s of ["finans", "pazarlama", "growth"]) expect(by[s], s).toBeUndefined();
+    for (const s of ["game-developer", "game-director", "advisor"]) expect(by[s].model, s).toBe("sonnet");
   });
 
-  it("growth, game-developer, game-director CLAUDE.md'de anılır; Codex/Gemini görsel kuralı iki oyun rolünde var", () => {
+  it("game-developer, game-director CLAUDE.md'de anılır; Codex/Gemini görsel kuralı iki oyun rolünde var", () => {
     const claude = read("CLAUDE.md");
-    for (const s of ["growth", "game-developer", "game-director"]) expect(claude).toContain(s);
+    for (const s of ["game-developer", "game-director"]) expect(claude).toContain(s);
     for (const s of ["game-developer", "game-director"]) {
       const t = read(`roles/${s}.md`);
       expect(t, s).toContain("codex exec");

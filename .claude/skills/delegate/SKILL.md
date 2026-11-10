@@ -28,7 +28,7 @@ vlad project list --json
   ```
   vlad role list --json
   ```
-  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (finans, pazarlama, analyst, architect) yalnızca `research`, `executor` roller (developer, tester, designer, devops) yalnızca `dev` görevinde kullanılır.
+  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (advisor, analyst, architect, security-reviewer; `advisor`'ın odakları `finans`, `pazarlama`, `growth` eski slug'larla alias olarak da verilir, listede görünmez) yalnızca `research`, `executor` roller (developer, tester, designer, devops) yalnızca `dev` görevinde kullanılır.
 
 ## 2. Döngüyü seç
 
@@ -94,7 +94,7 @@ Kullanıcıya şunu göster:
 ## Bağlam
 <ilgili kararlar, dosyalar, kısıtlar; kaynak ID'leriyle>
 ```
-Rol önerisi: işin doğasına en uygun rolü seç (ör. test yazma/hata avı → `tester`, maliyet/fiyat → `finans`, gereksinim/kod inceleme → `analyst`); türüyle uyumlu olmalı. Uygun rol yoksa "rol yok" yaz; rolsüz görev bugünkü gibi çalışır.
+Rol önerisi: işin doğasına en uygun rolü seç (ör. test yazma/hata avı → `tester`, maliyet/fiyat → `advisor` (odak `finans`; `--role finans` alias), gereksinim/kod inceleme → `analyst`); türüyle uyumlu olmalı. Uygun rol yoksa "rol yok" yaz; rolsüz görev bugünkü gibi çalışır.
 
 Sonunda sor: "Bu görevi oluşturup başlatayım mı?"
 
@@ -222,11 +222,11 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 
 ## 7. Danışman yan görevleri
 
-Finans veya pazarlama herhangi bir fazdan (taslakta ya da fazlar sürerken) danışılabilir. Kullanıcıya yan görevi kısa bir taslakla göster, onay al:
+Danışman (`advisor`: finans, pazarlama, growth odakları) herhangi bir fazdan (taslakta ya da fazlar sürerken) danışılabilir. Kullanıcıya yan görevi kısa bir taslakla göster, onay al:
 ```
-vlad task new --project <slug> --title "<başlık> — danışma: <konu>" --kind research --role <finans|pazarlama> --parent <çatı-id> --phase danışma --body-file <danışma.md> --json
+vlad task new --project <slug> --title "<başlık> — danışma: <konu>" --kind research --role <finans|pazarlama|growth> --parent <çatı-id> --phase danışma --body-file <danışma.md> --json
 ```
-Bağımlılık verilmez; hemen 5b ile yürüt. Sonucu ilgili fazın bağlamına ekle: faz henüz oluşturulmadıysa özetini o fazın `## Bağlam`'ına yaz; oluşturulduysa `vlad task log <faz-id> "Danışma <yan-id>: <özet> — raporuna bak"`. Çalışanlar kardeş görevleri de okur.
+`--role` değeri `advisor`'ın odağıdır (eski slug alias; rol dosyası `advisor.md`). Bağımlılık verilmez; hemen 5b ile yürüt. Sonucu ilgili fazın bağlamına ekle: faz henüz oluşturulmadıysa özetini o fazın `## Bağlam`'ına yaz; oluşturulduysa `vlad task log <faz-id> "Danışma <yan-id>: <özet> — raporuna bak"`. Çalışanlar kardeş görevleri de okur.
 
 ## 8. Hafızayı commit'le
 
