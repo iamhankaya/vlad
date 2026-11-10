@@ -382,6 +382,17 @@
   {
    "path": [
     "task",
+    "close"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "merge onayı (--yes) VLAD/kullanıcıdadır; konsoldan açılmadı, ayrı karar"
+   }
+  },
+  {
+   "path": [
+    "task",
     "digested"
    ],
    "json": true,

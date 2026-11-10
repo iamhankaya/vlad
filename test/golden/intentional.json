@@ -91,6 +91,14 @@
       "keys": [
         "task new --help"
       ]
+    },
+    {
+      "id": "T20261110-10",
+      "keys": [
+        "task close --help",
+        "task --help",
+        "task (bare)"
+      ]
     }
   ]
 }
