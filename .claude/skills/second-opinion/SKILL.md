@@ -1,6 +1,6 @@
 ---
 name: second-opinion
-description: Codex ile bağımsız 3. göz alır — architect planı eleştirisi (mod plan), son kapıda ana branch öncesi kod review'u (mod review) ya da iki çıktının kör A/B karşılaştırması (mod blind-compare). Kullan - /delegate plan fazında eleştiri adımında, /status son kapıda merge/PR'dan önce, iki çözümü karşılaştırırken.
+description: Codex ile bağımsız 3. göz alır — architect planı eleştirisi (mod plan), son kapıda ana branch öncesi kod review'u (mod review). Kullan - /delegate plan fazında eleştiri adımında, /status son kapıda merge/PR'dan önce.
 ---
 
 # second-opinion — Codex 3. göz
@@ -34,10 +34,6 @@ Tetikleyici, tur sınırı, loglama ve başka makinede koşan fazın atlanması 
 codex review -c model="gpt-6-astra" -c model_reasoning_effort="medium" -c 'windows.sandbox="unelevated"' --base vlad/<çatı-id>
 ```
 Tur notları (`Codex ara turu`, `Codex son turu`) ve ölçüm satırı `integrate` K2/K5'tedir. Yedek yolu K4.
-
-## Mod `blind-compare` — kör A/B
-
-İki çıktıyı (plan, diff, metin) rastgele sırayla `A`/`B` olarak etiketle; hangisinin kimden geldiğini söyleme. `codex exec -s read-only` ile ölçütler (doğruluk, eksik, risk) üzerinden karşılaştırtıp tercihi ve gerekçeyi al; etiketleri ancak sonuç alındıktan sonra aç. Sonucu `vlad task log`'a yaz.
 
 ## Bulguları sunma
 
