@@ -5,7 +5,7 @@ description: Bir görevin ya da pipeline fazının diff'ini entegrasyona hazırl
 
 # integrate — kapı yordamı
 
-Kapı yetkisi VLAD'dadır; çalışan merge etmez. **Merge, push ve PR her zaman o görev ve o eylem için kullanıcının açık onayını ister** (gece modu penceresi K7'deki sınırlarla önceden verilmiş onaydır); onaydan önce yalnız 1–4. adımlar yapılır. Bu skill yüklenemezse kapı eylemi **durur** ve kullanıcıya söylenir; sessiz yedek yok.
+Kapı yetkisi VLAD'dadır; çalışan merge etmez. **Merge, push ve PR her zaman o görev ve o eylem için kullanıcının açık onayını ister** (gece modunda merge, K7'deki sınırlarla pencerenin önceden verilmiş onayıdır; push yalnız `night.push` ile, PR kapsam dışı); onaydan önce yalnız 1–4. adımlar yapılır. Bu skill yüklenemezse kapı eylemi **durur** ve kullanıcıya söylenir; sessiz yedek yok.
 
 **Gece modu:** faz ve son kapı merge'ü, push yetkisi, durdurma koşulları ve sabah raporu K7–K8'de tek yerde tanımlıdır; gece modu etkinken de ön kontrol, gate ve ön izleme koşar.
 
