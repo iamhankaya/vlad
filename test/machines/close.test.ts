@@ -243,7 +243,7 @@ describe("task close: uzak görev ve çok makine", () => {
   it("kartın machines listesi ≥2 ise diğer makine için yeşil gate satırı yoksa durur", async () => {
     card(GREEN, "machines: [mac, win]\n");
     const id = await ready();
-    const r = await closeTask(id, { yes: true }, deps({ self: "mac" }));
+    const r = await closeTask(id, { yes: true, allMachines: true }, deps({ self: "mac" }));
     expect(r).toMatchObject({ ok: false, stopped_at: "gate" });
     expect(r.reason).toMatch(/win/);
     expect(existsSync(join(repo, "b.txt"))).toBe(false);
@@ -255,11 +255,54 @@ describe("task close: uzak görev ve çok makine", () => {
     const wt = getTask(id).data.worktree!;
     const head = execFileSync("git", ["-C", wt, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
     logTask(id, `Gate win: yeşil ${"0".repeat(12)}`);
-    const stale = await closeTask(id, { yes: true }, deps({ self: "mac" }));
+    const stale = await closeTask(id, { yes: true, allMachines: true }, deps({ self: "mac" }));
     expect(stale).toMatchObject({ ok: false, stopped_at: "gate" });
     expect(stale.reason).toMatch(/win/);
     logTask(id, `Gate win: yeşil ${head.slice(0, 12)}`);
-    const ok = await closeTask(id, { yes: true }, deps({ self: "mac" }));
+    const ok = await closeTask(id, { yes: true, allMachines: true }, deps({ self: "mac" }));
     expect(ok.ok).toBe(true);
+  });
+
+  it("P1: gate sürerken dala gelen commit gate'siz merge edilmez", async () => {
+    card(`node -e "require('child_process').execSync('echo broken > c.txt && git add c.txt && git -c user.name=T -c user.email=t@t commit -qm late')"`);
+    const id = await ready();
+    const r = await closeTask(id, { yes: true }, deps());
+    expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
+    expect(r.reason).toMatch(/gate'ten sonra değişti/);
+    expect(existsSync(join(repo, "c.txt"))).toBe(false);
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+  });
+
+  it("confirm durağı gate'lenen head'i basar; --head farklıysa durur, aynıysa merge eder", async () => {
+    const id = await ready();
+    const wt = getTask(id).data.worktree!;
+    const head = git(wt, "rev-parse", "HEAD").trim();
+    const first = await closeTask(id, {}, deps());
+    expect(first).toMatchObject({ stopped_at: "confirm", head });
+    expect(first.reason).toContain(`--head ${head.slice(0, 12)}`);
+    const bad = await closeTask(id, { yes: true, head: "deadbee" }, deps());
+    expect(bad).toMatchObject({ ok: false, stopped_at: "gate" });
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+    const ok = await closeTask(id, { yes: true, head: head.slice(0, 12) }, deps());
+    expect(ok.ok).toBe(true);
+    expect(ok.head).toBe(head);
+  });
+
+  it("çok makine: son kapı değilse eksik satır yalnız uyarı, --allMachines ile durur", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    const warn = await closeTask(id, {}, deps({ self: "mac" }));
+    expect(warn.stopped_at).toBe("confirm");
+    expect(warn.warnings.join("\n")).toMatch(/win/);
+    const strict = await closeTask(id, { yes: true, allMachines: true }, deps({ self: "mac" }));
+    expect(strict).toMatchObject({ ok: false, stopped_at: "gate" });
+  });
+
+  it("pipeline çatı kapanış raporu olmadan precheck'ten geçer", async () => {
+    const t = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "## Tanım\nx\n" });
+    await launchTask(t.data.id, { launcher: fake, cfg }).catch(() => {});
+    const r = await closeTask(t.data.id, { yes: true }, deps());
+    expect(r.reason ?? "").not.toMatch(/kapanış raporu yok/);
   });
 });

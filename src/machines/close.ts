@@ -10,6 +10,7 @@ import { closedFindingTokens, isFullFindingId } from "../findings/closed-report.
 import { UNRESOLVED, getFinding, listFindingsWithWarnings, setFindingStates } from "../findings/store.js";
 import { modeStatus } from "../mode/store.js";
 import { refreshProject } from "../projects/derived.js";
+import { doneSummaryNote } from "../projects/status.js";
 import { cleanupTask, getTask, integrationWorktrees, logTask, setState } from "../tasks/index.js";
 import type { Task } from "../tasks/index.js";
 import { closeWorkerWindow } from "../launcher/index.js";
@@ -32,10 +33,18 @@ export interface CloseResult {
   /** log + diff --stat of what the merge brings (shown when it stops for confirmation) */
   summary?: string;
   merged_head?: string;
+  /** the commit the gate ran on (and the only one the merge may bring); pass it back as --head on the approving run */
+  head?: string;
   /** closed findings (fixed by this task) */
   findings?: string[];
 }
-export interface CloseOpts { yes?: boolean; into?: string }
+export interface CloseOpts {
+  yes?: boolean; into?: string;
+  /** sha (≥7 hex prefix) the user approved at the confirm stop; a different gated head stops before the merge */
+  head?: string;
+  /** require the green-gate evidence of every card machine even when this is not the final gate */
+  allMachines?: boolean;
+}
 
 /** Remote (worker machine) half of the gate; defaults go through the Agent transport. */
 export interface CloseRemote {
@@ -77,10 +86,11 @@ function realDeps(o: Partial<CloseDeps>): CloseDeps {
   };
 }
 
-interface G { code: number; out: string }
+/** `out` = stdout only (values to parse); `all` = stdout+stderr (for messages) */
+interface G { code: number; out: string; all: string }
 function g(cwd: string, args: string[], timeoutMs = 60_000): G {
   const r = spawnSync("git", args, { cwd, encoding: "utf8", timeout: timeoutMs, maxBuffer: 32 << 20 });
-  return { code: r.status ?? 128, out: `${r.stdout ?? ""}${r.stderr ?? ""}` };
+  return { code: r.status ?? 128, out: r.stdout ?? "", all: `${r.stdout ?? ""}${r.stderr ?? ""}` };
 }
 const tail = (s: string, n = 30): string => s.trim().split("\n").slice(-n).join("\n");
 const cardOf = (slug: string): ProjectCard => {
@@ -114,7 +124,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     const wasDone = t0.data.state === "done";
     if (!wasDone && t0.data.state !== "awaiting_approval") stop("precheck", `görev awaiting_approval değil (${t0.data.state}); close yalnız raporu yazılmış görevde çalışır`);
     const report = (() => { try { return getKbRecord(id, "## Kapanış raporu").content.trim(); } catch { return ""; } })();
-    if (!wasDone && !report) stop("precheck", "kapanış raporu yok");
+    if (!wasDone && !report && t0.data.kind !== "pipeline") stop("precheck", "kapanış raporu yok");
     const isResearch = t0.data.kind === "research";
     const parent = t0.data.parent ?? null;
     const card = cardOf(t0.data.project);
@@ -133,6 +143,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (!w) stop("precheck", `${parent} entegrasyon worktree'si bulunamadı`);
       targetDir = w!.worktree;
     }
+    if (t0.data.kind === "pipeline" && !isResearch && !opts.into && integrationWorktrees(id, d.cfg).length > 1) stop("precheck", "çok projeli çatı: integrate skill §5 elle");
     const from = `vlad/${id}`;
     r.target = isResearch ? undefined : into;
     if (wasDone && !isResearch && !remoteMachine && g(card.path, ["rev-parse", "--verify", "-q", `refs/heads/${from}`]).code === 0
@@ -140,6 +151,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     add("precheck", "ok", wasDone ? "zaten done: kalan adımlar tamamlanıyor" : undefined);
 
     let gateGreen = wasDone;
+    let gatedHead = ""; // the commit the gate ran on; the merge may bring only this
     if (wasDone) {
       for (const s of ["gate", "conflict", "confirm", "merge", "done"] as const) add(s, "skipped", "görev zaten done");
     } else if (isResearch) {
@@ -151,7 +163,6 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (!gateCmd) return stop("gate", `gate tanımlı değil — kart için: vlad project set ${t0.data.project} gate "<komut>"`);
       const target = defaultGateTarget(t0);
       let ranOn: string;
-      let gatedHead = "";
       if (remoteMachine) {
         ranOn = remoteMachine;
         const gr = await d.remote.gate(t0, target, remoteMachine);
@@ -169,20 +180,24 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         const gr = spawnSync(gateCmd, { cwd: wt!, shell: true, encoding: "utf8", timeout: 25 * 60_000, maxBuffer: 64 << 20 });
         if (gr.status !== 0) stop("gate", `gate kırmızı (çıkış ${gr.status ?? "zaman aşımı"}):\n${tail(`${gr.stdout ?? ""}\n${gr.stderr ?? ""}`)}`);
       }
-      // several platforms: every listed machine needs a green gate line ("Gate <makine>: yeşil")
+      // several platforms: every listed machine needs a green gate line for this commit ("Gate <makine>: yeşil <sha>"); enforced at the final gate (pipeline) or with --all-machines, a warning elsewhere
       if ((card.machines?.length ?? 0) >= 2) {
+        const enforce = t0.data.kind === "pipeline" || !!opts.allMachines;
         if (!d.self && !remoteMachine) stop("gate", "kart ≥2 makineli ama bu makinenin kimliği belirsiz (VLAD_MACHINE / vlad.local.json self)");
         if (!/^[0-9a-f]{40}$/.test(gatedHead)) stop("gate", "gate head'i (sha) belirlenemedi; çok makine kanıtı sha'ya bağlanır");
         const short = gatedHead.slice(0, 12);
         // evidence is bound to the gated commit: "Gate <makine>: yeşil <sha>" (sha ≥7 hex prefix of the head)
-        const has = (text: string, m: string) => [...text.matchAll(new RegExp(`Gate ${m}: yeşil ([0-9a-f]{7,40})\\b`, "g"))].some((x) => gatedHead.startsWith(x[1]));
+        const has = (text: string, m: string) => [...text.matchAll(new RegExp(`Gate ${m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: yeşil ([0-9a-f]{7,40})\\b`, "g"))].some((x) => gatedHead.startsWith(x[1]));
         await withKbLock(() => { if (!has(getTask(id).body, ranOn)) logTask(id, `Gate ${ranOn}: yeşil ${short}`); });
         const logs = `${getTask(id).body}\n${parent ? getTask(parent).body : ""}`;
         const missing = card.machines!.filter((m) => m !== ranOn && !has(logs, m));
-        if (missing.length) stop("gate", `${missing.join(", ")} için bu commit'te (${short}) yeşil gate yok: o makinede \`vlad task gate ${id} --target ${target} --json\` koş, sonra \`vlad task log ${id} "Gate <makine>: yeşil ${short}"\``);
+        if (missing.length && !enforce) r.warnings.push(`${missing.join(", ")} için bu commit'te (${short}) yeşil gate satırı yok (son kapı değil: yalnız uyarı; zorunlu kılmak için --all-machines)`);
+        else if (missing.length) stop("gate", `${missing.join(", ")} için bu commit'te (${short}) yeşil gate yok: o makinede \`vlad task gate ${id} --target ${target} --json\` koş, sonra \`vlad task log ${id} "Gate <makine>: yeşil ${short}"\``);
       }
       gateGreen = true;
-      add("gate", "ok", ranOn);
+      r.head = gatedHead;
+      if (opts.head && !(/^[0-9a-f]{7,40}$/i.test(opts.head) && gatedHead.toLowerCase().startsWith(opts.head.toLowerCase()))) stop("gate", `onaylanan head (${opts.head}) ile gate'lenen head (${gatedHead.slice(0, 12)}) farklı; özeti yeniden gözden geçirip yeni head ile onayla`);
+      add("gate", "ok", `${ranOn} @ ${gatedHead.slice(0, 12)}`);
 
       // ---- conflict preview (writes nothing)
       if (remoteMachine) {
@@ -197,9 +212,9 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         if (mt.code === 1) {
           const rest = mt.out.split("\n").slice(1); // --name-only: tree id, conflicted paths, blank line, messages
           const names = rest.slice(0, Math.max(0, rest.indexOf(""))).filter(Boolean);
-          stop("conflict", `çakışma (${into} ← ${from}): ${names.join(", ") || tail(mt.out, 5)}`);
+          stop("conflict", `çakışma (${into} ← ${from}): ${names.join(", ") || tail(mt.all, 5)}`);
         }
-        if (mt.code !== 0) r.warnings.push(`merge-tree çalışmadı (git ≥ 2.38 gerekir): çakışma merge sırasında yakalanır — ${tail(mt.out, 2)}`);
+        if (mt.code !== 0) r.warnings.push(`merge-tree çalışmadı (git ≥ 2.38 gerekir): çakışma merge sırasında yakalanır — ${tail(mt.all, 2)}`);
       }
       add("conflict", "ok", r.warnings.length ? "ön izleme atlandı" : undefined);
     }
@@ -218,7 +233,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (!how) {
         add("confirm", "stopped", "onay gerekli");
         r.stopped_at = "confirm";
-        r.reason = `${isResearch ? "kabul" : `${from} → ${into} merge`} için onay gerekli: onaylıysan \`vlad task close ${id} --yes\``;
+        r.reason = `${isResearch ? "kabul" : `${from} → ${into} merge`} için onay gerekli${r.head ? ` (gate'lenen head ${r.head.slice(0, 12)})` : ""}: onaylıysan \`vlad task close ${id} --yes${r.head ? ` --head ${r.head.slice(0, 12)}` : ""}\``;
         return r;
       }
       add("confirm", "ok", how);
@@ -234,17 +249,20 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         const cur = g(targetDir, ["branch", "--show-current"]).out.trim();
         if (cur !== into) stop("merge", `hedef worktree ${into} dalında değil (${cur || "detached"}): ${targetDir}`);
         if (g(targetDir, ["status", "--porcelain"]).out.trim()) stop("merge", `hedef ağaç temiz değil: ${targetDir}`);
-        const mr = g(targetDir, ["-c", "user.name=VLAD", "-c", "user.email=vlad@localhost", "merge", "--no-ff", "-m", `Merge ${from}: ${t0.data.title}`, from], 5 * 60_000);
+        const tip = g(card.path, ["rev-parse", "--verify", "-q", `refs/heads/${from}^{commit}`]).out.trim();
+        if (tip !== gatedHead) stop("merge", `${from} ucu gate'ten sonra değişti (gate ${gatedHead.slice(0, 12)}, şimdi ${tip.slice(0, 12) || "yok"}); gate'siz commit merge edilmez, yeniden koş`);
+        const mr = g(targetDir, ["-c", "user.name=VLAD", "-c", "user.email=vlad@localhost", "merge", "--no-ff", "-m", `Merge ${from}: ${t0.data.title}`, gatedHead], 5 * 60_000);
         if (mr.code !== 0) {
           if (g(targetDir, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]).code === 0) g(targetDir, ["merge", "--abort"]); // not when the failure was e.g. index.lock held by another merge
-          stop("merge", `merge başarısız, geri alındı: ${tail(mr.out, 5)}`);
+          stop("merge", `merge başarısız, geri alındı: ${tail(mr.all, 5)}`);
         }
         r.merged_head = g(targetDir, ["rev-parse", "HEAD"]).out.trim(); merged = true;
         add("merge", "ok", r.merged_head);
       }
 
       // ---- done
-      await withKbLock(() => setState(id, "done"));
+      const doneT = await withKbLock(() => setState(id, "done"));
+      r.warnings.push(...doneSummaryNote(doneT).warnings);
       try { refreshProject(t0.data.project, { create: false, only: "activity" }); } catch (e) { r.warnings.push(`kart bloğu tazelenemedi: ${(e as Error).message}`); }
       add("done", "ok");
     }
