@@ -82,6 +82,7 @@
     "test/acceptance/setup-readme.test.ts",
     "test/acceptance/setup-settings.test.ts",
     "test/acceptance/setup-single-machine.test.ts",
+    "test/acceptance/setup-verify-e2e.test.ts",
     "test/acceptance/team-improvements-bugs.test.ts",
     "test/acceptance/team-improvements-e2e.test.ts",
     "test/acceptance/team-improvements-verify2.test.ts",
