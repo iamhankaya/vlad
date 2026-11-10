@@ -172,26 +172,26 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     expect(read("roles/developer.md")).toMatch(/Chromium\/Playwright/);
     const status = read(".claude/skills/status/SKILL.md");
     expect(status).toContain("Güvenlik incelemesi");
-    expect(status).toContain("security-reviewer");
+    expect(read(".claude/skills/integrate/SKILL.md")).toContain("security-reviewer");
     expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
   });
 
   it("security review is tiered: critical/high blocks, lower go to findings, 1 round, exception tied to the finding", () => {
-    // single source: status holds the rule, delegate only points to it (T20261028-15)
-    expect(read(".claude/skills/delegate/SKILL.md")).toMatch(/\/status[^.]*Kademeli güvenlik kuralı/);
-    for (const f of [".claude/skills/status/SKILL.md"]) {
-      const t = read(f);
-      expect(t, f).toContain("Kademeli güvenlik kuralı");
-      expect(t, f).toMatch(/kritik\/yüksek[^.]*merge/);
-      expect(t, f).toMatch(/orta\/düşük\/bilgi[^.]*değişiklik turu açılmaz/);
-      expect(t, f).toContain("en çok 1 güvenlik değişiklik turu");
-      expect(t, f).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
-      expect(t, f).toMatch(/kimlik doğrulamasız[^.]*sır[^.]*imza[^.]*yetki yükseltme/);
-      expect(t, f).not.toMatch(/faz auth\/yetki\/oturum\/sır\/veri silmeye dokunuyorsa/);
-    }
+    // single source: integrate K1 holds the rule; status, delegate and CLAUDE.md only point to it (T20261110-16)
+    expect(read(".claude/skills/delegate/SKILL.md")).toMatch(/`integrate` K1/);
+    expect(read(".claude/skills/status/SKILL.md")).toMatch(/`integrate` K1/);
+    const f = ".claude/skills/integrate/SKILL.md";
+    const t = read(f);
+    expect(t, f).toContain("K1 — Güvenlik incelemesi (kademeli)");
+    expect(t, f).toMatch(/[Kk]ritik\/yüksek[^.]*merge/);
+    expect(t, f).toMatch(/orta\/düşük\/bilgi[^.]*tur açılmaz/);
+    expect(t, f).toContain("en çok 1 güvenlik değişiklik turu");
+    expect(t, f).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
+    expect(t, f).toMatch(/kimlik doğrulamasız[^.]*sır[^.]*imza[^.]*yetki yükseltme/);
+    expect(t, f).not.toMatch(/faz auth\/yetki\/oturum\/sır\/veri silmeye dokunuyorsa/);
     const claude = read("CLAUDE.md");
-    expect(claude).toMatch(/kritik\/yüksek[^.]*merge[^.]*orta\/düşük/);
-    expect(claude).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
+    expect(claude).toMatch(/güvenlik incelemesi[\s\S]{0,300}`integrate` skill'inde tek kaynak/i);
+    expect(claude).not.toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
     expect(claude).not.toMatch(/auth\/yetki\/oturum\/sır\/veri silme ya da/);
   });
 
@@ -235,7 +235,8 @@ describe("game/mobile roles and short-writing rule", () => {
     expect(d).toMatch(/^  - frontend-design:frontend-design$/m);
     for (const w of ["yüksek sadakatli mockup", "açık + koyu", "2–3 ayrı görsel yön", "3–5 referans", "seçim gelmeden", "en az 2 tur", "impeccable critique", "new-work", "craft-floor", "frontend-design", "büyük harf etiket", "dekoratif gradyan", "karışık ikon", "Fluent 2", "### Görsel yönler", "### Görsel turlar"]) expect(d, w).toContain(w);
     const status = read(".claude/skills/status/SKILL.md");
-    for (const w of ["Görsel onay kapısı", "ekran görüntülerini (`### Görsel yönler`", "gece modunda da bu kapı", "`tasarım` kapısı (görsel onay"]) expect(status, w).toContain(w);
+    for (const w of ["Görsel onay kapısı", "ekran görüntülerini (`### Görsel yönler`", "gece modunda da bu kapı"]) expect(status, w).toContain(w);
+    expect(read(".claude/skills/integrate/SKILL.md")).toContain("`tasarım` kapısı (görsel onay");
   });
 
   it("designer keeps the web rules and gains a mobile section; pazarlama gains a game section split with growth", () => {
