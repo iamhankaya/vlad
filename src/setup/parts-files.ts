@@ -2,7 +2,7 @@
 // Kural: apply önce check koşar, ok ise yazmaz; kullanıcı ayarı silinmez/ezilmez (çakışan raporlanır); JSON değişimi yedekli.
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
-import { HOOK_TIMEOUT_S, globalSkillNames, hookCommand, isSessionReportHook, mergeSessionEndHook } from "../install.js";
+import { HOOK_TIMEOUT_S, globalSkillNames, hookCommand, isDeadSessionReportHook, isSessionReportHook, mergeSessionEndHook } from "../install.js";
 import { KB_GITIGNORE } from "../kb/commit.js";
 import { LOCAL_CONFIG_FILE } from "../kb/config-layer.js";
 import { loadConfig } from "../kb/config.js";
@@ -102,9 +102,11 @@ export const repoSkillsPart: SetupPart = {
 };
 
 // ---- hooks ----
-function sessionEndState(data: any, command: string): "ok" | "eksik" | "çakışan" {
-  const hooks = (data?.hooks?.SessionEnd ?? []).flatMap((e: any) => (Array.isArray(e?.hooks) ? e.hooks : [])).filter((h: any) => h?.command === command || isSessionReportHook(h?.command));
-  if (!hooks.length) return "eksik";
+function sessionEndState(data: any, command: string): "ok" | "eksik" | "eski" | "çakışan" {
+  const all = (data?.hooks?.SessionEnd ?? []).flatMap((e: any) => (Array.isArray(e?.hooks) ? e.hooks : [])).filter((h: any) => h?.command === command || isSessionReportHook(h?.command));
+  if (!all.length) return "eksik";
+  const hooks = all.filter((h: any) => h.command === command || !isDeadSessionReportHook(h.command));
+  if (hooks.length < all.length) return "eski"; // ölü yollu hook var (tek başına ya da yaşayanla birlikte): yeniden yazılmalı/temizlenmeli
   return hooks.some((h: any) => typeof h.timeout === "number" && h.timeout >= HOOK_TIMEOUT_S) ? "ok" : "çakışan";
 }
 export const hooksPart: SetupPart = {
@@ -118,7 +120,7 @@ export const hooksPart: SetupPart = {
     const startOk = existsSync(start) && readFileSync(start, "utf8").includes("status --summary --hook");
     const distOk = existsSync(join(c.vladHome, "dist", "hooks", "session-report.js"));
     return compose("hooks", [
-      { required: "zorunlu", item: item("hooks:session-end", st, st === "ok" ? "SessionEnd hook kayıtlı" : st === "eksik" ? "SessionEnd hook yok" : `SessionEnd hook timeout<${HOOK_TIMEOUT_S} (dokunulmadı)`, "vlad setup --only hooks") },
+      { required: "zorunlu", item: item("hooks:session-end", st, st === "ok" ? "SessionEnd hook kayıtlı" : st === "eksik" ? "SessionEnd hook yok" : st === "eski" ? "SessionEnd hook var olmayan bir yola işaret ediyor (repo taşındı?)" : `SessionEnd hook timeout<${HOOK_TIMEOUT_S} (dokunulmadı)`, "vlad setup --only hooks") },
       { required: "zorunlu", item: item("hooks:session-start", startOk ? "ok" : "eksik", startOk ? "SessionStart hook (repo) var" : ".claude/settings.json SessionStart yok") },
       { required: "zorunlu", item: item("hooks:dist", distOk ? "ok" : "eksik", distOk ? "dist/hooks/session-report.js var" : "dist/hooks/session-report.js yok", "npm run build") },
     ]);
@@ -133,13 +135,13 @@ export const hooksPart: SetupPart = {
     if (existsSync(join(c.vladHome, ".git")) && statSync(join(c.vladHome, ".git")).isFile()) return result("hooks", [{ kind: "print", what: "VLAD kökü bir git worktree'si: SessionEnd hook'u yazılmadı (yolu worktree'ye gömülür); setup'ı ana çalışma kopyasından çalıştırın" }]);
     if (st === "çakışan") return result("hooks", [{ kind: "skip", what: "SessionEnd hook'u farklı timeout ile kayıtlı: değiştirilmedi (çakışan)", target: settingsPath(c) }]);
     const r = updateJson(c, settingsPath(c), (d) => mergeSessionEndHook(d, cmd));
-    return result("hooks", [{ kind: "write", what: `SessionEnd hook ekle: ${cmd}`, target: settingsPath(c) }], r.backup ? [r.backup] : []);
+    return result("hooks", [{ kind: "write", what: st === "eski" ? `ölü yollu SessionEnd hook'u yeniden yazıldı: ${cmd}` : `SessionEnd hook ekle: ${cmd}`, target: settingsPath(c) }], r.backup ? [r.backup] : []);
   },
   async uninstall(c) {
     const cmd = hookCommand(c.vladHome);
     const r = updateJson(c, settingsPath(c), (d) => {
       if (!Array.isArray(d?.hooks?.SessionEnd)) return d;
-      d.hooks.SessionEnd = d.hooks.SessionEnd.map((e: any) => (Array.isArray(e?.hooks) ? { ...e, hooks: e.hooks.filter((h: any) => h?.command !== cmd) } : e)).filter((e: any) => !Array.isArray(e?.hooks) || e.hooks.length);
+      d.hooks.SessionEnd = d.hooks.SessionEnd.map((e: any) => (Array.isArray(e?.hooks) ? { ...e, hooks: e.hooks.filter((h: any) => h?.command !== cmd && !isDeadSessionReportHook(h?.command)) } : e)).filter((e: any) => !Array.isArray(e?.hooks) || e.hooks.length);
       return d;
     });
     return result("hooks", r.changed ? [{ kind: "write", what: "SessionEnd girişi kaldırıldı", target: settingsPath(c) }] : [{ kind: "skip", what: "kayıtlı değil" }], r.backup ? [r.backup] : []);

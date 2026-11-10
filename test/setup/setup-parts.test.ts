@@ -421,7 +421,8 @@ describe("compareDirs / yedek (P2-3)", () => {
 
 describe("hook eşleşmesi sonekle, worktree'de reddet (P2-4)", () => {
   it("başka kök için kayıtlı session-report hook'u varsa ikinci hook eklenmez", async () => {
-    const other = 'node "/baska/yer/vlad/dist/hooks/session-report.js"';
+    const other = `node "${join(root, "baska", "vlad", "dist", "hooks", "session-report.js")}"`;
+    w(join(root, "baska", "vlad", "dist", "hooks", "session-report.js"), "");
     w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: other, timeout: 60 }] }] } }));
     await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
     const cmds = jr(settings()).hooks.SessionEnd.flatMap((e: any) => e.hooks.map((h: any) => h.command));
@@ -432,5 +433,31 @@ describe("hook eşleşmesi sonekle, worktree'de reddet (P2-4)", () => {
     const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
     expect(existsSync(settings()) ? JSON.stringify(jr(settings())) : "").not.toContain("session-report");
     expect(rs[0]!.actions.some((a) => /worktree/i.test(a.what))).toBe(true);
+  });
+});
+
+describe("ölü yollu SessionEnd hook'u (son kapı tur 2 P1)", () => {
+  const dead = 'node "/old/gone/vlad/dist/hooks/session-report.js"';
+  const ends = () => jr(settings()).hooks.SessionEnd.flatMap((e: any) => e.hooks.map((h: any) => h.command));
+  it("--check eski der; setup yeniden yazar (yedekle), çoğaltmaz", async () => {
+    w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }] }] } }));
+    const k = (await runCheck(ctx(), { only: ["hooks"] })).parts[0]!;
+    expect(k.items!.find((i) => i.id === "hooks:session-end")!.status).toBe("eski");
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    expect(ends()).toEqual([`node "${join(vladHome, "dist", "hooks", "session-report.js")}"`]);
+    expect(rs[0]!.backups.length).toBe(1);
+    await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    expect(ends()).toHaveLength(1);
+  });
+  it("ölü + yaşayan hook birlikteyse ölü atılır, ikinci hook eklenmez", async () => {
+    const live = `node "${join(vladHome, "dist", "hooks", "session-report.js")}"`;
+    w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }, { type: "command", command: live, timeout: 60 }] }] } }));
+    await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    expect(ends()).toEqual([live]);
+  });
+  it("--uninstall ölü yollu hook'u da kaldırır", async () => {
+    w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }] }] } }));
+    await runUninstall(ctx(), "hooks");
+    expect(JSON.stringify(jr(settings()))).not.toContain("session-report");
   });
 });
