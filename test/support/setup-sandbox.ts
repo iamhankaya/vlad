@@ -40,7 +40,7 @@ export interface Sandbox {
 /** Windows: Git for Windows'in sh.exe'si (git.exe'nin yanından ya da PATH'ten). */
 function findSh(): string {
   const git = resolveTool("git");
-  const cands = [git && join(git, "..", "..", "bin", "sh.exe"), git && join(git, "..", "..", "usr", "bin", "sh.exe"), resolveTool("sh")].filter((c): c is string => !!c);
+  const cands = [git && join(git, "..", "..", "bin", "sh.exe"), git && join(git, "..", "..", "usr", "bin", "sh.exe"), git && join(git, "..", "..", "..", "bin", "sh.exe"), resolveTool("sh")].filter((c): c is string => !!c);
   const f = cands.find((c) => existsSync(c));
   if (!f) throw new Error("setup sandbox: Windows'ta sahte araçlar için Git'in sh.exe'si bulunamadı");
   return f;

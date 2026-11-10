@@ -22,8 +22,8 @@ export function resolveTool(cmd: string, env: NodeJS.ProcessEnv = process.env): 
 export function toolInvocation(cmd: string, args: string[], env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): { file: string; args: string[]; verbatim: boolean } {
   const r = platform === "win32" ? resolveTool(cmd, env) : null;
   if (!r || ![".cmd", ".bat"].includes(extname(r).toLowerCase())) return { file: r ?? cmd, args, verbatim: false };
-  if (args.some((a) => /["%]/.test(a))) throw new Error(`${cmd}: argüman " ya da % içeriyor (cmd sarmalayıcısı güvenle çağıramaz)`);
-  return { file: env.ComSpec ?? "cmd.exe", args: ["/d", "/s", "/c", `"${[r, ...args].map((a) => `"${a}"`).join(" ")}"`], verbatim: true };
+  if ([r, ...args].some((a) => /["%]/.test(a) || a.endsWith("\\"))) throw new Error(`${cmd}: argüman " ya da % içeriyor ya da ters eğik çizgiyle bitiyor (cmd sarmalayıcısı güvenle çağıramaz)`);
+  return { file: env.ComSpec ?? env.COMSPEC ?? "cmd.exe", args: ["/d", "/s", "/c", `"${[r, ...args].map((a) => `"${a}"`).join(" ")}"`], verbatim: true };
 }
 const realRunner: Runner = (cmd, args, o = {}) => {
   try {
