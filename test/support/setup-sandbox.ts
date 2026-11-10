@@ -89,7 +89,7 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
 
 /** S1 cevabı (Mac, tek makine, yerel kb); `over` üst düzey anahtarları değiştirir. */
 export const s1Answers = (sb: Sandbox, over: Record<string, unknown> = {}): Record<string, unknown> => ({
-  role: "brain", machines: "single", kb: { mode: "local", dir: sb.kbDir }, roots: [join(sb.root, "dev")], ...over,
+  role: "brain", machines: "single", fresh: true, kb: { mode: "local", dir: sb.kbDir }, roots: [join(sb.root, "dev")], ...over,
 });
 
 /** Dizin ağacının içerik karması (göreli yol → sha256); mtime dahil değil (ayrı `mtimes`). */

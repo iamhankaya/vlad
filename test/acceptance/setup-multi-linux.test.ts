@@ -36,7 +36,7 @@ describe("S8: beyin Mac + işçi Windows, çift anahtar", () => {
   });
   it("işçide --join mac: anahtar stdin'den; yalnız beyinle paylaşılan anahtar tutulur, self=windows", () => {
     const a = { role: "worker", machines: "multi", machine: { name: "windows", agent: { host: "192.168.1.34", port: 7437 } }, keys: "stdin", kb: { mode: "path", dir: worker.kbDir }, roots: [join(worker.root, "dev")] };
-    const r = keep(worker.run(["setup", "--join", "mac", "--yes", "--answers", worker.answers(a)], { input: key + "\n" }));
+    const r = keep(worker.run(["setup", "--join", "mac", "--key-stdin", "--yes", "--answers", worker.answers(a)], { input: key + "\n" }));
     expect(r.code, r.err + r.out).toBe(0);
     const l = local(worker);
     expect(l.self).toBe("windows");
