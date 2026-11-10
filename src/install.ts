@@ -15,15 +15,24 @@ export function mergeSessionEndHook(settings: any, command: string): any {
     throw new Error("settings.json: hooks.SessionEnd bir dizi değil; elle düzeltin");
   }
   const end: any[] = s.hooks?.SessionEnd ?? [];
+  const hooks = end.flatMap((e) => (Array.isArray(e?.hooks) ? e.hooks : [])).filter((h: any) => h?.command === command || isSessionReportHook(h?.command));
+  const dead = (h: any) => h.command !== command && isDeadSessionReportHook(h.command);
   let found = false;
+  for (const h of hooks) {
+    if (dead(h)) continue; // ölü yollu girdi yaşayan birini yerine koymadıkça işe yaramaz: aşağıda yeniden yazılır/çoğaltılmaz
+    found = true;
+    if (typeof h.timeout !== "number" || h.timeout < HOOK_TIMEOUT_S) h.timeout = HOOK_TIMEOUT_S;
+  }
+  // Ölü yollu (artık var olmayan kök) session-report hook'ları: yaşayan hook yoksa ilki bu kökün komutuyla yeniden yazılır, kalanlar ve (yaşayan varsa) hepsi atılır.
   for (const e of end) {
     if (!Array.isArray(e?.hooks)) continue;
-    for (const h of e.hooks) {
-      if (h?.command !== command) continue;
-      found = true;
-      if (typeof h.timeout !== "number" || h.timeout < HOOK_TIMEOUT_S) h.timeout = HOOK_TIMEOUT_S;
-    }
+    e.hooks = e.hooks.filter((h: any) => {
+      if (!(h?.command !== command && isSessionReportHook(h?.command) && isDeadSessionReportHook(h.command))) return true;
+      if (found) return false;
+      found = true; h.command = command; h.timeout = Math.max(typeof h.timeout === "number" ? h.timeout : 0, HOOK_TIMEOUT_S); return true;
+    });
   }
+  s.hooks && (s.hooks.SessionEnd = end.filter((e) => !Array.isArray(e?.hooks) || e.hooks.length));
   if (found) return s;
   s.hooks = { ...(s.hooks ?? {}), SessionEnd: [...end, { hooks: [{ type: "command", command, timeout: HOOK_TIMEOUT_S }] }] };
   return s;
@@ -47,6 +56,12 @@ function changedInstalledFiles(src: string, dst: string, rel = ""): string[] {
 }
 
 /** SessionEnd hook command for a VLAD root (shared by `vlad install` and `vlad setup`'s hooks part). */
+/** Hook komutu hangi VLAD köküne işaret ederse etsin aynı hook sayılır (worktree'den kurulum ikinci hook eklemesin). */
+export const isSessionReportHook = (command: unknown): boolean => typeof command === "string" && /\/dist\/hooks\/session-report\.js"$/.test(command.replace(/\\/g, "/"));
+/** Hook komutundaki tırnaklı betik yolu (`node "<yol>"`); yoksa null. */
+export const hookScriptPath = (command: string): string | null => /"([^"]+\/dist\/hooks\/session-report\.js)"$/.exec(command.replace(/\\/g, "/"))?.[1] ?? null;
+/** session-report hook'u olup işaret ettiği betik artık yoksa (repo taşındı/silindi) true: SessionEnd sessizce ölür. */
+export const isDeadSessionReportHook = (command: unknown): boolean => { const p = typeof command === "string" ? hookScriptPath(command) : null; return p !== null && !existsSync(p); };
 export const hookCommand = (home: string): string => `node "${join(home, "dist", "hooks", "session-report.js").replace(/\\/g, "/")}"`;
 
 /** Worker skills of `global/skills/*` (every dir with a SKILL.md). */

@@ -77,12 +77,13 @@ export function dirFiles(dir: string, rel = ""): Map<string, Buffer> {
   }
   return out;
 }
-/** src'deki her dosya dst'de aynıysa "ok"; dst yoksa "eksik"; fark varsa "eski". */
+/** src'deki her dosya dst'de aynıysa "ok"; dst yoksa ya da yalnız dosya eksikse "eksik"; herhangi bir dosya farklıysa (eksik olsa bile) "eski" (düzenleme sessizce ezilmesin). */
 export function compareDirs(src: string, dst: string): "ok" | "eksik" | "eski" {
   if (!existsSync(dst)) return "eksik";
   const d = dirFiles(dst);
-  for (const [k, v] of dirFiles(src)) { const o = d.get(k); if (!o) return "eksik"; if (!o.equals(v)) return "eski"; }
-  return "ok";
+  let missing = false;
+  for (const [k, v] of dirFiles(src)) { const o = d.get(k); if (!o) missing = true; else if (!o.equals(v)) return "eski"; }
+  return missing ? "eksik" : "ok";
 }
 export function newestMtime(dir: string): number {
   let m = 0;

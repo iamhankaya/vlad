@@ -50,7 +50,7 @@ TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yer
 
 **2. İkinci makine (beyin + işçi)**
 - Beyinde: `vlad setup --answers beyin.json` (`"machines":"multi","machine":{"name":"mac","agent":{"host":"<özel LAN IP>"}},"keys":"generate"`; komuta `--confirm keygen` ekleyin), sonra `vlad setup --add-worker windows --host <işçi IP> --os win32`, anahtarı `vlad agent keygen windows --show` ile alın.
-- İşçide: `vlad setup --answers isci.json --join mac --brain-host <beyin IP> --brain-os darwin` ve anahtarı stdin'den verin (`printf %s "$ANAHTAR" | vlad setup --answers isci.json --join mac ...`; `--answers` dosya yolu olmalı, `-` stdin'i anahtara bırakın). Agent adresleri yalnız özel ağ (RFC1918/loopback) olabilir.
+- İşçide: `vlad setup --answers isci.json --join mac --brain-host <beyin IP> --brain-os darwin` ve anahtarı `--key-stdin` ile stdin'den verin (`printf %s "$ANAHTAR" | vlad setup --answers isci.json --join mac --key-stdin ...`; `--key-stdin` olmadan stdin okunmaz ve anahtar yazılmaz; `--answers` dosya yolu olmalı, `-` stdin'i anahtara bırakın). Agent adresleri yalnız özel ağ (RFC1918/loopback) olabilir.
 - Doğrulama: iki uçta `vlad setup --check`, beyinde `vlad machine list` / `vlad machine ping <ad>`.
 
 **3. Sonradan**

@@ -24,7 +24,7 @@ function pair() {
 describe("README kurulum doğrulaması: bulunan hatalar", () => {
   it("V1: doğru --join ile kurulan işçide `setup --check` yeşil (işçi yalnız beyin anahtarını tutar, D-vlad-057)", () => {
     const { worker, key, w } = pair();
-    const r = worker.run(["setup", "--yes", "--answers", worker.answers(w), "--join", "mac", "--brain-host", "192.168.1.10", "--brain-os", "darwin"], { input: key });
+    const r = worker.run(["setup", "--yes", "--answers", worker.answers(w), "--join", "mac", "--key-stdin", "--brain-host", "192.168.1.10", "--brain-os", "darwin"], { input: key });
     expect(r.code, r.err + r.out).toBe(0);
     expect(Object.keys(local(worker).keys)).toEqual(["mac"]); // çift anahtar: yalnız beyinle paylaşılan
     const c = worker.run(["setup", "--check", "--only", "agent", "--json"]);
@@ -34,7 +34,7 @@ describe("README kurulum doğrulaması: bulunan hatalar", () => {
 
   it("V2: --join --only <parça> yalnız seçilen parçaları uygular (global-skills/hooks yazılmaz)", () => {
     const { worker, key, w } = pair();
-    const r = worker.run(["setup", "--yes", "--answers", worker.answers(w), "--join", "mac", "--brain-host", "192.168.1.10", "--brain-os", "darwin", "--only", "kb,config,agent"], { input: key });
+    const r = worker.run(["setup", "--yes", "--answers", worker.answers(w), "--join", "mac", "--key-stdin", "--brain-host", "192.168.1.10", "--brain-os", "darwin", "--only", "kb,config,agent"], { input: key });
     expect(r.code, r.err + r.out).toBe(0);
     // Hata: --only --join'de yok sayılıyor; hook ve global skill'ler yine de yazılıyor.
     expect(r.out).not.toMatch(/SessionEnd hook ekle|skill kopyala/);
@@ -51,7 +51,7 @@ describe("README kurulum doğrulaması: bulunan hatalar", () => {
 
   it("V4: --join --brain-host, tracked config'teki sahibin beyin adresiyle sessizce ezilmez (verilen adres geçerli ya da hata)", () => {
     const { worker, key, w } = pair();
-    const r = worker.run(["setup", "--yes", "--answers", worker.answers(w), "--join", "mac", "--brain-host", "192.168.1.10", "--brain-os", "darwin", "--only", "config"], { input: key });
+    const r = worker.run(["setup", "--yes", "--answers", worker.answers(w), "--join", "mac", "--key-stdin", "--brain-host", "192.168.1.10", "--brain-os", "darwin", "--only", "config"], { input: key });
     const list = worker.run(["machine", "list"]).out;
     // Hata: machine list beyini tracked'teki 192.168.1.35 ile gösteriyor; --brain-host yok sayıldı, uyarı yok.
     const honored = /mac\s+darwin\s+192\.168\.1\.10:7437/.test(list);

@@ -77,3 +77,21 @@ describe("güvenlik kararları (T20261110-05 değişiklik turu)", () => {
     expect(JSON.parse(t.out).platform).toBe("linux");
   });
 });
+
+describe("vlad setup --join anahtar okuma (P2-5)", () => {
+  const ja = () => JSON.stringify({ role: "worker", machines: "multi", machine: { name: "win", agent: { host: "192.168.1.77" } }, kb: { mode: "local", dir: join(base, "kb") }, roots: [join(base, "home", "dev")] });
+  const args = (...x: string[]) => ["setup", "--join", "mac", "--brain-host", "192.168.1.35", "--brain-os", "darwin", "--answers", ja(), "--only", "config", "--json", ...x];
+  const keys = () => { const f = join(base, "vlad.local.json"); return existsSync(f) ? JSON.parse(readFileSync(f, "utf8")).keys ?? {} : {}; };
+  it("--key-stdin olmadan stdin okunmaz: anahtar yazılmaz, print aksiyonu bildirir", () => {
+    const r = vlad(args(), "gizli-anahtar\n");
+    expect(r.code).toBe(0);
+    expect(keys().mac).toBeUndefined();
+    expect(r.out).toMatch(/key-stdin/);
+  });
+  it("--key-stdin ile anahtar stdin'den yazılır", () => {
+    const r = vlad(args("--key-stdin"), "ab".repeat(32) + "\n");
+    expect(r.code, r.err).toBe(0);
+    expect(keys().mac).toBeDefined();
+    expect(r.out).not.toContain("ab".repeat(32));
+  });
+});
