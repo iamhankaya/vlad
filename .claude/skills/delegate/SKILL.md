@@ -9,11 +9,7 @@ description: Bir projede yapılacak işi görev olarak tanımlar, kullanıcı on
 
 ## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
 
-kb ayrı private repoda (`iamhankaya/vlad-kb`; konum: `VLAD_KB_DIR` ya da `vlad.config.json`'daki `kbDir`). Bulutta bu akış kb'ye yazmadan **önce** (ilk yazma komutundan önce, bir kez) kb reposunu eşitle:
-```
-git -C <kbDir> pull --ff-only
-```
-Çakışma/ff yapılamazsa **dur**, yazma; kullanıcıya durumu bildir ve nasıl ilerleyeceğini sor. kbDir bulutta yoksa (`vlad` komutları "kb deposu bulunamadı" der) kullanıcıya `add_repo iamhankaya/vlad-kb` + `git clone https://github.com/iamhankaya/vlad-kb <kbDir>` gerektiğini söyle ve dur. Yerelde (`CLAUDE_CODE_REMOTE` yok) bu adım atlanır.
+`CLAUDE.md` "Bulutta kb senkronu" bölümü geçerlidir: kb'ye ilk yazmadan önce bir kez uygula; yerelde atla.
 
 ## 1. Bağlamı topla
 
@@ -32,7 +28,7 @@ vlad project list --json
   ```
   vlad role list --json
   ```
-  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (finans, pazarlama, analyst, architect) yalnızca `research`, `executor` roller (developer, tester, designer, devops) yalnızca `dev` görevinde kullanılır.
+  `{"roles":[{ "slug", "title", "kind", "summary", "file", "skills" }], ...}`. `advisory` roller (advisor, analyst, architect, security-reviewer; `advisor`'ın odakları `finans`, `pazarlama`, `growth` eski slug'larla alias olarak da verilir, listede görünmez) yalnızca `research`, `executor` roller (developer, tester, designer, devops) yalnızca `dev` görevinde kullanılır.
 
 ## 2. Döngüyü seç
 
@@ -55,7 +51,7 @@ vlad project list --json
 
 **Dağıtım/altyapıya dokunuyorsa `prova` fazını ekle** (iş dağıtım betiğini, CI tanımını, Dockerfile/compose/systemd'yi veya altyapıyı değiştiriyorsa; yoksa ekleme): `prova` (devops, dev, bağımlılık: `uygulama`) — `doğrulama` ile paralel ya da canlıya alma kapısından önce. Devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail/SIGPIPE, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder; Docker yoksa neyi prova edemediğini raporlar. Kırmızı prova canlıya almayı engeller (`/status` son kapı).
 
-**Güvenlik incelemesi:** bir faz auth, yetki, oturum veya veri silmeye dokunuyorsa ya da VLAD güvenlik etkili bir kararı otonom verecekse, ilgili fazın Tanım'ına "rapordan sonra kısa güvenlik incelemesi" ekle ve taslakta ayrıca belirt. İnceleme `security-reviewer` rolüyle arka plan agent'ı olarak yapılır (`security-audit` skill'i, guidance modu). Bulguların nasıl ele alınacağı (kritik/yüksek durdurur, orta/düşük kaydedilir, `exposure` istisnası) `/status`'taki Kademeli güvenlik kuralıdır; burada tekrarlanmaz. Ara Codex kapısı tetikleyicisi `/status`'taki tanımdır; o fazların Tanım'ına "faz merge'ünden önce ara Codex kapısı (`second-opinion` mod `review`, `--base vlad/<çatı-id>`; P1 faz içinde çözülür, P2 bulgu olarak kaydedilir)" notu ekle ve taslakta belirt. Bu tür bir kararı kullanıcıya sormadan verme: gerekçesiyle taslağa yaz.
+**Güvenlik incelemesi:** bir faz auth, yetki, oturum veya veri silmeye dokunuyorsa ya da VLAD güvenlik etkili bir kararı otonom verecekse, ilgili fazın Tanım'ına "rapordan sonra kısa güvenlik incelemesi" ekle ve taslakta ayrıca belirt. İnceleme `security-reviewer` rolüyle arka plan agent'ı olarak yapılır (`security-audit` skill'i, guidance modu). Bulguların nasıl ele alınacağı `integrate` K1, ara Codex kapısı tetikleyicisi `integrate` K2'dedir; burada tekrarlanmaz. Ara kapı tetikleyen fazların Tanım'ına "faz merge'ünden önce ara Codex kapısı (`integrate` K2)" notu ekle ve taslakta belirt. Bu tür bir kararı kullanıcıya sormadan verme: gerekçesiyle taslağa yaz.
 
 **Dış API gerçek fixture'ı:** iş dış bir API/servis yanıtına dayanıyorsa `spec`/`plan` fazının Tanım'ına "plan öncesi gerçek yanıt örnekleri" ekle (analyst/architect gerçek yanıtı kaydedip raporda verir; yoksa kullanıcıdan alınacağını `### Açık noktalar`'a yazar). Taslakta örnek yoksa bunu uyarı olarak göster ve kullanıcıdan iste. Kabul ve unit testler kaydedilmiş gerçek fixture'a karşı yazılır; uydurma yanıt şekline değil.
 
@@ -98,7 +94,7 @@ Kullanıcıya şunu göster:
 ## Bağlam
 <ilgili kararlar, dosyalar, kısıtlar; kaynak ID'leriyle>
 ```
-Rol önerisi: işin doğasına en uygun rolü seç (ör. test yazma/hata avı → `tester`, maliyet/fiyat → `finans`, gereksinim/kod inceleme → `analyst`); türüyle uyumlu olmalı. Uygun rol yoksa "rol yok" yaz; rolsüz görev bugünkü gibi çalışır.
+Rol önerisi: işin doğasına en uygun rolü seç (ör. test yazma/hata avı → `tester`, maliyet/fiyat → `advisor` (odak `finans`; `--role finans` alias), gereksinim/kod inceleme → `analyst`); türüyle uyumlu olmalı. Uygun rol yoksa "rol yok" yaz; rolsüz görev bugünkü gibi çalışır.
 
 Sonunda sor: "Bu görevi oluşturup başlatayım mı?"
 
@@ -218,7 +214,7 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 2. **Taslak:** architect rolüyle arka plan agent'ı (5b'deki rol, skill ve `depends_on` cümleleriyle; girdi spec fazının raporu). Rolün `## Çıktı` başlıklarıyla taslak plan döndürür. Taslağı geçici dosyada tut; `vlad task log <id> "Plan taslağı hazır"`.
    Bu adımdaki tüm arka plan agent'larını (taslak, eleştiri, son plan) kullandıkları rolün modeliyle başlat, plan görevinin kendi `model`'i varsa (`effective_model`) onunla (Agent aracının `model` parametresi); ikisi de boşsa varsayılan.
 3. **Eleştiri:** iki arka plan agent'ı paralel — biri `roles/developer.md`, biri `roles/tester.md` rol dosyasıyla. Prompt: spec raporu + taslak plan; "Rol dosyasından yalnızca rolün bakış açısını al; Yetki, iş akışı ve commit kuralları bu görevde geçerli değil. Kendi rolünün gözüyle eleştir: uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde. Kod yazma, dosya değiştirme, skill yükleme." Her biri için `vlad task log <id> "<Developer|Tester> eleştirisi: <kısa özet>"`.
-   **Codex eleştirisi (3. göz):** iki agent'la paralel, `second-opinion` skill'ini **Skill aracıyla yükle**, mod `plan` ile uygula (komutu elle kopyalama; komut, model, yedek ve loglama orada; Codex yoksa/limit/hata → `second-opinion`'daki "Codex yedeği" reviewer agent'ı). Skill yüklenemezse eleştiri adımı durur ve kullanıcıya söylenir.
+   **Codex eleştirisi (3. göz):** iki agent'la paralel, `second-opinion` skill'ini **Skill aracıyla yükle**, mod `plan` ile uygula (komutu elle kopyalama; komut, model, yedek ve loglama orada; Codex yoksa/limit/hata → `integrate` K4 reviewer yedeği). Skill yüklenemezse eleştiri adımı durur ve kullanıcıya söylenir.
 4. **Son plan:** architect agent'ına taslak + eleştirileri (developer, tester, varsa Codex) ver; son planı ve `### Eleştiriler ve nasıl ele alındı` bölümünü yazdır.
 5. Rapora yalnızca son plan girer (ara ürünler log'da kalır): `vlad task report <id> --file <plan.md> --json`, sonra 5b adım 5.
 
@@ -226,11 +222,11 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 
 ## 7. Danışman yan görevleri
 
-Finans veya pazarlama herhangi bir fazdan (taslakta ya da fazlar sürerken) danışılabilir. Kullanıcıya yan görevi kısa bir taslakla göster, onay al:
+Danışman (`advisor`: finans, pazarlama, growth odakları) herhangi bir fazdan (taslakta ya da fazlar sürerken) danışılabilir. Kullanıcıya yan görevi kısa bir taslakla göster, onay al:
 ```
-vlad task new --project <slug> --title "<başlık> — danışma: <konu>" --kind research --role <finans|pazarlama> --parent <çatı-id> --phase danışma --body-file <danışma.md> --json
+vlad task new --project <slug> --title "<başlık> — danışma: <konu>" --kind research --role <finans|pazarlama|growth> --parent <çatı-id> --phase danışma --body-file <danışma.md> --json
 ```
-Bağımlılık verilmez; hemen 5b ile yürüt. Sonucu ilgili fazın bağlamına ekle: faz henüz oluşturulmadıysa özetini o fazın `## Bağlam`'ına yaz; oluşturulduysa `vlad task log <faz-id> "Danışma <yan-id>: <özet> — raporuna bak"`. Çalışanlar kardeş görevleri de okur.
+`--role` değeri `advisor`'ın odağıdır (eski slug alias; rol dosyası `advisor.md`). Bağımlılık verilmez; hemen 5b ile yürüt. Sonucu ilgili fazın bağlamına ekle: faz henüz oluşturulmadıysa özetini o fazın `## Bağlam`'ına yaz; oluşturulduysa `vlad task log <faz-id> "Danışma <yan-id>: <özet> — raporuna bak"`. Çalışanlar kardeş görevleri de okur.
 
 ## 8. Hafızayı commit'le
 
