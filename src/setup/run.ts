@@ -71,21 +71,24 @@ const assertPrivate = (h: string, label: string) => {
 const assertPort = (p: number | undefined, label: string) => { if (p !== undefined && !(Number.isInteger(p) && p >= 1024 && p <= 65535)) throw new Error(`${label}: 1024-65535 tamsayı olmalı`); };
 const assertName = (n: string, label: string) => { if (!/^[a-z][a-z0-9-]*$/.test(n) || n === "self") throw new Error(`${label}: ^[a-z][a-z0-9-]*$ olmalı ('self' ayrılmış)`); };
 
-export interface JoinOptions { brain: string; brainHost?: string; brainPort?: number; brainOs?: MachineEntry["os"]; brainKey?: string }
+export interface JoinOptions { only?: PartId[]; brain: string; brainHost?: string; brainPort?: number; brainOs?: MachineEntry["os"]; brainKey?: string }
 /** İkinci makine: beyin girdisini yerel katmana yazar, sonra normal kurulum (config → ... → agent) ve beyinle paylaşılan anahtar. */
 export async function runJoin(c: SetupContext, j: JoinOptions): Promise<ApplyResult[]> {
   assertName(j.brain, "--join");
   if (!c.answers.machine?.name) throw new Error("--join: answers.machine.name zorunlu (bu makinenin adı); hiçbir şey yazılmadı");
   const known = (() => { try { return loadConfig(c.vladHome).machines?.find((m) => m.name === j.brain); } catch { return undefined; } })();
-  if (!known) {
-    if (!j.brainHost || !j.brainOs) throw new Error(`beyin '${j.brain}' config'te yok: --brain-host <özel IP> ve --brain-os darwin|win32|linux ver`);
-    assertPrivate(j.brainHost, "--brain-host"); assertPort(j.brainPort, "--brain-port");
-    const brain: MachineEntry = { name: j.brain, os: j.brainOs, agent: { host: j.brainHost, port: j.brainPort ?? 7437 } };
+  // Verilen adres/port/os tracked'teki sahip girdisini sessizce ezmez: farklıysa yerel katmanda verilen değer geçerli olur.
+  const differs = !!known && ((j.brainHost !== undefined && j.brainHost !== known.agent?.host) || (j.brainPort !== undefined && j.brainPort !== known.agent?.port) || (j.brainOs !== undefined && j.brainOs !== known.os));
+  if (!known || differs) {
+    const host = j.brainHost ?? known?.agent?.host, os = j.brainOs ?? (known?.os as MachineEntry["os"] | undefined);
+    if (!host || !os) throw new Error(`beyin '${j.brain}' config'te yok: --brain-host <özel IP> ve --brain-os darwin|win32|linux ver`);
+    assertPrivate(host, "--brain-host"); assertPort(j.brainPort, "--brain-port");
+    const brain: MachineEntry = { name: j.brain, os, agent: { host, port: j.brainPort ?? known?.agent?.port ?? 7437 } };
     const cur = readJsonFile(join(c.vladHome, "vlad.config.local.json")).data;
     const existing: MachineEntry[] = cur.machines ?? []; // beyin tracked'te yok (known=false): tracked machines taşınmaz
     writeOverlay(c, { machines: [...existing.filter((m) => m.name !== j.brain), brain], brain: j.brain }, cur.brain !== undefined && cur.brain !== j.brain ? ["brain"] : []);
   }
-  const out = await runSetup({ ...c, answers: { ...c.answers, role: "worker", machines: "multi" } });
+  const out = await runSetup({ ...c, answers: { ...c.answers, role: "worker", machines: "multi" } }, { only: j.only });
   if (j.brainKey !== undefined && !c.dryRun) {
     const name = c.answers.machine?.name;
     if (name && readLocal().self !== name) writeLocal({ ...readLocal(), self: name });
@@ -101,9 +104,12 @@ export async function runAddWorker(c: SetupContext, name: string, w: { os: Machi
   const cur = readJsonFile(join(c.vladHome, "vlad.config.local.json")).data;
   let base: MachineEntry[] = cur.machines ?? loadConfig(c.vladHome).machines ?? [];
   if (!base.length) throw new Error("beyin çok makineli değil: önce `vlad setup --answers` ile machines=multi kur");
-  const known = base.some((m) => m.name === name);
-  if (!known) base = [...base, { name, os: w.os, agent: { host: w.host, port: w.port ?? 7437 } }];
-  const r = known ? ({ part: "config", changed: false, actions: [{ kind: "skip", what: `${name} zaten tanımlı` }], backups: [] } as ApplyResult) : writeOverlay(c, { machines: base });
+  const prev = base.find((m) => m.name === name);
+  const want: MachineEntry = { name, os: w.os, agent: { host: w.host, port: w.port ?? prev?.agent?.port ?? 7437 } };
+  // Aynı ad zaten varsa: aynı değerler → değişiklik yok; farklıysa verilen değer yerel katmanda geçerli olur (tracked sahip adresi sessizce tutulmaz).
+  const same = !!prev && prev.os === want.os && prev.agent?.host === want.agent.host && prev.agent?.port === want.agent.port;
+  const r = same ? ({ part: "config", changed: false, actions: [{ kind: "skip", what: `${name} zaten tanımlı` }], backups: [] } as ApplyResult) : writeOverlay(c, { machines: prev ? base.map((m) => (m.name === name ? want : m)) : [...base, want] });
+  if (prev && !same) r.actions.push({ kind: "print", what: `${name}: tracked/önceki girdi (${prev.agent?.host}:${prev.agent?.port} ${prev.os}) yerine verilen değer yerel katmanda geçerli` });
   if (w.keygen && c.confirmed.has("keygen") && !c.dryRun && !readLocal().keys[name]) { agentKeygen(name, false); r.actions.push({ kind: "write", what: `anahtar üretildi: ${name} (değer basılmaz)` }); }
   r.actions.push({ kind: "print", what: `anahtar: \`vlad agent keygen ${name} --show\` çıktısını işçide \`vlad setup --join <beyin>\` stdin'ine ilet (argv'ye yazma)` });
   return r;

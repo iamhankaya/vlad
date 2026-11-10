@@ -1,5 +1,5 @@
 // Doğrulama (T20261110-06): README kılavuzunu temiz sandbox'ta harfiyen izleyince bulunan hatalar.
-// Her test, elle yeniden üretilen (Mac, sahte HOME) bir davranışı kanıtlar; düzeltme gelene dek KIRMIZI kalması BEKLENİR.
+// Her test, elle yeniden üretilen (Mac, sahte HOME) bir hatayı kanıtlar; T20261110-19 ile düzeltildi, artık yeşil olmalı (regresyon).
 // Sahte araçlar + geçici dizin (makeSandbox); gerçek HOME/~/.claude'a dokunulmaz.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

@@ -52,7 +52,9 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
       let base: MachineEntry[] = cur.machines ?? (inTracked ? tracked.machines : []);
       const i = base.findIndex((m) => m.name === me.name);
       const mine = { ...me, agent: Object.fromEntries(Object.entries(me.agent).filter(([, v]) => v !== undefined)) as MachineEntry["agent"] };
-      base = i >= 0 ? base.map((m, n) => (n === i ? { ...m, ...mine, agent: { ...m.agent, ...mine.agent } } : m)) : [...base, { ...mine, agent: { ...mine.agent, port: mine.agent.port ?? 7437 } }];
+      // Başkasının makinesi: adres farklıysa ya da fresh ise sahibin kişisel alanları (roots/kbDir/bind/host) kopyalanmaz (F-vlad-294).
+      const foreign = i >= 0 && inTracked && cur.machines === undefined && (a.fresh === true || (!!base[i]!.agent?.host && !!mine.agent.host && base[i]!.agent.host !== mine.agent.host));
+      base = i >= 0 ? base.map((m, n) => (n === i ? (foreign ? { ...mine, agent: { ...mine.agent, port: mine.agent.port ?? 7437 } } : { ...m, ...mine, agent: { ...m.agent, ...mine.agent } }) : m)) : [...base, { ...mine, agent: { ...mine.agent, port: mine.agent.port ?? 7437 } }];
       o.machines = base;
       if (a.role === "brain") o.brain = me.name;
       else {

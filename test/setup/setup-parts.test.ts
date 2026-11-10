@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { rmTemp } from "../helpers.js";
 import { setRunner, type Runner } from "../../src/setup/io.js";
 import { buildContext, runAddWorker, runCheck, runJoin, runSetup, runUninstall, runUpgrade } from "../../src/setup/run.js";
-import { WORKER_PERMISSIONS } from "../../src/setup/parts-files.js";
+import { WORKER_DENY, WORKER_PERMISSIONS } from "../../src/setup/parts-files.js";
 import type { SetupAnswers } from "../../src/setup/index.js";
 
 const repo = resolve(import.meta.dirname, "..", "..");
@@ -276,7 +276,14 @@ describe("güvenlik kararları (değişiklik turu)", () => {
     w(settings(), JSON.stringify({ permissions: { deny: ["Bash(rm -rf *)"] } }));
     await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
     const d = jr(settings()).permissions.deny;
-    expect(d).toEqual(["Bash(rm -rf *)", "Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)"]);
+    expect(d).toEqual(["Bash(rm -rf *)", ...WORKER_DENY]);
+  });
+  // F-vlad-293: `*` boş eşleşemez (ayraç boşluğu kalıpta durur): sonda ve hemen `push`'tan sonra gelen -f/-d/--force/--delete ayrı kalıp ister.
+  it("deny kalıpları sonda ve push'tan hemen sonra -f/-d/--force/--delete biçimlerini kapsar (glob anlamıyla)", () => {
+    const glob = (pat: string, cmd: string) => new RegExp("^" + pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$").test(cmd);
+    const blocked = (cmd: string) => WORKER_DENY.map((d) => d.slice(5, -1)).some((p) => glob(p, cmd));
+    for (const cmd of ["git push origin vlad/x -f", "git push origin vlad/x -d", "git push origin -d vlad/x", "git push -f origin vlad/x", "git push -d origin vlad/x", "git push --force origin x", "git push --delete origin x", "git push origin x --force", "git push origin x -f"]) expect(blocked(cmd), cmd).toBe(true);
+    for (const cmd of ["git push origin vlad/x", "git push -u origin vlad/x"]) expect(blocked(cmd), cmd).toBe(false);
   });
   it("onay metni push kalıbının tüm Claude oturumlarına geçerli olduğunu söyler", async () => {
     const r = await runSetup(ctx(ans({ perms: true }), { yes: true }), { only: ["permissions"] });
@@ -303,6 +310,15 @@ describe("güvenlik kararları (değişiklik turu)", () => {
   it("fresh olmadan tracked kişisel değerler nötrlenmez; fresh:true ile nötrlenir (F-P2-3)", async () => {
     await runSetup(ctx(ans(), { yes: true }), { only: ["config"] });
     expect(jr(join(vladHome, "vlad.config.local.json")).projects).toBeUndefined();
+  });
+  // F-vlad-294: arkadaş, sahibin tracked machines'indeki bir adla (windows) kurulursa sahibin kişisel alanları (roots/kbDir/bind/host) yerel katmana taşınmaz.
+  it("tracked adla kurulan arkadaş: sahip girdisinin roots/kbDir/bind alanları kopyalanmaz (F-vlad-294)", async () => {
+    const t = jr(join(vladHome, "vlad.config.json"));
+    t.machines[1] = { ...t.machines[1], bind: "192.168.1.34", roots: ["C:\\dev"], kbDir: "C:\\dev\\vlad-kb" };
+    w(join(vladHome, "vlad.config.json"), JSON.stringify(t));
+    await runSetup(ctx(ans({ role: "worker", machines: "multi", machine: { name: "windows", agent: { host: "192.168.1.77", port: 7437 } } }), { yes: true }), { only: ["config"] });
+    const mine = jr(join(vladHome, "vlad.config.local.json")).machines.find((m: { name: string }) => m.name === "windows");
+    expect(mine).toEqual({ name: "windows", os: "darwin", agent: { host: "192.168.1.77", port: 7437 } });
   });
   it("machines cevapsız + tracked çok makineli + self tanımsız: açık hata (P1-2)", async () => {
     const a = ans(); delete a.machines;

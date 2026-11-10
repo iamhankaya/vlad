@@ -149,7 +149,11 @@ export const WORKER_PERMISSIONS = [
   "Bash(git push origin vlad/*)", "Bash(git push -u origin vlad/*)", "Bash(gh run list *)", "Bash(gh run view *)", "Bash(gh run watch *)", "Bash(gh run rerun *)", "Bash(gh run download *)", "Bash(gh workflow run * --ref vlad/*)",
 ];
 /** Geniş push biçimlerini kapatır (allow kalıbı `*` ile --force/--delete/çoklu ref'i de eşler): kullanıcı düzeyi, TÜM Claude oturumlarını kapsar. */
-export const WORKER_DENY = ["Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)"];
+export const WORKER_DENY = [
+  "Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)",
+  // F-vlad-293: `* -f *` sonda ve `push`'tan hemen sonra eşleşmez; kısa -d de kapalı olmalı.
+  "Bash(git push * -f)", "Bash(git push -f *)", "Bash(git push * -d)", "Bash(git push * -d *)", "Bash(git push -d *)", "Bash(git push --force*)", "Bash(git push --delete*)",
+];
 function kbOutside(c: SetupContext): string | null {
   const kb = resolveKbDir(c.vladHome).dir;
   const rel = relative(resolve(c.vladHome), resolve(kb));
