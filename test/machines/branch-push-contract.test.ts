@@ -5,9 +5,8 @@ import {
   BRANCH_PUSH_BRANCH_RE, BRANCH_PUSH_REASONS, BRANCH_PUSH_REMOTE, BRANCH_PUSH_TIMEOUT_MS, RemoteError,
   type AgentOp, type BranchPushArgs,
 } from "../../src/fleet/types.js";
-import { fetchTaskBranch } from "../../src/machines/remote.js";
 
-// Sözleşme testleri (T20261111-50, F-vlad-314): yalnız şekil — imza, tür, hata biçimi. Git davranışı uygulama fazındadır.
+// Sözleşme testleri (T20261111-50, F-vlad-314): yalnız şekil — imza, tür, hata biçimi. Git davranışı branch-push-op.test.ts'te.
 
 const SHA = "a".repeat(40);
 const good: BranchPushArgs = { taskId: "T20261111-50", project: "vlad", repoName: "vlad", branch: "vlad/T20261111-50", expectHead: SHA };
@@ -20,9 +19,9 @@ describe("branch-push contract: roles and op table", () => {
     for (const c of ["worker", "console", "self"] as const) expect(isAllowed("worker-agent", c, op), c).toBe(false);
     for (const c of ["brain", "worker", "console", "self"] as const) expect(allowedOps("brain-agent", c), c).not.toContain(op);
   });
-  it("body is a stub: valid args reach NotImplementedOp, invalid args fail validation first", async () => {
-    await expect(OP_TABLE[op](good, { from: "mac", opId: "o" })).rejects.toBeInstanceOf(NotImplementedOp);
-    await expect(OP_TABLE[op]({ ...good, branch: "main" }, { from: "mac", opId: "o" })).rejects.not.toBeInstanceOf(NotImplementedOp);
+  it("body is implemented: invalid args fail validation (bad_request) before any git/kb access", async () => {
+    await expect(OP_TABLE[op]({ ...good, branch: "main" }, { from: "mac", opId: "o" })).rejects.toThrow(/^bad_request/);
+    await expect(OP_TABLE[op](good, { from: "mac", opId: "o" })).rejects.not.toBeInstanceOf(NotImplementedOp);
   });
 });
 
@@ -67,11 +66,5 @@ describe("branch-push contract: request schema", () => {
     const e = badRequest({ ...good, force: true });
     expect(e).toBeInstanceOf(RemoteError);
     expect(e?.message).toMatch(/^bad_request: /);
-  });
-});
-
-describe("branch-push contract: brain-side stubs", () => {
-  it("fetchTaskBranch is a stub until the implementation phase", async () => {
-    await expect(fetchTaskBranch({} as never, SHA)).rejects.toThrow(/gerçeklenmedi/);
   });
 });

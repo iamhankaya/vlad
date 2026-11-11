@@ -9,7 +9,7 @@ import { kbSync } from "./kb-sync.js";
 import { cleanupOp, closeOp, launchOp, resumeOp } from "./launch.js";
 import { probeWindow } from "./probe-window.js";
 import { gateRun, mergeOp, mergePreview } from "./gate.js";
-import { parseBranchPushArgs } from "./branch-push.js";
+import { branchPushOp } from "./branch-push.js";
 import { liveness } from "./liveness.js";
 import { scriptList, scriptRun } from "./script.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
@@ -85,7 +85,7 @@ OP_TABLE.merge = (a) => mergeOp(a);
 // --- /machines:C4 ---
 // --- machines:branch-push (F-vlad-314) ---
 // sözleşme: yalnız şema doğrulanır; gövde (git push) uygulama fazında
-OP_TABLE["branch-push"] = async (a) => { parseBranchPushArgs(a); throw new NotImplementedOp("branch-push"); };
+OP_TABLE["branch-push"] = (a) => branchPushOp(a);
 // --- /machines:branch-push ---
 // --- scripts: kayıtlı bakım betikleri (T20261109-03) ---
 OP_TABLE["script-list"] = (a) => scriptList(a);
