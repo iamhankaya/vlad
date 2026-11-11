@@ -26,7 +26,14 @@ export const branchPushArgv = (branch: string, head: string): string[] => ["push
 
 const fail = (reason: BranchPushReason, m: string) => new RemoteError("failed", `failed: [${reason}] ${m}`);
 const AUTH = /authenticat|could not read (username|password)|permission denied|access denied|\b40[13]\b|terminal prompts disabled/i;
-const lsRemoteSha = (stdout: string): string => stdout.trim().split(/\s+/)[0] ?? "";
+/** ls-remote çıktısında refname'i tam eşleşen satırın sha'sı (desen `vlad/x*` benzeri ek satırlara karşı). */
+const lsRemoteSha = (stdout: string, ref: string): string => {
+  for (const line of stdout.split("\n")) {
+    const [sha, name] = line.trim().split(/\s+/);
+    if (name === ref && /^[0-9a-f]{40}$/.test(sha ?? "")) return sha as string;
+  }
+  return "";
+};
 
 export async function pushTaskBranch(repo: string, id: string, expectHead: string): Promise<BranchPushResult> {
   const branch = `vlad/${id}`;
@@ -40,7 +47,7 @@ export async function pushTaskBranch(repo: string, id: string, expectHead: strin
   const remoteSha = async (): Promise<string> => {
     const r = await runGit(repo, ["ls-remote", BRANCH_PUSH_REMOTE, ref], BRANCH_PUSH_TIMEOUT_MS);
     if (r.code !== 0) throw fail(AUTH.test(r.stderr) ? "auth" : "no_origin", `origin'e ulaşılamadı (ayrıntı: işçide git ls-remote origin)`);
-    return lsRemoteSha(r.stdout);
+    return lsRemoteSha(r.stdout, ref);
   };
   return serialized(repo, async () => {
     const before = await remoteSha();
@@ -67,7 +74,7 @@ export async function branchPushOp(args: unknown): Promise<BranchPushResult> {
 export function branchPushVerdict(repo: string, branch: string, expectHead: string): Verdict | { verdict: "applied"; result: BranchPushResult } {
   const r = spawnSync("git", ["ls-remote", BRANCH_PUSH_REMOTE, `refs/heads/${branch}`], { cwd: repo, encoding: "utf8", windowsHide: true, timeout: BRANCH_PUSH_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
   if (r.status !== 0) return "unknown";
-  const sha = lsRemoteSha(r.stdout ?? "");
+  const sha = lsRemoteSha(r.stdout ?? "", `refs/heads/${branch}`);
   if (!sha) return "not-applied";
   // başka (eski) uç: push uygulanmadı; pushTaskBranch idempotent olduğundan yeniden denemek güvenli
   return sha === expectHead ? { verdict: "applied", result: { branch, head: expectHead, pushed: true, remote: BRANCH_PUSH_REMOTE } } : "not-applied";

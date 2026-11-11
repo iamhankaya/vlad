@@ -274,3 +274,19 @@ describe("fetchTaskBranch (beyinde gerçek git; bare origin)", () => {
     await expect(fetchTaskBranch(t, "a".repeat(40))).rejects.toThrow();
   });
 });
+
+describe("F-vlad-320: push sonrası işçi dalı ilerlerse close cleanup'ı yapmaz", () => {
+  it("cleanup'a gate'lenen sha verilir; işçi ucu ilerlemişse (stale_tip) close cleanup'ta durur, worktree kaydı kalır", async () => {
+    const { id, head } = await ready();
+    const advanced = "f".repeat(40); // gate+push'tan sonra işçide yeni commit: uç artık head değil
+    const cleanup = vi.fn(async (_t: unknown, _m: string, expectHead?: string) => {
+      if (expectHead !== advanced) throw new RemoteError("failed", `failed: [stale_tip] işçide vlad/${id} ucu gate'lenen sha'dan (${(expectHead ?? "").slice(0, 7)}) farklı; worktree silinmedi`);
+    });
+    const r = await closeTask(id, { yes: true }, deps(remoteFor(head, [], { cleanup })));
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(cleanup.mock.calls[0]![2]).toBe(head);
+    expect(r).toMatchObject({ ok: false, stopped_at: "cleanup" });
+    expect(r.reason).toContain("stale_tip");
+    expect(getTask(id).data.worktree).toBeTruthy(); // yeni iş kaybolmasın
+  });
+});

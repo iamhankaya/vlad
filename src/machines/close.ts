@@ -56,7 +56,8 @@ export interface CloseRemote {
   fetch(t: Task, expectHead: string): Promise<void>;
   preview(t: Task, machine: string, into?: string): Promise<MergePreviewResult>;
   merge(t: Task, machine: string, into?: string, message?: string): Promise<MergeResult>;
-  cleanup(t: Task, machine: string): Promise<void>;
+  /** expectHead (uzak teslim): işçide dal ucu bu sha değilse worktree silinmez (F-vlad-320) */
+  cleanup(t: Task, machine: string, expectHead?: string): Promise<void>;
 }
 export interface CloseDeps {
   cfg: VladConfig;
@@ -77,7 +78,7 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     fetch: (t, head) => fetchTaskBranch(t, head),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),
-    cleanup: async (t, m) => { await remoteCleanup(transport(), m, t); await withKbLock(() => markCleaned(t.data.id)); },
+    cleanup: async (t, m, head) => { await remoteCleanup(transport(), m, t, head); await withKbLock(() => markCleaned(t.data.id)); },
   };
 }
 function realDeps(o: Partial<CloseDeps>): CloseDeps {
@@ -158,6 +159,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     const viaBrain = !!remoteMachine && !isResearch && (t0.data.kind === "pipeline" || !parent);
     if (wasDone && viaBrain) {
       const gh = t0.data.last_green_gate?.head;
+      if (gh && !/^[0-9a-f]{40}$/.test(gh)) stop("precheck", `last_green_gate.head geçerli bir sha değil: ${gh.slice(0, 20)}`); // F-vlad-322 C
       if (gh && g(card.path, ["merge-base", "--is-ancestor", gh, into!]).code !== 0) stop("precheck", `görev done ama gate'lenen head (${gh.slice(0, 12)}), ${into} içinde değil; merge edilmemiş`);
     }
     add("precheck", "ok", wasDone ? "zaten done: kalan adımlar tamamlanıyor" : undefined);
@@ -301,7 +303,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     await after("cleanup", async () => {
       const t = getTask(id);
       if (!t.data.worktree) return "skipped";
-      if (remoteMachine) await d.remote.cleanup(t, remoteMachine);
+      if (remoteMachine) await d.remote.cleanup(t, remoteMachine, viaBrain ? (gatedHead || t.data.last_green_gate?.head || undefined) : undefined);
       else await withKbLock(() => cleanupTask(id, { cfg: d.cfg, closeWorker: d.closeWorker }));
       return undefined;
     });
