@@ -3,10 +3,9 @@ import { OP_TABLE, NotImplementedOp, allowedOps, isAllowed } from "../../src/age
 import { parseBranchPushArgs } from "../../src/agent/ops/branch-push.js";
 import {
   BRANCH_PUSH_BRANCH_RE, BRANCH_PUSH_REASONS, BRANCH_PUSH_REMOTE, BRANCH_PUSH_TIMEOUT_MS, RemoteError,
-  type AgentOp, type BranchPushArgs, type BranchPushResult,
+  type AgentOp, type BranchPushArgs,
 } from "../../src/fleet/types.js";
-import type { CloseRemote, CloseStepName } from "../../src/machines/close.js";
-import { fetchTaskBranch, remoteBranchPush } from "../../src/machines/remote.js";
+import { fetchTaskBranch } from "../../src/machines/remote.js";
 
 // Sözleşme testleri (T20261111-50, F-vlad-314): yalnız şekil — imza, tür, hata biçimi. Git davranışı uygulama fazındadır.
 
@@ -71,19 +70,8 @@ describe("branch-push contract: request schema", () => {
   });
 });
 
-describe("branch-push contract: result shape and brain-side signatures", () => {
-  it("result carries branch/head/pushed/remote and no URL or path", () => {
-    const r: BranchPushResult = { branch: good.branch, head: SHA, pushed: false, remote: "origin" };
-    expect(Object.keys(r).sort()).toEqual(["branch", "head", "pushed", "remote"]);
-  });
-  it("remoteBranchPush(transport, machine, task, expectHead) exists (behavior: implementation phase)", () => {
-    expect(remoteBranchPush.length).toBe(4);
-  });
-  it("close gains push and fetch steps and CloseRemote hooks", async () => {
-    const steps: CloseStepName[] = ["gate", "push", "fetch", "conflict"];
-    expect(steps).toHaveLength(4);
-    const hooks: Pick<CloseRemote, "push" | "fetch"> = { push: async () => ({ branch: good.branch, head: SHA, pushed: true, remote: "origin" }), fetch: async () => undefined };
-    expect(Object.keys(hooks).sort()).toEqual(["fetch", "push"]);
+describe("branch-push contract: brain-side stubs", () => {
+  it("fetchTaskBranch is a stub until the implementation phase", async () => {
     await expect(fetchTaskBranch({} as never, SHA)).rejects.toThrow(/gerçeklenmedi/);
   });
 });

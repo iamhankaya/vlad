@@ -221,7 +221,7 @@ describe("task close: uzak görev ve çok makine", () => {
     const id = await ready();
     const merge = vi.fn();
     const r = await closeTask(id, { yes: true }, deps({
-      remote: { machine: () => "win", gate: async () => ({ exit: 1, stdout: "x", stderr: "" }), preview: async () => ({ log: "", diffStat: "", conflicts: [] }), merge, cleanup: async () => {} },
+      remote: { machine: () => "win", gate: async () => ({ exit: 1, stdout: "x", stderr: "" }), push: async () => ({ branch: "", head: "", pushed: false, remote: "origin" }), fetch: async () => {}, preview: async () => ({ log: "", diffStat: "", conflicts: [] }), merge, cleanup: async () => {} },
     }));
     expect(r).toMatchObject({ ok: false, stopped_at: "gate" });
     expect(merge).not.toHaveBeenCalled();
@@ -232,7 +232,7 @@ describe("task close: uzak görev ve çok makine", () => {
     const merge = vi.fn(async () => ({ head: "a".repeat(40), merged: true }));
     const cleanup = vi.fn(async () => {});
     const r = await closeTask(id, { yes: true }, deps({
-      remote: { machine: () => "win", gate: async () => ({ exit: 0, stdout: "", stderr: "", head: "a".repeat(40) }), preview: async () => ({ log: "l", diffStat: "d", conflicts: [] }), merge, cleanup },
+      remote: { machine: () => "win", gate: async () => ({ exit: 0, stdout: "", stderr: "", head: "a".repeat(40) }), push: async () => ({ branch: "", head: "", pushed: false, remote: "origin" }), fetch: async () => {}, preview: async () => ({ log: "l", diffStat: "d", conflicts: [] }), merge, cleanup },
     }));
     expect(r.ok).toBe(true);
     expect(merge).toHaveBeenCalled();
