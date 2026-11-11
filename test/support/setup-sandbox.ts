@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { delimiter, join, relative, resolve } from "node:path";
 import { assertInside, makeFixtureRoot } from "../helpers.js";
+import { resolveTool, toolInvocation } from "../../src/setup/io.js";
 
 export const repoRoot = resolve(import.meta.dirname, "..", "..");
 export const cliJs = join(repoRoot, "dist", "cli.js");
@@ -27,9 +28,22 @@ export interface Sandbox {
   run(args: string[], o?: { input?: string; env?: Record<string, string>; cwd?: string }): { code: number | null; out: string; err: string };
   /** Sahte araç çağrıları (`<araç> <argv>` satırları). */
   calls(): string[];
+  /** Her sahte araç, setup'ın kullandığı çözümlemeyle (Windows: PATH+PATHEXT) 'bin'deki dosyaya çözülmeli; gerçek araca düşerse fırlatır (F-vlad-310). */
+  assertFakesResolve(): void;
+  /** Sahte aracı setup'ın çağırdığı biçimde çalıştırır (win32: .cmd sarmalayıcı). */
+  runTool(name: string, args: string[]): { code: number | null; out: string; err: string };
   settings(): any;
   writeSettings(s: unknown | string): string;
   answers(a: Record<string, unknown>): string;
+}
+
+/** Windows: Git for Windows'in sh.exe'si (git.exe'nin yanından ya da PATH'ten). */
+function findSh(): string {
+  const git = resolveTool("git");
+  const cands = [git && join(git, "..", "..", "bin", "sh.exe"), git && join(git, "..", "..", "usr", "bin", "sh.exe"), git && join(git, "..", "..", "..", "bin", "sh.exe"), resolveTool("sh")].filter((c): c is string => !!c);
+  const f = cands.find((c) => existsSync(c));
+  if (!f) throw new Error("setup sandbox: Windows'ta sahte araçlar için Git'in sh.exe'si bulunamadı");
+  return f;
 }
 
 const SKIP = new Set(["node_modules", "dist", ".git", "test", "docs", "vendor"]);
@@ -50,6 +64,9 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
     const f = join(bin, name);
     writeFileSync(f, `#!/bin/sh\n${logLine}${body}\n`);
     chmodSync(f, 0o755);
+    // Windows: CreateProcess uzantısız dosyayı çözmez (gerçek gh.exe çağrılırdı); .cmd sarmalayıcı PATHEXT ile bulunur, gövdeyi Git'in sh'ı çalıştırır
+    if (process.platform === "win32") writeFileSync(join(bin, name + ".cmd"), `@"${findSh()}" "%~dp0${name}" %*
+`);
   }
   const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => {
     const e: Record<string, string> = {
@@ -72,7 +89,20 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
         const a = JSON.parse(args[ai + 1]!);
         if (a.confirm !== undefined) { args.push("--confirm", (a.confirm as string[]).join(",")); delete a.confirm; args[ai + 1] = JSON.stringify(a); }
       }
+      this.assertFakesResolve();
       const r = spawnSync(process.execPath, [cliJs, ...args], { encoding: "utf8", env: env(ro.env), input: ro.input, cwd: ro.cwd ?? vladHome, timeout: 60_000, killSignal: "SIGKILL" });
+      return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
+    },
+    assertFakesResolve() {
+      const e = env();
+      for (const name of Object.keys(FAKE_TOOLS)) {
+        const found = process.platform === "win32" ? resolveTool(name, e) : (e.PATH ?? "").split(delimiter).map((d) => join(d, name)).find((f) => existsSync(f));
+        if (!found || resolve(found, "..").toLowerCase() !== resolve(bin).toLowerCase()) throw new Error(`setup sandbox: '${name}' sahte araca çözülmüyor (çözülen: ${found ?? "yok"}); gerçek araç çağrılırdı`);
+      }
+    },
+    runTool(name, args) {
+      const inv = toolInvocation(name, args, env(), process.platform);
+      const r = spawnSync(inv.file, inv.args, { encoding: "utf8", env: env(), windowsVerbatimArguments: inv.verbatim, timeout: 30_000, killSignal: "SIGKILL" });
       return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
     },
     calls: () => (existsSync(log) ? readFileSync(log, "utf8").split("\n").filter(Boolean) : []),

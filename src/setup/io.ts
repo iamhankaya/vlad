@@ -1,16 +1,35 @@
 // Parça yardımcıları (T20261110-05): dosya/JSON/yedek, komut yürütücü (testte değiştirilebilir), karma, sürüm.
-import { execFileSync } from "node:child_process";
+import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { stamp } from "../install.js";
 import type { ApplyAction, ApplyResult, ItemCheck, PartCheck, PartId, Requirement, SetupContext } from "./types.js";
 
 // ---- komut yürütücü ----
 export interface RunResult { ok: boolean; code: number | null; stdout: string; stderr: string }
 export type Runner = (cmd: string, args: string[], o?: { cwd?: string; input?: string; timeoutMs?: number }) => RunResult;
+/** Windows'ta CreateProcess yalnız `.exe` bulur; PATH+PATHEXT ile çözülen yol (`gh.cmd` gibi sarmalayıcılar dahil). Yol ayırıcılı/mutlak ad ya da bulunamazsa null. */
+export function resolveTool(cmd: string, env: NodeJS.ProcessEnv = process.env): string | null {
+  if (isAbsolute(cmd) || /[\\/]/.test(cmd)) return null;
+  const exts = (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean).map((e) => e.toLowerCase());
+  for (const d of (env.PATH ?? env.Path ?? "").split(delimiter)) {
+    if (!d) continue;
+    for (const e of exts) { const f = join(d, cmd + e); if (existsSync(f)) return f; }
+  }
+  return null;
+}
+/** Çalıştırılacak dosya+argümanlar: Windows'ta `.cmd/.bat` sarmalayıcılar `cmd.exe /d /s /c` ile (`"`/`%` içeren argüman reddedilir; kabuk enjeksiyonu yok). */
+export function toolInvocation(cmd: string, args: string[], env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): { file: string; args: string[]; verbatim: boolean } {
+  const r = platform === "win32" ? resolveTool(cmd, env) : null;
+  if (!r || ![".cmd", ".bat"].includes(extname(r).toLowerCase())) return { file: r ?? cmd, args, verbatim: false };
+  if ([r, ...args].some((a) => /["%]/.test(a) || a.endsWith("\\"))) throw new Error(`${cmd}: argüman " ya da % içeriyor ya da ters eğik çizgiyle bitiyor (cmd sarmalayıcısı güvenle çağıramaz)`);
+  return { file: env.ComSpec ?? env.COMSPEC ?? "cmd.exe", args: ["/d", "/s", "/c", `"${[r, ...args].map((a) => `"${a}"`).join(" ")}"`], verbatim: true };
+}
 const realRunner: Runner = (cmd, args, o = {}) => {
   try {
-    const stdout = execFileSync(cmd, args, { cwd: o.cwd, input: o.input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: o.timeoutMs ?? 20_000, windowsHide: true, shell: process.platform === "win32" && (cmd === "claude" || cmd === "codex"), env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    const viaShell = process.platform === "win32" && (cmd === "claude" || cmd === "codex"); // npm .cmd kabuk sarmalayıcıları eskisi gibi
+    const inv = viaShell ? { file: cmd, args, verbatim: false } : toolInvocation(cmd, args);
+    const stdout = execFileSync(inv.file, inv.args, { ...(inv.verbatim ? { windowsVerbatimArguments: true } : {}), cwd: o.cwd, input: o.input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: o.timeoutMs ?? 20_000, windowsHide: true, shell: viaShell, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } } as ExecFileSyncOptionsWithStringEncoding); // windowsVerbatimArguments çalışma zamanında geçerli, tipte yok
     return { ok: true, code: 0, stdout, stderr: "" };
   } catch (e) {
     const x = e as { status?: number | null; stdout?: string; stderr?: string; message: string };

@@ -53,6 +53,12 @@ TTY'de `--answers` vermezseniz sihirbaz soruları sorar. `kb.mode`: `local` (yer
 - İşçide: `vlad setup --answers isci.json --join mac --brain-host <beyin IP> --brain-os darwin` ve anahtarı `--key-stdin` ile stdin'den verin (`printf %s "$ANAHTAR" | vlad setup --answers isci.json --join mac --key-stdin ...`; `--key-stdin` olmadan stdin okunmaz ve anahtar yazılmaz; `--answers` dosya yolu olmalı, `-` stdin'i anahtara bırakın). Agent adresleri yalnız özel ağ (RFC1918/loopback) olabilir.
 - Doğrulama: iki uçta `vlad setup --check`, beyinde `vlad machine list` / `vlad machine ping <ad>`.
 
+**Windows notları**
+- PowerShell'de anahtarı stdin'e verin: `$anahtar | node dist\cli.js setup --answers isci.json --join mac --brain-host <beyin IP> --brain-os darwin --key-stdin` (PowerShell borunun sonuna satır sonu ekler; `--key-stdin` değeri `trim` ettiği için zararsızdır. `echo`/dosya yönlendirmesiyle BOM'lu ya da çok satırlı içerik vermeyin; anahtarı komut satırı argümanı olarak yazmayın, geçmişe girer).
+- Git Bash'te `vlad` komutu PATH'te değilse `node dist/cli.js ...` kullanın (örnekler `vlad ...` yerine geçer); `printf %s "$ANAHTAR" | node dist/cli.js setup ... --key-stdin` aynen çalışır.
+- `roots` makineye göredir: örnekteki `["~/dev"]` Mac içindir; Windows'ta projelerinizin gerçek kök klasörünü yazın (ör. `["C:/dev"]`, JSON'da ters eğik çizgi yerine `/`). Aynı `cevaplar.json`'u iki makinede kopyalamayın.
+- `vlad.local.json` (anahtarlar) Windows'ta `icacls` ile miras kapatılıp yalnız geçerli kullanıcıya açılır; kilitlenemezse uyarı basılır, `icacls <dosya>` ile elle doğrulayın.
+
 **3. Sonradan**
 - `git pull` sonrası: `npm i && npm run build && vlad setup --upgrade` (global skill farkı gösterilir; yerel değişiklik `.bak-` olarak yedeklenir).
 - Geri alma: `vlad setup --uninstall hooks|global-skills|config` (yalnız VLAD'ın yazdığı girdiler; kb, anahtarlar ve kendi izinleriniz dokunulmaz).

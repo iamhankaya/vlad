@@ -1,5 +1,6 @@
 // vlad setup parça/orkestrasyon testleri (T20261110-05). Her test geçici HOME/claudeDir/vladHome kullanır; gerçek ~/.claude ve kb'ye dokunulmaz.
 // Gerçek gh/launchctl/schtasks/git-clone yok: komut yürütücü sahte (setRunner).
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -13,6 +14,16 @@ import type { SetupAnswers } from "../../src/setup/index.js";
 const repo = resolve(import.meta.dirname, "..", "..");
 let root: string, vladHome: string, home: string, claudeDir: string, calls: string[][];
 const w = (p: string, s: string) => { mkdirSync(resolve(p, ".."), { recursive: true }); writeFileSync(p, s); };
+/** POSIX: mod 0600. Windows: mod biti anlamsız; icacls ile miras kapalı (`(I)` yok) ve tek ACE, o da geçerli kullanıcı (F-vlad-311). */
+function expectOwnerOnly(f: string): void {
+  if (process.platform !== "win32") { expect(statSync(f).mode & 0o777).toBe(0o600); return; }
+  const sys32 = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+  const who = execFileSync(join(sys32, "whoami.exe"), { encoding: "utf8" }).trim().toLowerCase();
+  const acl = execFileSync(join(sys32, "icacls.exe"), [f], { encoding: "utf8" }).split(/\r?\n/).filter((l) => /:\(/.test(l));
+  expect(acl.some((l) => l.includes("(I)")), acl.join("\n")).toBe(false); // miras kapalı
+  expect(acl, acl.join("\n")).toHaveLength(1); // yalnız geçerli kullanıcı
+  expect(acl[0]!.toLowerCase()).toContain(who);
+}
 const jr = (p: string) => JSON.parse(readFileSync(p, "utf8"));
 const settings = () => join(claudeDir, "settings.json");
 const ctx = (answers: SetupAnswers = {}, o: { dryRun?: boolean; yes?: boolean; platform?: "darwin" | "win32" | "linux" } = {}) =>
@@ -225,7 +236,7 @@ describe("senaryo 8: çok makine ve anahtar", () => {
     await runSetup(ctx(a, { yes: true }), { only: ["agent"] });
     const lf = jr(join(root, "vlad.local.json"));
     expect(lf.self).toBe("mbp"); expect(Object.keys(lf.keys).sort()).toEqual(["mbp", "pc2"]);
-    expect(statSync(join(root, "vlad.local.json")).mode & 0o777).toBe(0o600);
+    expectOwnerOnly(join(root, "vlad.local.json"));
     expect(JSON.stringify(res)).not.toMatch(/[0-9a-f]{64}/);
   });
   it("onaysız keygen anahtar üretmez", async () => {
@@ -444,7 +455,7 @@ describe("ölü yollu SessionEnd hook'u (son kapı tur 2 P1)", () => {
     const k = (await runCheck(ctx(), { only: ["hooks"] })).parts[0]!;
     expect(k.items!.find((i) => i.id === "hooks:session-end")!.status).toBe("eski");
     const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
-    expect(ends()).toEqual([`node "${join(vladHome, "dist", "hooks", "session-report.js")}"`]);
+    expect(ends()).toEqual([`node "${join(vladHome, "dist", "hooks", "session-report.js").replaceAll("\\", "/")}"`]); // ürün hook yolunu bilerek `/` ile yazar (src/install.ts hookCommand)
     expect(rs[0]!.backups.length).toBe(1);
     await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
     expect(ends()).toHaveLength(1);
