@@ -11,3 +11,4 @@ dist-old/
 node_modules-old/
 .vlad-npm-ci-running
 /vlad.config.local.json*
+/.claude/settings.local.json
