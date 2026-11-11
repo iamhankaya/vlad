@@ -221,11 +221,12 @@ async function dropTaskBranch(repo: string, id: string): Promise<string | undefi
 }
 
 export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Promise<{ removed: boolean; warning?: string }> {
-  const a = argObject(args, ["taskId", "project", "repoName", "terminal", "dropBranch"]);
+  const a = argObject(args, ["taskId", "project", "repoName", "terminal", "dropBranch", "expectHead"]);
   const id = taskIdArg(a);
   projectArg(a);
   const repoName = repoNameArg(a);
   if (a.terminal !== true) throw forbidden("cleanup yalnız done/cancelled görev için (terminal:true)");
+  if (a.expectHead !== undefined && (typeof a.expectHead !== "string" || !/^[0-9a-f]{40}$/.test(a.expectHead))) throw bad("expectHead 40 haneli sha olmalı");
   const ctx = workerCtx();
   const { repo, wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) {
@@ -234,6 +235,11 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
     return { removed: false, ...(warning ? { warning } : {}) };
   }
   if (!isOwnWorktree(dirname(workerWorktree(ctx, repo, id)), wt, id)) throw forbidden(`worktree kendi görev klasörü değil / kök dışında: ${wt}`); // kök config'ten, wt'den değil (F-vlad-133)
+  if (typeof a.expectHead === "string") {
+    // F-vlad-320: uzak teslimde push'tan sonra çalışan yeni commit atmış olabilir; gate'lenmemiş iş worktree ile birlikte silinmesin
+    const tip = ((await runGitAsync(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/vlad/${id}^{commit}`])) ?? "").trim();
+    if (tip !== a.expectHead) throw failed(`[stale_tip] işçide vlad/${id} ucu (${tip.slice(0, 7) || "yok"}) gate'lenen sha'dan (${a.expectHead.slice(0, 7)}) farklı; worktree silinmedi, yeniden gate/push gerekir`);
+  }
   try { (o.close ?? defaultClose)(id); } catch { /* kapatılamayan pencere silme adımında raporlanır */ }
   let warn: string | null = null;
   try { warn = untrustWorktree(wt); } catch (e) { warn = (e as Error).message; }

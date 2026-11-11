@@ -77,13 +77,14 @@ export async function remoteResume(
  * entegrasyon worktree'leri de. Fazların başka projeleri için kayıt yoksa (forbidden/not_found) atlanır; görevin kendisi hata verirse yükselir.
  * Başarıdan sonra çağıran, kilit altında `worktree: null` yazar (`markCleaned`).
  */
-export async function remoteCleanup(transport: RemoteTransport, machine: string, task: Task): Promise<void> {
+export async function remoteCleanup(transport: RemoteTransport, machine: string, task: Task, expectHead?: string): Promise<void> {
   const own = task.data.project;
   const projects = new Set<string>();
   if (task.data.kind === "pipeline") for (const c of listTasks({ parent: task.data.id })) projects.add(c.data.project);
   projects.delete(own);
   const call = (project: string) => transport.call(machine, "cleanup", {
     taskId: task.data.id, project, repoName: repoNameOf(cardOf(project).path), terminal: true,
+    ...(expectHead && project === own ? { expectHead } : {}),
     ...(task.data.state === "cancelled" ? { dropBranch: true } : {}),
   });
   for (const p of projects) {
@@ -160,14 +161,16 @@ export async function remoteBranchPush(transport: RemoteTransport, machine: stri
   const { taskId, project, repoName } = gateIds(task);
   return (await transport.call<BranchPushResult>(machine, "branch-push", { taskId, project, repoName, branch: `vlad/${taskId}`, expectHead }, { timeoutMs: 150_000 })).result;
 }
-/** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD === expectHead doğrulanır, yerel `refs/heads/vlad/<id>` yaratılmaz. Gövde uygulama fazında. */
 /** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD gate'lenen sha olmalı. Yerel `refs/heads/vlad/<id>` yaratılmaz, merge sha ile yapılır. */
 export function fetchBranchHead(repo: string, id: string, expectHead: string): void {
   const run = (args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8", windowsHide: true, timeout: 120_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
-  const f = run(["fetch", "origin", `vlad/${id}`]);
-  if (f.status !== 0) throw new Error(`git fetch origin vlad/${id} başarısız: ${(f.stderr ?? "").trim().split("\n")[0]}`);
-  const head = run(["rev-parse", "--verify", "FETCH_HEAD^{commit}"]).stdout?.trim();
-  if (head !== expectHead) throw new Error(`FETCH_HEAD (${(head ?? "").slice(0, 12) || "yok"}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
+  // tam ref + geçici ref: FETCH_HEAD yarışı yok; hata iletisine git stderr/URL girmez (F-vlad-321/322)
+  const tmp = `refs/vladfetch/${id}`;
+  const f = run(["fetch", "--no-tags", "origin", `+refs/heads/vlad/${id}:${tmp}`]);
+  if (f.status !== 0) throw new Error(`git fetch başarısız (kod ${f.status ?? "?"})`);
+  const head = run(["rev-parse", "--verify", "--quiet", `${tmp}^{commit}`]).stdout?.trim();
+  run(["update-ref", "-d", tmp]);
+  if (head !== expectHead) throw new Error(`FETCH_HEAD (fetch edilen uç, ${(head ?? "").slice(0, 12) || "yok"}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
 }
 export async function fetchTaskBranch(task: Task, expectHead: string): Promise<void> {
   fetchBranchHead(cardOf(task.data.project).path, task.data.id, expectHead);

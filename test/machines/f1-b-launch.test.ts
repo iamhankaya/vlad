@@ -75,6 +75,19 @@ describe("F-vlad-133: cleanup, worktree'nin kendi görev klasörü olduğunu do�
   });
 });
 
+describe("F-vlad-320: cleanup expectHead — dal ucu ilerlediyse worktree silinmez", () => {
+  it("uç expectHead'den farklıysa failed [stale_tip] ve worktree durur; eşitse silinir", async () => {
+    const r = await launchOp(L, { from: "mac", opId: "op-1" }, { launcher });
+    const gated = git(r.worktree, "rev-parse", "HEAD");
+    writeFileSync(join(r.worktree, "yeni.txt"), "n"); git(r.worktree, "add", "-A"); git(r.worktree, "commit", "-q", "-m", "gate sonrası");
+    const a = { taskId: ID, project: "alpha", repoName: "alpha", terminal: true, expectHead: gated };
+    await expect(cleanupOp(a, { close: () => [] })).rejects.toMatchObject({ code: "failed", message: expect.stringContaining("stale_tip") });
+    expect(existsSync(r.worktree)).toBe(true);
+    await expect(cleanupOp({ ...a, expectHead: git(r.worktree, "rev-parse", "HEAD") }, { close: () => [] })).resolves.toMatchObject({ removed: true });
+    expect(existsSync(r.worktree)).toBe(false);
+  });
+});
+
 describe("F-vlad-144: aynı görev için eşzamanlı iki launch (farklı opId) → biri sahip, diğeri conflict", () => {
   it("ikinci launch pencere açmaz", async () => {
     const [a, b] = await Promise.allSettled([launchOp(L, { from: "mac", opId: "op-a" }, { launcher }), launchOp(L, { from: "mac", opId: "op-b" }, { launcher })]);
