@@ -42,6 +42,7 @@
     "test/machines/c4-remote.test.ts",
     "test/machines/d3-console-gate.test.ts",
     "test/machines/f1-b-closewin.test.ts",
+    "test/machines/branch-push-contract.test.ts",
     "test/machines/s-ops.test.ts",
     "test/memory/decisions.test.ts",
     "test/memory/docs.test.ts",

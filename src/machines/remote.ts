@@ -14,7 +14,7 @@ import { remoteMachineOf } from "../tasks/launch.js";
 import type { RemoteDeps } from "../tasks/launch.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
-import type { GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "../fleet/types.js";
+import type { BranchPushResult, GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "../fleet/types.js";
 
 /** Beyin kimliğiyle işçi Agent'larına konuşan gerçek taşıma (anahtarlar `vlad.local.json`'dan). */
 export const brainTransport = (cfg: VladConfig, self: string): RemoteTransport =>
@@ -153,3 +153,14 @@ export async function remoteMerge(transport: RemoteTransport, machine: string, t
   return (await transport.call<MergeResult>(machine, "merge", { ...gateIds(task), ...refs, expectHead, ...(o.message ? { message: o.message } : {}) }, { timeoutMs: 330_000 })).result;
 }
 // --- /machines:C4 ---
+// --- machines:branch-push (F-vlad-314, sözleşme T20261111-50) --- uzak görev dalını origin'e itme + beyinde alma
+/** Gate'lenen sha'yı (`expectHead`) görevin `vlad/<id>` dalı olarak origin'e iter; yalnız beyinden, force yok. Hata RemoteError (`conflict [diverged]`, `failed [stale_tip|push_rejected|no_origin|auth]`). */
+export async function remoteBranchPush(transport: RemoteTransport, machine: string, task: Task, expectHead: string): Promise<BranchPushResult> {
+  const { taskId, project, repoName } = gateIds(task);
+  return (await transport.call<BranchPushResult>(machine, "branch-push", { taskId, project, repoName, branch: `vlad/${taskId}`, expectHead }, { timeoutMs: 150_000 })).result;
+}
+/** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD === expectHead doğrulanır, yerel `refs/heads/vlad/<id>` yaratılmaz. Gövde uygulama fazında. */
+export async function fetchTaskBranch(_task: Task, _expectHead: string): Promise<void> {
+  throw new Error("fetchTaskBranch henüz gerçeklenmedi (F-vlad-314 uygulama fazı)");
+}
+// --- /machines:branch-push ---
