@@ -197,7 +197,7 @@
     "test/acceptance/machines-K11-liveness-kbsync.test.ts",
     "test/acceptance/machines-K13-agent.test.ts",
     "test/acceptance/branch-push-agent.test.ts",
-    "test/acceptance/branch-push-close-e2e.test.ts",
+    "test/acceptance/branch-push-close-e2e.test.ts", "test/acceptance/branch-push-stale-tip-verify.test.ts",
     "test/acceptance/machines-V01-stress.test.ts",
     "test/acceptance/machines-V02-lock-tmp.test.ts",
     "test/acceptance/machines-scripts-manifest.test.ts",
