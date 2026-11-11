@@ -216,6 +216,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         if (!/^[0-9a-f]{40}$/.test(gatedHead)) stop("gate", "işçi gate'i head (sha) döndürmedi; dal push edilemez");
         let pr;
         try { pr = await d.remote.push(t0, remoteMachine!, gatedHead); } catch (e) { return stop("push", (e as Error).message); }
+        if (pr?.head !== gatedHead) stop("push", "branch-push yanıtı gate'lenen sha'yı doğrulamadı; yeniden koş");
         await withKbLock(() => logTask(id, `branch-push: ${from} @ ${gatedHead.slice(0, 12)} ${pr.pushed ? "origin'e itildi" : "origin'de zaten vardı"} (${remoteMachine})`));
         add("push", "ok", pr.pushed ? gatedHead.slice(0, 12) : "origin'de zaten var");
         try { await d.remote.fetch(t0, gatedHead); } catch (e) { return stop("fetch", (e as Error).message); }
@@ -273,7 +274,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         const cur = g(targetDir, ["branch", "--show-current"]).out.trim();
         if (cur !== into) stop("merge", `hedef worktree ${into} dalında değil (${cur || "detached"}): ${targetDir}`);
         if (g(targetDir, ["status", "--porcelain"]).out.trim()) stop("merge", `hedef ağaç temiz değil: ${targetDir}`);
-        const tip = viaBrain ? gatedHead : g(card.path, ["rev-parse", "--verify", "-q", `refs/heads/${from}^{commit}`]).out.trim();
+        const tip = viaBrain ? gatedHead /* uzak teslimde sha doğrulaması fetch adımındadır */ : g(card.path, ["rev-parse", "--verify", "-q", `refs/heads/${from}^{commit}`]).out.trim();
         if (tip !== gatedHead) stop("merge", `${from} ucu gate'ten sonra değişti (gate ${gatedHead.slice(0, 12)}, şimdi ${tip.slice(0, 12) || "yok"}); gate'siz commit merge edilmez, yeniden koş`);
         const mr = g(targetDir, ["-c", "user.name=VLAD", "-c", "user.email=vlad@localhost", "merge", "--no-ff", "-m", `Merge ${from}: ${t0.data.title}`, gatedHead], 5 * 60_000);
         if (mr.code !== 0) {

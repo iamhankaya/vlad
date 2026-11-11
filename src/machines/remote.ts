@@ -158,7 +158,7 @@ export async function remoteMerge(transport: RemoteTransport, machine: string, t
 /** Gate'lenen sha'yı (`expectHead`) görevin `vlad/<id>` dalı olarak origin'e iter; yalnız beyinden, force yok. Hata RemoteError (`conflict [diverged]`, `failed [stale_tip|push_rejected|no_origin|auth]`). */
 export async function remoteBranchPush(transport: RemoteTransport, machine: string, task: Task, expectHead: string): Promise<BranchPushResult> {
   const { taskId, project, repoName } = gateIds(task);
-  return (await transport.call<BranchPushResult>(machine, "branch-push", { taskId, project, repoName, branch: `vlad/${taskId}`, expectHead }, { timeoutMs: 150_000 })).result;
+  return (await transport.call<BranchPushResult>(machine, "branch-push", { taskId, project, repoName, branch: `vlad/${taskId}`, expectHead }, { timeoutMs: 400_000 })).result;
 }
 /** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD === expectHead doğrulanır, yerel `refs/heads/vlad/<id>` yaratılmaz. Gövde uygulama fazında. */
 /** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD gate'lenen sha olmalı. Yerel `refs/heads/vlad/<id>` yaratılmaz, merge sha ile yapılır. */

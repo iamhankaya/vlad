@@ -28,8 +28,8 @@ const fail = (reason: BranchPushReason, m: string) => new RemoteError("failed", 
 const AUTH = /authenticat|could not read (username|password)|permission denied|access denied|\b40[13]\b|terminal prompts disabled/i;
 /** stderr'in ilk satırı; uzak URL/yol "origin" ile değiştirilir (sızıntı yok). */
 const firstLine = (s: string, url: string): string => {
-  const l = (s.trim().split("\n")[0] ?? "").slice(0, 200);
-  return url ? l.split(url).join("origin") : l;
+  const l = s.trim().split("\n")[0] ?? "";
+  return (url ? l.split(url).join("origin") : l).slice(0, 200); // önce URL'yi sansürle, sonra kes
 };
 const lsRemoteSha = (stdout: string): string => stdout.trim().split(/\s+/)[0] ?? "";
 
@@ -74,7 +74,8 @@ export function branchPushVerdict(repo: string, branch: string, expectHead: stri
   if (r.status !== 0) return "unknown";
   const sha = lsRemoteSha(r.stdout ?? "");
   if (!sha) return "not-applied";
-  return sha === expectHead ? { verdict: "applied", result: { branch, head: expectHead, pushed: true, remote: BRANCH_PUSH_REMOTE } } : "unknown";
+  // başka (eski) uç: push uygulanmadı; pushTaskBranch idempotent olduğundan yeniden denemek güvenli
+  return sha === expectHead ? { verdict: "applied", result: { branch, head: expectHead, pushed: true, remote: BRANCH_PUSH_REMOTE } } : "not-applied";
 }
 
 export const reconcileBranchPush: Reconciler = (rec) => {

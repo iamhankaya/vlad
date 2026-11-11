@@ -100,12 +100,12 @@ describe("pushTaskBranch", () => {
 });
 
 describe("branchPushVerdict (reconciler)", () => {
-  it("origin'de expectHead → applied; yok → not-applied; başka sha → unknown", async () => {
+  it("origin'de expectHead → applied; yok → not-applied; başka sha → not-applied (yeniden deneme güvenli)", async () => {
     const head = commit(worker, "b.txt", "2");
     expect(branchPushVerdict(worker, BR, head)).toBe("not-applied");
     await pushTaskBranch(worker, ID, head);
     expect(branchPushVerdict(worker, BR, head)).toEqual({ verdict: "applied", result: { branch: BR, head, pushed: true, remote: "origin" } });
-    expect(branchPushVerdict(worker, BR, "b".repeat(40))).toBe("unknown");
+    expect(branchPushVerdict(worker, BR, "b".repeat(40))).toBe("not-applied");
   });
 });
 
