@@ -225,7 +225,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
 
       // ---- conflict preview (writes nothing)
       if (remoteMachine && !viaBrain) {
-        const p = await d.remote.preview(t0, remoteMachine, opts.into);
+        const p = await d.remote.preview(getTask(id), remoteMachine, opts.into);
         r.summary = `${p.log}${p.diffStat}`;
         if (p.conflicts.length) stop("conflict", `çakışma: ${p.conflicts.join(", ")}`);
       } else {
@@ -266,7 +266,8 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       // ---- merge
       if (isResearch) add("merge", "skipped", "research: merge yok");
       else if (remoteMachine && !viaBrain) {
-        const m = await d.remote.merge(t0, remoteMachine, opts.into, `Merge ${from}`);
+        // gate sonrası yeniden oku: last_green_gate t0'da bayat
+        const m = await d.remote.merge(getTask(id), remoteMachine, opts.into, `Merge ${from}`);
         r.merged_head = m.head; merged = true;
         add("merge", "ok", m.merged ? m.head : `zaten içeride (${m.head})`);
       } else {

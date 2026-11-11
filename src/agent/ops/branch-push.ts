@@ -26,11 +26,6 @@ export const branchPushArgv = (branch: string, head: string): string[] => ["push
 
 const fail = (reason: BranchPushReason, m: string) => new RemoteError("failed", `failed: [${reason}] ${m}`);
 const AUTH = /authenticat|could not read (username|password)|permission denied|access denied|\b40[13]\b|terminal prompts disabled/i;
-/** stderr'in ilk satırı; uzak URL/yol "origin" ile değiştirilir (sızıntı yok). */
-const firstLine = (s: string, url: string): string => {
-  const l = s.trim().split("\n")[0] ?? "";
-  return (url ? l.split(url).join("origin") : l).slice(0, 200); // önce URL'yi sansürle, sonra kes
-};
 const lsRemoteSha = (stdout: string): string => stdout.trim().split(/\s+/)[0] ?? "";
 
 export async function pushTaskBranch(repo: string, id: string, expectHead: string): Promise<BranchPushResult> {
@@ -44,7 +39,7 @@ export async function pushTaskBranch(repo: string, id: string, expectHead: strin
   if (!url) throw fail("no_origin", "işçi reposunda origin tanımlı değil");
   const remoteSha = async (): Promise<string> => {
     const r = await runGit(repo, ["ls-remote", BRANCH_PUSH_REMOTE, ref], BRANCH_PUSH_TIMEOUT_MS);
-    if (r.code !== 0) throw fail(AUTH.test(r.stderr) ? "auth" : "no_origin", `origin'e ulaşılamadı: ${firstLine(r.stderr, url)}`);
+    if (r.code !== 0) throw fail(AUTH.test(r.stderr) ? "auth" : "no_origin", `origin'e ulaşılamadı (ayrıntı: işçide git ls-remote origin)`);
     return lsRemoteSha(r.stdout);
   };
   return serialized(repo, async () => {
@@ -53,7 +48,7 @@ export async function pushTaskBranch(repo: string, id: string, expectHead: strin
     // origin'deki uç yerelin atası değilse (ya da yerelde yoksa) ayrışmış sayılır: force yok
     if (before && (await runGit(repo, ["merge-base", "--is-ancestor", before, expectHead])).code !== 0) throw new RemoteError("conflict", `conflict: [diverged] origin'deki ${branch} ucu (${before.slice(0, 7)}) gate'lenen sha'nın atası değil; push yapılmadı`);
     const p = await runGit(repo, branchPushArgv(branch, expectHead), BRANCH_PUSH_TIMEOUT_MS);
-    if (p.code !== 0) throw fail(AUTH.test(p.stderr) ? "auth" : "push_rejected", `push başarısız: ${firstLine(p.stderr || p.stdout, url)}`);
+    if (p.code !== 0) throw fail(AUTH.test(p.stderr) ? "auth" : "push_rejected", `push başarısız (ayrıntı: işçide git push)`);
     if ((await remoteSha()) !== expectHead) throw fail("push_rejected", "push sonrası origin ucu beklenen sha değil");
     return done(true);
   });
