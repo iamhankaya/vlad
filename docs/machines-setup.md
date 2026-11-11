@@ -52,6 +52,7 @@ vlad machine probe-window windows
 ## 5. Bilinen sınırlar
 
 - `--external` yalnız beyin makinesinde.
+- Uzak görev kapanışı (`vlad task close`, F-vlad-314): işçi Agent'ının `branch-push` op'u gate'lenen `vlad/<id>` dalını origin'e iter; işçi reposunda `origin` tanımlı olmalı ve Agent'ın çalıştığı bağlamda etkileşimsiz `git push` kimliği (Credential Manager/SSH anahtarı) bulunmalı; aksi halde close `push` adımında `[no_origin]`/`[auth]` ile durur. Varsayılan dal origin'de korumalı olmalı (Agent yalnız `vlad/T…` dallarını iter). Gerçek Windows işçide bu kimlik doğrulanmadı.
 - Gerçek bir ikinci makinede uçtan uca deneme (pencere görünürlüğü, kb-sync, launch/resume/cleanup) elle yapılmalı; testler sahte taşıma ve geçici dizin kullanır.
 
 ## 6. Mac mini (beyin) kurulumu ve denetimi (F-vlad-115)

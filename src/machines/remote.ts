@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { AgentClient } from "../agent/client.js";
@@ -160,7 +161,15 @@ export async function remoteBranchPush(transport: RemoteTransport, machine: stri
   return (await transport.call<BranchPushResult>(machine, "branch-push", { taskId, project, repoName, branch: `vlad/${taskId}`, expectHead }, { timeoutMs: 150_000 })).result;
 }
 /** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD === expectHead doğrulanır, yerel `refs/heads/vlad/<id>` yaratılmaz. Gövde uygulama fazında. */
-export async function fetchTaskBranch(_task: Task, _expectHead: string): Promise<void> {
-  throw new Error("fetchTaskBranch henüz gerçeklenmedi (F-vlad-314 uygulama fazı)");
+/** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD gate'lenen sha olmalı. Yerel `refs/heads/vlad/<id>` yaratılmaz, merge sha ile yapılır. */
+export function fetchBranchHead(repo: string, id: string, expectHead: string): void {
+  const run = (args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8", windowsHide: true, timeout: 120_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+  const f = run(["fetch", "origin", `vlad/${id}`]);
+  if (f.status !== 0) throw new Error(`git fetch origin vlad/${id} başarısız: ${(f.stderr ?? "").trim().split("\n")[0]}`);
+  const head = run(["rev-parse", "--verify", "FETCH_HEAD^{commit}"]).stdout?.trim();
+  if (head !== expectHead) throw new Error(`FETCH_HEAD (${(head ?? "").slice(0, 12) || "yok"}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
+}
+export async function fetchTaskBranch(task: Task, expectHead: string): Promise<void> {
+  fetchBranchHead(cardOf(task.data.project).path, task.data.id, expectHead);
 }
 // --- /machines:branch-push ---

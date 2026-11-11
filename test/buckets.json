@@ -72,6 +72,7 @@
     "test/tasks/transitions-consistency.test.ts"
   ],
   "process": [
+    "test/machines/branch-push-op.test.ts",
     "test/tasks/gate-compare.test.ts",
     "test/acceptance/cloud-ingest-real-shape.test.ts",
     "test/acceptance/cloud-ingest-verify2.test.ts",
@@ -215,6 +216,7 @@
     "test/aktarim/s-contract.test.ts",
     "test/aktarim/w-worker-local.test.ts",
     "test/isolation/**/*.test.ts",
+    "test/machines/branch-push-e2e.test.ts",
     "test/machines/agent-restart.test.ts",
     "test/machines/b-e2e.test.ts",
     "test/machines/b-review.test.ts",

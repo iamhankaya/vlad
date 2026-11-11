@@ -8,6 +8,7 @@ import type { Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding, getFinding } from "../../src/findings/store.js";
 import { createTask, getTask, launchTask, logTask, reportTask } from "../../src/tasks/index.js";
+import { saveTaskQuiet } from "../../src/tasks/store.js";
 import { setNight } from "../../src/mode/store.js";
 import { closeTask, type CloseDeps } from "../../src/machines/close.js";
 import { makeHome, rmTemp } from "../helpers.js";
@@ -227,17 +228,110 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(merge).not.toHaveBeenCalled();
   });
 
-  it("uzak yeşil gate → uzak merge + uzak cleanup", async () => {
+  /** Uzak işçi taklidi: gate gerçek worktree head'ini döner; push/fetch/merge/cleanup izlenir (merge yerel olmalı). */
+  const win = (id: string, o: Partial<CloseDeps["remote"]> = {}) => {
+    const head = () => git(getTask(id).data.worktree!, "rev-parse", "HEAD").trim();
+    const calls: string[] = [];
+    const remote: CloseDeps["remote"] = {
+      machine: () => "win",
+      gate: async () => { calls.push("gate"); return { exit: 0, stdout: "", stderr: "", head: head() }; },
+      push: async (_t, _m, h) => { calls.push(`push:${h.slice(0, 7)}`); return { branch: `vlad/${id}`, head: h, pushed: true, remote: "origin" }; },
+      fetch: async (_t, h) => { calls.push(`fetch:${h.slice(0, 7)}`); },
+      preview: async () => { calls.push("preview"); return { log: "", diffStat: "", conflicts: [] }; },
+      merge: async () => { calls.push("remote-merge"); return { head: "a".repeat(40), merged: true }; },
+      cleanup: async () => { calls.push("cleanup"); },
+      ...o,
+    };
+    return { remote, calls, head };
+  };
+
+  it("uzak tek görev: gate → push → fetch → beyinde merge (uzak merge yok) → uzak cleanup; günlükte push satırı", async () => {
     const id = await ready();
-    const merge = vi.fn(async () => ({ head: "a".repeat(40), merged: true }));
-    const cleanup = vi.fn(async () => {});
-    const r = await closeTask(id, { yes: true }, deps({
-      remote: { machine: () => "win", gate: async () => ({ exit: 0, stdout: "", stderr: "", head: "a".repeat(40) }), push: async () => ({ branch: "", head: "", pushed: false, remote: "origin" }), fetch: async () => {}, preview: async () => ({ log: "l", diffStat: "d", conflicts: [] }), merge, cleanup },
-    }));
-    expect(r.ok).toBe(true);
-    expect(merge).toHaveBeenCalled();
-    expect(cleanup).toHaveBeenCalled();
+    const w = win(id);
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: true, stopped_at: null });
+    const h = w.head().slice(0, 7);
+    expect(w.calls).toEqual(["gate", `push:${h}`, `fetch:${h}`, "cleanup"]);
+    expect(r.steps.map((x) => x.step).slice(0, 5)).toEqual(["precheck", "gate", "push", "fetch", "conflict"]);
+    expect(readFileSync(join(repo, "b.txt"), "utf8")).toBe("2");
     expect(getTask(id).data.state).toBe("done");
+    expect(getTask(id).body).toMatch(new RegExp(`branch-push: vlad/${id} @ ${w.head().slice(0, 12)} origin'e itildi \\(win\\)`));
+  });
+
+  it("push hatasında stopped_at push: fetch/merge yok, görev awaiting_approval", async () => {
+    const id = await ready();
+    const w = win(id, { push: async () => { throw new Error("failed: [auth] kimlik yok"); } });
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "push" });
+    expect(r.reason).toMatch(/auth/);
+    expect(w.calls).toEqual(["gate"]);
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+  });
+
+  it("fetch hatasında stopped_at fetch: merge yok", async () => {
+    const id = await ready();
+    const w = win(id, { fetch: async () => { throw new Error("FETCH_HEAD farklı"); } });
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "fetch" });
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+  });
+
+  it("--head gate'lenen sha'dan farklıysa push'tan ÖNCE durur", async () => {
+    const id = await ready();
+    const w = win(id);
+    const r = await closeTask(id, { yes: true, head: "deadbee" }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "gate" });
+    expect(w.calls).toEqual(["gate"]);
+  });
+
+  it("çakışma önizlemesi beyinde: çakışırsa stopped_at conflict, merge yok", async () => {
+    const id = await ready({ name: "a.txt", content: "other" });
+    writeFileSync(join(repo, "a.txt"), "main-change");
+    git(repo, "commit", "-am", "main değişti");
+    const w = win(id);
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "conflict" });
+    expect(w.calls).not.toContain("remote-merge");
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+  });
+
+  it("onay yoksa push+fetch sonrası confirm'de durur; yeniden koşu idempotent (push tekrar çağrılır, pushed:false)", async () => {
+    const id = await ready();
+    let n = 0;
+    const w = win(id, { push: async (_t, _m, h) => ({ branch: `vlad/${id}`, head: h, pushed: n++ === 0, remote: "origin" }) });
+    const first = await closeTask(id, {}, deps({ remote: w.remote }));
+    expect(first).toMatchObject({ stopped_at: "confirm" });
+    const again = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(again.ok).toBe(true);
+    expect(n).toBe(2);
+  });
+
+  it("pipeline fazı (parent var) uzakta eskisi gibi: push/fetch yok, merge işçide", async () => {
+    const p = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" }).data.id;
+    const id = await ready({ parent: p });
+    const w = win(id);
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r.ok).toBe(true);
+    expect(w.calls).toEqual(["gate", "preview", "remote-merge", "cleanup"]);
+  });
+
+  it("done uzak görev yeniden koşusu: push/fetch yok; gate'lenen head hedefte değilse precheck durur", async () => {
+    const id = await ready();
+    const w = win(id);
+    await closeTask(id, { yes: true }, deps({ remote: w.remote, kbCommit }));
+    const t = getTask(id);
+    w.calls.length = 0;
+    expect((await closeTask(id, { yes: true }, deps({ remote: w.remote }))).ok).toBe(true);
+    expect(w.calls).toEqual(["cleanup"].filter(() => t.data.worktree));
+    // kayıtlı yeşil head ana dalda yoksa: merge edilmemiş
+    const t2 = getTask(id);
+    t2.data.last_green_gate = { head: "c".repeat(40), target: "task", at: new Date().toISOString() };
+    saveTaskQuiet(t2);
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "precheck" });
+    expect(r.reason).toMatch(/merge edilmemiş/);
   });
 
   it("kartın machines listesi ≥2 ise diğer makine için yeşil gate satırı yoksa durur", async () => {
