@@ -41,7 +41,7 @@ export type IdentityRole = "brain" | "worker" | "console";
 
 export type AgentOp =
   | "ping" | "op-status" | "kb-sync" | "launch" | "resume" | "close" | "cleanup" | "liveness" | "probe-window"
-  | "gate-run" | "merge-preview" | "merge"
+  | "gate-run" | "merge-preview" | "merge" | "branch-push" // branch-push: F-vlad-314 (T20261111-50 sözleşmesi)
   | "apply-write" | "exec" | "kb-head"
   | "forward-write" | "queue-list" | "queue-flush" | "queue-drop"
   | "xfer-begin" | "xfer-chunk" | "xfer-commit" | "xfer-abort" | "clip-push" // aktarım (T20261105-03 sözleşmesi)
@@ -137,6 +137,21 @@ export interface MergePreviewResult { log: string; diffStat: string; conflicts: 
 /** `merge`: faz → vlad/<çatı> ya da son kapıda ana dal; yalnız brain'den, görev/makine eşleşmeli. */
 export interface MergeArgs { taskId: string; project: string; repoName: string; from: string; into: string; message?: string }
 export interface MergeResult { head: string; merged: boolean }
+
+// `branch-push` (F-vlad-314, çatı T20261111-48, sözleşme T20261111-50). Davranış yok; uygulama fazları bu şekle bağlanır.
+// Yeni AgentCode eklenmez: neden hata mesajında köşeli parantezle taşınır (`conflict [diverged]`, `failed [stale_tip]`).
+/** Yalnız görevin kendi dalı: `vlad/<taskId>`; başka ref, `+refspec`, `a:b`, tag ve `refs/` öneki bu kalıba uymaz. */
+export const BRANCH_PUSH_BRANCH_RE = /^vlad\/T\d{8}-\d+$/;
+/** Push hedefi her zaman projenin kayıtlı `origin`'i; istekten uzak ad/URL alınmaz. */
+export const BRANCH_PUSH_REMOTE = "origin";
+export const BRANCH_PUSH_TIMEOUT_MS = 120_000;
+/** `branch-push` hata nedenleri (hata iletisinde `[neden]`): diverged → conflict; diğerleri → failed. */
+export const BRANCH_PUSH_REASONS = ["diverged", "no_origin", "stale_tip", "push_rejected", "auth"] as const;
+export type BranchPushReason = (typeof BRANCH_PUSH_REASONS)[number];
+/** `branch` = `vlad/` + taskId; `expectHead` = gate'lenen 40 haneli sha (push yalnız bu sha'yı gönderir). Bilinmeyen alan → bad_request. */
+export interface BranchPushArgs { taskId: string; project: string; repoName: string; branch: string; expectHead: string }
+/** `pushed:false` = origin'de dal zaten `head`'te (idempotent yeniden koşu). URL/yol dönmez. */
+export interface BranchPushResult { branch: string; head: string; pushed: boolean; remote: typeof BRANCH_PUSH_REMOTE }
 
 // Kayıtlı bakım betikleri (T20261109-03 çatısı, sözleşme T20261109-05). Davranış yok; uygulama fazları bu şekle bağlanır.
 // Yeni AgentCode eklenmez: neden, hata mesajında köşeli parantezle taşınır (`forbidden [dirty]`); istemci tanımadığı kodu geçersiz sayar.

@@ -15,11 +15,11 @@ import { cleanupTask, getTask, integrationWorktrees, logTask, setState } from ".
 import type { Task } from "../tasks/index.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import { selfName } from "../fleet/state.js";
-import type { GateRunResult, MergePreviewResult, MergeResult } from "../fleet/types.js";
-import { brainTransport, defaultGateTarget, gateMachineOf, markCleaned, recordGreenGate, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb } from "./remote.js";
+import type { BranchPushResult, GateRunResult, MergePreviewResult, MergeResult } from "../fleet/types.js";
+import { brainTransport, defaultGateTarget, fetchTaskBranch, gateMachineOf, markCleaned, recordGreenGate, remoteBranchPush, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb } from "./remote.js";
 
 /** `vlad task close`: one command for the gate (precheck → gate → conflict → confirm → merge → done → cleanup → findings → kb). */
-export type CloseStepName = "precheck" | "gate" | "conflict" | "confirm" | "merge" | "done" | "cleanup" | "findings" | "kb";
+export type CloseStepName = "precheck" | "gate" | "push" | "fetch" | "conflict" | "confirm" | "merge" | "done" | "cleanup" | "findings" | "kb";
 export interface CloseStep { step: CloseStepName; status: "ok" | "skipped" | "stopped" | "failed"; detail?: string }
 export interface CloseResult {
   id: string;
@@ -50,6 +50,10 @@ export interface CloseOpts {
 export interface CloseRemote {
   machine(t: Task): string | null;
   gate(t: Task, target: "integration" | "task", machine: string): Promise<GateRunResult>;
+  /** uzak tek görev / çatı kökü: gate'ten sonra, gate'lenen sha ile; hata → close `push`ta durur, merge yok */
+  push(t: Task, machine: string, expectHead: string): Promise<BranchPushResult>;
+  /** beyinde `fetch origin vlad/<id>` (FETCH_HEAD === expectHead); hata → close `fetch`te durur */
+  fetch(t: Task, expectHead: string): Promise<void>;
   preview(t: Task, machine: string, into?: string): Promise<MergePreviewResult>;
   merge(t: Task, machine: string, into?: string, message?: string): Promise<MergeResult>;
   cleanup(t: Task, machine: string): Promise<void>;
@@ -69,6 +73,8 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
   return {
     machine: (t) => (cfg.machines ? gateMachineOf(t, cfg) : null),
     gate: async (t, target, m) => { const tr = transport(); await syncKb(tr, m); return remoteGateRun(tr, m, t, target); },
+    push: (t, m, head) => remoteBranchPush(transport(), m, t, head),
+    fetch: (t, head) => fetchTaskBranch(t, head),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),
     cleanup: async (t, m) => { await remoteCleanup(transport(), m, t); await withKbLock(() => markCleaned(t.data.id)); },
