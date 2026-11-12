@@ -11,6 +11,7 @@ function segments(cmd: string): Tok[][] {
   const cut = () => { flush(); if (out[out.length - 1]!.length) out.push([]); };
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i]!;
+    if (c === "\\" && (cmd[i + 1] === "\n" || (cmd[i + 1] === "\r" && cmd[i + 2] === "\n"))) { i += cmd[i + 1] === "\r" ? 2 : 1; continue; } // satır devamı: bash birleştirir (tırnak içinde de)
     if (open) { if (c === open) open = null; else if (c === "\\" && open === '"' && i + 1 < cmd.length) cur += cmd[++i]!; else cur += c; continue; }
     if (c === "'" || c === '"') { open = c; q = true; continue; }
     if (c === "\\" && i + 1 < cmd.length) { cur += cmd[++i]!; q = true; continue; }
@@ -34,12 +35,15 @@ function findGit(s: Tok[]): { at: number; sub: number } | null {
 /** Yalnız tek `git push [-u|--set-upstream] origin vlad/<kendi-id>` geçer. null = serbest, string = ret nedeni. */
 export function checkWorkerPush(command: string, ownId: string | null): string | null {
   // Komut ikamesi / alt kabuk / eval içindeki push segment bölmesinde kaybolmasın (shortcut: heredoc commit mesajında "git push …" geçerse de reddedilir; -F kullanın).
-  if (/(\$\(|`|\b(?:ba|z|da)?sh\s+-c|\beval\b)/.test(command) && /\bgit\b[^\n]*\bpush\b/.test(command)) return deny("komut ikamesi/alt kabukta git push");
+  if (/(\$\(|`|\b(?:ba|z|da|k)?sh\s+-\w*c|\beval\b)/.test(command) && /\bgit\b[^\n]*\bpush\b/.test(command)) return deny("komut ikamesi/alt kabukta git push");
   command = command.replace(/\s\d?>&\d(?=\s|$)/g, " ").replace(/\s\d?>\s*\/dev\/null(?=\s|$)/g, " "); // zararsız yönlendirmeler
   for (const s of segments(command)) {
     const g = findGit(s);
     if (!g) continue;
-    if (s.some((t) => /\balias\./.test(t.v))) return deny("git alias ayarı");
+    // Yalnız alias YAZAN biçimler: `git -c alias.x=…`, `--config-env=alias.x=…`, `git config … alias.x` (commit mesajı/--grep içindeki "alias." yanlış pozitif olmasın).
+    const globals = s.slice(g.at + 1, g.sub).map((t) => t.v);
+    if (globals.some((v, k) => (v === "-c" && /^alias\./i.test(globals[k + 1] ?? "")) || /^(?:-c|--config-env=)alias\./i.test(v))) return deny("git alias ayarı");
+    if (s[g.sub]?.v === "config" && !s.some((t) => /^(--get(-all|-regexp)?|--list|-l|--unset(-all)?)$/.test(t.v)) && s.slice(g.sub + 1).some((t) => /^alias\./i.test(t.v))) return deny("git alias ayarı");
     if (s[g.sub]?.v !== "push") continue; // shortcut: kullanıcı tanımlı alias (`git p`) kalıp/izin glob'una bırakılır
     if (g.at !== 0 || s[0]!.v !== "git" || s[0]!.quoted) return deny("`git push` düz biçimde (sarmalayıcı/env/yol/tırnaklı git öneksiz) olmalı");
     if (g.sub !== 1) return deny("git global seçeneği (-c/-C/--git-dir/…) ile push yok");

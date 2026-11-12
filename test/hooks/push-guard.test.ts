@@ -35,6 +35,14 @@ describe("F-vlad-324: çalışan git push argv doğrulaması", () => {
     for (const cmd of [`git 'push' origin main`, `git "push" origin vlad/${ID}:main`, `"git" push origin +main`, `git p\\ush origin main`])
       expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
   });
+  it("3. tur P1: satır devamı (backslash-newline, CRLF) birleştirilir; P2: alias yalnız yazılırken; bash -lc", () => {
+    for (const cmd of ["git \\\npush --force origin main", "git \\\r\npush origin main", "git push \\\n--force origin vlad/T20261112-10", "git push origin \\\nmain", `git push origin vlad/${ID}:\\\nmain`, "git pu\\\nsh origin main"])
+      expect(checkWorkerPush(cmd, ID), JSON.stringify(cmd)).not.toBeNull();
+    expect(checkWorkerPush(`git push \\\n origin vlad/${ID}`, ID)).toBeNull();
+    for (const cmd of [`git commit -m "fix alias.foo"`, "git log --grep=alias.foo", "git config --get alias.p", "git status"]) expect(checkWorkerPush(cmd, ID), cmd).toBeNull();
+    for (const cmd of ["git -c alias.p=push p origin +main", "git --config-env=alias.p=X push origin main", "git config alias.p push", "git config --global alias.p 'push -f'"]) expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
+    for (const cmd of ["bash -lc 'git push origin main'", "sh -ec 'git push -f origin main'", "zsh -c 'git push origin main'"]) expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
+  });
   it("kimlik bilinmiyorsa yalnız vlad/T… biçimi aranır", () => {
     expect(checkWorkerPush("git push origin vlad/T20261112-10", null)).toBeNull();
     expect(checkWorkerPush("git push origin vlad/main", null)).not.toBeNull();
