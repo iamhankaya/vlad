@@ -150,7 +150,11 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
       const h = winRestartHelper({ pidFile: pidFile(), startCmd, systemRoot: process.env.SystemRoot, watch: { host: wdHost, port, repo: getVladHome() } });
       await defaultExec(h.file, h.args);
     },
-    onFail: (m) => { maint.leave(); process.stderr.write(`yeniden başlatma yapılamadı, Agent eski süreçle sürüyor: ${m}\n`); },
+    onFail: (m) => {
+      // F-vlad-326: açılış geri almasından sonra karışık modüllerle op kabul edilmez; bakım açık kalır, ping stuck gösterir
+      if (recovered) { maint.markStuck(); process.stderr.write(`yeniden başlatma yapılamadı; geri alma sonrası Agent bakımda kalıyor, elle yeniden başlat: ${m}\n`); return; }
+      maint.leave(); process.stderr.write(`yeniden başlatma yapılamadı, Agent eski süreçle sürüyor: ${m}\n`);
+    },
   };
   agentEnv().requestRestart = () => scheduleRestart(restartDeps);
   if (recovered) agentEnv().requestRestart?.();
