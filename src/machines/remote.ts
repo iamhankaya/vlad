@@ -11,7 +11,7 @@ import { listTasks, effectiveModel, getTask, roleFor, saveTask, saveTaskQuiet } 
 import type { Task } from "../tasks/store.js";
 import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
-import { remoteMachineOf } from "../tasks/launch.js";
+import { remoteMachineOf, sessionArg } from "../tasks/launch.js";
 import type { RemoteDeps } from "../tasks/launch.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
@@ -68,6 +68,7 @@ export async function remoteResume(
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
     ...(plan.sessionId ? { sessionId: plan.sessionId } : {}),
+    ...(await sessionArg(transport, machine)),
   };
   return (await transport.call<{ worktree: string; method: string; dirty: string[] }>(machine, "resume", args)).result;
 }

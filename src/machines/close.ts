@@ -54,6 +54,11 @@ export interface CloseRemote {
   push(t: Task, machine: string, expectHead: string): Promise<BranchPushResult>;
   /** beyinde `fetch origin vlad/<id>` (FETCH_HEAD === expectHead); hata → close `fetch`te durur */
   fetch(t: Task, expectHead: string): Promise<void>;
+  /**
+   * F-vlad-320 (uzak teslim): confirm sonrası, merge'ten hemen önce işçide `vlad/<id>` ucunun gate'lenen sha olduğunu yeniden doğrular;
+   * farklıysa fırlatır → close `merge`de durur (merge/done/cleanup yok). Tanımsızsa atlanır.
+   */
+  verifyTip?(t: Task, machine: string, expectHead: string): Promise<void>;
   preview(t: Task, machine: string, into?: string): Promise<MergePreviewResult>;
   merge(t: Task, machine: string, into?: string, message?: string): Promise<MergeResult>;
   /** expectHead (uzak teslim): işçide dal ucu bu sha değilse worktree silinmez (F-vlad-320) */
@@ -75,6 +80,8 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     machine: (t) => (cfg.machines ? gateMachineOf(t, cfg) : null),
     gate: async (t, target, m) => { const tr = transport(); await syncKb(tr, m); return remoteGateRun(tr, m, t, target); },
     push: (t, m, head) => remoteBranchPush(transport(), m, t, head),
+    // branch-push idempotenttir ve işçide ucu expectHead'e karşı denetler (stale_tip); origin zaten güncelse yeniden itmez
+    verifyTip: async (t, m, head) => { const r = await remoteBranchPush(transport(), m, t, head); if (r.head !== head) throw new Error("işçi dal ucu doğrulanamadı: yanıt gate'lenen sha'yı içermiyor"); },
     fetch: (t, head) => fetchTaskBranch(t, head),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),
@@ -266,6 +273,8 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       add("confirm", "ok", how);
 
       // ---- merge
+      // F-vlad-320: confirm beklerken işçi yeni commit atmış olabilir; gate'siz uç merge edilip görev done olmasın
+      if (viaBrain && d.remote.verifyTip) { try { await d.remote.verifyTip(getTask(id), remoteMachine!, gatedHead); } catch (e) { return stop("merge", `işçi dal ucu doğrulanamadı, merge yapılmadı: ${(e as Error).message}`); } }
       if (isResearch) add("merge", "skipped", "research: merge yok");
       else if (remoteMachine && !viaBrain) {
         // gate sonrası yeniden oku: last_green_gate t0'da bayat

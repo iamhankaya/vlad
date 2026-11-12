@@ -315,6 +315,34 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(n).toBe(2);
   });
 
+  it("F-vlad-320: uzak teslimde merge'ten ÖNCE işçi dal ucu gate'lenen sha'ya karşı yeniden doğrulanır (confirm sonrası, merge öncesi)", async () => {
+    const id = await ready();
+    const w = win(id, { verifyTip: async (_t, _m, h) => { calls.push(`verify:${h.slice(0, 7)}`); } });
+    const calls = w.calls;
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r.ok).toBe(true);
+    const h = w.head().slice(0, 7);
+    expect(calls).toEqual(["gate", `push:${h}`, `fetch:${h}`, `verify:${h}`, "cleanup"]);
+  });
+
+  it("F-vlad-320: confirm bekleyen close'da onaydan sonra işçi yeni commit atarsa (stale-tip) merge/done/cleanup yok, görev awaiting_approval kalır", async () => {
+    const id = await ready();
+    const mainBefore = git(repo, "rev-parse", "HEAD").trim();
+    const w = win(id, { verifyTip: async () => { throw new Error("failed: [stale_tip] işçide vlad/x ucu gate'lenen sha'dan farklı"); } });
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
+    expect(r.reason).toMatch(/stale_tip/);
+    expect(w.calls).not.toContain("cleanup");
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+    expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
+  });
+
+  it("F-vlad-320: işçi taklidinde verifyTip yoksa doğrulama atlanır, akış eskisi gibi", async () => {
+    const id = await ready();
+    const w = win(id); // verifyTip tanımsız
+    expect((await closeTask(id, { yes: true }, deps({ remote: w.remote }))).ok).toBe(true);
+  });
+
   it("pipeline fazı (parent var) uzakta eskisi gibi: push/fetch yok, merge işçide", async () => {
     const p = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "" }).data.id;
     const id = await ready({ parent: p });
