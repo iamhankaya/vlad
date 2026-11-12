@@ -173,6 +173,31 @@ export function fetchBranchHead(repo: string, id: string, expectHead: string): v
   run(["update-ref", "-d", tmp]);
   if (head !== expectHead) throw new Error(`FETCH_HEAD (fetch edilen uç, ${(head ?? "").slice(0, 12) || "yok"}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
 }
+/**
+ * F-vlad-328: Agent yanıtı tek başına kanıt değildir (işçi `done()` her zaman `head: expectHead` döndürür).
+ * Yanıtın alanları tutarlı olmalı: head = gate'lenen sha, branch = vlad/<id>, remote = origin, pushed boolean.
+ */
+export function checkBranchPushReply(r: BranchPushResult, id: string, expectHead: string): void {
+  if (!r || typeof r !== "object") throw new Error("işçi dal ucu doğrulanamadı: branch-push yanıtı geçersiz");
+  if (r.head !== expectHead) throw new Error("işçi dal ucu doğrulanamadı: yanıt head'i gate'lenen sha değil");
+  if (r.branch !== `vlad/${id}`) throw new Error(`işçi dal ucu doğrulanamadı: yanıt branch'i vlad/${id} değil`);
+  if (r.remote !== "origin") throw new Error("işçi dal ucu doğrulanamadı: yanıt remote'u origin değil");
+  if (typeof r.pushed !== "boolean") throw new Error("işçi dal ucu doğrulanamadı: yanıt pushed alanı boolean değil");
+}
+/** Beyinden bağımsız kanıt: `ls-remote origin refs/heads/vlad/<id>` tam eşleşen satırın sha'sı gate'lenen sha olmalı. */
+export function checkOriginTip(repo: string, id: string, expectHead: string): void {
+  const ref = `refs/heads/vlad/${id}`;
+  const r = spawnSync("git", ["ls-remote", "origin", ref], { cwd: repo, encoding: "utf8", windowsHide: true, timeout: 120_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+  if (r.status !== 0) throw new Error("işçi dal ucu doğrulanamadı: beyinde origin'e ulaşılamadı (ls-remote)");
+  const sha = (r.stdout ?? "").split("\n").map((l) => l.trim().split(/\s+/)).find(([, name]) => name === ref)?.[0] ?? "";
+  if (!sha) throw new Error(`işçi dal ucu doğrulanamadı: origin'de ${ref} yok`);
+  if (sha !== expectHead) throw new Error(`işçi dal ucu doğrulanamadı: origin ucu (${sha.slice(0, 12)}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
+}
+/** close verifyTip: Agent çağrısı (işçide kuyruk içi stale_tip) + yanıt tutarlılığı + beyinde bağımsız origin kanıtı. */
+export async function verifyRemoteTip(call: () => Promise<BranchPushResult>, repo: string, id: string, expectHead: string): Promise<void> {
+  checkBranchPushReply(await call(), id, expectHead);
+  checkOriginTip(repo, id, expectHead);
+}
 /** Beyin-yerel repo yolu: close'un fetch/önizleme/merge/ancestry adımlarının tek çözümü (kart yolu başka OS'tansa brain roots, F-vlad-200). */
 export const brainRepoPath = (project: string, cfg?: VladConfig): string => projectPath(project, cfg);
 export async function fetchTaskBranch(task: Task, expectHead: string, cfg?: VladConfig): Promise<void> {

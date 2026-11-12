@@ -8,6 +8,8 @@ import { argObject, bad, projectArg, repoNameArg, taskIdArg, workerCtx } from ".
 // `branch-push` (F-vlad-314, D-vlad-076): işçi Agent'ı yalnız görevin kendi `vlad/<id>` dalını, gate'lenen sha'ya kilitli olarak origin'e iter.
 // Push argv'sinde `+`/force/tags/mirror/all/delete asla yok: hedef `origin <expectHead>:refs/heads/vlad/<id>`.
 
+/** Yerel (ağsız) git çağrıları için kısa zaman aşımı: takılan bir çağrı serialized kuyruğunu tutmasın. */
+const LOCAL_GIT_TIMEOUT_MS = 30_000;
 const ARGS = ["taskId", "project", "repoName", "branch", "expectHead"] as const;
 
 /** İstek şeması: yalnız bu 5 alan; branch tam `vlad/<taskId>`; expectHead 40 haneli küçük harf sha. */
@@ -41,7 +43,7 @@ export async function pushTaskBranch(repo: string, id: string, expectHead: strin
   const done = (pushed: boolean): BranchPushResult => ({ branch, head: expectHead, pushed, remote: BRANCH_PUSH_REMOTE });
   // F-vlad-332: uç doğrulaması kuyruğun İÇİNDE; kuyrukta beklerken dal ilerlemiş olabilir. Başarı dönmeden önce de (ağ işlemlerinden sonra) yeniden okunur.
   const checkTip = async (): Promise<void> => {
-    const tip = (await runGit(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).stdout.trim();
+    const tip = (await runGit(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], LOCAL_GIT_TIMEOUT_MS)).stdout.trim();
     if (!tip) throw new RemoteError("not_found", `not_found: dal yok: ${branch}`);
     if (tip !== expectHead) throw fail("stale_tip", `${branch} ucu (${tip.slice(0, 7)}) gate'lenen sha'dan (${expectHead.slice(0, 7)}) farklı; gate'i yeniden koş`);
   };
@@ -52,15 +54,17 @@ export async function pushTaskBranch(repo: string, id: string, expectHead: strin
   };
   return serialized(repo, async () => {
     await checkTip();
-    const url = (await runGit(repo, ["remote", "get-url", BRANCH_PUSH_REMOTE])).stdout.trim();
+    const url = (await runGit(repo, ["remote", "get-url", BRANCH_PUSH_REMOTE], LOCAL_GIT_TIMEOUT_MS)).stdout.trim();
     if (!url) throw fail("no_origin", "işçi reposunda origin tanımlı değil");
     const before = await remoteSha();
     if (before === expectHead) { await checkTip(); return done(false); }
     // origin'deki uç yerelin atası değilse (ya da yerelde yoksa) ayrışmış sayılır: force yok
-    if (before && (await runGit(repo, ["merge-base", "--is-ancestor", before, expectHead])).code !== 0) throw new RemoteError("conflict", `conflict: [diverged] origin'deki ${branch} ucu (${before.slice(0, 7)}) gate'lenen sha'nın atası değil; push yapılmadı`);
+    if (before && (await runGit(repo, ["merge-base", "--is-ancestor", before, expectHead], LOCAL_GIT_TIMEOUT_MS)).code !== 0) throw new RemoteError("conflict", `conflict: [diverged] origin'deki ${branch} ucu (${before.slice(0, 7)}) gate'lenen sha'nın atası değil; push yapılmadı`);
     const p = await runGit(repo, branchPushArgv(branch, expectHead), BRANCH_PUSH_TIMEOUT_MS);
     if (p.code !== 0) throw fail(AUTH.test(p.stderr) ? "auth" : "push_rejected", `push başarısız (ayrıntı: işçide git push)`);
     if ((await remoteSha()) !== expectHead) throw fail("push_rejected", "push sonrası origin ucu beklenen sha değil");
+    // Son yeniden okuma yalnız yarış penceresini daraltır (push ile bu satır arası); uç yine de bundan sonra ilerleyebilir.
+    // Merge'ün gate'lenen sha'yı getirmesinin garantisi beyindedir: merge sha ile yapılır, beyin fetch FETCH_HEAD + ls-remote ile doğrular (close.ts).
     await checkTip();
     return done(true);
   });

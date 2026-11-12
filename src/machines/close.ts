@@ -16,7 +16,7 @@ import type { Task } from "../tasks/index.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import { selfName } from "../fleet/state.js";
 import type { BranchPushResult, GateRunResult, MergePreviewResult, MergeResult } from "../fleet/types.js";
-import { brainTransport, defaultGateTarget, brainRepoPath, fetchTaskBranch, gateMachineOf, markCleaned, recordGreenGate, remoteBranchPush, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb } from "./remote.js";
+import { brainTransport, defaultGateTarget, brainRepoPath, fetchTaskBranch, gateMachineOf, markCleaned, recordGreenGate, remoteBranchPush, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb, verifyRemoteTip } from "./remote.js";
 
 /** `vlad task close`: one command for the gate (precheck → gate → conflict → confirm → merge → done → cleanup → findings → kb). */
 export type CloseStepName = "precheck" | "gate" | "push" | "fetch" | "conflict" | "confirm" | "merge" | "done" | "cleanup" | "findings" | "kb";
@@ -81,8 +81,8 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     gate: async (t, target, m) => { const tr = transport(); await syncKb(tr, m); return remoteGateRun(tr, m, t, target); },
     push: (t, m, head) => remoteBranchPush(transport(), m, t, head),
     // branch-push idempotenttir ve işçide ucu expectHead'e karşı denetler ([stale_tip]); origin zaten güncelse yeniden itmez (F-vlad-320)
-    // asıl doğrulama işçide ve kuyruk içinde ([stale_tip], F-vlad-332: uç origin işlemlerinden sonra da yeniden okunur); buradaki r.head denetimi yalnız bozuk/eski bir Agent yanıtına karşı savunmadır
-    verifyTip: async (t, m, head) => { const r = await remoteBranchPush(transport(), m, t, head); if (r.head !== head) throw new Error("işçi dal ucu doğrulanamadı: yanıt gate'lenen sha'yı içermiyor"); },
+    // işçide kuyruk içi stale_tip (F-vlad-332) + yanıt alanları + beyinde bağımsız `ls-remote origin` kanıtı: Agent'ın head'i tek başına tautolojiktir (F-vlad-328)
+    verifyTip: (t, m, head) => verifyRemoteTip(() => remoteBranchPush(transport(), m, t, head), brainRepoPath(t.data.project, cfg), t.data.id, head),
     fetch: (t, head) => fetchTaskBranch(t, head, cfg),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),

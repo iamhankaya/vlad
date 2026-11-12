@@ -362,6 +362,31 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
   });
 
+  it.each([
+    ["Agent yanlış head döndürür", { head: "b".repeat(40) }, null, /head/],
+    ["Agent yanlış dal döndürür", { branch: "vlad/baska" }, null, /branch/],
+    ["Agent doğru ama origin ucu gate sha'sı değil", {}, "wrong-origin", /origin/],
+  ] as const)("F-vlad-328 (tautoloji): %s → merge durur, bağımsız beyin kanıtı", async (_n, agent, originMode, re) => {
+    const id = await ready();
+    const w = win(id);
+    const origin = join(dirname(repo), "origin.git");
+    git(dirname(repo), "init", "--bare", "-b", "main", origin);
+    git(repo, "remote", "add", "origin", origin);
+    // origin'de vlad/<id>: "wrong-origin" modunda gate sha'sı değil (ana dalın ucu), diğerlerinde gate sha'sı
+    git(repo, "push", "origin", `${originMode ? "main" : w.head()}:refs/heads/vlad/${id}`);
+    const { verifyRemoteTip } = await import("../../src/machines/remote.js");
+    const remote: CloseDeps["remote"] = {
+      ...w.remote,
+      verifyTip: (t, _m, h) => verifyRemoteTip(async () => ({ branch: `vlad/${id}`, head: h, pushed: true, remote: "origin", ...agent }), repo, t.data.id, h),
+    };
+    const mainBefore = git(repo, "rev-parse", "HEAD").trim();
+    const r = await closeTask(id, { yes: true }, deps({ remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
+    expect(r.reason).toMatch(re);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+    expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
+  });
+
   it("F-vlad-328: gerçek branch-push stale_tip (gate sonrası işçi commit attı) merge'ü uçtan uca durdurur; gate'siz sha merge edilmez", async () => {
     const id = await ready();
     const origin = join(dirname(repo), "origin.git");
