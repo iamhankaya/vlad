@@ -56,7 +56,7 @@ function projectCard(slug: string): ProjectCard {
  * Card path as is when it exists here; a path from another OS (C:\\dev\\x on the Mac brain) is resolved as
  * `<brain root>/<repo name>` against the brain's `roots` (F-vlad-200). No match keeps the card path (the git error names it).
  */
-function projectPath(slug: string, cfg?: VladConfig): string {
+export function projectPath(slug: string, cfg?: VladConfig): string {
   const path = projectCard(slug).path;
   if (existsSync(path) || !cfg?.brain) return path;
   const name = repoNameOf(path);

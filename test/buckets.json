@@ -147,6 +147,7 @@
     "test/machines/f199-session.test.ts",
     "test/machines/close.test.ts",
     "test/machines/close-branch-push.test.ts",
+    "test/machines/close-brain-path.test.ts",
     "test/machines/d2-launch-gate-fixes.test.ts",
     "test/machines/f1-b-gate.test.ts",
     "test/machines/f1-b-launch.test.ts",

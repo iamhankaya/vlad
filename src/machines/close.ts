@@ -16,7 +16,7 @@ import type { Task } from "../tasks/index.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import { selfName } from "../fleet/state.js";
 import type { BranchPushResult, GateRunResult, MergePreviewResult, MergeResult } from "../fleet/types.js";
-import { brainTransport, defaultGateTarget, fetchTaskBranch, gateMachineOf, markCleaned, recordGreenGate, remoteBranchPush, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb } from "./remote.js";
+import { brainTransport, defaultGateTarget, brainRepoPath, fetchTaskBranch, gateMachineOf, markCleaned, recordGreenGate, remoteBranchPush, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb } from "./remote.js";
 
 /** `vlad task close`: one command for the gate (precheck → gate → conflict → confirm → merge → done → cleanup → findings → kb). */
 export type CloseStepName = "precheck" | "gate" | "push" | "fetch" | "conflict" | "confirm" | "merge" | "done" | "cleanup" | "findings" | "kb";
@@ -82,7 +82,7 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     push: (t, m, head) => remoteBranchPush(transport(), m, t, head),
     // branch-push idempotenttir ve işçide ucu expectHead'e karşı denetler ([stale_tip]); origin zaten güncelse yeniden itmez (F-vlad-320)
     verifyTip: async (t, m, head) => { const r = await remoteBranchPush(transport(), m, t, head); if (r.head !== head) throw new Error("işçi dal ucu doğrulanamadı: yanıt gate'lenen sha'yı içermiyor"); },
-    fetch: (t, head) => fetchTaskBranch(t, head),
+    fetch: (t, head) => fetchTaskBranch(t, head, cfg),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),
     cleanup: async (t, m, head) => { await remoteCleanup(transport(), m, t, head); await withKbLock(() => markCleaned(t.data.id)); },
@@ -142,6 +142,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     const isResearch = t0.data.kind === "research";
     const parent = t0.data.parent ?? null;
     const card = cardOf(t0.data.project);
+    const repoDir = brainRepoPath(t0.data.project, d.cfg); // kart yolu başka OS'tansa brain roots (F-vlad-200)
     const remoteMachine = isResearch ? null : d.remote.machine(t0);
     if (parent && !isResearch && !wasDone) {
       const tests = sub(report, "Test sonuçları");
@@ -151,7 +152,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     // merge target: a phase goes into the integration branch's worktree, anything else into the default branch
     const into = opts.into ?? (parent ? `vlad/${parent}` : card.default_branch);
     if (!isResearch && !into) stop("precheck", `${t0.data.project} kartında default_branch yok; --into ver ya da project set default_branch`);
-    let targetDir = card.path;
+    let targetDir = repoDir;
     if (parent && !opts.into) {
       const w = integrationWorktrees(parent, d.cfg).find((x) => x.project === t0.data.project);
       if (!w) stop("precheck", `${parent} entegrasyon worktree'si bulunamadı`);
@@ -160,14 +161,14 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     if (t0.data.kind === "pipeline" && !isResearch && !opts.into && integrationWorktrees(id, d.cfg).length > 1) stop("precheck", "çok projeli çatı: integrate skill §5 elle");
     const from = `vlad/${id}`;
     r.target = isResearch ? undefined : into;
-    if (wasDone && !isResearch && !remoteMachine && g(card.path, ["rev-parse", "--verify", "-q", `refs/heads/${from}`]).code === 0
-      && g(card.path, ["merge-base", "--is-ancestor", from, into!]).code !== 0) stop("precheck", `görev done ama ${from}, ${into} içinde değil; merge edilmemiş`);
+    if (wasDone && !isResearch && !remoteMachine && g(repoDir, ["rev-parse", "--verify", "-q", `refs/heads/${from}`]).code === 0
+      && g(repoDir, ["merge-base", "--is-ancestor", from, into!]).code !== 0) stop("precheck", `görev done ama ${from}, ${into} içinde değil; merge edilmemiş`);
     // uzak teslim (D-vlad-076): tek görev / çatı kökü işçide gate'lenir, dal origin üzerinden beyne gelir ve merge beyinde olur
     const viaBrain = !!remoteMachine && !isResearch && (t0.data.kind === "pipeline" || !parent);
     if (wasDone && viaBrain) {
       const gh = t0.data.last_green_gate?.head;
       if (gh && !/^[0-9a-f]{40}$/.test(gh)) stop("precheck", `last_green_gate.head geçerli bir sha değil: ${gh.slice(0, 20)}`); // F-vlad-322 C
-      if (gh && g(card.path, ["merge-base", "--is-ancestor", gh, into!]).code !== 0) stop("precheck", `görev done ama gate'lenen head (${gh.slice(0, 12)}), ${into} içinde değil; merge edilmemiş`);
+      if (gh && g(repoDir, ["merge-base", "--is-ancestor", gh, into!]).code !== 0) stop("precheck", `görev done ama gate'lenen head (${gh.slice(0, 12)}), ${into} içinde değil; merge edilmemiş`);
     }
     add("precheck", "ok", wasDone ? "zaten done: kalan adımlar tamamlanıyor" : undefined);
 
@@ -286,7 +287,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         const cur = g(targetDir, ["branch", "--show-current"]).out.trim();
         if (cur !== into) stop("merge", `hedef worktree ${into} dalında değil (${cur || "detached"}): ${targetDir}`);
         if (g(targetDir, ["status", "--porcelain"]).out.trim()) stop("merge", `hedef ağaç temiz değil: ${targetDir}`);
-        const tip = viaBrain ? gatedHead /* uzak teslimde sha doğrulaması fetch adımındadır */ : g(card.path, ["rev-parse", "--verify", "-q", `refs/heads/${from}^{commit}`]).out.trim();
+        const tip = viaBrain ? gatedHead /* uzak teslimde sha doğrulaması fetch adımındadır */ : g(repoDir, ["rev-parse", "--verify", "-q", `refs/heads/${from}^{commit}`]).out.trim();
         if (tip !== gatedHead) stop("merge", `${from} ucu gate'ten sonra değişti (gate ${gatedHead.slice(0, 12)}, şimdi ${tip.slice(0, 12) || "yok"}); gate'siz commit merge edilmez, yeniden koş`);
         const mr = g(targetDir, ["-c", "user.name=VLAD", "-c", "user.email=vlad@localhost", "merge", "--no-ff", "-m", `Merge ${from}: ${t0.data.title}`, gatedHead], 5 * 60_000);
         if (mr.code !== 0) {

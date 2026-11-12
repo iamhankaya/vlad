@@ -11,7 +11,7 @@ import { listTasks, effectiveModel, getTask, roleFor, saveTask, saveTaskQuiet } 
 import type { Task } from "../tasks/store.js";
 import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
-import { remoteMachineOf, sessionArg } from "../tasks/launch.js";
+import { projectPath, remoteMachineOf, sessionArg } from "../tasks/launch.js";
 import type { RemoteDeps } from "../tasks/launch.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
@@ -173,7 +173,9 @@ export function fetchBranchHead(repo: string, id: string, expectHead: string): v
   run(["update-ref", "-d", tmp]);
   if (head !== expectHead) throw new Error(`FETCH_HEAD (fetch edilen uç, ${(head ?? "").slice(0, 12) || "yok"}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
 }
-export async function fetchTaskBranch(task: Task, expectHead: string): Promise<void> {
-  fetchBranchHead(cardOf(task.data.project).path, task.data.id, expectHead);
+/** Beyin-yerel repo yolu: close'un fetch/önizleme/merge/ancestry adımlarının tek çözümü (kart yolu başka OS'tansa brain roots, F-vlad-200). */
+export const brainRepoPath = (project: string, cfg?: VladConfig): string => projectPath(project, cfg);
+export async function fetchTaskBranch(task: Task, expectHead: string, cfg?: VladConfig): Promise<void> {
+  fetchBranchHead(brainRepoPath(task.data.project, cfg), task.data.id, expectHead);
 }
 // --- /machines:branch-push ---
