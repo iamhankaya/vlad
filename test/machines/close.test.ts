@@ -325,13 +325,13 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(calls).toEqual(["gate", `push:${h}`, `fetch:${h}`, `verify:${h}`, "cleanup"]);
   });
 
-  it("F-vlad-320: confirm bekleyen close'da onaydan sonra işçi yeni commit atarsa (stale-tip) merge/done/cleanup yok, görev awaiting_approval kalır", async () => {
+  it.each([["stale_tip", "failed: [stale_tip] işçide vlad/x ucu gate'lenen sha'dan farklı"], ["başka hata", "failed: [no_origin] işçi origin'e ulaşamadı"]])("F-vlad-320: doğrulama %s döndürünce merge/done/cleanup yok, görev awaiting_approval kalır", async (_n, msg) => {
     const id = await ready();
     const mainBefore = git(repo, "rev-parse", "HEAD").trim();
-    const w = win(id, { verifyTip: async () => { throw new Error("failed: [stale_tip] işçide vlad/x ucu gate'lenen sha'dan farklı"); } });
+    const w = win(id, { verifyTip: async () => { throw new Error(msg); } });
     const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
     expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
-    expect(r.reason).toMatch(/stale_tip/);
+    expect(r.reason).toContain(msg);
     expect(w.calls).not.toContain("cleanup");
     expect(getTask(id).data.state).toBe("awaiting_approval");
     expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
