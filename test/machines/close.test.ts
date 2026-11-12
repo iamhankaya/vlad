@@ -73,6 +73,13 @@ async function ready(o: { parent?: string; name?: string; content?: string; repo
 const step = (r: { steps: { step: string; status: string }[] }, s: string) => r.steps.find((x) => x.step === s)?.status;
 
 describe("task close: yerel tek görev", () => {
+  it("F-vlad-309: 'kısmen … açık kalır' satırı bulguyu kapatmaz, uyarır", async () => {
+    const f = addFinding({ project: "alpha", severity: "orta", source: "T20261101-01", title: "kısmi bulgu" }).data.id;
+    const id = await ready({ report: REPORT(`### Kapatılan bulgular\n- ${f} — kısmen: yarısı; bulgu açık kalır\n`) });
+    const r = await closeTask(id, { yes: true }, deps());
+    expect(getFinding(f).data.state).toBe("open");
+    expect(r.warnings.join("\n")).toMatch(new RegExp(`${f}.*kısmi`));
+  });
   it("gate + merge + done + cleanup + bulgu + kb commit tek komutta; --yes ile", async () => {
     const f = addFinding({ project: "alpha", severity: "orta", source: "T20261101-01", title: "kapanacak bulgu" }).data.id;
     const id = await ready({ report: REPORT(`### Kapatılan bulgular\n- ${f} — fixed — b.txt:1\n- F-alpha-999 — fixed — yok\n`) });

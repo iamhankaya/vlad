@@ -16,11 +16,11 @@ describe("runCli (in-process CLI, F-vlad-071)", () => {
   });
 
   it("maps a failing command to exit 1 with the error on stderr (no throw)", async () => {
-    const r = await runCli(["mode", "night", "--until", "sabah", "--json"], { env: { VLAD_HOME: home } });
-    const child = spawnVlad({ args: ["mode", "night", "--until", "sabah", "--json"], env: { VLAD_HOME: home } });
+    const r = await runCli(["mode", "watch", "maybe", "--json"], { env: { VLAD_HOME: home } });
+    const child = spawnVlad({ args: ["mode", "watch", "maybe", "--json"], env: { VLAD_HOME: home } });
     expect(r.code).toBe(1);
     expect(r).toMatchObject({ code: child.status, err: child.stderr });
-    expect(r.err).toContain("geçersiz bitiş");
+    expect(r.err).toContain("on ya da off ver");
   });
 
   it("restores process.env after the call", async () => {
