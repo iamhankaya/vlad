@@ -173,11 +173,31 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     add("precheck", "ok", wasDone ? "zaten done: kalan adımlar tamamlanıyor" : undefined);
 
     let gateGreen = wasDone;
+    let how = null as string | null; // decide() atar
+    // confirm kararı: --yes, ya da açık gece penceresi + yeşil gate + bu görevin açık kritik/yüksek bulgusu yok. Uzak teslimde dış etkili push'tan (D-vlad-076: merge onayının parçası) ÖNCE verilir
+    const decide = () => {
+      how = opts.yes ? "--yes" : null;
+      if (!how) {
+        const night = modeStatus(d.now()).night;
+        const p1 = listFindingsWithWarnings({ source: id, state: [...UNRESOLVED], severity: ["kritik", "yüksek"] }).findings.length;
+        // the night window never covers: a pipeline's final gate and design gates (status skill), or a report that itself lists a critical/high open point
+        const reportP1 = /^\s*-\s*\[(kritik|yüksek)\]/mi.test(sub(report, "Açık noktalar"));
+        const nightOk = t0.data.kind !== "pipeline" && t0.data.role !== "designer" && !reportP1;
+        if (night && nightOk && gateGreen && (night.projects.length === 0 || night.projects.includes(t0.data.project)) && p1 === 0) how = "gece modu";
+      }
+    };
+    const stopConfirm = () => {
+      add("confirm", "stopped", "onay gerekli");
+      r.stopped_at = "confirm";
+      r.reason = `${isResearch ? "kabul" : `${from} → ${into} merge`} için onay gerekli${r.head ? ` (gate'lenen head ${r.head.slice(0, 12)})` : ""}: onaylıysan \`vlad task close ${id} --yes${r.head ? ` --head ${r.head.slice(0, 12)}` : ""}\``;
+      return r;
+    };
     let gatedHead = ""; // the commit the gate ran on; the merge may bring only this
     if (wasDone) {
       for (const s of ["gate", "conflict", "confirm", "merge", "done"] as const) add(s, "skipped", "görev zaten done");
     } else if (isResearch) {
       add("gate", "skipped", "research: gate/merge yok");
+      decide();
       add("conflict", "skipped");
     } else {
       // ---- gate (local: card gate in the task worktree; remote: on the worker)
@@ -221,6 +241,10 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (opts.head && !(/^[0-9a-f]{7,40}$/i.test(opts.head) && gatedHead.toLowerCase().startsWith(opts.head.toLowerCase()))) stop("gate", `onaylanan head (${opts.head}) ile gate'lenen head (${gatedHead.slice(0, 12)}) farklı; özeti yeniden gözden geçirip yeni head ile onayla`);
       add("gate", "ok", `${ranOn} @ ${gatedHead.slice(0, 12)}`);
 
+      decide();
+      // onay yoksa uzak teslimde dal origin'e gitmez (CI tetiklenmesin): push/fetch/conflict atlanır
+      if (viaBrain && !how) return stopConfirm();
+
       // ---- push + fetch (yalnız uzak teslimde): işçi gate'lenen sha'yı origin'e iter, beyin alır; hata → merge yok
       if (viaBrain) {
         if (!/^[0-9a-f]{40}$/.test(gatedHead)) stop("gate", "işçi gate'i head (sha) döndürmedi; dal push edilemez");
@@ -254,23 +278,9 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       add("conflict", "ok", r.warnings.length ? "ön izleme atlandı" : undefined);
     }
 
-    // ---- confirm: --yes, or an open night window with a green gate and no open critical/high finding of this task
+    // ---- confirm: karar decide() ile yukarıda verildi; yalnız durağı/kaydı yazar
     if (!wasDone) {
-      let how: string | null = opts.yes ? "--yes" : null;
-      if (!how) {
-        const night = modeStatus(d.now()).night;
-        const p1 = listFindingsWithWarnings({ source: id, state: [...UNRESOLVED], severity: ["kritik", "yüksek"] }).findings.length;
-        // the night window never covers: a pipeline's final gate and design gates (status skill), or a report that itself lists a critical/high open point
-        const reportP1 = /^\s*-\s*\[(kritik|yüksek)\]/mi.test(sub(report, "Açık noktalar"));
-        const nightOk = t0.data.kind !== "pipeline" && t0.data.role !== "designer" && !reportP1;
-        if (night && nightOk && gateGreen && (night.projects.length === 0 || night.projects.includes(t0.data.project)) && p1 === 0) how = "gece modu";
-      }
-      if (!how) {
-        add("confirm", "stopped", "onay gerekli");
-        r.stopped_at = "confirm";
-        r.reason = `${isResearch ? "kabul" : `${from} → ${into} merge`} için onay gerekli${r.head ? ` (gate'lenen head ${r.head.slice(0, 12)})` : ""}: onaylıysan \`vlad task close ${id} --yes${r.head ? ` --head ${r.head.slice(0, 12)}` : ""}\``;
-        return r;
-      }
+      if (!how) return stopConfirm();
       add("confirm", "ok", how);
 
       // ---- merge
