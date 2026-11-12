@@ -24,6 +24,10 @@ describe("F-vlad-324: çalışan git push argv doğrulaması", () => {
       `git -C /x push origin main`, `git push origin 'vlad/${ID}' main`,
     ]) expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
   });
+  it("yanlış pozitif yok: push'u anan başka komutlar, zincirde/yönlendirmede kendi push'u geçer; zincirli kötü push reddedilir", () => {
+    for (const cmd of [`git commit -m "docs: git push guard"`, `git log --grep='git push'`, `cd x && git push origin vlad/${ID}`, `git push origin vlad/${ID} 2>&1`, `git push origin vlad/${ID} 2>&1 | tail -3`, `git -C /w push origin vlad/${ID}`]) expect(checkWorkerPush(cmd, ID), cmd).toBeNull();
+    for (const cmd of [`cd x && git push origin main`, `echo $(git push -f origin main)`, `FOO=1 git push origin main`, `command git push origin main`, `/usr/bin/git push origin main`, `git -c alias.p=push p origin +main`, `"git" push origin +main`, `sh -c 'git push origin main'`]) expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
+  });
   it("push olmayan komutlara dokunmaz", () => {
     for (const cmd of ["git status", "git pull origin main", "npm test", "git log --oneline"]) expect(checkWorkerPush(cmd, ID), cmd).toBeNull();
   });

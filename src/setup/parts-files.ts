@@ -197,7 +197,7 @@ export const permissionsPart: SetupPart = {
     const dirs: string[] = s.data?.permissions?.additionalDirectories ?? [];
     return compose("permissions", [
       { required: "isteğe bağlı", item: item("permissions:worker-push-ci", miss.length ? "eksik" : "ok", miss.length ? `${miss.length}/${WORKER_PERMISSIONS.length + WORKER_DENY.length} çalışan push/CI allow+deny kalıbı eksik` : "çalışan push/CI kalıpları var", "vlad setup --only permissions (onay ister)") },
-      { required: "isteğe bağlı", item: item("permissions:push-guard", guardOk ? "ok" : "eksik", guardOk ? "PreToolUse push-guard hook'u kayıtlı" : "PreToolUse push-guard hook'u yok (çalışan push argv doğrulaması)", "vlad setup --only permissions (onay ister); önce npm run build") },
+      { required: "isteğe bağlı", item: isWorktreeRoot(c.vladHome) ? item("permissions:push-guard", "n/a", "VLAD kökü worktree: hook yolu gömülmez (ana kopyadan kurun)") : item("permissions:push-guard", guardOk ? "ok" : "eksik", guardOk ? "PreToolUse push-guard hook'u kayıtlı" : "PreToolUse push-guard hook'u yok (çalışan push argv doğrulaması)", "vlad setup --only permissions (onay ister); önce npm run build") },
       { required: "isteğe bağlı", item: kb ? item("permissions:additional-dirs", dirs.includes(kb) ? "ok" : "eksik", dirs.includes(kb) ? "kb additionalDirectories'te" : "kb additionalDirectories'te yok", "vlad setup --only permissions (onay ister)") : item("permissions:additional-dirs", "n/a", "kb VLAD_HOME içinde") },
     ]);
   },
