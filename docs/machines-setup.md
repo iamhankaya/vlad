@@ -64,6 +64,6 @@ Betiğin yapmadığı, **kullanıcının elle yaptığı** adımlar:
 2. Remote Control: ana oturumda (`tmux attach -t vlad`) `/remote-control`.
 3. Agent anahtarları: §2 (`keygen`/`setkey`; anahtar güvenli kanaldan).
 4. `vlad install` (kullanıcı düzeyi: `~/.claude` skill'leri, sağ tık menüsü); `~/.claude` dosyalarına dokunduğu için betik çalıştırmaz.
-5. Son kontrol: `scripts/mac/audit.sh --strict`.
+5. Son kontrol: `scripts/mac/audit.sh --strict` (eksik ya da `doğrulanamadı` varsa çıkış 1; CI runner dizini bu hesaba kapalıysa önce parolasız `sudo -n -u vlad-ci test -f …/.runner` denenir, başarısızsa `doğrulanamadı`).
 
 CI runner için `docs/mac-ci-runner.md`.

@@ -47,17 +47,22 @@ function findSh(): string {
 }
 
 const SKIP = new Set(["node_modules", "dist", ".git", "test", "docs", "vendor"]);
+/** F-vlad-333: ana checkout'un yerel/kişisel durumu (gitignore'lu: anahtarlar, yerel katman, kb, Agent durumu) sandbox'a kopyalanmaz; yoksa kabul testleri gerçek kurulumu görür. */
+export const LOCAL_STATE = new Set([".claude", "vlad.local.json", "vlad-session.txt", ".vlad.lock", ".vlad-agent", "kb", "inbox", "logs", ".remember", ".superpowers", ".vlad-npm-ci-running"]);
+export const isLocalState = (name: string): boolean => LOCAL_STATE.has(name) || name.startsWith("vlad.config.local.json") || name.startsWith("vlad.local.json");
 
-export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwin" | "linux" } = {}): Sandbox {
+/** `srcRoot` yalnız sandbox'ın kendi testi içindir (sahte kaynak ağacı); varsayılan repo kökü. */
+export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwin" | "linux"; srcRoot?: string } = {}): Sandbox {
+  const src = o.srcRoot ?? repoRoot;
   const root = makeFixtureRoot();
   const home = join(root, "home"), vladHome = join(root, "dev", "vlad"), kbDir = join(root, "dev", "vlad-kb"), bin = join(root, "bin");
   const claudeDir = join(home, ".claude"), log = join(root, "fake-calls.log");
   for (const d of [home, vladHome, bin, join(root, "dev")]) mkdirSync(d, { recursive: true });
   assertInside(root, vladHome);
   // repo kopyası: kaynak/şema/skill dosyaları; dist en son (src'den yeni kalsın)
-  for (const e of readdirSync(repoRoot)) if (!SKIP.has(e) && e !== ".claude") cpSync(join(repoRoot, e), join(vladHome, e), { recursive: true });
-  cpSync(join(repoRoot, ".claude"), join(vladHome, ".claude"), { recursive: true, filter: (s) => !s.endsWith("settings.local.json") });
-  cpSync(join(repoRoot, "vendor"), join(vladHome, "vendor"), { recursive: true });
+  for (const e of readdirSync(src)) if (!SKIP.has(e) && !isLocalState(e)) cpSync(join(src, e), join(vladHome, e), { recursive: true });
+  cpSync(join(src, ".claude"), join(vladHome, ".claude"), { recursive: true, filter: (s) => !s.endsWith("settings.local.json") });
+  cpSync(join(src, "vendor"), join(vladHome, "vendor"), { recursive: true });
   if (o.withDist !== false) cpSync(join(repoRoot, "dist"), join(vladHome, "dist"), { recursive: true });
   for (const [name, body] of Object.entries(FAKE_TOOLS)) {
     const logLine = LOGGED_TOOLS.includes(name) ? `echo "${name} $*" >> "$FAKE_LOG"\n` : "";
@@ -70,7 +75,7 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
   }
   const env = (extra: Record<string, string> = {}): NodeJS.ProcessEnv => {
     const e: Record<string, string> = {
-      PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`, HOME: home, USERPROFILE: home, VLAD_CLAUDE_DIR: claudeDir, VLAD_HOME: vladHome,
+      PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`, HOME: home, USERPROFILE: home, VLAD_CLAUDE_DIR: claudeDir, VLAD_HOME: vladHome, VLAD_LOCAL_FILE: join(vladHome, "vlad.local.json"), VLAD_MACHINE: "", VLAD_KB_DIR: "",
       VLAD_NO_NATIVE: "1", VLAD_TEST: "1", VLAD_LAUNCHER: "noop", VLAD_CLAUDE_JSON: join(root, "claude.json"), FAKE_LOG: log, CLAUDE_CODE_REMOTE: "",
       GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t.invalid",
       GIT_CONFIG_GLOBAL: join(home, ".gitconfig"), GIT_CONFIG_NOSYSTEM: "1", ...extra,

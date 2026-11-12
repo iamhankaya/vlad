@@ -70,17 +70,29 @@ describe.skipIf(process.platform === "win32")("mac/audit.sh", () => {
     expect(calls).not.toMatch(/bootstrap|load |kickstart|new-session|install|--apply/);
   });
   // F-vlad-260 (1): runner dizini CI hesabında 0700; beyin hesabı erişemeyince "runner yok" (eksik → --strict kırmızı) demek yanlış, "ok" demek de yanlış
-  it("F-vlad-260: runner dizini bu hesaba kapalıysa (erişim reddi) ne 'ok' ne 'eksik': uyarı + CI hesabıyla doğrula; --strict geçer", () => {
+  it("F-vlad-260: runner dizini bu hesaba kapalıysa (erişim reddi) ne 'ok' ne 'eksik': doğrulanamadı + CI hesabıyla doğrula; F-vlad-325: --strict kırmızı", () => {
     const s = sandbox(); fullMac(s);
     const rdir = join(s.home, "ci", "actions-runner");
     chmodSync(rdir, 0o000);
     try {
       const rows = JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string; kanit: string }>;
       const r = rows.find((x) => x.madde === "ci-runner");
-      expect(r?.durum).toBe("uyarı");
+      expect(r?.durum).toBe("doğrulanamadı");
       expect(r?.kanit).toMatch(/erişim reddi/);
       expect(r?.kanit).toContain("vlad-ci");
       expect(rows.filter((x) => x.durum === "eksik")).toEqual([]);
+      expect(run("audit.sh", ["--strict"], s).status).toBe(1);
+      expect(run("audit.sh", [], s).status).toBe(0); // --strict yoksa bilgilendirir, kırmaz
+    } finally { chmodSync(rdir, 0o755); }
+  });
+  it("F-vlad-325: erişim reddinde CI hesabıyla (sudo -n -u) doğrulanırsa ok; --strict geçer", () => {
+    const s = sandbox(); fullMac(s);
+    stub(s, "sudo", 'case "$*" in *"-u vlad-ci test -f"*".runner"*) exit 0;; *) exit 1;; esac');
+    const rdir = join(s.home, "ci", "actions-runner");
+    chmodSync(rdir, 0o000);
+    try {
+      const r = (JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string }>).find((x) => x.madde === "ci-runner");
+      expect(r?.durum).toBe("ok");
       expect(run("audit.sh", ["--strict"], s).status).toBe(0);
     } finally { chmodSync(rdir, 0o755); }
   });
@@ -90,7 +102,8 @@ describe.skipIf(process.platform === "win32")("mac/audit.sh", () => {
     chmodSync(ci, 0o000);
     try {
       const r = (JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string }>).find((x) => x.madde === "ci-runner");
-      expect(r?.durum).toBe("uyarı");
+      expect(r?.durum).toBe("doğrulanamadı");
+      expect(run("audit.sh", ["--strict"], s).status).toBe(1);
     } finally { chmodSync(ci, 0o755); }
   });
   it("F-vlad-260: runner gerçekten yoksa (dizin okunabilir, .runner yok) eksik kalır", () => {

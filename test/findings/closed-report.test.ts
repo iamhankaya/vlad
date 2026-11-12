@@ -49,3 +49,21 @@ describe("F-vlad-309: kısmi satır kapatılmaz", () => {
     expect(closedFindingTokens(rep("- F-alpha-003 — KISMEN: BULGU AÇIK KALIR"))).toEqual([]);
   });
 });
+
+describe("F-vlad-309 kalan: kısmi işareti devam satırında ve ASCII/varyant yazımlarda da kapatmaz", () => {
+  it("devam satırındaki 'açık kalır' maddeyi kısmi yapar", async () => {
+    const { closedFindingTokens, partialFindingTokens } = await import("../../src/findings/closed-report.js");
+    const md = rep("- F-alpha-001 — fixed — abc123\n- F-alpha-002 — düzeltme yapıldı:\n  yarısı kaldı; bulgu açık kalır\n- F-alpha-003 — fixed — def456");
+    expect(closedFindingTokens(md)).toEqual(["F-alpha-001", "F-alpha-003"]);
+    expect(partialFindingTokens(md)).toEqual(["F-alpha-002"]);
+  });
+  it.each(["kismen: yarısı", "kismi düzeltme", "Partially fixed", "partial fix", "tam değil: eksik var", "tam degil", "acik kalir", "AÇIK KALIYOR", "açık kaldı"])("varyant %j kapatmaz", async (v) => {
+    const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
+    expect(closedFindingTokens(rep(`- F-alpha-005 — ${v}`))).toEqual([]);
+  });
+  it("devam satırı bir sonraki maddeye sızmaz ve meşru satırlar kapanır", async () => {
+    const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
+    const md = rep("- F-alpha-001 — fixed — abc\n  ek not: tam kapandı\n- F-alpha-002 — fixed — partial index eklendi");
+    expect(closedFindingTokens(md)).toEqual(["F-alpha-001", "F-alpha-002"]);
+  });
+});

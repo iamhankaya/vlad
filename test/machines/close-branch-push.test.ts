@@ -77,6 +77,7 @@ function remoteFor(head: string, calls: string[], o: Partial<CloseRemote> = {}):
     preview: vi.fn(async () => { calls.push("preview"); return { log: "l", diffStat: "d", conflicts: [] }; }),
     merge: vi.fn(async () => { calls.push("remote-merge"); return { head: "c".repeat(40), merged: true }; }),
     cleanup: vi.fn(async () => { calls.push("cleanup"); }),
+    verifyTip: vi.fn(async () => {}), // F-vlad-328: verifyTip zorunlu
     ...o,
   };
 }
