@@ -139,13 +139,13 @@ describe("task close (sahte uzak): sıra ve karar noktaları", () => {
     expect(remote.push).not.toHaveBeenCalled();
   });
 
-  it("onay durağında (--yes yok) push+fetch yapılmıştır, merge yoktur; yeniden koşu idempotent devam eder", async () => {
+  it("onay durağında (--yes yok) push+fetch YAPILMAZ, merge yoktur; --yes ile devam eder", async () => {
     const { id, head } = await ready();
     const remote = remoteFor(head, []);
     const first = await closeTask(id, {}, deps(remote));
     expect(first).toMatchObject({ ok: false, stopped_at: "confirm", head });
-    expect(step(first, "push")).toBe("ok");
-    expect(step(first, "fetch")).toBe("ok");
+    expect(step(first, "push")).toBeUndefined();
+    expect(step(first, "fetch")).toBeUndefined();
     expect(existsSync(join(repo, "b.txt"))).toBe(false);
     const again = await closeTask(id, { yes: true, head: head.slice(0, 12) }, deps(remote));
     expect(again.ok).toBe(true);

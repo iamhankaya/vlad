@@ -49,18 +49,17 @@ const closeJson = async (id: string, extra: string[] = []) => runVlad(w!.brain, 
 const originRefs = (origin: string) => git(origin, "for-each-ref", "--format=%(refname) %(objectname)").trim().split("\n").sort();
 
 describe("branch-push doğrulama (uçtan uca, gerçek Agent)", () => {
-  it("onay durağı: --yes yokken push+fetch yapılır ama merge/done yok; ardından --yes ile tamamlanır (idempotent), cleanup işçide worktree'yi siler", async () => {
+  it("onay durağı: --yes yokken push/fetch/merge/done yok (origin'e dal gitmez); ardından --yes ile tamamlanır, cleanup işçide worktree'yi siler", async () => {
     const { w: world, id, origin, head, wt } = await setup({ origin: true });
     expect(world).toBe(w);
     const r1 = await closeJson(id);
     const o1 = JSON.parse(r1.out);
     expect(o1.stopped_at).toBe("confirm");
-    expect(o1.steps.map((s: { step: string }) => s.step)).toEqual(expect.arrayContaining(["gate", "push", "fetch"]));
+    expect(o1.steps.map((s: { step: string }) => s.step)).not.toContain("push");
     expect(o1.steps.map((s: { step: string }) => s.step)).not.toContain("merge");
-    expect(git(origin, "rev-parse", `vlad/${id}`).trim()).toBe(head);
+    expect(git(origin, "branch", "--list", `vlad/${id}`).trim()).toBe(""); // onaysız: dal origin'e gitmedi
     expect(existsSync(join(w!.brainRepo, "iş.txt"))).toBe(false);
     expect(front(w!.readTask(w!.brain, id), "state")).toBe("awaiting_approval");
-    const before = originRefs(origin);
     const r2 = await closeJson(id, ["--yes"]);
     expect(r2.code, r2.err + r2.out).toBe(0);
     const o2 = JSON.parse(r2.out);
@@ -68,7 +67,7 @@ describe("branch-push doğrulama (uçtan uca, gerçek Agent)", () => {
     expect(cleanup?.status, JSON.stringify(o2.steps)).toBe("ok");
     expect(existsSync(wt)).toBe(false); // işçi worktree'si silindi; iş origin + beyinde duruyor
     expect(readFileSync(join(w!.brainRepo, "iş.txt"), "utf8")).toBe("uzak iş\n");
-    expect(originRefs(origin)).toEqual(before); // ikinci koşu origin'e yeni ref eklemedi
+    expect(git(origin, "rev-parse", `vlad/${id}`).trim()).toBe(head);
   }, 240_000);
 
   it("origin'de ayrışmış (ata olmayan) vlad/<id> varsa: close push'ta durur, origin değişmez (force yok), beyine bir şey gelmez", async () => {
