@@ -302,6 +302,29 @@ describe("güvenlik kararları (değişiklik turu)", () => {
     for (const cmd of ["git push -fu origin vlad/x", "git push -uf origin vlad/x", "git push -df origin vlad/x", "git push -fd origin x", "git push origin vlad/x -fu", "git push origin vlad/x -uf", "git push -fuv origin x"]) expect(blocked(cmd), cmd).toBe(true);
     for (const cmd of ["git push -u origin vlad/fix-x", "git push origin vlad/x", "git push -u origin vlad/df-x"]) expect(blocked(cmd), cmd).toBe(false);
   });
+  it("F-vlad-324: izinler PreToolUse push-guard hook'unu da kaydeder (idempotent, var olan hook korunur); `*:*` deny'ı yerine hook doğrular", async () => {
+    w(settings(), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }] }] } }));
+    await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+    await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+    const h = jr(settings()).hooks.PreToolUse.flatMap((e: any) => e.hooks).map((x: any) => x.command);
+    expect(h.filter((c: string) => /dist\/hooks\/push-guard-hook\.js"$/.test(c.replace(/\\/g, "/")))).toHaveLength(1);
+    expect(h).toContain("mine");
+    expect(WORKER_DENY).toContain("Bash(git push * +*)");
+    expect(WORKER_DENY).toContain("Bash(git push *:*)"); // hook kurulu değilken vlad/x:main kesilir
+  });
+  it("F-vlad-324 madde 6: check permissions:push-guard hook dosyası (dist) yoksa 'eksik', varsa 'ok'", async () => {
+    await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+    const st = async () => (await runCheck(ctx(), { only: ["permissions"] })).parts[0]!.items!.find((i: any) => i.id === "permissions:push-guard")!.status;
+    expect(await st()).toBe("eksik");
+    w(join(vladHome, "dist", "hooks", "push-guard-hook.js"), "// stub");
+    expect(await st()).toBe("ok");
+  });
+  it("F-vlad-324: glob deny (hook kurulu olmasa da) vlad/x:main, çoklu ref, +refspec, --mirror/--prune/--no-verify kapsar; vlad/<id> takılmaz", () => {
+    const glob = (pat: string, cmd: string) => new RegExp("^" + pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$").test(cmd);
+    const blocked = (cmd: string) => WORKER_DENY.map((d) => d.slice(5, -1)).some((p) => glob(p, cmd));
+    for (const cmd of ["git push origin vlad/x:main", "git push origin HEAD:main", "git push origin vlad/x main", "git push -u origin vlad/x main", "git push origin vlad/x +main", "git push +main origin", "git push --mirror origin", "git push origin --mirror", "git push origin vlad/x --prune", "git push --no-verify origin vlad/x", "git push origin vlad/x --no-verify"]) expect(blocked(cmd), cmd).toBe(true);
+    for (const cmd of ["git push origin vlad/T20261112-10", "git push -u origin vlad/T20261112-10"]) expect(blocked(cmd), cmd).toBe(false);
+  });
   it("onay metni push kalıbının tüm Claude oturumlarına geçerli olduğunu söyler", async () => {
     const r = await runSetup(ctx(ans({ perms: true }), { yes: true }), { only: ["permissions"] });
     expect(r[0]!.actions[0]!.what).toMatch(/TÜM Claude oturumlarına/);
