@@ -161,8 +161,9 @@ const COMBINED_SHORT = (() => {
 })();
 /** Geniş push biçimlerini kapatır (allow kalıbı `*` ile --force/--delete/çoklu ref'i de eşler): kullanıcı düzeyi, TÜM Claude oturumlarını kapsar. */
 export const WORKER_DENY = [
-  "Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)",
-  // F-vlad-324: `+refspec` ve silme/korumasız biçimler; `*:*` kaldırıldı (HEAD:vlad/<id> geçerli olmalı) — refspec/çoklu ref/bayrak doğrulamasını push-guard hook'u yapar.
+  "Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)",
+  // F-vlad-324: `+refspec` ve silme/korumasız biçimler; `*:*` geri (hook kurulu değilken vlad/x:main kesilir); çalışan yalnız `vlad/<id>` iter. Bayrak kümeleri/sarmalayıcılar için asıl kapı push-guard hook'u.
+  "Bash(git push origin * *)", "Bash(git push -u origin * *)",
   "Bash(git push * +*)", "Bash(git push +*)", "Bash(git push * --mirror*)", "Bash(git push * --prune*)", "Bash(git push * --no-verify*)", "Bash(git push --mirror*)", "Bash(git push --prune*)", "Bash(git push --no-verify*)",
   // F-vlad-293: `* -f *` sonda ve `push`'tan hemen sonra eşleşmez; kısa -d de kapalı olmalı.
   "Bash(git push * -f)", "Bash(git push -f *)", "Bash(git push * -d)", "Bash(git push * -d *)", "Bash(git push -d *)", "Bash(git push --force*)", "Bash(git push --delete*)",
@@ -193,11 +194,11 @@ export const permissionsPart: SetupPart = {
     const deny: string[] = s.data?.permissions?.deny ?? [];
     const miss = [...WORKER_PERMISSIONS.filter((p) => !allow.includes(p)), ...WORKER_DENY.filter((p) => !deny.includes(p))];
     const kb = kbOutside(c);
-    const guardOk = hasPushGuard(s.data, pushGuardCommand(c.vladHome));
+    const guardOk = hasPushGuard(s.data, pushGuardCommand(c.vladHome)) && existsSync(join(c.vladHome, "dist", "hooks", "push-guard-hook.js"));
     const dirs: string[] = s.data?.permissions?.additionalDirectories ?? [];
     return compose("permissions", [
       { required: "isteğe bağlı", item: item("permissions:worker-push-ci", miss.length ? "eksik" : "ok", miss.length ? `${miss.length}/${WORKER_PERMISSIONS.length + WORKER_DENY.length} çalışan push/CI allow+deny kalıbı eksik` : "çalışan push/CI kalıpları var", "vlad setup --only permissions (onay ister)") },
-      { required: "isteğe bağlı", item: isWorktreeRoot(c.vladHome) ? item("permissions:push-guard", "n/a", "VLAD kökü worktree: hook yolu gömülmez (ana kopyadan kurun)") : item("permissions:push-guard", guardOk ? "ok" : "eksik", guardOk ? "PreToolUse push-guard hook'u kayıtlı" : "PreToolUse push-guard hook'u yok (çalışan push argv doğrulaması)", "vlad setup --only permissions (onay ister); önce npm run build") },
+      { required: "isteğe bağlı", item: isWorktreeRoot(c.vladHome) ? item("permissions:push-guard", "n/a", "VLAD kökü worktree: hook yolu gömülmez (ana kopyadan kurun)") : item("permissions:push-guard", guardOk ? "ok" : "eksik", guardOk ? "PreToolUse push-guard hook'u kayıtlı" : "PreToolUse push-guard hook'u yok ya da dist/hooks/push-guard-hook.js derlenmemiş", "vlad setup --only permissions (onay ister); önce npm run build") },
       { required: "isteğe bağlı", item: kb ? item("permissions:additional-dirs", dirs.includes(kb) ? "ok" : "eksik", dirs.includes(kb) ? "kb additionalDirectories'te" : "kb additionalDirectories'te yok", "vlad setup --only permissions (onay ister)") : item("permissions:additional-dirs", "n/a", "kb VLAD_HOME içinde") },
     ]);
   },

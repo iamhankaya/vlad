@@ -1,42 +1,57 @@
 /** F-vlad-324: çalışan `git push` argv doğrulaması (saf). İzin glob'u (`vlad/*`) boşluk/`+`/çoklu ref'i yuttuğu için asıl kapı bu. */
-const ID = /^T\d{8}-\d+$/;
-const DENY_HINT = "(izinli: git push [-u] origin vlad/<kendi-id> | HEAD:vlad/<kendi-id>)";
+const DENY_HINT = "(izinli: git push [-u] origin vlad/<kendi-id>)";
 const deny = (why: string) => `çalışan push reddedildi: ${why} ${DENY_HINT}`;
 
-/** `git` komut konumunda mı (env öneki/`command`/yol önekli ya da alıntılı biçimler dahil)? Alt komutu döndürür. */
-function gitSubcommand(t: string[]): { sub: string | null; plain: boolean; rest: string[] } | null {
-  let i = 0;
-  while (i < t.length && /^\w+=/.test(t[i]!)) i++;
-  const head = (t[i] ?? "").replace(/^["'\\]+|["']+$/g, "");
-  if (head === "command" || head === "exec" || head === "env") return gitSubcommand(t.slice(i + 1));
-  if (!/(^|\/)git(\.exe)?$/.test(head.replace(/\\/g, ""))) return null;
-  const plain = i === 0 && t[0] === "git";
-  let j = i + 1;
-  while (j < t.length && t[j]!.startsWith("-")) j += /^-[Cc]$|^--(git-dir|work-tree|namespace)$/.test(t[j]!) ? 2 : 1;
-  return { sub: t[j] ?? null, plain, rest: t.slice(j + 1) };
+interface Tok { v: string; quoted: boolean }
+/** Tırnak-bilinçli bölme: ayraçlar (`&&`,`||`,`;`,`|`,`&`,satır sonu,`(`,`)`) yalnız tırnak dışında segment keser; token değeri tırnaksızdır. */
+function segments(cmd: string): Tok[][] {
+  const out: Tok[][] = [[]];
+  let cur = "", q = false, open: string | null = null;
+  const flush = () => { if (cur !== "" || q) out[out.length - 1]!.push({ v: cur, quoted: q }); cur = ""; q = false; };
+  const cut = () => { flush(); if (out[out.length - 1]!.length) out.push([]); };
+  for (let i = 0; i < cmd.length; i++) {
+    const c = cmd[i]!;
+    if (open) { if (c === open) open = null; else if (c === "\\" && open === '"' && i + 1 < cmd.length) cur += cmd[++i]!; else cur += c; continue; }
+    if (c === "'" || c === '"') { open = c; q = true; continue; }
+    if (c === "\\" && i + 1 < cmd.length) { cur += cmd[++i]!; q = true; continue; }
+    if (/\s/.test(c)) { if (c === "\n") cut(); else flush(); continue; }
+    if (c === "&" || c === "|" || c === ";" || c === "(" || c === ")") { if (cmd[i + 1] === c && c !== ";" && c !== "(" && c !== ")") i++; cut(); continue; }
+    cur += c;
+  }
+  flush();
+  return out.filter((s) => s.length);
 }
 
-/** Yalnız tek, tırnaksız, meta karaktersiz `git push [-u|--set-upstream] origin <ref>` geçer; ref kendi dalıdır. null = serbest, string = ret nedeni. */
+/** Segmentte `git` token'ı (yol/`.exe` önekli olabilir) ve ondan sonraki ilk alt komut. Belirsizlikte (git öncesi sarmalayıcı) `wrapped`. */
+function findGit(s: Tok[]): { at: number; sub: number } | null {
+  const at = s.findIndex((t) => /(^|[\/\\])git(\.exe)?$/.test(t.v));
+  if (at < 0) return null;
+  let j = at + 1;
+  while (j < s.length && s[j]!.v.startsWith("-")) j += /^-[Cc]$|^--(git-dir|work-tree|namespace|exec-path|config-env)$/.test(s[j]!.v) ? 2 : 1;
+  return { at, sub: j };
+}
+
+/** Yalnız tek `git push [-u|--set-upstream] origin vlad/<kendi-id>` geçer. null = serbest, string = ret nedeni. */
 export function checkWorkerPush(command: string, ownId: string | null): string | null {
-  // Komut ikamesi/alt kabuk içindeki push, segment bölmesinde kaybolmasın.
-  if (/(\$\(|`|\bsh\s+-c|\bbash\s+-c|\beval\b)/.test(command) && /\bgit\b[^\n]*\bpush\b/.test(command)) return deny("komut ikamesi/alt kabukta git push");
-  for (const seg of command.split(/&&|\|\||[;|\n]/)) {
-    const t = seg.trim().split(/\s+/).filter(Boolean);
-    const g = t.length ? gitSubcommand(t) : null;
+  // Komut ikamesi / alt kabuk / eval içindeki push segment bölmesinde kaybolmasın (shortcut: heredoc commit mesajında "git push …" geçerse de reddedilir; -F kullanın).
+  if (/(\$\(|`|\b(?:ba|z|da)?sh\s+-c|\beval\b)/.test(command) && /\bgit\b[^\n]*\bpush\b/.test(command)) return deny("komut ikamesi/alt kabukta git push");
+  command = command.replace(/\s\d?>&\d(?=\s|$)/g, " ").replace(/\s\d?>\s*\/dev\/null(?=\s|$)/g, " "); // zararsız yönlendirmeler
+  for (const s of segments(command)) {
+    const g = findGit(s);
     if (!g) continue;
-    if (/\balias\./.test(seg)) return deny("git alias ayarı");
-    if (g.sub !== "push") continue; // shortcut: kullanıcı tanımlı alias (`git p`) kalıp/izin glob'una bırakılır
-    if (!g.plain) return deny("`git push` düz biçimde (env/yol/`command` öneksiz) olmalı");
-    if (/[<>$"'\\*?{}()[\]]/.test(seg.replace(/\s2>&1(\s|$)/g, " "))) return deny("kabuk meta karakteri / tırnak");
-    const a = g.rest.filter((x) => x !== "2>&1");
+    if (s.some((t) => /\balias\./.test(t.v))) return deny("git alias ayarı");
+    if (s[g.sub]?.v !== "push") continue; // shortcut: kullanıcı tanımlı alias (`git p`) kalıp/izin glob'una bırakılır
+    if (g.at !== 0 || s[0]!.v !== "git" || s[0]!.quoted) return deny("`git push` düz biçimde (sarmalayıcı/env/yol/tırnaklı git öneksiz) olmalı");
+    if (g.sub !== 1) return deny("git global seçeneği (-c/-C/--git-dir/…) ile push yok");
+    if (s.some((t) => t.quoted)) return deny("tırnak/kaçış");
+    if (s.some((t) => /[<>$*?{}[\]]/.test(t.v))) return deny("kabuk meta karakteri");
+    const a = s.slice(2).map((t) => t.v).filter((x) => x !== "2>&1");
     if (a[0] === "-u" || a[0] === "--set-upstream") a.shift();
     if (a.length !== 2) return deny("tam olarak `origin <ref>` bekleniyor");
     if (a[0] !== "origin") return deny("uzak yalnız origin");
-    const m = /^(?:(HEAD|[0-9a-f]{7,40}|vlad\/(T\d{8}-\d+)):(?:refs\/heads\/)?)?vlad\/(T\d{8}-\d+)$/.exec(a[1]!);
+    const m = /^vlad\/(T\d{8}-\d+)$/.exec(a[1]!);
     if (!m) return deny("ref biçimi geçersiz (+, :, başka dal, bayrak yok)");
-    const dst = m[3]!;
-    if (!ID.test(dst) || (ownId !== null && dst !== ownId)) return deny("yalnız kendi vlad/<id> dalı");
-    if (m[2] && m[2] !== dst) return deny("kaynak ve hedef dal aynı olmalı");
+    if (ownId !== null && m[1] !== ownId) return deny("yalnız kendi vlad/<id> dalı");
   }
   return null;
 }
