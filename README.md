@@ -33,6 +33,8 @@ Ayarlar `vlad.config.json`'dadır (kök klasörler, yetki seviyesi, `staleAfterH
 
 `vlad setup` bir makineyi sıfırdan hazırlar; `vlad setup --check` salt okuma doktordur (hangi parça eksik/eski/çakışan, düzeltme komutu). Kişisel veriler tracked `vlad.config.json`'a değil gitignored `vlad.config.local.json`'a yazılır (tracked dosyanın üstüne sığ birleşir, `null` anahtarı siler); sırlar (`vlad.local.json` anahtarları) git'e ve çıktıya girmez. Arkadaş kurulumu **boş kb** ile başlar; sizin kartlarınız/kararlarınız taşınmaz.
 
+**Kısa yol:** repoyu klonlayın, klasörde `claude` açın ve "kur" deyin; `CLAUDE.md`'deki "Kurulmamış makine" bölümü Claude'u aşağıdaki adımlarda yönlendirir.
+
 Ön koşul: Node 22+, git 2.38+, `claude`, macOS/Windows için tmux (Mac) / PowerShell (Windows). Linux: işçi deneysel; beyin hiçbir bayrakla kurulmaz.
 
 **1. Tek makine (Mac ya da Windows)**
