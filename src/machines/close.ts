@@ -6,7 +6,7 @@ import { getKbRecord } from "../kb/get.js";
 import { loadConfig, readDoc, withKbLock } from "../kb/index.js";
 import type { ProjectCard, VladConfig } from "../kb/index.js";
 import { kbPaths } from "../kb/home.js";
-import { closedFindingTokens, isFullFindingId } from "../findings/closed-report.js";
+import { closedFindingTokens, isFullFindingId, partialFindingTokens } from "../findings/closed-report.js";
 import { UNRESOLVED, getFinding, listFindingsWithWarnings, setFindingStates } from "../findings/store.js";
 import { modeStatus } from "../mode/store.js";
 import { refreshProject } from "../projects/derived.js";
@@ -309,6 +309,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     });
     await after("findings", async () => {
       const ids: string[] = [];
+      for (const tok of new Set(partialFindingTokens(report))) r.warnings.push(`${tok} kısmi düzeltme olarak yazılmış, kapatılmadı`);
       for (const tok of new Set(closedFindingTokens(report))) {
         if (!isFullFindingId(tok)) { r.warnings.push(`kısaltılmış/aralık bulgu ID'si "${tok}" kapatılmadı`); continue; }
         try {

@@ -32,3 +32,20 @@ describe("closedFindingWarnings", () => {
     expect(w.every((x) => /kısaltılmış/.test(x))).toBe(true);
   });
 });
+
+describe("F-vlad-309: kısmi satır kapatılmaz", () => {
+  beforeEach(() => { makeHome(); });
+  it("closedFindingTokens skips 'kısmen'/'açık kalır' lines; closedFindingWarnings flags them", async () => {
+    const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
+    const a = add("a"), b = add("b");
+    const md = rep(`- ${a.data.id} — fixed — abc123\n- ${b.data.id} — kısmen: yarısı; bulgu açık kalır`);
+    expect(closedFindingTokens(md)).toEqual([a.data.id]);
+    expect(closedFindingWarnings(md).join("\n")).toMatch(new RegExp(`${b.data.id}.*kısmi`));
+  });
+  it("meşru fixed satırları kısmi sayılmaz ('açık kalan yok', 'partial index', büyük harf kısmi yakalanır)", async () => {
+    const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
+    const ok = rep("- F-alpha-001 — fixed — açık kalan yok\n- F-alpha-002 — fixed — partial index eklendi, bulgu açıklaması güncellendi");
+    expect(closedFindingTokens(ok)).toEqual(["F-alpha-001", "F-alpha-002"]);
+    expect(closedFindingTokens(rep("- F-alpha-003 — KISMEN: BULGU AÇIK KALIR"))).toEqual([]);
+  });
+});

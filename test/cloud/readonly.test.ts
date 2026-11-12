@@ -237,6 +237,20 @@ describe("role and vendored skill from the public vlad repo (T20261026-55)", () 
     expect(r.warnings).toEqual([]);
   });
 
+  it("F-vlad-175: ponytail off arm on the pinned-clone path embeds the stripped role body, never points at the role file", () => {
+    cfg({ cloudKb: "readonly", experiments: { ponytail: "ab" } });
+    vendor();
+    const f = join(home, "roles", "developer.md");
+    writeFileSync(f, readFileSync(f, "utf8") + "- **ponytail (deneme):** PONYTAIL-KURALI\n");
+    let t = mk();
+    while (Number(t.data.id.slice(-1)) % 2 === 0) t = mk();
+    const p = prepareCloudLaunch(t.data.id, { vladPin: () => SHA }).prompt;
+    expect(p).toContain("ROL-GÖVDESİ sorumluluk");
+    expect(p).not.toContain("PONYTAIL-KURALI");
+    expect(p).not.toContain("/tmp/vlad-ro/roles/developer.md");
+    expect(p).not.toContain("SKILL-GÖVDESİ");
+  });
+
   it("falls back to embedded text with a warning when the files are dirty or unpushed", () => {
     vendor();
     const r = prepareCloudLaunch(mk().data.id, { vladPin: () => { throw new Error("roles/developer.md origin/master'dan farklı"); } });
