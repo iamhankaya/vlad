@@ -1,6 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { kbPaths } from "../../src/kb/index.js";
@@ -168,8 +166,8 @@ describe("mod güvenliği (T20261109-30: F-vlad-282/285/286)", () => {
 
   it("F-282: VLAD_TASK_ID tanımlıyken yazma komutları reddedilir", () => {
     expect(() => assertNotWorker({ VLAD_TASK_ID: "T20261109-30" })).toThrow(/çalışan/);
-    expect(() => assertNotWorker({}, tmpdir())).not.toThrow();
-    expect(() => assertNotWorker({ VLAD_TASK_ID: " " }, tmpdir())).not.toThrow();
+    expect(() => assertNotWorker({})).not.toThrow();
+    expect(() => assertNotWorker({ VLAD_TASK_ID: " " })).not.toThrow();
   });
 
   it("F-285: --except biçimi doğrulanır, küçük harfe çevrilir; --until-task biçimi doğrulanır", () => {
@@ -212,14 +210,6 @@ describe("T20261112-04 izin-mod regresyonları", () => {
   it("F-vlad-283: geçersiz started ile elle yazılmış pencere kapalı sayılır", () => {
     writeFileSync(modeFile(), JSON.stringify({ night: { until: new Date(now.getTime() + 72 * H).toISOString(), started: "x", projects: [], note: null, push: true, except: [], untilTasks: [] }, watch: false }));
     expect(modeStatus(now).night).toBeNull();
-  });
-  it("F-vlad-287: env temizlense de vlad/T… dalındaki (çalışan worktree'si) cwd mod yazamaz", () => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
-    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "pipe" });
-    git("init", "-q", "-b", "vlad/T20261112-99");
-    expect(() => assertNotWorker({}, dir)).toThrow(/çalışan/);
-    git("checkout", "-q", "-b", "master");
-    expect(() => assertNotWorker({}, dir)).not.toThrow();
   });
   it("F-vlad-284: integrate skill'i except sınıflarını somut eyleme eşler ve --force/--no-verify'ı yasaklar", () => {
     const t = readFileSync(join(import.meta.dirname, "..", "..", ".claude", "skills", "integrate", "SKILL.md"), "utf8");

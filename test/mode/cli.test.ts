@@ -1,7 +1,9 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { assertNotWorker } from "../../src/mode/guard.js";
 import { claudeProjectDir } from "../../src/tasks/liveness.js";
 import { makeHome } from "../helpers.js";
 import { runCli } from "../support/run-cli.js";
@@ -60,6 +62,14 @@ describe("vlad task idle / audit skills", () => {
     const r = await vlad(["mode", "off"], { VLAD_TASK_ID: "T20261112-99" });
     expect(r.code).toBe(1);
     expect((await vlad(["mode", "status"])).out).toMatch(/gece modu etkin/);
+  });
+  it("F-vlad-287: env temizlense de vlad/T… dalındaki (çalışan worktree'si) cwd mod yazamaz", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "pipe" });
+    git("init", "-q", "-b", "vlad/T20261112-99");
+    expect(() => assertNotWorker({}, dir)).toThrow(/çalışan/);
+    git("checkout", "-q", "-b", "master");
+    expect(() => assertNotWorker({}, dir)).not.toThrow();
   });
 });
 

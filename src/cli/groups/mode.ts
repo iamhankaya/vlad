@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { expireMode, modeLine, modeStatus, assertNotWorker, setNight, setOff, setWatch } from "../../mode/store.js";
+import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "../../mode/store.js";
+import { assertNotWorker } from "../../mode/guard.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
