@@ -37,7 +37,7 @@ const runTaskkill = (pid: number): Promise<number | null> => new Promise((res) =
  * `waitMs` içinde ölmedi): çağıran yarım işi geri almamalı (npm/tsc hâlâ node_modules'a yazıyor olabilir).
  * Windows: taskkill çıkışı beklenir (0 ya da 128 = süreç yok) + kök pid ölümü; POSIX: süreç grubuna SIGKILL + grubun yok olması (spawn `detached: true` gerekir).
  */
-export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "kill">, d: KillDeps = {}): Promise<boolean> {
+export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "kill"> & Partial<Pick<ReturnType<typeof spawn>, "exitCode" | "signalCode">>, d: KillDeps = {}): Promise<boolean> {
   const pid = p.pid;
   if (!pid) return true;
   const win = (d.platform ?? process.platform) === "win32";
@@ -45,6 +45,8 @@ export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "ki
   const waitMs = d.waitMs ?? 10_000, pollMs = d.pollMs ?? 100;
   let target = pid;
   if (win) {
+    // F-vlad-272: yeniden denemede kök süreç tutamacı çıkmışsa pid başka sürece geçmiş olabilir; taskkill atılmaz (yabancı süreç ağacı)
+    if (d.recheck && (p.exitCode != null || p.signalCode != null)) return true;
     const code = await (d.spawnTaskkill ?? runTaskkill)(pid);
     if (code !== 0 && code !== 128) { try { p.kill(); } catch { /* yok */ } return false; }
   } else {

@@ -40,6 +40,12 @@ export interface ScriptDeps {
   killTree?: RunSpec["killTree"];
   /** süreç ağacı doğrulanamayan selfUpdate zaman aşımında yeniden deneme aralığı (varsayılan 5 sn) */
   retryMs?: number;
+  /** geri yükleme rename'i (testler için); varsayılan renameSync */
+  rename?: (a: string, b: string) => void;
+  /** kurtarma bu kadar denemede başarısız olursa bir kez uyarı + ping `stuck` (varsayılan 120 ≈ 10 dk) */
+  recoverMaxTries?: number;
+  /** uyarı çıktısı (varsayılan stderr) */
+  warn?: (msg: string) => void;
 }
 export const defaultScriptDeps = (): ScriptDeps => {
   // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
@@ -92,7 +98,10 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   if (active) throw new RemoteError("busy", `busy: başka bir betik sürüyor: ${active}`);
   // selfUpdate: başlamadan uçuşta başka op varsa busy (npm ci altlarından çekmesin); denetim ile bayrak arasında await yok (tek tur)
   if (entry.selfUpdate) {
-    if (maint.others(ctx.opId) > 0) throw new RemoteError("busy", "busy: [maintenance] uçuşta başka işlemler var; bitince selfUpdate betiğini tekrar çalıştır");
+    if (maint.others(ctx.opId) > 0) {
+      const l = maint.list(ctx.opId).slice(0, 5).map((o) => `${o.op}(${o.opId}, ${Math.round(o.ageMs / 1000)}s)`).join(", "); // F-vlad-278: neyin beklendiği görünsün
+      throw new RemoteError("busy", `busy: [maintenance] uçuşta başka işlemler var: ${l}; bitince selfUpdate betiğini tekrar çalıştır`);
+    }
     maint.enter();
   }
   active = entry.name;
@@ -106,7 +115,7 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     const { retryKill, ...res } = out;
     if (res.recovery === "pending" && retryKill) {
       // süreç ağacı hâlâ koşuyor olabilir (npm/tsc node_modules'a yazıyor): geri yükleme, bakım bayrağı ve `active` ertelenir, Agent sınırsız yeniden dener
-      deferred = true; deferRecovery(st.repo, retryKill, d.retryMs ?? 5000, entry.selfUpdate);
+      deferred = true; holdAndRecover({ repo: st.repo, retryKill, selfUpdate: entry.selfUpdate, ...recoverOpts(d) });
       return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
     }
     // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed:false iken yalnız çalışan derleme diskteki dist/.build-head'den farklıysa: önceki yardımcı başarısız olduysa yeniden denenebilsin) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
@@ -116,24 +125,46 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     }
     return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
   } finally {
+    // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
+    if (!deferred) {
+      // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar; başarısızsa (EBUSY…) bayrak AÇIK kalır ve yeniden denenir (F-vlad-275)
+      if (entry.selfUpdate && !restarting && !recoverSelfUpdate(st.repo, d.rename)) { deferred = true; holdAndRecover({ repo: st.repo, selfUpdate: true, ...recoverOpts(d) }); }
+      else if (entry.selfUpdate && !restarting) maint.leave();
+    }
     if (!deferred) active = null;
-    if (entry.selfUpdate && !restarting && !deferred) {
-      recoverSelfUpdate(st.repo); // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar
-      maint.leave();
-    } // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
   }
 }
 
-/** Öldürme doğrulanana dek aralıkla yeniden dener; doğrulanınca kurtarmayı yapar ve bakım bayrağını kaldırır. Zamanlayıcı süreci tutmaz (unref). */
-function deferRecovery(repo: string, retryKill: () => Promise<boolean>, everyMs: number, selfUpdate: boolean): void {
-  const tick = (): void => {
-    void retryKill().catch(() => false).then((ok) => {
-      if (!ok) { setTimeout(tick, everyMs).unref(); return; }
-      if (selfUpdate) { recoverSelfUpdate(repo); maint.leave(); }
-      active = null;
-    });
+const recoverOpts = (d: Pick<ScriptDeps, "retryMs" | "rename" | "recoverMaxTries" | "warn">) => ({ everyMs: d.retryMs ?? 5000, rename: d.rename, maxTries: d.recoverMaxTries ?? 120, warn: d.warn });
+
+interface HoldOpts { repo: string; retryKill?: () => Promise<boolean>; selfUpdate: boolean; everyMs: number; rename?: (a: string, b: string) => void; maxTries?: number; warn?: (m: string) => void }
+/**
+ * Öldürme doğrulanana ve (selfUpdate'te) geri yükleme başarılı olana dek aralıkla yeniden dener; bitince bakım bayrağını ve `active`'i kaldırır.
+ * Tavan (`maxTries`): aşılınca bir kez uyarı yazılır ve ping `stuck:true` gösterir; bayrak yine kalkmaz (yarım node_modules ile op kabul edilmez), deneme sürer.
+ * Zamanlayıcı süreci tutmaz (unref).
+ */
+function holdAndRecover(o: HoldOpts): void {
+  let tries = 0, killed = !o.retryKill;
+  const warn = o.warn ?? ((m: string) => { process.stderr.write(`${m}\n`); });
+  const tick = async (): Promise<void> => {
+    if (!killed) killed = await o.retryKill!().catch(() => false);
+    if (killed && (!o.selfUpdate || recoverSelfUpdate(o.repo, o.rename))) { if (o.selfUpdate) maint.leave(); active = null; return; }
+    tries++; maint.attempt(tries);
+    if (o.maxTries !== undefined && tries === o.maxTries) {
+      maint.markStuck();
+      warn(`vlad agent: bakım kurtarması ${tries} denemede tamamlanamadı (${killed ? "geri yükleme" : "süreç ağacı"}); Agent bakımda kalıyor, yeni op almıyor. node_modules/dist yedeklerini elle denetle ve Agent'ı yeniden başlat.`);
+    }
+    setTimeout(() => void tick(), o.everyMs).unref();
   };
-  setTimeout(tick, everyMs).unref();
+  setTimeout(() => void tick(), o.everyMs).unref();
+}
+
+/** Açılışta (F-vlad-274): önceki süreç selfUpdate ortasında öldüyse (`.vlad-npm-ci-running` kaldı) yarım güncellemeyi geri alır; yapılamazsa bakımda kalır ve yeniden dener. */
+export function startupRecover(repo: string, o: { rename?: (a: string, b: string) => void; everyMs?: number; maxTries?: number; warn?: (m: string) => void } = {}): void {
+  if (!existsSync(join(repo, ".vlad-npm-ci-running"))) return;
+  maint.enter("recovery");
+  if (recoverSelfUpdate(repo, o.rename)) { maint.leave(); return; }
+  holdAndRecover({ repo, selfUpdate: true, everyMs: o.everyMs ?? 5000, rename: o.rename, maxTries: o.maxTries ?? 120, warn: o.warn });
 }
 
 /**
@@ -152,11 +183,12 @@ export function diskBuildHead(repo: string): string | undefined {
 /**
  * selfUpdate betiği `.vlad-npm-ci-running` işaretini bıraktıysa (başarıyla bitmedi: zaman aşımı/öldürme/çökme) yarım güncellemeyi geri alır:
  * node_modules-old → node_modules, dist yoksa dist-old → dist, dist-next silinir, işaret kalkar. İşaret yoksa (betik kendi temizledi ya da
- * yedek önceki başarılı güncellemeye ait) hiçbir şeye dokunmaz. Hata yutulur: bayrak yine kalkmalı, kurtarma elle yapılabilir.
+ * yedek önceki başarılı güncellemeye ait) hiçbir şeye dokunmaz. Dönüş: true = temiz (işaret yoktu ya da geri yüklendi); false = başarısız,
+ * işaret kalır (F-vlad-275: çağıran bakım bayrağını KALDIRMAZ, yeniden dener).
  */
-export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) => void = renameSync): void {
+export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) => void = renameSync): boolean {
   const mark = join(repo, ".vlad-npm-ci-running");
-  if (!existsSync(mark)) return;
+  if (!existsSync(mark)) return true;
   try {
     const nm = join(repo, "node_modules"), nmOld = join(repo, "node_modules-old");
     // F-vlad-281: eskiyi geri koymadan önce mevcut olanı silme; rename patlarsa mevcut geri konur
@@ -174,5 +206,6 @@ export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) =
     if (existsSync(distOld) && (swapped || !existsSync(dist))) restore(dist, distOld);
     rmSync(join(repo, "dist-next"), { recursive: true, force: true });
     rmSync(mark, { force: true });
-  } catch { /* geri yükleme başarısızsa işaret kalır; sonraki vlad-guncelle koşusu başında yeniden dener */ }
+    return true;
+  } catch { return false; /* işaret kalır; çağıran yeniden dener, vlad-guncelle de koşusu başında dener */ }
 }
