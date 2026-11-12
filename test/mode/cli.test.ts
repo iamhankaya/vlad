@@ -81,6 +81,13 @@ describe("vlad task idle / audit skills", () => {
     expect(() => assertNotWorker({}, join(root, "proj-wt"))).not.toThrow(); // worktree kökü değil
     expect(() => assertNotWorker({}, root)).not.toThrow();
   });
+  it("F-vlad-287: yol eşleşmesi büyük/küçük harf duyarsız; çözülemeyen cwd fail-closed; ret mesajı ana repo ipucu verir", () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
+    const wt = join(root, "Proj-WT", "t20261112-97");
+    mkdirSync(wt, { recursive: true });
+    expect(() => assertNotWorker({}, wt)).toThrow(/ana repo dizininden/);
+    expect(() => assertNotWorker({}, join(root, "yok", "boyle"))).toThrow(/çalışan/);
+  });
   it("F-vlad-287: env -u ile worktree'den `vlad mode night` reddedilir ve pencere açılmaz", async () => {
     const root = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
     const wt = join(root, "proj-wt", "T20261112-98");
