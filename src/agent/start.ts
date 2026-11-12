@@ -100,7 +100,9 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });
   reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge, "branch-push": reconcileBranchPush, "script-run": reconcileScriptRun }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
 
-  startupRecover(getVladHome(), { pidFile: updaterPidFile(dir) }); // F-vlad-274: önceki süreç selfUpdate ortasında öldüyse yarım node_modules/dist geri alınır, bitene dek bakım (op kabul yok)
+  // F-vlad-326: geri alma sonrası bu süreç eski/yeni karışık modüllerle çalışıyor olabilir: yeniden başlat (requestRestart sunucu kurulunca bağlanır; erken geri almada bayrakla ertelenir)
+  let recovered = false;
+  startupRecover(getVladHome(), { pidFile: updaterPidFile(dir), onRecovered: () => { recovered = true; agentEnv().requestRestart?.(); } }); // F-vlad-274: önceki süreç selfUpdate ortasında öldüyse yarım node_modules/dist geri alınır, bitene dek bakım (op kabul yok)
   sweepScriptDir(join(dir, "scripts-run")); // çökmüş çalışmadan kalan geçici betikler
 
   const deps = createProdDeps();
@@ -148,9 +150,14 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
       const h = winRestartHelper({ pidFile: pidFile(), startCmd, systemRoot: process.env.SystemRoot, watch: { host: wdHost, port, repo: getVladHome() } });
       await defaultExec(h.file, h.args);
     },
-    onFail: (m) => { maint.leave(); process.stderr.write(`yeniden başlatma yapılamadı, Agent eski süreçle sürüyor: ${m}\n`); },
+    onFail: (m) => {
+      // F-vlad-326: açılış geri almasından sonra karışık modüllerle op kabul edilmez; bakım açık kalır, ping stuck gösterir
+      if (recovered) { maint.markStuck(); process.stderr.write(`yeniden başlatma yapılamadı; geri alma sonrası Agent bakımda kalıyor, elle yeniden başlat: ${m}\n`); return; }
+      maint.leave(); process.stderr.write(`yeniden başlatma yapılamadı, Agent eski süreçle sürüyor: ${m}\n`);
+    },
   };
   agentEnv().requestRestart = () => scheduleRestart(restartDeps);
+  if (recovered) agentEnv().requestRestart?.();
   process.on("SIGINT", stop);
   process.on("SIGTERM", stop);
   if (queue) {

@@ -276,6 +276,20 @@ describe("geri alma ve parça seçimi", () => {
     await runUninstall(ctx(), "hooks");
     expect(jr(settings()).hooks.SessionEnd).toEqual([{ hooks: [{ type: "command", command: "mine" }] }]);
   });
+  it("F-vlad-330: --uninstall hooks push-guard PreToolUse hook'unu da siler; kullanıcının PreToolUse hook'u ve izin kalıpları kalır", async () => {
+    w(settings(), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }] }] } }));
+    await runSetup(ctx(ans({ perms: true, confirm: ["permissions-write"] }), { yes: true }), { only: ["permissions"] });
+    const cmds = () => (jr(settings()).hooks?.PreToolUse ?? []).flatMap((e: any) => e.hooks).map((x: any) => x.command);
+    expect(cmds().some((c: string) => c.includes("push-guard-hook.js"))).toBe(true);
+    await runUninstall(ctx(), "hooks");
+    expect(cmds()).toEqual(["mine"]);
+    expect(jr(settings()).permissions.deny).toEqual(expect.arrayContaining(WORKER_DENY)); // izinler hooks parçasının değil
+  });
+  it("F-vlad-330: kullanıcının kendi (VLAD'a ait olmayan) push-guard adlı hook'una dokunmaz", async () => {
+    w(settings(), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "node /x/my-push-guard-hook.js" }] }] } }));
+    await runUninstall(ctx(), "hooks");
+    expect(jr(settings()).hooks.PreToolUse[0].hooks[0].command).toBe("node /x/my-push-guard-hook.js");
+  });
   it("--uninstall desteklemeyen parça hata verir", async () => {
     await expect(runUninstall(ctx(), "kb")).rejects.toThrow(/desteklenmiyor/);
   });
