@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
+import { defaultConfig, kbPaths, type VladConfig } from "../../src/kb/index.js";
 import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
@@ -53,6 +53,17 @@ function fakeLauncher(ok = true): Launcher & { reqs: LaunchRequest[] } {
   return { reqs, async launch(r) { reqs.push(r); return ok ? { ok: true, method: "fake" } : { ok: false, method: "fake", detail: "boom" }; } };
 }
 const mk = (kind: "dev" | "research" = "dev") => createTask({ project: "alpha", title: "İlk görev", kind, body: "## Tanım\nx\n" });
+
+describe("launchTask: yabancı kart yolu brain roots ile çözülür (F-vlad-200)", () => {
+  it("C:\\dev\\alpha taşıyan kart, beynin roots'undaki alpha reposuyla başlatılır", async () => {
+    const card = join(kbPaths().kb, "projects", "alpha.md");
+    writeFileSync(card, readFileSync(card, "utf8").replace(/^path: .*$/m, "path: 'C:\\dev\\alpha'"));
+    const c = { ...cfg, brain: "mac", machines: [{ name: "mac", os: "darwin", agent: { port: 7437 }, roots: [dirname(repo)] }] } as VladConfig;
+    const t = await launchTask(mk().data.id, { launcher: fakeLauncher(), cfg: c, machine: "mac" });
+    expect(t.data.state).toBe("running");
+    expect(existsSync(join(t.data.worktree!, "a.txt"))).toBe(true);
+  });
+});
 
 describe("launchTask: eşzamanlı başka başlatma (F-vlad-102)", () => {
   it("launcher beklerken görev başka yerde running olduysa hata geri yazımı çalışan göreve error yazmaz", async () => {

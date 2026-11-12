@@ -51,7 +51,17 @@ function projectCard(slug: string): ProjectCard {
   return readDoc<ProjectCard>(file).data;
 }
 
-const projectPath = (slug: string): string => projectCard(slug).path;
+/**
+ * Card path as is when it exists here; a path from another OS (C:\\dev\\x on the Mac brain) is resolved as
+ * `<brain root>/<repo name>` against the brain's `roots` (F-vlad-200). No match keeps the card path (the git error names it).
+ */
+function projectPath(slug: string, cfg?: VladConfig): string {
+  const path = projectCard(slug).path;
+  if (existsSync(path) || !cfg?.brain) return path;
+  const name = repoNameOf(path);
+  const hit = (machineDef(cfg, cfg.brain)?.roots ?? []).map((r) => join(r, name)).find((d) => name && existsSync(join(d, ".git")));
+  return hit ?? path;
+}
 const projectDefaultBranch = (slug: string): string | undefined => projectCard(slug).default_branch ?? undefined;
 
 /** Persists the last error on a task without touching its state. */
@@ -126,7 +136,7 @@ export function ensureIntegration(
   const p = getTask(parentId);
   if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parentId} ${p.data.state}; fazı başlatılamaz`);
   const slug = project ?? p.data.project;
-  const repo = projectPath(slug);
+  const repo = projectPath(slug, cfg);
   const { branch, worktree } = ensureIntegrationGit(repo, parentId, cfg, projectDefaultBranch(slug));
   recordIntegration(parentId, slug, branch, worktree);
   return { repo, branch, worktree };
@@ -157,7 +167,7 @@ export function integrationWorktrees(
   for (const project of projects) {
     // a phase project whose card is gone must not block listing or cleanup of the rest
     if (!existsSync(join(kbPaths().projects, `${project}.md`))) continue;
-    const repo = projectPath(project);
+    const repo = projectPath(project, cfg);
     const worktree = worktreePath(cfg, repo, parentId, process.platform as "win32" | "darwin" | "linux");
     if (!out.some((w) => w.worktree === worktree)) out.push({ project, repo, branch, worktree });
   }
@@ -297,7 +307,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     arm = ponytailArm(id, role, cfg);
     if (arm === "off") role = withoutPonytail(role!);
-    repo = projectPath(task.data.project);
+    repo = projectPath(task.data.project, cfg);
     wt = worktreePath(cfg, repo, id, process.platform as "win32" | "darwin" | "linux");
     // a pipeline phase branches from the pipeline's integration branch; the rollback in launchCore leaves it alone
     base = task.data.parent ? (await withKbLock(() => ensureIntegration(task.data.parent!, cfg, task.data.project))).branch : undefined;
@@ -663,11 +673,11 @@ export function cleanupTask(
     } catch {
       /* a window that could not be closed is reported by the removal below */
     }
-    removeTaskWorktree(projectPath(t.data.project), wt, id);
+    removeTaskWorktree(projectPath(t.data.project, o.cfg), wt, id);
     // F-vlad-231/244: a cancelled task's branch without own commits would block a relaunch. Proof is "no commits beyond the base it was
     // cut from" (the integration branch for a phase), not `-d`'s HEAD comparison; no proof (null) keeps the branch.
     if (t.data.state === "cancelled") {
-      const repo = projectPath(t.data.project), branch = `vlad/${id}`;
+      const repo = projectPath(t.data.project, o.cfg), branch = `vlad/${id}`;
       const parentBranch = t.data.parent ? `vlad/${t.data.parent}` : null;
       const base = parentBranch && runGit(repo, ["rev-parse", "--verify", "-q", `refs/heads/${parentBranch}`]) ? parentBranch : "HEAD";
       if (unmergedCommits(repo, branch, base) === 0) runGit(repo, ["branch", "-D", branch]);
