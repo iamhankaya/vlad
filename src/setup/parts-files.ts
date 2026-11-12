@@ -153,11 +153,18 @@ export const hooksPart: SetupPart = {
 export const WORKER_PERMISSIONS = [
   "Bash(git push origin vlad/*)", "Bash(git push -u origin vlad/*)", "Bash(gh run list *)", "Bash(gh run view *)", "Bash(gh run watch *)", "Bash(gh run rerun *)", "Bash(gh run download *)", "Bash(gh workflow run * --ref vlad/*)",
 ];
+/** F-vlad-302: birleşik kısa bayraklar (-fu/-uf/-df/-fd …; glob `-f*` -u'yu da yutardı, bu yüzden ikili kombinasyonlar). shortcut: 3. harfte f/d (-uvf) kapsanmaz, gerekirse üçlüler eklenir. */
+const COMBINED_SHORT = (() => {
+  const other = ["u", "n", "v", "q", "k", "f", "d"], out = new Set<string>();
+  for (const a of ["f", "d"]) for (const b of other) { out.add(a + b); out.add(b + a); }
+  return [...out].flatMap((c) => [`Bash(git push -${c}*)`, `Bash(git push * -${c}*)`]);
+})();
 /** Geniş push biçimlerini kapatır (allow kalıbı `*` ile --force/--delete/çoklu ref'i de eşler): kullanıcı düzeyi, TÜM Claude oturumlarını kapsar. */
 export const WORKER_DENY = [
   "Bash(git push * --force*)", "Bash(git push * -f *)", "Bash(git push * --delete*)", "Bash(git push *:*)",
   // F-vlad-293: `* -f *` sonda ve `push`'tan hemen sonra eşleşmez; kısa -d de kapalı olmalı.
   "Bash(git push * -f)", "Bash(git push -f *)", "Bash(git push * -d)", "Bash(git push * -d *)", "Bash(git push -d *)", "Bash(git push --force*)", "Bash(git push --delete*)",
+  ...COMBINED_SHORT,
 ];
 function kbOutside(c: SetupContext): string | null {
   const kb = resolveKbDir(c.vladHome).dir;

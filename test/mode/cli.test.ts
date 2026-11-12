@@ -1,13 +1,18 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { assertNotWorker } from "../../src/mode/guard.js";
 import { claudeProjectDir } from "../../src/tasks/liveness.js";
 import { makeHome } from "../helpers.js";
 import { runCli } from "../support/run-cli.js";
 
 let home: string;
-beforeEach(() => { home = makeHome(); });
+// F-vlad-287: mode yazma komutları cwd `vlad/T…` dalındaysa reddeder; çalışan worktree'sinde koşan testler nötr dizinde çalışır
+const cwd0 = process.cwd();
+beforeEach(() => { home = makeHome(); process.chdir(home); });
+afterEach(() => process.chdir(cwd0));
 
 // in-process (F-vlad-071): no child per call; stdin is unused here
 const vlad = (args: string[], env: Record<string, string> = {}) => runCli(args, { env: { VLAD_HOME: home, ...env } });
@@ -51,6 +56,20 @@ describe("vlad task idle / audit skills", () => {
     expect(r.tasks[0]).toMatchObject({ id, transcript: true, loaded: ["vlad-worker"], missing: [] });
     expect(r.summary).toMatchObject({ audited: 1, expected: 1, loaded: 1, rate: 1 });
     expect((await vlad(["audit", "skills", "--since", "nonsense"], { CLAUDE_CONFIG_DIR: cfg })).code).toBe(1);
+  });
+  it("F-vlad-287: mode off çalışan oturumunda (VLAD_TASK_ID) reddedilir ve pencereyi kapatmaz", async () => {
+    await vlad(["mode", "night", "--until", "23:59"]);
+    const r = await vlad(["mode", "off"], { VLAD_TASK_ID: "T20261112-99" });
+    expect(r.code).toBe(1);
+    expect((await vlad(["mode", "status"])).out).toMatch(/gece modu etkin/);
+  });
+  it("F-vlad-287: env temizlense de vlad/T… dalındaki (çalışan worktree'si) cwd mod yazamaz", () => {
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
+    const git = (...a: string[]) => execFileSync("git", a, { cwd: dir, stdio: "pipe" });
+    git("init", "-q", "-b", "vlad/T20261112-99");
+    expect(() => assertNotWorker({}, dir)).toThrow(/çalışan/);
+    git("checkout", "-q", "-b", "master");
+    expect(() => assertNotWorker({}, dir)).not.toThrow();
   });
 });
 
