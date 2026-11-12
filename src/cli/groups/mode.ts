@@ -29,6 +29,7 @@ export function registerMode(program: Command, k: Kit): void {
     out(o, { ...modeStatus(new Date()), dropped }, modeText(new Date()) + (dropped ? " (dolmuş gece penceresi düşürüldü)" : ""));
   });
   def(mode, "off", "Gece ve bekçi modunu kapatır", (o: Opts) => {
+    assertNotWorker();
     setOff();
     out(o, modeStatus(new Date()), "mod kapalı");
   });
