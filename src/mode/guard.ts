@@ -13,7 +13,7 @@ function inWorkerBranch(cwd: string): boolean {
  * Worktree dışına cd + env -u ya da kb/mode.json'a doğrudan yazma bunu aşar; gerçek sınır (izin kümesi deny / imzalı token) F-vlad-287'nin kalanı olarak izlenir.
  * Büyük/küçük harf duyarsız (macOS/Windows dosya sistemleri); yol `realpathSync.native` ile gerçek yazımına çevrilir. Çözülemezse fail-closed: çalışan sayılır.
  */
-function inWorkerWorktreeDir(cwd: string): boolean {
+export function inWorkerWorktreeDir(cwd: string): boolean {
   let d: string;
   try { d = realpathSync.native(cwd); } catch { return true; }
   for (;;) {

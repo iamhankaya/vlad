@@ -333,6 +333,39 @@ describe("güvenlik kararları (değişiklik turu)", () => {
     w(join(vladHome, "dist", "hooks", "push-guard-hook.js"), "// stub");
     expect(await st()).toBe("ok");
   });
+  describe("F-vlad-287: push-guard hook'u mod korumasını da kapsar (matcher Bash + dosya yazma araçları)", () => {
+    const guardEntries = () => jr(settings()).hooks.PreToolUse.filter((e: any) => e.hooks.some((x: any) => x.command.includes("push-guard-hook.js")));
+    const tools = (e: any) => String(e.matcher).split("|");
+    const st = async () => (await runCheck(ctx(), { only: ["permissions"] })).parts[0]!.items!.find((i: any) => i.id === "permissions:push-guard")!.status;
+    it("yeni kurulum: matcher Bash+Edit+Write+MultiEdit+NotebookEdit; idempotent", async () => {
+      await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+      await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+      expect(guardEntries()).toHaveLength(1);
+      expect(tools(guardEntries()[0])).toEqual(["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"]);
+    });
+    it("yükseltme: eski matcher 'Bash' girdisi yeni matcher'a taşınır, kullanıcının hook'u ve izinleri korunur; check 'eski' → 'ok'", async () => {
+      await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+      w(join(vladHome, "dist", "hooks", "push-guard-hook.js"), "// stub");
+      const d = jr(settings());
+      d.hooks.PreToolUse = [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }, ...guardEntries()[0].hooks] }]; // eski sürüm: matcher yalnız Bash, kullanıcı hook'uyla aynı girdide
+      d.permissions.deny.push("Bash(rm -rf *)");
+      w(settings(), JSON.stringify(d));
+      expect(await st()).toBe("eksik");
+      await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+      expect(await st()).toBe("ok");
+      const after = jr(settings());
+      expect(after.hooks.PreToolUse.find((e: any) => e.hooks.some((x: any) => x.command === "mine")).matcher).toBe("Bash"); // kullanıcı girdisi genişlemedi
+      expect(guardEntries()).toHaveLength(1);
+      expect(tools(guardEntries()[0])).toContain("Write");
+      expect(after.permissions.deny).toContain("Bash(rm -rf *)");
+    });
+    it("uninstall hooks: taşınan girdi de silinir, kullanıcı hook'u kalır", async () => {
+      w(settings(), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }] }] } }));
+      await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+      await runUninstall(ctx(), "hooks");
+      expect(jr(settings()).hooks.PreToolUse.flatMap((e: any) => e.hooks).map((x: any) => x.command)).toEqual(["mine"]);
+    });
+  });
   it("F-vlad-324: glob deny (hook kurulu olmasa da) vlad/x:main, çoklu ref, +refspec, --mirror/--prune/--no-verify kapsar; vlad/<id> takılmaz", () => {
     const glob = (pat: string, cmd: string) => new RegExp("^" + pat.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$").test(cmd);
     const blocked = (cmd: string) => WORKER_DENY.map((d) => d.slice(5, -1)).some((p) => glob(p, cmd));

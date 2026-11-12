@@ -116,6 +116,7 @@
     "test/findings/set-cli.test.ts",
     "test/git/**/*.test.ts",
     "test/hooks/push-guard-hook.test.ts",
+    "test/hooks/mode-guard.test.ts",
     "test/hooks/session-report.test.ts",
     "test/infra/build-guard.test.ts",
     "test/infra/spawn-guard.test.ts",
