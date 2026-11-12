@@ -191,6 +191,32 @@ describe("F-vlad-274 P1: açılış kurtarması güncelleyicinin durduğunu doğ
     expect(maint.on).toBe(false);
     expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
   });
+  it("Windows: kök pid ölü olsa da torunlar kanıtlanamaz → geri alınmaz, bakımda kalır + uyarı (stuck görünür olacak)", async () => {
+    const d = tmp(); halfUpdated(d);
+    const pf = side(tmp()); writeFileSync(pf, "4242");
+    const warns: string[] = [];
+    startupRecover(d, { pidFile: pf, platform: "win32", isAlive: () => false, everyMs: 10, maxTries: 2, warn: (m) => warns.push(m) });
+    expect(maint.on).toBe(true);
+    await vi.waitFor(() => expect(maint.snapshot().stuck).toBe(true), { timeout: 5_000 });
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("YENI");
+    expect(existsSync(join(d, ".vlad-npm-ci-running"))).toBe(true);
+    expect(warns.join("\n")).toMatch(/Windows|torun/);
+    maint.reset();
+  });
+  posix("P2: geri alma EBUSY ile başarısız → sidecar silinmez (yeniden başlatmada startupRecover ölü pid görüp tekrar dener); başarılı olunca silinir", async () => {
+    const f = scriptRepo(OS, "x", `cd "$VLAD_REPO"\ntouch .vlad-npm-ci-running\nmv node_modules node_modules-old\nmkdir node_modules\nexit 1\n`, { class: "write", selfUpdate: true });
+    fixtures.push(f);
+    mkdirSync(join(f.dir, "node_modules")); writeFileSync(join(f.dir, "node_modules", "f"), "ESKI");
+    const state = tmp();
+    const deps: ScriptDeps = { home: f.dir, platform: OS, machine: "win", roots: [], stateDir: state, env: { PATH: process.env.PATH ?? "" }, warn: () => {}, retryMs: 30, rename: flaky(2) };
+    const approval = { planId: scriptPlanId({ machine: "win", name: "x", platform: OS, sha256: f.entry.sha256, params: {} }) };
+    await scriptRun({ name: "x", approval }, deps, { opId: "op-p2" });
+    expect(maint.on).toBe(true);
+    expect(existsSync(join(state, "self-update.pid")), "geri alma bitmeden sidecar silinmemeli").toBe(true);
+    await vi.waitFor(() => expect(maint.on).toBe(false), { timeout: 5_000 });
+    expect(existsSync(join(state, "self-update.pid"))).toBe(false);
+    expect(readFileSync(join(f.dir, "node_modules", "f"), "utf8")).toBe("ESKI");
+  });
   posix("scriptRun selfUpdate: spawn anında güncelleyici pid'i sidecar'a yazılır, kurtarma bitince silinir", async () => {
     const f = scriptRepo(OS, "x", `cd "$VLAD_REPO"\ncat "$VLAD_STATE_PID_PROBE" 2>/dev/null\nexit 1\n`, { class: "write", selfUpdate: true });
     fixtures.push(f);

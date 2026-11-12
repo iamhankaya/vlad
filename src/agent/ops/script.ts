@@ -142,10 +142,11 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   } finally {
     // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
     if (!deferred) {
-      if (entry.selfUpdate) { try { rmSync(updaterPidFile(d.stateDir), { force: true }); } catch { /* dizin yok */ } } // betik bitti (doğrulandı): sidecar eskimesin
       // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar; başarısızsa (EBUSY…) bayrak AÇIK kalır ve yeniden denenir (F-vlad-275)
-      if (entry.selfUpdate && !restarting && !recoverSelfUpdate(st.repo, d.rename)) { deferred = true; holdAndRecover({ repo: st.repo, selfUpdate: true, ...recoverOpts(d) }); }
-      else if (entry.selfUpdate && !restarting) maint.leave();
+      // sidecar yalnız geri alma başarılı olunca silinir (P2): başarısızsa kalır, yeniden başlatmada startupRecover ölü pid'i görüp geri almayı dener
+      const pidFile = updaterPidFile(d.stateDir);
+      if (entry.selfUpdate && !restarting && !recoverSelfUpdate(st.repo, d.rename)) { deferred = true; holdAndRecover({ repo: st.repo, selfUpdate: true, pidFile, ...recoverOpts(d) }); }
+      else if (entry.selfUpdate) { if (!restarting) maint.leave(); try { rmSync(pidFile, { force: true }); } catch { /* dizin yok */ } }
     }
     if (!deferred) active = null;
   }
@@ -180,17 +181,20 @@ function holdAndRecover(o: HoldOpts): void {
  * durduğunu kanıtlamaz (POSIX'te detached npm/tsc Agent çökse de yaşar): önce sidecar pid'indeki süreç grubunun öldüğü doğrulanır; canlıysa ÖLDÜRÜLMEZ
  * (pid yeniden kullanılmış olabilir), bakımda beklenir. Sidecar yoksa (eski biçim) güvenli tarafta kalınır: bakımda + uyarı. Geri alma başarısızsa yeniden dener.
  */
-export function startupRecover(repo: string, o: { pidFile: string; isAlive?: (pid: number) => boolean; rename?: (a: string, b: string) => void; everyMs?: number; maxTries?: number; warn?: (m: string) => void }): void {
+export function startupRecover(repo: string, o: { pidFile: string; platform?: NodeJS.Platform; isAlive?: (pid: number) => boolean; rename?: (a: string, b: string) => void; everyMs?: number; maxTries?: number; warn?: (m: string) => void }): void {
   if (!existsSync(join(repo, ".vlad-npm-ci-running"))) return;
   const warn = o.warn ?? ((m: string) => { process.stderr.write(`${m}\n`); });
   const isAlive = o.isAlive ?? procAlive;
   maint.enter("recovery");
-  const gone = updaterGone(o.pidFile, isAlive);
-  if (gone === "unknown") warn("vlad agent: açılışta yarım selfUpdate işareti var ama güncelleyici pid kaydı yok (eski biçim); durduğu doğrulanamadığından geri alma yapılmadı, Agent bakımda. Güncelleyicinin bittiğini denetleyip .vlad-npm-ci-running ve yedek dizinleri elle çöz, Agent'ı yeniden başlat.");
+  // Windows: yalnız kök pid yoklanabilir, torunlar (npm/tsc) yaşıyor olabilir; kanıtlanamadığından geri alma yapılmaz (bakımda kal + uyarı, stuck görünür)
+  const win = (o.platform ?? process.platform) === "win32";
+  const gone = win ? "unknown" : updaterGone(o.pidFile, isAlive);
+  if (win) warn("vlad agent: açılışta yarım selfUpdate işareti var; Windows'ta güncelleyicinin torun süreçlerinin (npm/tsc) durduğu doğrulanamadığından geri alma yapılmadı, Agent bakımda. Süreçlerin bittiğini denetleyip .vlad-npm-ci-running ve yedek dizinleri (node_modules-old, dist-old) elle çöz, Agent'ı yeniden başlat.");
+  else if (gone === "unknown") warn("vlad agent: açılışta yarım selfUpdate işareti var ama güncelleyici pid kaydı yok (eski biçim); durduğu doğrulanamadığından geri alma yapılmadı, Agent bakımda. Güncelleyicinin bittiğini denetleyip .vlad-npm-ci-running ve yedek dizinleri elle çöz, Agent'ı yeniden başlat.");
   if (gone === true && recoverSelfUpdate(repo, o.rename)) { maint.leave(); rmSync(o.pidFile, { force: true }); return; }
   // sidecar yoksa pid bilinmez: retryKill hep false (bakımda kal); canlıysa ölünce true
   holdAndRecover({ repo, selfUpdate: true, pidFile: o.pidFile, everyMs: o.everyMs ?? 5000, rename: o.rename, maxTries: o.maxTries ?? 120, warn: o.warn,
-    ...(gone === true ? {} : { retryKill: async () => updaterGone(o.pidFile, isAlive) === true }) });
+    ...(gone === true ? {} : { retryKill: async () => !win && updaterGone(o.pidFile, isAlive) === true }) });
 }
 
 /**
