@@ -304,15 +304,17 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(getTask(id).data.state).toBe("awaiting_approval");
   });
 
-  it("onay yoksa push+fetch sonrası confirm'de durur; yeniden koşu idempotent (push tekrar çağrılır, pushed:false)", async () => {
+  it("onay yoksa push/fetch/preview çağrılmadan confirm'de durur; --yes ile tek push", async () => {
     const id = await ready();
     let n = 0;
     const w = win(id, { push: async (_t, _m, h) => ({ branch: `vlad/${id}`, head: h, pushed: n++ === 0, remote: "origin" }) });
     const first = await closeTask(id, {}, deps({ remote: w.remote }));
     expect(first).toMatchObject({ stopped_at: "confirm" });
+    expect(n).toBe(0);
+    expect(w.calls).toEqual(["gate"]);
     const again = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
     expect(again.ok).toBe(true);
-    expect(n).toBe(2);
+    expect(n).toBe(1);
   });
 
   it("F-vlad-320: uzak teslimde merge'ten ÖNCE işçi dal ucu gate'lenen sha'ya karşı yeniden doğrulanır (confirm sonrası, merge öncesi)", async () => {

@@ -63,21 +63,23 @@ describe("task close (uzak tek görev): push → fetch → beyinde merge", () =>
     expect(x.pushes()).toHaveLength(1);
   }, T);
 
-  it("onay durağı: --yes yok → push+fetch yapılmış, merge yok; --yes --head ile devam, push tekrarı zararsız", async () => {
+  it("onay durağı: --yes yok → push/fetch YOK (origin'e dal gitmez), merge yok; --yes --head ile devam", async () => {
     const x = await ready();
     const gated = git(x.wt, "rev-parse", "HEAD").trim();
     const mainBefore = brainMain(x);
     const first = await close(x, []);
     expect(first.json).toMatchObject({ ok: false, stopped_at: "confirm", head: gated });
-    expect(status(first.json, "push")).toBe("ok");
-    expect(x.originRefs()[`refs/heads/vlad/${x.id}`]).toBe(gated);
+    expect(status(first.json, "push")).toBeUndefined();
+    expect(journalOps(x, "branch-push")).toHaveLength(0);
+    expect(x.pushes()).toHaveLength(0);
+    expect(x.originRefs()[`refs/heads/vlad/${x.id}`]).toBeUndefined();
     expect(brainMain(x)).toBe(mainBefore);
     expect(brainHas(x, "is.txt")).toBe(false);
     expect(front(x.w.readTask(x.w.brain, x.id), "state")).toBe("awaiting_approval");
     const ok = await close(x, ["--yes", "--head", gated.slice(0, 12)]);
     expect(ok.json, ok.out + ok.err).toMatchObject({ ok: true });
     expect(brainHas(x, "is.txt")).toBe(true);
-    expect(x.pushes()).toHaveLength(1); // ikinci koşuda origin zaten gated sha'da: push yok (pushed:false)
+    expect(x.pushes()).toHaveLength(1); // onaylı koşuda tek gerçek push
   }, T);
 
   it("senaryo 20: --head gate'lenen head'den farklı → push öncesi durur; origin ve beyin değişmez", async () => {
