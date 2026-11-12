@@ -80,6 +80,17 @@ describe("task close: yerel tek görev", () => {
     expect(getFinding(f).data.state).toBe("open");
     expect(r.warnings.join("\n")).toMatch(new RegExp(`${f}.*kısmi`));
   });
+  it("F-vlad-309: devam satırında / ASCII 'kismen' yazılmış bulgu close'da fixed olmaz; düz fixed olan kapanır", async () => {
+    const a = addFinding({ project: "alpha", severity: "orta", source: "T20261101-01", title: "a" }).data.id;
+    const b = addFinding({ project: "alpha", severity: "orta", source: "T20261101-01", title: "b" }).data.id;
+    const c = addFinding({ project: "alpha", severity: "orta", source: "T20261101-01", title: "c" }).data.id;
+    const id = await ready({ report: REPORT(`### Kapatılan bulgular\n- ${a} — düzeltildi:\n  yarısı yapıldı, bulgu acik kalir\n- ${b} — kismen duzeltildi\n- ${c} — fixed — abc123\n`) });
+    const r = await closeTask(id, { yes: true }, deps());
+    expect(getFinding(a).data.state).toBe("open");
+    expect(getFinding(b).data.state).toBe("open");
+    expect(getFinding(c).data.state).toBe("fixed");
+    expect(r.findings).toEqual([c]);
+  });
   it("gate + merge + done + cleanup + bulgu + kb commit tek komutta; --yes ile", async () => {
     const f = addFinding({ project: "alpha", severity: "orta", source: "T20261101-01", title: "kapanacak bulgu" }).data.id;
     const id = await ready({ report: REPORT(`### Kapatılan bulgular\n- ${f} — fixed — b.txt:1\n- F-alpha-999 — fixed — yok\n`) });
@@ -247,6 +258,7 @@ describe("task close: uzak görev ve çok makine", () => {
       preview: async () => { calls.push("preview"); return { log: "", diffStat: "", conflicts: [] }; },
       merge: async () => { calls.push("remote-merge"); return { head: "a".repeat(40), merged: true }; },
       cleanup: async () => { calls.push("cleanup"); },
+      verifyTip: async () => {}, // F-vlad-328: zorunlu; varsayılan taklit doğrular (çağrıyı izlemez)
       ...o,
     };
     return { remote, calls, head };
@@ -339,10 +351,62 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
   });
 
-  it("F-vlad-320: işçi taklidinde verifyTip yoksa doğrulama atlanır, akış eskisi gibi", async () => {
+  it("F-vlad-328: verifyTip zorunlu — tanımsızsa uzak teslim merge'ten önce durur (doğrulamasız merge yok)", async () => {
     const id = await ready();
-    const w = win(id); // verifyTip tanımsız
-    expect((await closeTask(id, { yes: true }, deps({ remote: w.remote }))).ok).toBe(true);
+    const mainBefore = git(repo, "rev-parse", "HEAD").trim();
+    const w = win(id, { verifyTip: undefined });
+    const r = await closeTask(id, { yes: true }, deps({ remote: w.remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
+    expect(r.reason).toMatch(/verifyTip|doğrulanamadı/);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+    expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
+  });
+
+  it.each([
+    ["Agent yanlış head döndürür", { head: "b".repeat(40) }, null, /head/],
+    ["Agent yanlış dal döndürür", { branch: "vlad/baska" }, null, /branch/],
+    ["Agent doğru ama origin ucu gate sha'sı değil", {}, "wrong-origin", /origin/],
+  ] as const)("F-vlad-328 (tautoloji): %s → merge durur, bağımsız beyin kanıtı", async (_n, agent, originMode, re) => {
+    const id = await ready();
+    const w = win(id);
+    const origin = join(dirname(repo), "origin.git");
+    git(dirname(repo), "init", "--bare", "-b", "main", origin);
+    git(repo, "remote", "add", "origin", origin);
+    // origin'de vlad/<id>: "wrong-origin" modunda gate sha'sı değil (ana dalın ucu), diğerlerinde gate sha'sı
+    git(repo, "push", "origin", `${originMode ? "main" : w.head()}:refs/heads/vlad/${id}`);
+    const { verifyRemoteTip } = await import("../../src/machines/remote.js");
+    const remote: CloseDeps["remote"] = {
+      ...w.remote,
+      verifyTip: (t, _m, h) => verifyRemoteTip(async () => ({ branch: `vlad/${id}`, head: h, pushed: true, remote: "origin", ...agent }), repo, t.data.id, h),
+    };
+    const mainBefore = git(repo, "rev-parse", "HEAD").trim();
+    const r = await closeTask(id, { yes: true }, deps({ remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
+    expect(r.reason).toMatch(re);
+    expect(getTask(id).data.state).toBe("awaiting_approval");
+    expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
+  });
+
+  it("F-vlad-328: gerçek branch-push stale_tip (gate sonrası işçi commit attı) merge'ü uçtan uca durdurur; gate'siz sha merge edilmez", async () => {
+    const id = await ready();
+    const origin = join(dirname(repo), "origin.git");
+    git(dirname(repo), "init", "--bare", "-b", "main", origin);
+    git(repo, "remote", "add", "origin", origin);
+    const w = win(id);
+    const wt = getTask(id).data.worktree!;
+    const { pushTaskBranch } = await import("../../src/agent/ops/branch-push.js");
+    const remote: CloseDeps["remote"] = {
+      ...w.remote,
+      // push gerçek işlemden geçer; sonra (confirm penceresinde) işçi yeni commit atar
+      push: async (_t, _m, h) => { const res = await pushTaskBranch(wt, id, h); writeFileSync(join(wt, "late.txt"), "x"); git(wt, "add", "."); git(wt, "commit", "-m", "gate sonrası"); return res; },
+      verifyTip: async (_t, _m, h) => { await pushTaskBranch(wt, id, h); },
+    };
+    const mainBefore = git(repo, "rev-parse", "HEAD").trim();
+    const r = await closeTask(id, { yes: true }, deps({ remote }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "merge" });
+    expect(r.reason).toContain("stale_tip");
+    expect(git(repo, "rev-parse", "HEAD").trim()).toBe(mainBefore);
+    expect(existsSync(join(repo, "late.txt"))).toBe(false);
   });
 
   it("pipeline fazı (parent var) uzakta eskisi gibi: push/fetch yok, merge işçide", async () => {

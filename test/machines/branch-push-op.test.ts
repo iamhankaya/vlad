@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { branchPushArgv, branchPushVerdict, pushTaskBranch } from "../../src/agent/ops/branch-push.js";
+import { serialized } from "../../src/agent/ops/gate.js";
 import { RemoteError } from "../../src/fleet/types.js";
-import { fetchBranchHead } from "../../src/machines/remote.js";
+import { checkBranchPushReply, checkOriginTip, fetchBranchHead } from "../../src/machines/remote.js";
 import { rmTemp } from "../helpers.js";
 
 // F-vlad-314 uygulama: gerçek bare origin + iki klon (işçi / beyin); hiçbir gerçek dizine dokunulmaz.
@@ -78,6 +79,28 @@ describe("pushTaskBranch", () => {
     expect(e?.message).toContain("[stale_tip]");
     expect(git(origin, "branch", "--list", BR)).toBe("");
   });
+  it("F-vlad-332: kuyrukta beklerken işçi yeni commit atarsa eski sha onaylanmaz ([stale_tip]), origin'e itilmez", async () => {
+    const head = commit(worker, "b.txt", "2");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const blocker = serialized(worker, () => gate); // aynı repoda önceki iş kuyruğu tutuyor
+    const queued = codeOf(pushTaskBranch(worker, ID, head));
+    commit(worker, "c.txt", "3"); // bekleme sırasında dal ilerledi
+    release();
+    await blocker;
+    const e = await queued;
+    expect(e?.code).toBe("failed");
+    expect(e?.message).toContain("[stale_tip]");
+    expect(git(origin, "branch", "--list", BR)).toBe("");
+  });
+  it("F-vlad-332: ağ işlemlerinden sonra uç yeniden okunur; push sürerken ilerleyen dal başarı sayılmaz", async () => {
+    const head = commit(worker, "b.txt", "2");
+    // pre-push kancası push sürerken dalı ilerletir (kuyruk içinde, ağ işleminden sonra yeniden doğrulama gerekir)
+    writeFileSync(join(worker, ".git", "hooks", "pre-push"), "#!/bin/sh\ngit -c user.name=T -c user.email=t@t commit --allow-empty -q -m moved\nexit 0\n", { mode: 0o755 });
+    const e = await codeOf(pushTaskBranch(worker, ID, head));
+    expect(e?.code).toBe("failed");
+    expect(e?.message).toContain("[stale_tip]");
+  });
   it("dal yok → not_found", async () => {
     git(worker, "checkout", "main");
     git(worker, "branch", "-D", BR);
@@ -106,6 +129,26 @@ describe("branchPushVerdict (reconciler)", () => {
     await pushTaskBranch(worker, ID, head);
     expect(branchPushVerdict(worker, BR, head)).toEqual({ verdict: "applied", result: { branch: BR, head, pushed: true, remote: "origin" } });
     expect(branchPushVerdict(worker, BR, "b".repeat(40))).toBe("not-applied");
+  });
+});
+
+describe("F-vlad-328: beyin tarafı bağımsız doğrulama (Agent yanıtına güvenme)", () => {
+  const reply = (head: string, o: Partial<{ branch: string; pushed: boolean; remote: string }> = {}) => ({ branch: BR, head, pushed: true, remote: "origin", ...o });
+  it("checkBranchPushReply: head/branch/remote/pushed tutarsızsa fırlatır; tutarlıysa geçer", () => {
+    const h = "a".repeat(40);
+    expect(() => checkBranchPushReply(reply(h), ID, h)).not.toThrow();
+    expect(() => checkBranchPushReply(reply("b".repeat(40)), ID, h)).toThrow(/head/);
+    expect(() => checkBranchPushReply(reply(h, { branch: "vlad/baska" }), ID, h)).toThrow(/branch/);
+    expect(() => checkBranchPushReply(reply(h, { remote: "evil" }), ID, h)).toThrow(/remote/);
+    expect(() => checkBranchPushReply({ ...reply(h), pushed: "yes" as unknown as boolean }, ID, h)).toThrow(/pushed/);
+    expect(() => checkBranchPushReply(null as never, ID, h)).toThrow();
+  });
+  it("checkOriginTip: origin'deki vlad/<id> sha'sı gate'lenen sha ile aynıysa geçer; farklı ya da yoksa fırlatır", async () => {
+    const head = commit(worker, "b.txt", "2");
+    expect(() => checkOriginTip(brain, ID, head)).toThrow(/origin/); // dal origin'de yok
+    await pushTaskBranch(worker, ID, head);
+    expect(() => checkOriginTip(brain, ID, head)).not.toThrow();
+    expect(() => checkOriginTip(brain, ID, "b".repeat(40))).toThrow(/farklı/);
   });
 });
 
