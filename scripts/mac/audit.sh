@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mac mini (beyin) kurulum denetimi, F-vlad-115. YALNIZ OKUR: dosya yazmaz, servis başlatmaz/durdurmaz.
-# Kullanım: audit.sh [--json] [--strict]    (--strict: eksik varsa çıkış kodu 1)
+# Kullanım: audit.sh [--json] [--strict]    (--strict: eksik ya da doğrulanamadı varsa çıkış kodu 1)
 # Ortam: VLAD_REPO_DIR (vars. $HOME/dev/vlad), VLAD_KB_DIR (vars. $HOME/dev/vlad-kb), VLAD_CI_USER (vars. vlad-ci), VLAD_CI_HOME (vars. ~$VLAD_CI_USER), VLAD_AGENT_PORT (vars. 7437)
 set -euo pipefail
 
@@ -22,7 +22,7 @@ LA="$HOME/Library/LaunchAgents"
 [[ "$CI_USER" =~ ^[A-Za-z0-9_.-]+$ ]] || { echo "hata: VLAD_CI_USER yalnız harf/rakam/._- içerebilir" >&2; exit 2; }
 
 ROWS=()
-row() { ROWS+=("$1|$2|$3"); }   # madde|durum|kanit  (durum: ok | eksik | uyarı | manuel)
+row() { ROWS+=("$1|$2|$3"); }   # madde|durum|kanit  (durum: ok | eksik | doğrulanamadı | uyarı | manuel)
 have() { command -v "$1" >/dev/null 2>&1; }
 # $(...) içinde `|| true`: bir komutun hatası denetimi durdurmaz, satır "eksik" olur
 first() { head -n1 | tr -d '\r'; }
@@ -107,7 +107,9 @@ CI_HOME="${VLAD_CI_HOME:-$(dscl . -read "/Users/$CI_USER" NFSHomeDirectory 2>/de
 RUNNER_DIR="$CI_HOME/actions-runner"
 if [ -f "$RUNNER_DIR/.runner" ]; then row ci-runner ok "$RUNNER_DIR kayıtlı"
 elif { [ -e "$CI_HOME" ] && [ ! -x "$CI_HOME" ]; } || { [ -e "$RUNNER_DIR" ] && { [ ! -x "$RUNNER_DIR" ] || [ ! -r "$RUNNER_DIR" ]; }; }; then
-  row ci-runner uyarı "erişim reddi: runner dizini bu hesaba kapalı, doğrulanamadı; $CI_USER hesabıyla doğrula (sudo -u $CI_USER test -f $RUNNER_DIR/.runner)"
+  # F-vlad-325: erişim reddi "uyarı" değil "doğrulanamadı" (--strict kırmızı); önce CI hesabıyla (parolasız sudo) doğrulamayı dene
+  if have sudo && sudo -n -u "$CI_USER" test -f "$RUNNER_DIR/.runner" >/dev/null 2>&1; then row ci-runner ok "$RUNNER_DIR kayıtlı ($CI_USER hesabıyla doğrulandı)"
+  else row ci-runner doğrulanamadı "erişim reddi: runner dizini bu hesaba kapalı; $CI_USER hesabıyla doğrula (sudo -u $CI_USER test -f $RUNNER_DIR/.runner)"; fi
 else row ci-runner eksik "runner kayıtlı değil (scripts/mac/ci-runner.sh)"; fi
 
 # --- çıktı ---
@@ -116,14 +118,14 @@ missing=0
 if [ "$JSON" = 1 ]; then
   printf '['; sep=''
   for r in "${ROWS[@]}"; do
-    IFS='|' read -r m d k <<<"$r"; [ "$d" = eksik ] && missing=$((missing+1))
+    IFS='|' read -r m d k <<<"$r"; case "$d" in eksik|doğrulanamadı) missing=$((missing+1)) ;; esac
     printf '%s{"madde":"%s","durum":"%s","kanit":"%s"}' "$sep" "$(jesc "$m")" "$d" "$(jesc "$k")"; sep=','
   done
   printf ']\n'
 else
   printf '%-16s %-7s %s\n' MADDE DURUM KANIT
   for r in "${ROWS[@]}"; do
-    IFS='|' read -r m d k <<<"$r"; [ "$d" = eksik ] && missing=$((missing+1))
+    IFS='|' read -r m d k <<<"$r"; case "$d" in eksik|doğrulanamadı) missing=$((missing+1)) ;; esac
     printf '%-16s %-7s %s\n' "$m" "$d" "$k"
   done
 fi
