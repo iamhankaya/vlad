@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Fast test run: one `tsc`, then vitest projects one after another with VLAD_SKIP_BUILD=1 (global-setup still refuses a stale dist).
+// Fast test run: one `tsc` (skipped when VLAD_SKIP_BUILD=1 is already set: the caller built dist, F-vlad-319), then vitest projects one after another with VLAD_SKIP_BUILD=1 (global-setup still refuses a stale dist).
 // Usage: node scripts/test-run.mjs [--project unit,process,...] [--changed <ref>] [-- <test file filters>]
 // Without --project every bucket runs. `npm test` stays plain `vitest run` (card gate).
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { matchGlob } from "./scope-lib.mjs";
+import { matchGlob, shouldBuild } from "./scope-lib.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const argv = process.argv.slice(2);
@@ -24,7 +24,7 @@ const bad = projects.filter((p) => !all.includes(p));
 if (bad.length) { process.stderr.write(`bilinmeyen kova: ${bad.join(",")} (var: ${all.join(",")})\n`); process.exit(2); }
 
 const sh = (cmd, args, env = {}) => spawnSync(cmd, args, { cwd: root, stdio: "inherit", env: { ...process.env, ...env }, shell: process.platform === "win32" });
-if (sh("npx", ["tsc"]).status !== 0) process.exit(1);
+if (shouldBuild(process.env) && sh("npx", ["tsc"]).status !== 0) process.exit(1);
 
 let code = 0;
 for (const p of projects) {
