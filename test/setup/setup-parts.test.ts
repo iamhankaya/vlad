@@ -359,6 +359,19 @@ describe("güvenlik kararları (değişiklik turu)", () => {
       expect(tools(guardEntries()[0])).toContain("Write");
       expect(after.permissions.deny).toContain("Bash(rm -rf *)");
     });
+    it("check: node PATH'te yoksa 'eksik' + 'koruma çalışmıyor' (hook hiç başlamaz); node varsa ok", async () => {
+      await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
+      w(join(vladHome, "dist", "hooks", "push-guard-hook.js"), "// stub");
+      const item = async () => (await runCheck(ctx(), { only: ["permissions"] })).parts[0]!.items!.find((i: any) => i.id === "permissions:push-guard")!;
+      expect((await item()).status).toBe("ok");
+      const saved = process.env.PATH, savedWin = process.env.Path;
+      try {
+        process.env.PATH = join(vladHome, "bos"); if (savedWin !== undefined) process.env.Path = process.env.PATH;
+        const it2 = await item();
+        expect(it2.status).toBe("eksik");
+        expect(it2.message ?? (it2 as any).detail ?? JSON.stringify(it2)).toMatch(/koruma çalışmıyor/);
+      } finally { process.env.PATH = saved; if (savedWin !== undefined) process.env.Path = savedWin; }
+    });
     it("uninstall hooks: taşınan girdi de silinir, kullanıcı hook'u kalır", async () => {
       w(settings(), JSON.stringify({ hooks: { PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine" }] }] } }));
       await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
