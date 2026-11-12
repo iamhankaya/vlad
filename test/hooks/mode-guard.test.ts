@@ -13,6 +13,15 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
     for (const c of ["vlad mode off", "env -u VLAD_TASK_ID vlad mode off", "cd / && vlad mode night --until 23:00", "node /x/dist/cli.js mode watch on", "vlad   mode  off", `v"la"d mode off`, "vlad \\\nmode off", "true; vlad mode off", "node cli.js mode off"])
       expect(bash(c), c).toMatch(/mod/);
   });
+  it("Bash: status ile başlayan zincirde sonraki vlad mode da denetlenir; Windows shim / ts / kök seçenek biçimleri yakalanır", () => {
+    for (const c of ["vlad mode status && vlad mode off", "vlad mode status\nvlad mode off", "vlad mode status | cat; vlad mode off", "vlad mode status; vlad mode off", "vlad.cmd mode off", "vlad.exe mode off", "npx tsx src/cli.ts mode off", "vlad --json mode off", "vlad -q mode night"])
+      expect(bash(c), c).toMatch(/mod/);
+    expect(bash("vlad mode status; echo ok")).toBeNull();
+  });
+  it("Bash: mode.json yalnız okuma/arama bağlamında (grep, git diff, cat) geçerse serbest; yazma bağlamı reddedilir", () => {
+    for (const c of ["grep -r mode.json src", "git diff -- src/mode/mode.json", `cat ${KB}/mode.json`]) expect(bash(c), c).toBeNull();
+    for (const c of [`echo x >${KB}/mode.json`, `tee ${KB}/mode.json`, `mv a ${KB}/mode.json`, `python3 -c "open('mode.json','w')"`, `truncate -s0 ${KB}/mode.json`]) expect(bash(c), c).toMatch(/mode\.json/);
+  });
   it("Bash: mode.json'a dokunan her komut reddedilir (echo >, cp, sed, tırnaklı ad)", () => {
     for (const c of [`echo '{}' > ${KB}/mode.json`, `cp x ${KB}/mode.json`, `sed -i s/a/b/ ${KB}/MODE.JSON`, `echo x > ${KB}/mo"de.j"son`, "rm $KB/mode.json"])
       expect(bash(c), c).toMatch(/mode\.json/);

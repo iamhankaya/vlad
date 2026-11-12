@@ -17,9 +17,11 @@ export function checkWorkerMode(tool: string, input: Record<string, unknown> | u
   if (tool === "Bash") {
     const cmd = typeof input?.command === "string" ? input.command : "";
     const bare = cmd.replace(/\\\r?\n/g, "").replace(/["'\\]/g, ""); // `v"la"d`, `mo"de.j"son` ve satır devamı
-    if (/mode\.json/i.test(bare)) return `${WHY} (komutta mode.json geçiyor)`;
-    const m = /\b(?:vlad|cli(?:\.js)?)\s+mode\b\s*(\S*)/i.exec(bare);
-    if (m && m[1]?.toLowerCase() !== "status") return `${WHY} (yalnız \`vlad mode status\` serbest)`;
+    // shortcut: mode.json yalnız yazma bağlamında (yönlendirme ya da yazan komut/yorumlayıcı) reddedilir; okuma/arama (grep, git diff) serbest. Bilinmeyen yazan araç kaçar.
+    if (/mode\.json/i.test(bare) && /[>]|\b(?:tee|cp|mv|rm|sed|truncate|dd|ln|install|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|ni|sc|set-content|out-file|remove-item)\b/i.test(bare)) return `${WHY} (komutta mode.json yazma bağlamında geçiyor)`;
+    // her `vlad mode` geçişi ayrı denetlenir (`status && vlad mode off`); komut adı Windows shim/ts ve kök seçenekleri (`vlad --json mode`) kapsar
+    for (const m of bare.matchAll(/\b(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/gi))
+      if (m[1]?.replace(/[;|&)]+$/, "").toLowerCase() !== "status") return `${WHY} (yalnız \`vlad mode status\` serbest)`;
     return null;
   }
   if (!MODE_GUARD_TOOLS.includes(tool)) return null;

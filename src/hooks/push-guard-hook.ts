@@ -36,6 +36,6 @@ process.stdin.on("end", async () => {
     const why = checkWorkerPush(cmd, id);
     if (why) block(why);
   } catch (e) {
-    if (mentionsPush(raw) || (process.env.VLAD_TASK_ID && /mode/i.test(raw))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
+    if (mentionsPush(raw) || (/mode/i.test(raw) && (process.env.VLAD_TASK_ID || ownId(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
   }
 });
