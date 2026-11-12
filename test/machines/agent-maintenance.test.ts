@@ -76,13 +76,13 @@ describe("F-vlad-274: açılışta işaret varsa kurtarma; tavan + uyarı + gör
   });
   it("işaret var, kurtarma başarılı → yarım güncelleme geri alınır, bayrak kalkar", () => {
     const d = tmp(); halfUpdated(d);
-    startupRecover(d, { pidFile: deadPid() });
+    startupRecover(d, { pidFile: deadPid(), platform: "linux" });
     expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
     expect(maint.on).toBe(false);
   });
   it("işaret var, kurtarma başarısız → bakımda kalır, yeniden dener, sonunda kalkar", async () => {
     const d = tmp(); halfUpdated(d);
-    startupRecover(d, { pidFile: deadPid(), rename: flaky(3), everyMs: 20, warn: () => {} });
+    startupRecover(d, { pidFile: deadPid(), platform: "linux", rename: flaky(3), everyMs: 20, warn: () => {} });
     expect(maint.on).toBe(true);
     expect(maint.snapshot().reason).toBe("recovery");
     await vi.waitFor(() => expect(maint.on).toBe(false), { timeout: 5_000 });
@@ -91,7 +91,7 @@ describe("F-vlad-274: açılışta işaret varsa kurtarma; tavan + uyarı + gör
   it("tavan aşılınca bir kez uyarı yazılır ve durum 'stuck' olur (ping'te görünür); yeniden denemeye devam", async () => {
     const d = tmp(); halfUpdated(d);
     const warns: string[] = [];
-    startupRecover(d, { pidFile: deadPid(), rename: flaky(99), everyMs: 10, maxTries: 3, warn: (m) => warns.push(m) });
+    startupRecover(d, { pidFile: deadPid(), platform: "linux", rename: flaky(99), everyMs: 10, maxTries: 3, warn: (m) => warns.push(m) });
     await vi.waitFor(() => expect(maint.snapshot().stuck).toBe(true), { timeout: 5_000 });
     await new Promise((r) => setTimeout(r, 80));
     expect(warns).toHaveLength(1);
@@ -164,7 +164,7 @@ describe("F-vlad-274 P1: açılış kurtarması güncelleyicinin durduğunu doğ
   it("sidecar yok (eski biçim) → geri alınmaz, bakımda kalır, uyarı", () => {
     const d = tmp(); halfUpdated(d);
     const warns: string[] = [];
-    startupRecover(d, { pidFile: side(tmp()), rename: renameSync, everyMs: 10_000, warn: (m) => warns.push(m) });
+    startupRecover(d, { pidFile: side(tmp()), platform: "linux", rename: renameSync, everyMs: 10_000, warn: (m) => warns.push(m) });
     expect(maint.on).toBe(true);
     expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("YENI");
     expect(existsSync(join(d, ".vlad-npm-ci-running"))).toBe(true);
@@ -174,7 +174,7 @@ describe("F-vlad-274 P1: açılış kurtarması güncelleyicinin durduğunu doğ
     const d = tmp(); halfUpdated(d);
     const pf = side(tmp()); writeFileSync(pf, "4242");
     let alive = true;
-    startupRecover(d, { pidFile: pf, isAlive: () => alive, everyMs: 20, warn: () => {} });
+    startupRecover(d, { pidFile: pf, platform: "linux", isAlive: () => alive, everyMs: 20, warn: () => {} });
     expect(maint.on).toBe(true);
     expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("YENI");
     await new Promise((r) => setTimeout(r, 80));
@@ -187,7 +187,7 @@ describe("F-vlad-274 P1: açılış kurtarması güncelleyicinin durduğunu doğ
   it("sidecar'daki süreç ölü → hemen geri alınır", () => {
     const d = tmp(); halfUpdated(d);
     const pf = side(tmp()); writeFileSync(pf, "4242");
-    startupRecover(d, { pidFile: pf, isAlive: () => false });
+    startupRecover(d, { pidFile: pf, platform: "linux", isAlive: () => false });
     expect(maint.on).toBe(false);
     expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
   });
@@ -237,5 +237,31 @@ describe("symlink yedek reddi (güvenlik, düşük)", () => {
     symlinkSync(target, join(d, "node_modules-old"));
     expect(recoverSelfUpdate(d)).toBe(false);
     expect(existsSync(join(d, ".vlad-npm-ci-running"))).toBe(true);
+  });
+});
+
+describe("F-vlad-326: açılış geri almasından sonra yeniden başlatma", () => {
+  it("hemen geri alma başarılı → onRecovered çağrılır, bakım yeniden başlayana kadar açık kalır", () => {
+    const d = tmp(); halfUpdated(d);
+    const onRecovered = vi.fn();
+    startupRecover(d, { pidFile: deadPid(), platform: "linux", onRecovered });
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
+    expect(onRecovered).toHaveBeenCalledTimes(1);
+    expect(maint.on, "yeniden başlamadan op kabul edilmemeli").toBe(true);
+  });
+  it("ertelenmiş (yeniden denenen) geri alma başarılı → onRecovered bir kez çağrılır", async () => {
+    const d = tmp(); halfUpdated(d);
+    const onRecovered = vi.fn();
+    startupRecover(d, { pidFile: deadPid(), platform: "linux", rename: flaky(2), everyMs: 10, warn: () => {}, onRecovered });
+    expect(onRecovered).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(onRecovered).toHaveBeenCalledTimes(1), { timeout: 5_000 });
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
+    expect(maint.on).toBe(true);
+  });
+  it("işaret yok → onRecovered çağrılmaz", () => {
+    const onRecovered = vi.fn();
+    startupRecover(tmp(), { pidFile: deadPid(), platform: "linux", onRecovered });
+    expect(onRecovered).not.toHaveBeenCalled();
+    expect(maint.on).toBe(false);
   });
 });
