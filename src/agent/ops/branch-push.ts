@@ -39,24 +39,29 @@ export async function pushTaskBranch(repo: string, id: string, expectHead: strin
   const branch = `vlad/${id}`;
   const ref = `refs/heads/${branch}`;
   const done = (pushed: boolean): BranchPushResult => ({ branch, head: expectHead, pushed, remote: BRANCH_PUSH_REMOTE });
-  const tip = (await runGit(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).stdout.trim();
-  if (!tip) throw new RemoteError("not_found", `not_found: dal yok: ${branch}`);
-  if (tip !== expectHead) throw fail("stale_tip", `${branch} ucu (${tip.slice(0, 7)}) gate'lenen sha'dan (${expectHead.slice(0, 7)}) farklı; gate'i yeniden koş`);
-  const url = (await runGit(repo, ["remote", "get-url", BRANCH_PUSH_REMOTE])).stdout.trim();
-  if (!url) throw fail("no_origin", "işçi reposunda origin tanımlı değil");
+  // F-vlad-332: uç doğrulaması kuyruğun İÇİNDE; kuyrukta beklerken dal ilerlemiş olabilir. Başarı dönmeden önce de (ağ işlemlerinden sonra) yeniden okunur.
+  const checkTip = async (): Promise<void> => {
+    const tip = (await runGit(repo, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`])).stdout.trim();
+    if (!tip) throw new RemoteError("not_found", `not_found: dal yok: ${branch}`);
+    if (tip !== expectHead) throw fail("stale_tip", `${branch} ucu (${tip.slice(0, 7)}) gate'lenen sha'dan (${expectHead.slice(0, 7)}) farklı; gate'i yeniden koş`);
+  };
   const remoteSha = async (): Promise<string> => {
     const r = await runGit(repo, ["ls-remote", BRANCH_PUSH_REMOTE, ref], BRANCH_PUSH_TIMEOUT_MS);
     if (r.code !== 0) throw fail(AUTH.test(r.stderr) ? "auth" : "no_origin", `origin'e ulaşılamadı (ayrıntı: işçide git ls-remote origin)`);
     return lsRemoteSha(r.stdout, ref);
   };
   return serialized(repo, async () => {
+    await checkTip();
+    const url = (await runGit(repo, ["remote", "get-url", BRANCH_PUSH_REMOTE])).stdout.trim();
+    if (!url) throw fail("no_origin", "işçi reposunda origin tanımlı değil");
     const before = await remoteSha();
-    if (before === expectHead) return done(false);
+    if (before === expectHead) { await checkTip(); return done(false); }
     // origin'deki uç yerelin atası değilse (ya da yerelde yoksa) ayrışmış sayılır: force yok
     if (before && (await runGit(repo, ["merge-base", "--is-ancestor", before, expectHead])).code !== 0) throw new RemoteError("conflict", `conflict: [diverged] origin'deki ${branch} ucu (${before.slice(0, 7)}) gate'lenen sha'nın atası değil; push yapılmadı`);
     const p = await runGit(repo, branchPushArgv(branch, expectHead), BRANCH_PUSH_TIMEOUT_MS);
     if (p.code !== 0) throw fail(AUTH.test(p.stderr) ? "auth" : "push_rejected", `push başarısız (ayrıntı: işçide git push)`);
     if ((await remoteSha()) !== expectHead) throw fail("push_rejected", "push sonrası origin ucu beklenen sha değil");
+    await checkTip();
     return done(true);
   });
 }

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { branchPushArgv, branchPushVerdict, pushTaskBranch } from "../../src/agent/ops/branch-push.js";
+import { serialized } from "../../src/agent/ops/gate.js";
 import { RemoteError } from "../../src/fleet/types.js";
 import { fetchBranchHead } from "../../src/machines/remote.js";
 import { rmTemp } from "../helpers.js";
@@ -77,6 +78,28 @@ describe("pushTaskBranch", () => {
     expect(e?.code).toBe("failed");
     expect(e?.message).toContain("[stale_tip]");
     expect(git(origin, "branch", "--list", BR)).toBe("");
+  });
+  it("F-vlad-332: kuyrukta beklerken işçi yeni commit atarsa eski sha onaylanmaz ([stale_tip]), origin'e itilmez", async () => {
+    const head = commit(worker, "b.txt", "2");
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const blocker = serialized(worker, () => gate); // aynı repoda önceki iş kuyruğu tutuyor
+    const queued = codeOf(pushTaskBranch(worker, ID, head));
+    commit(worker, "c.txt", "3"); // bekleme sırasında dal ilerledi
+    release();
+    await blocker;
+    const e = await queued;
+    expect(e?.code).toBe("failed");
+    expect(e?.message).toContain("[stale_tip]");
+    expect(git(origin, "branch", "--list", BR)).toBe("");
+  });
+  it("F-vlad-332: ağ işlemlerinden sonra uç yeniden okunur; push sürerken ilerleyen dal başarı sayılmaz", async () => {
+    const head = commit(worker, "b.txt", "2");
+    // pre-push kancası push sürerken dalı ilerletir (kuyruk içinde, ağ işleminden sonra yeniden doğrulama gerekir)
+    writeFileSync(join(worker, ".git", "hooks", "pre-push"), "#!/bin/sh\ngit -c user.name=T -c user.email=t@t commit --allow-empty -q -m moved\nexit 0\n", { mode: 0o755 });
+    const e = await codeOf(pushTaskBranch(worker, ID, head));
+    expect(e?.code).toBe("failed");
+    expect(e?.message).toContain("[stale_tip]");
   });
   it("dal yok → not_found", async () => {
     git(worker, "checkout", "main");
