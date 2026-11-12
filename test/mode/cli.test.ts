@@ -71,6 +71,33 @@ describe("vlad task idle / audit skills", () => {
     git("checkout", "-q", "-b", "master");
     expect(() => assertNotWorker({}, dir)).not.toThrow();
   });
+  it("F-vlad-287: env temizlenmiş + detached HEAD + dal adı değişmiş olsa da <repo>-wt/T… worktree'sinin altındaki cwd mod yazamaz", () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
+    const wt = join(root, "proj-wt", "T20261112-99");
+    const sub = join(wt, "src", "x");
+    mkdirSync(sub, { recursive: true });
+    execFileSync("git", ["init", "-q", "-b", "master"], { cwd: wt, stdio: "pipe" });
+    expect(() => assertNotWorker({}, sub)).toThrow(/çalışan/);
+    expect(() => assertNotWorker({}, join(root, "proj-wt"))).not.toThrow(); // worktree kökü değil
+    expect(() => assertNotWorker({}, root)).not.toThrow();
+  });
+  it("F-vlad-287: yol eşleşmesi büyük/küçük harf duyarsız; çözülemeyen cwd fail-closed; ret mesajı ana repo ipucu verir", () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
+    const wt = join(root, "Proj-WT", "t20261112-97");
+    mkdirSync(wt, { recursive: true });
+    expect(() => assertNotWorker({}, wt)).toThrow(/ana repo dizininden/);
+    expect(() => assertNotWorker({}, join(root, "yok", "boyle"))).toThrow(/çalışan/);
+  });
+  it("F-vlad-287: env -u ile worktree'den `vlad mode night` reddedilir ve pencere açılmaz", async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "vlad-wk-")));
+    const wt = join(root, "proj-wt", "T20261112-98");
+    mkdirSync(wt, { recursive: true });
+    process.chdir(wt);
+    const r = await vlad(["mode", "night", "--until", "23:59"], { VLAD_TASK_ID: "" });
+    expect(r.code).toBe(1);
+    process.chdir(home);
+    expect((await vlad(["mode", "status"])).out).toMatch(/mod kapalı/);
+  });
 });
 
 import { readFileSync } from "node:fs";
