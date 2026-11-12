@@ -95,7 +95,9 @@ export function setOff(): void {
 export function modeStatus(now: Date): { night: NightMode | null; watch: boolean; watching: boolean; expired: boolean; remaining: string[]; timedOut: boolean } {
   const m = read();
   const remaining = (m.night?.untilTasks ?? []).filter(taskOpen);
-  const timedOut = !!m.night && Date.parse(m.night.until) <= now.getTime();
+  // F-vlad-283: elle uzatılmış until kabul edilmez: tavan started+24h (started okunamıyorsa pencere kapalı)
+  const ceiling = m.night ? Date.parse(m.night.started) + 24 * 3_600_000 : NaN;
+  const timedOut = !!m.night && !(Math.min(Date.parse(m.night.until), ceiling) > now.getTime());
   const tasksDone = !!m.night && m.night.untilTasks.length > 0 && remaining.length === 0;
   const live = !!m.night && !timedOut && !tasksDone;
   return { night: live ? m.night : null, watch: m.watch, watching: live || m.watch, expired: !!m.night && !live, remaining, timedOut };

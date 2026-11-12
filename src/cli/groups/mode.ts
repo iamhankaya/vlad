@@ -1,5 +1,6 @@
 import type { Command } from "commander";
-import { expireMode, modeLine, modeStatus, assertNotWorker, setNight, setOff, setWatch } from "../../mode/store.js";
+import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "../../mode/store.js";
+import { assertNotWorker } from "../../mode/guard.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -29,6 +30,7 @@ export function registerMode(program: Command, k: Kit): void {
     out(o, { ...modeStatus(new Date()), dropped }, modeText(new Date()) + (dropped ? " (dolmuş gece penceresi düşürüldü)" : ""));
   });
   def(mode, "off", "Gece ve bekçi modunu kapatır", (o: Opts) => {
+    assertNotWorker();
     setOff();
     out(o, modeStatus(new Date()), "mod kapalı");
   });
