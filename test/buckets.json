@@ -17,6 +17,7 @@
     "test/findings/store.test.ts",
     "test/helpers-cleanup.test.ts",
     "test/hooks/project.test.ts",
+    "test/hooks/push-guard.test.ts",
     "test/ideas/store.test.ts",
     "test/hooks/transcript.test.ts",
     "test/inbox/**/*.test.ts",
