@@ -139,12 +139,14 @@ export const hooksPart: SetupPart = {
   },
   async uninstall(c) {
     const cmd = hookCommand(c.vladHome);
+    const guard = pushGuardCommand(c.vladHome);
     const r = updateJson(c, settingsPath(c), (d) => {
-      if (!Array.isArray(d?.hooks?.SessionEnd)) return d;
-      d.hooks.SessionEnd = d.hooks.SessionEnd.map((e: any) => (Array.isArray(e?.hooks) ? { ...e, hooks: e.hooks.filter((h: any) => h?.command !== cmd && !isDeadSessionReportHook(h?.command)) } : e)).filter((e: any) => !Array.isArray(e?.hooks) || e.hooks.length);
+      if (Array.isArray(d?.hooks?.SessionEnd)) d.hooks.SessionEnd = d.hooks.SessionEnd.map((e: any) => (Array.isArray(e?.hooks) ? { ...e, hooks: e.hooks.filter((h: any) => h?.command !== cmd && !isDeadSessionReportHook(h?.command)) } : e)).filter((e: any) => !Array.isArray(e?.hooks) || e.hooks.length);
+      // F-vlad-330: permissions parçasının yazdığı push-guard PreToolUse hook'u (yalnız tam komut eşleşmesi; kullanıcının hook'u kalır)
+      if (Array.isArray(d?.hooks?.PreToolUse)) d.hooks.PreToolUse = d.hooks.PreToolUse.map((e: any) => (Array.isArray(e?.hooks) ? { ...e, hooks: e.hooks.filter((h: any) => h?.command !== guard) } : e)).filter((e: any) => !Array.isArray(e?.hooks) || e.hooks.length);
       return d;
     });
-    return result("hooks", r.changed ? [{ kind: "write", what: "SessionEnd girişi kaldırıldı", target: settingsPath(c) }] : [{ kind: "skip", what: "kayıtlı değil" }], r.backup ? [r.backup] : []);
+    return result("hooks", r.changed ? [{ kind: "write", what: "SessionEnd/push-guard girişi kaldırıldı", target: settingsPath(c) }] : [{ kind: "skip", what: "kayıtlı değil" }], r.backup ? [r.backup] : []);
   },
 };
 
