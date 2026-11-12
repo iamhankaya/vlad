@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM script without types (shared with scripts/test-scope.mjs)
-import { selectScope, matchGlob, groupFilesByBucket } from "../../scripts/scope-lib.mjs";
+import { selectScope, matchGlob, groupFilesByBucket, shouldBuild } from "../../scripts/scope-lib.mjs";
 
 const root = join(import.meta.dirname, "..", "..");
 const scope = JSON.parse(readFileSync(join(root, "test", "scope.json"), "utf8"));
@@ -100,5 +100,15 @@ describe("u2 scope: explicit test files run in their owning bucket (F-vlad-256)"
   });
   it("a path no bucket claims is reported, never dropped", () => {
     expect(groupFilesByBucket(["test/nowhere/x.test.ts"], buckets)).toEqual({ "": ["test/nowhere/x.test.ts"] });
+  });
+});
+
+describe("shouldBuild (F-vlad-319: iç içe test-run koşusu paylaşılan dist'i yeniden yazmaz)", () => {
+  it("VLAD_SKIP_BUILD=1 iken tsc koşmaz (üst vitest globalSetup'ı dist'i zaten derledi/doğruladı)", () => {
+    expect(shouldBuild({ VLAD_SKIP_BUILD: "1" })).toBe(false);
+  });
+  it("değişken yoksa ya da 1 değilse derler", () => {
+    expect(shouldBuild({})).toBe(true);
+    expect(shouldBuild({ VLAD_SKIP_BUILD: "0" })).toBe(true);
   });
 });
