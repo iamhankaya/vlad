@@ -12,17 +12,18 @@ function sectionLines(md: string): string[] {
 }
 
 /** A line that says the finding is only partly fixed / stays open must not close it (F-vlad-309). */
-const PARTIAL = /kısmen|kısmi|partial|açık kal|bulgu açık|açık kalır/i;
+const PARTIAL_RE = /kısmen|kısmi|partially|açık kal(ır|ıyor|dı)(?![a-zçğıöşü])/;
+const isPartial = (line: string): boolean => PARTIAL_RE.test(line.toLocaleLowerCase("tr"));
 const firstToken = (line: string): string => line.replace(/^\s*-\s*/, "").split(/\s+[—–-]\s+|\s+—\s+/)[0]!.trim().replace(/[`*]/g, "");
 
 /** Ids of `### Kapatılan bulgular` lines marked partial; close skips them and warns. */
 export function partialFindingTokens(md: string): string[] {
-  return sectionLines(md).filter((l) => PARTIAL.test(l)).map(firstToken).filter(Boolean);
+  return sectionLines(md).filter((l) => isPartial(l)).map(firstToken).filter(Boolean);
 }
 
 /** First token (the finding id) of each non-partial `### Kapatılan bulgular` line; may be abbreviated, callers validate it. */
 export function closedFindingTokens(md: string): string[] {
-  return sectionLines(md).filter((l) => !PARTIAL.test(l)).map((line) => line.replace(/^\s*-\s*/, "").split(/\s+[—–-]\s+|\s+—\s+/)[0]!.trim().replace(/[`*]/g, "")).filter(Boolean);
+  return sectionLines(md).filter((l) => !isPartial(l)).map(firstToken).filter(Boolean);
 }
 export const isFullFindingId = (s: string): boolean => FULL_ID.test(s);
 
@@ -35,7 +36,7 @@ export function closedFindingWarnings(md: string): string[] {
   for (const line of sectionLines(md)) {
     const first = firstToken(line);
     if (!first) continue;
-    if (PARTIAL.test(line)) { warnings.push(`${first} kısmi düzeltme olarak yazılmış; kapatılmaz (\`### Açık noktalar\` altında [kalan ${first}] yaz)`); continue; }
+    if (isPartial(line)) { warnings.push(`${first} kısmi düzeltme olarak yazılmış; kapatılmaz (\`### Açık noktalar\` altında [kalan ${first}] yaz)`); continue; }
     if (!FULL_ID.test(first)) {
       warnings.push(`kısaltılmış/aralık bulgu ID'si "${first}": tam ID (F-<proje>-NNN) yaz; digest bunu kapatmaz, onaya taşır`);
       continue;

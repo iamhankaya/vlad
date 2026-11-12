@@ -42,4 +42,10 @@ describe("F-vlad-309: kısmi satır kapatılmaz", () => {
     expect(closedFindingTokens(md)).toEqual([a.data.id]);
     expect(closedFindingWarnings(md).join("\n")).toMatch(new RegExp(`${b.data.id}.*kısmi`));
   });
+  it("meşru fixed satırları kısmi sayılmaz ('açık kalan yok', 'partial index', büyük harf kısmi yakalanır)", async () => {
+    const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
+    const ok = rep("- F-alpha-001 — fixed — açık kalan yok\n- F-alpha-002 — fixed — partial index eklendi, bulgu açıklaması güncellendi");
+    expect(closedFindingTokens(ok)).toEqual(["F-alpha-001", "F-alpha-002"]);
+    expect(closedFindingTokens(rep("- F-alpha-003 — KISMEN: BULGU AÇIK KALIR"))).toEqual([]);
+  });
 });
