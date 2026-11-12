@@ -84,11 +84,22 @@ else
   fi
 fi
 
+# F-vlad-260: kurulum ile başlatma ayrı adımlar; `install` başarılı `start` başarısızsa .service kalır ve sonraki koşu yalnız başlatmayı dener
 if [ -f "$DIR/.service" ]; then
-  echo "$TAG servis zaten kurulu"
+  echo "$TAG servis zaten kurulu; çalışıyor mu bakılır, değilse ./svc.sh start"
 else
-  echo "$TAG ./svc.sh install && ./svc.sh start (kullanıcı LaunchAgent; $CI_USER GUI oturumunda açık olmalı)"
-  if [ "$APPLY" = 1 ]; then ( cd "$DIR" && ./svc.sh install && ./svc.sh start ); fi
+  echo "$TAG ./svc.sh install (kullanıcı LaunchAgent; $CI_USER GUI oturumunda açık olmalı)"
+  if [ "$APPLY" = 1 ]; then ( cd "$DIR" && ./svc.sh install ); fi
+  echo "$TAG ./svc.sh start"
+fi
+if [ "$APPLY" = 1 ]; then
+  # çalışıyor = status çıktısında 'Started' var, 'Not running'/'Stopped' yok (başarısız status "çalışmıyor" sayılır; start asıl hatayı verir)
+  st="$( cd "$DIR" && ./svc.sh status 2>&1 || true )"
+  if printf '%s' "$st" | grep -qiE 'not running|stopped|not started' || ! printf '%s' "$st" | grep -qi 'started'; then
+    ( cd "$DIR" && ./svc.sh start ) || die "svc.sh start başarısız; servis kurulu ama çalışmıyor (runner çevrimdışı). Sorunu giderip --apply'ı yeniden çalıştır: yalnız başlatma denenir"
+  else
+    echo "$TAG servis çalışıyor"
+  fi
 fi
 
 cat <<'USER'

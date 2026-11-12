@@ -58,3 +58,8 @@ export function groupFilesByBucket(files, buckets) {
   }
   return out;
 }
+
+/** F-vlad-319: a test-run nested in a vitest run (u2-scope-cli --run) is started with VLAD_SKIP_BUILD=1 (dist already built/verified by global-setup) and must not re-run `tsc` over the shared dist/ while other test files import it. */
+export function shouldBuild(env) {
+  return env.VLAD_SKIP_BUILD !== "1";
+}

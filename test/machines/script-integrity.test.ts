@@ -2,6 +2,7 @@ import { rmSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkEntry, checkPushed, loadRepoState } from "../../src/agent/scripts/integrity.js";
 import { RemoteError } from "../../src/fleet/types.js";
+import { canSymlink } from "../helpers.js";
 import { entryOf, makeRepo, manifestJson, scriptRepo, sha256, symlinkIn, type Fixture } from "./script-fixture.js";
 
 // Bütünlük algoritması (T20261109-07): çalışma ağacı değil HEAD blob'u esas alınır.
@@ -44,7 +45,7 @@ describe("loadRepoState", () => {
     expect(e.code).toBe("forbidden");
     expect(e.message).toContain("[not_in_head]");
   });
-  it("manifest symlink → forbidden [not_regular]", async () => {
+  it.skipIf(!canSymlink())("manifest symlink → forbidden [not_regular]", async () => {
     const f = track(makeRepo({ "README.md": "x", "real.json": manifestJson() }));
     symlinkIn(f, "agent-scripts/manifest.json", "../real.json");
     f.commit("link");
@@ -89,7 +90,7 @@ describe("checkEntry", () => {
     f.write("agent-scripts/y.sh", "echo y");
     expect((await checkEntry(f.dir, entryOf("darwin", "y", "echo y"), f.head)).integrity).toBe("not_in_head");
   });
-  it("symlink betik → not_regular", async () => {
+  it.skipIf(!canSymlink())("symlink betik → not_regular", async () => {
     const f = track(scriptRepo("darwin", "x", BODY));
     symlinkIn(f, "agent-scripts/ln.sh", "x.sh");
     const c = f.commit("ln");

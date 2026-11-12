@@ -26,6 +26,8 @@ export interface KillDeps {
   /** yeniden deneme: POSIX'te tekrar SIGKILL atılmaz (grup ölüp pid başka sürece düşmüş olabilir), yalnız ölüm yoklanır */
   recheck?: boolean;
 }
+/** `taskkill /T /F` başarıyla (0/128) çalışmış süreçler: kök sonradan çıkınca torunların da gittiği bilinir; başarısız olanlar için bilinmez (F-vlad-272) */
+const treeKilled = new WeakSet<object>();
 const alive = (pid: number): boolean => { try { process.kill(pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; } };
 const runTaskkill = (pid: number): Promise<number | null> => new Promise((res) => {
   const t = spawn(taskkillPath(), ["/PID", String(pid), "/T", "/F"], { windowsHide: true, stdio: "ignore" });
@@ -37,7 +39,7 @@ const runTaskkill = (pid: number): Promise<number | null> => new Promise((res) =
  * `waitMs` içinde ölmedi): çağıran yarım işi geri almamalı (npm/tsc hâlâ node_modules'a yazıyor olabilir).
  * Windows: taskkill çıkışı beklenir (0 ya da 128 = süreç yok) + kök pid ölümü; POSIX: süreç grubuna SIGKILL + grubun yok olması (spawn `detached: true` gerekir).
  */
-export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "kill">, d: KillDeps = {}): Promise<boolean> {
+export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "kill"> & Partial<Pick<ReturnType<typeof spawn>, "exitCode" | "signalCode">>, d: KillDeps = {}): Promise<boolean> {
   const pid = p.pid;
   if (!pid) return true;
   const win = (d.platform ?? process.platform) === "win32";
@@ -45,8 +47,12 @@ export async function killTreeWait(p: Pick<ReturnType<typeof spawn>, "pid" | "ki
   const waitMs = d.waitMs ?? 10_000, pollMs = d.pollMs ?? 100;
   let target = pid;
   if (win) {
+    // F-vlad-272: yeniden denemede kök süreç tutamacı çıkmışsa pid başka sürece geçmiş olabilir; taskkill atılmaz (yabancı süreç ağacı).
+    // Ağaç öldürme daha önce doğrulandıysa (taskkill 0/128) kök ölümü yeter; doğrulanmadıysa (taskkill başarısızdı, yalnız yorumlayıcı öldü) torunlar yaşıyor olabilir → false (kurtarma pending kalır)
+    if (d.recheck && (p.exitCode != null || p.signalCode != null)) return treeKilled.has(p);
     const code = await (d.spawnTaskkill ?? runTaskkill)(pid);
     if (code !== 0 && code !== 128) { try { p.kill(); } catch { /* yok */ } return false; }
+    treeKilled.add(p);
   } else {
     target = -pid;
     if (!d.recheck) try { (d.signalGroup ?? ((g) => process.kill(g, "SIGKILL")))(target); } catch { try { p.kill("SIGKILL"); } catch { /* yok */ } }
