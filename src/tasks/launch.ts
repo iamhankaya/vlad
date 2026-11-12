@@ -6,6 +6,7 @@ import {
   unlinkReparsePoints, worktreePath,
 } from "../git/git.js";
 import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
+import { readSessionFile, SESSION_NAME_RE } from "../kb/session.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { relatedOpenFindings } from "../findings/similar.js";
@@ -530,6 +531,21 @@ async function pollLaunch(transport: RemoteTransport, machine: string, op: strin
 interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
 interface OpStatus { state: string; result?: RemoteLaunched; truncated?: boolean }
 
+/**
+ * F-vlad-199: the brain's session name goes to the worker so its notifications reach the live brain session (the worker's own
+ * vlad-session.txt is local and stale). Sent only when the worker's ping lists the `session` cap: an old worker rejects unknown
+ * args, so it (and an unreachable ping) gets none and keeps the old behaviour.
+ */
+export async function sessionArg(transport: RemoteTransport, machine: string): Promise<{ sessionName?: string }> {
+  let name: string | null = null;
+  try { name = readSessionFile(); } catch { return {}; }
+  if (!name || !SESSION_NAME_RE.test(name)) return {};
+  try {
+    const { caps } = (await transport.call<{ caps?: unknown }>(machine, "ping", {}, { timeoutMs: 10_000 })).result ?? {};
+    return Array.isArray(caps) && caps.includes("session") ? { sessionName: name } : {};
+  } catch { return {}; }
+}
+
 async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: RemoteDeps): Promise<Task> {
   const { cfg } = o;
   const { transport } = remote;
@@ -602,6 +618,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
     // F-vlad-239: a recorded worktree on a queued task means an earlier run ended (failed → queued); the worker re-adopts it
     ...(task.data.worktree && !old ? { retry: true } : {}),
+    ...(await sessionArg(transport, machine)),
   };
   const op = await reserve(old);
 

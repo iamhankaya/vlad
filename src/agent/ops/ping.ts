@@ -2,8 +2,8 @@ import { PROTO_VERSION } from "../../fleet/types.js";
 import { maint } from "../maintenance.js";
 import { agentEnv, type AgentEnv } from "./env.js";
 
-/** Yetenekler: karşı Agent'ın aktarım/pano op'larını bilip bilmediği (sendPaths önce bunu denetler). */
-export const CAPS = ["xfer", "clip"] as const;
+/** Yetenekler: karşı Agent'ın aktarım/pano op'larını bilip bilmediği (sendPaths önce bunu denetler); `session`: launch/resume `sessionName` alanını kabul eder (F-vlad-199). */
+export const CAPS = ["xfer", "clip", "session"] as const;
 
 /** worker: {machine, os, proto, build, uptimeS, caps}; beyin: {machine, proto, build, caps}. `env` enjekte edilir (aynı süreçte iki Agent: test). */
 export function makePing(env: () => AgentEnv): () => Promise<unknown> {

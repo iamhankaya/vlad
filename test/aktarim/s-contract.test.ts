@@ -95,12 +95,12 @@ describe("aktarim:S günlük ve ping", () => {
     const jm = existsSync(join(p.mac.stateDir, "journal.jsonl")) ? readFileSync(join(p.mac.stateDir, "journal.jsonl"), "utf8") : "";
     expect(jm.includes("s-contract-clip")).toBe(false);
   });
-  it("ping sonucu caps: xfer, clip (her iki yönde)", async () => {
+  it("ping sonucu caps: xfer, clip, session (her iki yönde)", async () => {
     const p = await pair();
     const w = (await p.mac.transport.call<{ caps: string[]; machine: string }>("windows", "ping", {})).result;
     const m = (await p.windows.transport.call<{ caps: string[]; machine: string }>("mac", "ping", {})).result;
-    expect(w).toMatchObject({ machine: "windows", caps: ["xfer", "clip"] });
-    expect(m).toMatchObject({ machine: "mac", caps: ["xfer", "clip"] });
+    expect(w).toMatchObject({ machine: "windows", caps: ["xfer", "clip", "session"] });
+    expect(m).toMatchObject({ machine: "mac", caps: ["xfer", "clip", "session"] });
   });
 });
 

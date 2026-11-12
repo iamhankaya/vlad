@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:f
 import { dirname, join } from "node:path";
 import { branchExistsAsync, runGitAsync, runGitRawAsync } from "../../git/git-async.js";
 import { getVladHome } from "../../kb/home.js";
+import { SESSION_NAME_RE } from "../../kb/session.js";
 import { fillRolePlaceholders } from "../../roles/store.js";
 import { writeFileAtomic } from "../../kb/atomic.js";
 import { closeWorkerWindow, resolveLaunchMode } from "../../launcher/index.js";
@@ -76,7 +77,8 @@ function dropEntry(id: string, repo: string, wt: string): void {
 
 const fill = (s: string, ctx: WorkerCtx, id: string): string => fillRolePlaceholders(s.split("{{TASK_FILE}}").join(taskFileOf(ctx.def, id)), getVladHome());
 // işçinin kbDir'i oturuma da geçer: yoksa `vlad kb get`/`task list` yanlış kb'yi okur (F-vlad-147)
-const envOf = (id: string, ctx: WorkerCtx) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome(), ...(ctx.def.kbDir ? { VLAD_KB_DIR: ctx.def.kbDir } : {}) });
+// F-vlad-199: beyin oturum adı VLAD_SESSION ile gelir; işçideki yerel vlad-session.txt eski olabilir
+const envOf = (id: string, ctx: WorkerCtx, session?: string) => ({ VLAD_TASK_ID: id, VLAD_HOME: getVladHome(), ...(ctx.def.kbDir ? { VLAD_KB_DIR: ctx.def.kbDir } : {}), ...(session ? { VLAD_SESSION: session } : {}) });
 
 let launchChain: Promise<unknown> = Promise.resolve();
 /** Async git removed the accidental serialisation sync calls gave: launches on one worker run one at a time again (worktree/branch/lock races). */
@@ -87,7 +89,7 @@ export function launchOp(args: unknown, c: { from: string; opId: string }, o: { 
 }
 
 async function launchOne(args: unknown, c: { from: string; opId: string }, o: { launcher?: Launcher; close?: CloseFn }): Promise<LaunchResultW> {
-  const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact", "retry"]);
+  const a = argObject(args, ["taskId", "project", "repoName", "branch", "base", "promptTemplate", "title", "model", "autoCompact", "retry", "sessionName"]);
   const id = taskIdArg(a);
   projectArg(a);
   const repoName = repoNameArg(a);
@@ -100,6 +102,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   const title = text(a, "title", 300);
   const model = optStr(a, "model", MODEL);
   const autoCompact = optStr(a, "autoCompact", COMPACT);
+  const session = optStr(a, "sessionName", SESSION_NAME_RE);
 
   const ctx = workerCtx();
   let existing = readRecord(id);
@@ -132,7 +135,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
     res = await launchCore({
       taskId: id, repo, worktree, branch: `vlad/${id}`, ...(a.retry === true ? { adopt: true } : {}),
       ...(integration ? { base: integration.branch } : defaultBranch && (await branchExistsAsync(repo, defaultBranch)) ? { base: defaultBranch } : {}),
-      prompt: fill(template, ctx, id), env: envOf(id, ctx), title,
+      prompt: fill(template, ctx, id), env: envOf(id, ctx, session), title,
       ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),
     }, launcher, ASYNC_GIT);
   } catch (e) {
@@ -253,7 +256,7 @@ export async function cleanupOp(args: unknown, o: { close?: CloseFn } = {}): Pro
 }
 
 export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: CloseFn } = {}): Promise<{ worktree: string; method: string; dirty: string[] }> {
-  const a = argObject(args, ["taskId", "project", "repoName", "promptTemplate", "title", "model", "autoCompact", "sessionId"]);
+  const a = argObject(args, ["taskId", "project", "repoName", "promptTemplate", "title", "model", "autoCompact", "sessionId", "sessionName"]);
   const id = taskIdArg(a);
   projectArg(a);
   const repoName = repoNameArg(a);
@@ -262,6 +265,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: 
   const model = optStr(a, "model", MODEL);
   const autoCompact = optStr(a, "autoCompact", COMPACT);
   const sessionId = optStr(a, "sessionId", /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
+  const session = optStr(a, "sessionName", SESSION_NAME_RE);
   const ctx = workerCtx();
   const { wt } = verifiedRecord(ctx, id, repoName);
   if (!existsSync(wt)) throw new RemoteError("not_found", `not_found: worktree yok: ${wt}; görev ${id} bu makinede sürdürülemez`);
@@ -274,7 +278,7 @@ export async function resumeOp(args: unknown, o: { launcher?: Launcher; close?: 
   try { (o.close ?? defaultClose)(id); } catch { /* no window to close, or it could not be closed: the launcher reports real failures */ } // no second window beside a live one
   let r;
   try {
-    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id, ctx), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), ...(sessionId ? { resume: { sessionId } } : {}) });
+    r = await launcher.launch({ taskId: id, cwd: wt, prompt, env: envOf(id, ctx, session), title, ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}), ...(sessionId ? { resume: { sessionId } } : {}) });
   } catch (e) { throw failed(`launcher başarısız: ${(e as Error).message}`); }
   if (!r.ok) throw failed(`launcher başarısız (${r.method}): ${r.detail ?? "bilinmeyen hata"}`);
   return { worktree: wt, method: r.method, dirty };
