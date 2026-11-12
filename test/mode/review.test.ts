@@ -18,7 +18,7 @@ describe("review fixes", () => {
   });
 
   it("a night entry without projects (hand-edited file) does not crash", () => {
-    writeFileSync(join(kbPaths().kb, "mode.json"), JSON.stringify({ night: { until: "2099-01-01T00:00:00+03:00" } }));
+    writeFileSync(join(kbPaths().kb, "mode.json"), JSON.stringify({ night: { until: "2026-10-29T00:00:00+03:00", started: "2026-10-28T23:00:00+03:00" } }));
     expect(modeStatus(now).night?.projects).toEqual([]);
     expect(modeLine(now)).toMatch(/gece modu etkin/);
   });

@@ -22,14 +22,13 @@ export function resolveTool(cmd: string, env: NodeJS.ProcessEnv = process.env): 
 export function toolInvocation(cmd: string, args: string[], env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): { file: string; args: string[]; verbatim: boolean } {
   const r = platform === "win32" ? resolveTool(cmd, env) : null;
   if (!r || ![".cmd", ".bat"].includes(extname(r).toLowerCase())) return { file: r ?? cmd, args, verbatim: false };
-  if ([r, ...args].some((a) => /["%]/.test(a) || a.endsWith("\\"))) throw new Error(`${cmd}: argüman " ya da % içeriyor ya da ters eğik çizgiyle bitiyor (cmd sarmalayıcısı güvenle çağıramaz)`);
+  if ([r, ...args].some((a) => /["%\r\n]/.test(a) || a.endsWith("\\"))) throw new Error(`${cmd}: argüman ", %, CR ya da LF içeriyor ya da ters eğik çizgiyle bitiyor (cmd sarmalayıcısı güvenle çağıramaz)`);
   return { file: env.ComSpec ?? env.COMSPEC ?? "cmd.exe", args: ["/d", "/s", "/c", `"${[r, ...args].map((a) => `"${a}"`).join(" ")}"`], verbatim: true };
 }
 const realRunner: Runner = (cmd, args, o = {}) => {
   try {
-    const viaShell = process.platform === "win32" && (cmd === "claude" || cmd === "codex"); // npm .cmd kabuk sarmalayıcıları eskisi gibi
-    const inv = viaShell ? { file: cmd, args, verbatim: false } : toolInvocation(cmd, args);
-    const stdout = execFileSync(inv.file, inv.args, { ...(inv.verbatim ? { windowsVerbatimArguments: true } : {}), cwd: o.cwd, input: o.input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: o.timeoutMs ?? 20_000, windowsHide: true, shell: viaShell, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } } as ExecFileSyncOptionsWithStringEncoding); // windowsVerbatimArguments çalışma zamanında geçerli, tipte yok
+    const inv = toolInvocation(cmd, args); // claude/codex npm .cmd sarmalayıcıları da buradan: kabuk yok, argüman doğrulaması var
+    const stdout = execFileSync(inv.file, inv.args, { ...(inv.verbatim ? { windowsVerbatimArguments: true } : {}), cwd: o.cwd, input: o.input, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"], timeout: o.timeoutMs ?? 20_000, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } } as ExecFileSyncOptionsWithStringEncoding); // windowsVerbatimArguments çalışma zamanında geçerli, tipte yok
     return { ok: true, code: 0, stdout, stderr: "" };
   } catch (e) {
     const x = e as { status?: number | null; stdout?: string; stderr?: string; message: string };

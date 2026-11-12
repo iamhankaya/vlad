@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { run, sandbox, stub, type Sandbox } from "./helpers.js";
@@ -68,6 +68,36 @@ describe.skipIf(process.platform === "win32")("mac/audit.sh", () => {
     const s = sandbox(); fullMac(s); run("audit.sh", [], s);
     const calls = readFileSync(s.log, "utf8") as string;
     expect(calls).not.toMatch(/bootstrap|load |kickstart|new-session|install|--apply/);
+  });
+  // F-vlad-260 (1): runner dizini CI hesabında 0700; beyin hesabı erişemeyince "runner yok" (eksik → --strict kırmızı) demek yanlış, "ok" demek de yanlış
+  it("F-vlad-260: runner dizini bu hesaba kapalıysa (erişim reddi) ne 'ok' ne 'eksik': uyarı + CI hesabıyla doğrula; --strict geçer", () => {
+    const s = sandbox(); fullMac(s);
+    const rdir = join(s.home, "ci", "actions-runner");
+    chmodSync(rdir, 0o000);
+    try {
+      const rows = JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string; kanit: string }>;
+      const r = rows.find((x) => x.madde === "ci-runner");
+      expect(r?.durum).toBe("uyarı");
+      expect(r?.kanit).toMatch(/erişim reddi/);
+      expect(r?.kanit).toContain("vlad-ci");
+      expect(rows.filter((x) => x.durum === "eksik")).toEqual([]);
+      expect(run("audit.sh", ["--strict"], s).status).toBe(0);
+    } finally { chmodSync(rdir, 0o755); }
+  });
+  it("F-vlad-260: CI ev dizini kapalıyken de (üst dizin erişimi reddi) uyarı verir, 'eksik' demez", () => {
+    const s = sandbox(); fullMac(s);
+    const ci = join(s.home, "ci");
+    chmodSync(ci, 0o000);
+    try {
+      const r = (JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string }>).find((x) => x.madde === "ci-runner");
+      expect(r?.durum).toBe("uyarı");
+    } finally { chmodSync(ci, 0o755); }
+  });
+  it("F-vlad-260: runner gerçekten yoksa (dizin okunabilir, .runner yok) eksik kalır", () => {
+    const s = sandbox(); fullMac(s);
+    rmSync(join(s.home, "ci", "actions-runner", ".runner"));
+    const r = (JSON.parse(run("audit.sh", ["--json"], s).stdout) as Array<{ madde: string; durum: string }>).find((x) => x.madde === "ci-runner");
+    expect(r?.durum).toBe("eksik");
   });
   // F-vlad-249
   it("ev dizini group/other okunabiliyorsa home-perms uyarısı verir; 700'de ok", () => {

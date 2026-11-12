@@ -95,7 +95,7 @@ describe("M1: push yetkisi ve istisnalar (T20261109-22)", () => {
   it("push varsayılan kapalı; eski mode.json (alansız) push:false okunur", () => {
     setNight({ until: "08:00" }, now);
     expect(modeStatus(now).night).toMatchObject({ push: false, except: [...DEFAULT_EXCEPT] });
-    writeFileSync(join(kbPaths().kb, "mode.json"), JSON.stringify({ night: { until: "2026-10-29T08:00:00+03:00", started: "x", projects: [], note: null }, watch: false }));
+    writeFileSync(join(kbPaths().kb, "mode.json"), JSON.stringify({ night: { until: "2026-10-29T08:00:00+03:00", started: "2026-10-28T23:00:00+03:00", projects: [], note: null }, watch: false }));
     expect(modeStatus(now).night).toMatchObject({ push: false, untilTasks: [] });
   });
 
@@ -193,5 +193,30 @@ describe("mod güvenliği (T20261109-30: F-vlad-282/285/286)", () => {
     const later = new Date(now.getTime() + 20 * 60_000);
     expect(setWatch(true, later)).toBe(true);
     expect(setWatch(true, later)).toBe(false);
+  });
+});
+
+describe("T20261112-04 izin-mod regresyonları", () => {
+  const modeFile = () => join(kbPaths().kb, "mode.json");
+  it("F-vlad-283: mode.json'a elle uzatılmış until okunurken started+24h'e kısılır", () => {
+    setNight({ until: "08:00" }, now);
+    const j = JSON.parse(readFileSync(modeFile(), "utf8"));
+    j.night.until = new Date(now.getTime() + 72 * H).toISOString();
+    writeFileSync(modeFile(), JSON.stringify(j));
+    const later = new Date(now.getTime() + 25 * H);
+    expect(modeStatus(later)).toMatchObject({ night: null, expired: true, timedOut: true });
+    expect(modeStatus(new Date(now.getTime() + 23 * H)).night).not.toBeNull();
+  });
+  it("F-vlad-283: geçersiz started ile elle yazılmış pencere kapalı sayılır", () => {
+    writeFileSync(modeFile(), JSON.stringify({ night: { until: new Date(now.getTime() + 72 * H).toISOString(), started: "x", projects: [], note: null, push: true, except: [], untilTasks: [] }, watch: false }));
+    expect(modeStatus(now).night).toBeNull();
+  });
+  it("F-vlad-284: integrate skill'i except sınıflarını somut eyleme eşler ve --force/--no-verify'ı yasaklar", () => {
+    const t = readFileSync(join(import.meta.dirname, "..", "..", ".claude", "skills", "integrate", "SKILL.md"), "utf8");
+    expect(t).toMatch(/deploy[^\n]*(vercel|fly|eas|kubectl|ssh)/i);
+    expect(t).toMatch(/backfill[^\n]*(migrasyon|migration|toplu)/i);
+    expect(t).toMatch(/keychain[^\n]*(security|anahtar|gizli)/i);
+    expect(t).toContain("--force");
+    expect(t).toContain("--no-verify");
   });
 });

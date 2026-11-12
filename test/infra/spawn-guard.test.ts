@@ -28,4 +28,11 @@ describe("F-vlad-265: symlink fixture without privilege", () => {
     expect(itLines.length).toBeGreaterThan(0);
     for (const l of itLines) expect(l).toContain("it.skipIf(!canSymlink())(");
   });
+  // F-vlad-290: script-integrity (2) and script-ops (1) built symlinks via symlinkIn() unguarded and went red with EPERM on Windows
+  it.each(["script-integrity", "script-ops"])("%s: every test that builds a symlink via symlinkIn() is skipped when canSymlink() is false", (name) => {
+    const src = readFileSync(join(TEST_DIR, "machines", `${name}.test.ts`), "utf8");
+    const itLines = src.split("\n").filter((l, i, a) => /^\s*it[.(]/.test(l) && a.slice(i, i + 6).some((x) => /\bsymlinkIn\(|symlinkSync\(/.test(x)));
+    expect(itLines.length).toBeGreaterThan(0);
+    for (const l of itLines) expect(l).toContain("it.skipIf(!canSymlink())(");
+  });
 });

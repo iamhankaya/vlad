@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { AgentClient } from "../agent/client.js";
@@ -10,11 +11,11 @@ import { listTasks, effectiveModel, getTask, roleFor, saveTask, saveTaskQuiet } 
 import type { Task } from "../tasks/store.js";
 import type { ResumePlan } from "../tasks/resume.js";
 import { remoteResumeTemplate } from "../tasks/resume.js";
-import { remoteMachineOf } from "../tasks/launch.js";
+import { projectPath, remoteMachineOf, sessionArg } from "../tasks/launch.js";
 import type { RemoteDeps } from "../tasks/launch.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
-import type { GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "../fleet/types.js";
+import type { BranchPushResult, GateRunResult, MergePreviewResult, MergeResult, RemoteTransport } from "../fleet/types.js";
 
 /** Beyin kimliğiyle işçi Agent'larına konuşan gerçek taşıma (anahtarlar `vlad.local.json`'dan). */
 export const brainTransport = (cfg: VladConfig, self: string): RemoteTransport =>
@@ -67,6 +68,7 @@ export async function remoteResume(
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
     ...(plan.sessionId ? { sessionId: plan.sessionId } : {}),
+    ...(await sessionArg(transport, machine)),
   };
   return (await transport.call<{ worktree: string; method: string; dirty: string[] }>(machine, "resume", args)).result;
 }
@@ -76,13 +78,14 @@ export async function remoteResume(
  * entegrasyon worktree'leri de. Fazların başka projeleri için kayıt yoksa (forbidden/not_found) atlanır; görevin kendisi hata verirse yükselir.
  * Başarıdan sonra çağıran, kilit altında `worktree: null` yazar (`markCleaned`).
  */
-export async function remoteCleanup(transport: RemoteTransport, machine: string, task: Task): Promise<void> {
+export async function remoteCleanup(transport: RemoteTransport, machine: string, task: Task, expectHead?: string): Promise<void> {
   const own = task.data.project;
   const projects = new Set<string>();
   if (task.data.kind === "pipeline") for (const c of listTasks({ parent: task.data.id })) projects.add(c.data.project);
   projects.delete(own);
   const call = (project: string) => transport.call(machine, "cleanup", {
     taskId: task.data.id, project, repoName: repoNameOf(cardOf(project).path), terminal: true,
+    ...(expectHead && project === own ? { expectHead } : {}),
     ...(task.data.state === "cancelled" ? { dropBranch: true } : {}),
   });
   for (const p of projects) {
@@ -153,3 +156,26 @@ export async function remoteMerge(transport: RemoteTransport, machine: string, t
   return (await transport.call<MergeResult>(machine, "merge", { ...gateIds(task), ...refs, expectHead, ...(o.message ? { message: o.message } : {}) }, { timeoutMs: 330_000 })).result;
 }
 // --- /machines:C4 ---
+// --- machines:branch-push (F-vlad-314, sözleşme T20261111-50) --- uzak görev dalını origin'e itme + beyinde alma
+/** Gate'lenen sha'yı (`expectHead`) görevin `vlad/<id>` dalı olarak origin'e iter; yalnız beyinden, force yok. Hata RemoteError (`conflict [diverged]`, `failed [stale_tip|push_rejected|no_origin|auth]`). */
+export async function remoteBranchPush(transport: RemoteTransport, machine: string, task: Task, expectHead: string): Promise<BranchPushResult> {
+  const { taskId, project, repoName } = gateIds(task);
+  return (await transport.call<BranchPushResult>(machine, "branch-push", { taskId, project, repoName, branch: `vlad/${taskId}`, expectHead }, { timeoutMs: 150_000 })).result;
+}
+/** Beyinde `git fetch origin vlad/<id>`; FETCH_HEAD gate'lenen sha olmalı. Yerel `refs/heads/vlad/<id>` yaratılmaz, merge sha ile yapılır. */
+export function fetchBranchHead(repo: string, id: string, expectHead: string): void {
+  const run = (args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8", windowsHide: true, timeout: 120_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+  // tam ref + geçici ref: FETCH_HEAD yarışı yok; hata iletisine git stderr/URL girmez (F-vlad-321/322)
+  const tmp = `refs/vladfetch/${id}`;
+  const f = run(["fetch", "--no-tags", "origin", `+refs/heads/vlad/${id}:${tmp}`]);
+  if (f.status !== 0) throw new Error(`git fetch başarısız (kod ${f.status ?? "?"})`);
+  const head = run(["rev-parse", "--verify", "--quiet", `${tmp}^{commit}`]).stdout?.trim();
+  run(["update-ref", "-d", tmp]);
+  if (head !== expectHead) throw new Error(`FETCH_HEAD (fetch edilen uç, ${(head ?? "").slice(0, 12) || "yok"}) gate'lenen sha'dan (${expectHead.slice(0, 12)}) farklı`);
+}
+/** Beyin-yerel repo yolu: close'un fetch/önizleme/merge/ancestry adımlarının tek çözümü (kart yolu başka OS'tansa brain roots, F-vlad-200). */
+export const brainRepoPath = (project: string, cfg?: VladConfig): string => projectPath(project, cfg);
+export async function fetchTaskBranch(task: Task, expectHead: string, cfg?: VladConfig): Promise<void> {
+  fetchBranchHead(brainRepoPath(task.data.project, cfg), task.data.id, expectHead);
+}
+// --- /machines:branch-push ---

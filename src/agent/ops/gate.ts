@@ -45,7 +45,7 @@ export function capText(s: string, max: number): string {
 /** `git merge-tree --write-tree --name-only` çıktısı: ilk satır ağaç kimliği, sonrası çakışan dosyalar. */
 export const conflictsOf = (stdout: string): string[] => stdout.split("\n").slice(1).map((l) => l.trim()).filter(Boolean);
 
-function taskFront(ctx: WorkerCtx, id: string, project: string): TaskFront {
+export function taskFront(ctx: WorkerCtx, id: string, project: string): TaskFront {
   const f = join(workerKbDir(ctx.def), "tasks", `${id}.md`);
   if (!existsSync(f)) throw new RemoteError("not_found", `not_found: görev dosyası işçi kb'sinde yok: ${id}`);
   const t = readDoc<TaskFront>(f).data;
@@ -131,7 +131,7 @@ export async function runBaseGate(cwd: string, branch: string, cachedHead: strin
 
 /** cwd başına sıra: aynı worktree'de gate ve merge birbirinin altında dosya değiştirmesin. */
 const chains = new Map<string, Promise<unknown>>();
-function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
+export function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const run = (chains.get(key) ?? Promise.resolve()).then(fn);
   const tail = run.catch(() => undefined);
   chains.set(key, tail);

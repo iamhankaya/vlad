@@ -11,7 +11,7 @@ const TOKEN = "AAAATESTTOKEN123";
 function fixture(s: Sandbox) {
   const src = join(s.root, "pkg"); mkdirSync(src);
   for (const f of ["config.sh", "svc.sh"]) {
-    writeFileSync(join(src, f), `#!/bin/bash\necho "${f} $*" >> "$VLAD_CALL_LOG"\n${f === "config.sh" ? 'echo "{}" > "$(dirname "$0")/.runner"' : '[ "$1" = install ] && touch "$(dirname "$0")/.service"'}\nexit 0\n`);
+    writeFileSync(join(src, f), `#!/bin/bash\necho "${f} $*" >> "$VLAD_CALL_LOG"\n${f === "config.sh" ? 'echo "{}" > "$(dirname "$0")/.runner"; exit 0' : '[ "$1" = install ] && touch "$(dirname "$0")/.service"\n[ "$1" = status ] && echo "${VLAD_SVC_STATUS:-Stopped}"\n[ "$1" = start ] && [ -n "${VLAD_SVC_START_FAIL:-}" ] && exit 1\nexit 0'}\n`);
     chmodSync(join(src, f), 0o755);
   }
   const tgz = join(s.root, "runner.tar.gz");
@@ -107,5 +107,35 @@ describe.skipIf(process.platform === "win32")("mac/ci-runner.sh", () => {
     const r = run("ci-runner.sh", [...f.base, "--apply", "--token-stdin"], s, { ...f.env, VLAD_CI_USER: "tester" }, TOKEN + "\n");
     expect(r.status).toBe(1); expect(r.stderr).toContain("beyin");
     expect(calls(s)).not.toMatch(/config\.sh|curl/);
+  });
+  // F-vlad-260 (2): install başarılı + start başarısız → .service kalır; sonraki --apply başlatmayı da atlıyordu (runner çevrimdışı)
+  it("F-vlad-260: start başarısız olursa hata verir, .service kalır; ikinci --apply kurulumu tekrarlamadan yalnız başlatır", () => {
+    const s = sandbox(); const f = fixture(s);
+    const r1 = run("ci-runner.sh", [...f.base, "--apply", "--token-stdin"], s, { ...f.env, VLAD_SVC_START_FAIL: "1" }, TOKEN + "\n");
+    expect(r1.status).not.toBe(0);
+    expect(existsSync(join(f.dir, ".service"))).toBe(true);
+    writeFileSync(s.log, "");
+    const r2 = run("ci-runner.sh", [...f.base, "--apply"], s, f.env);
+    expect(r2.status).toBe(0);
+    const c = calls(s);
+    expect(c).toContain("svc.sh start");
+    expect(c).not.toContain("svc.sh install");
+    expect(c).not.toMatch(/curl|config\.sh/);
+  });
+  it("F-vlad-260: servis kurulu ve çalışıyorsa (status Started) start çağrılmaz", () => {
+    const s = sandbox(); const f = fixture(s);
+    run("ci-runner.sh", [...f.base, "--apply", "--token-stdin"], s, f.env, TOKEN + "\n");
+    writeFileSync(s.log, "");
+    const r = run("ci-runner.sh", [...f.base, "--apply"], s, { ...f.env, VLAD_SVC_STATUS: "Started: 1234 0 actions.runner.x" });
+    expect(r.status).toBe(0);
+    expect(calls(s)).not.toMatch(/svc\.sh (install|start)/);
+  });
+  it("F-vlad-260: 'Not running' çıktısı çalışıyor sayılmaz → start çağrılır", () => {
+    const s = sandbox(); const f = fixture(s);
+    run("ci-runner.sh", [...f.base, "--apply", "--token-stdin"], s, f.env, TOKEN + "\n");
+    writeFileSync(s.log, "");
+    const r = run("ci-runner.sh", [...f.base, "--apply"], s, { ...f.env, VLAD_SVC_STATUS: "Not running" });
+    expect(r.status).toBe(0);
+    expect(calls(s)).toContain("svc.sh start");
   });
 });

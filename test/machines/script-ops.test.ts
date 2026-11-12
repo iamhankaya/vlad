@@ -7,6 +7,7 @@ import { Journal } from "../../src/agent/journal.js";
 import { reconcile } from "../../src/agent/reconcile.js";
 import { scriptPlanId } from "../../src/agent/scripts/manifest.js";
 import { RemoteError, SCRIPT_RESULT_SENTINEL, type Os, type ScriptEntry } from "../../src/fleet/types.js";
+import { canSymlink } from "../helpers.js";
 import { entryOf, makeRepo, manifestJson, scriptRepo, sha256, symlinkIn, type Fixture } from "./script-fixture.js";
 
 // script-list / script-run op'ları (T20261109-07): gerçek geçici git deposu, gerçek bash (POSIX). Windows'ta bash testleri atlanır.
@@ -97,7 +98,7 @@ describe("script-run: bütünlük", () => {
     const e = await fail(scriptRun({ name: "x" }, deps(repo("echo a\n", { sha256: sha256("b") })), ctx));
     expect([e.code, /\[hash_mismatch\]/.test(e.message)]).toEqual(["forbidden", true]);
   });
-  it("symlink betik → forbidden [not_regular]", async () => {
+  it.skipIf(!canSymlink())("symlink betik → forbidden [not_regular]", async () => {
     const f = repo("echo a\n");
     symlinkIn(f, "agent-scripts/ln.sh", "x.sh");
     const m = entryOf(OS, "ln", "echo a\n");

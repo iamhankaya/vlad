@@ -36,8 +36,8 @@ const UNJOURNALED: ReadonlySet<AgentOp> = new Set<AgentOp>([...READ_ONLY, "xfer-
 const defaultJournaled = (op: AgentOp): boolean => !UNJOURNALED.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
-const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "apply-write", "forward-write", "script-run"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
-const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge", "script-run"]);
+const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "branch-push", "apply-write", "forward-write", "script-run"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
+const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge", "branch-push", "script-run"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
 const MAX_REPLY_BYTES = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (imza/meta payı); sınır bayt, karakter değil (F-vlad-126)
 const OPID_RE = /^[A-Za-z0-9._:-]{1,64}$/;
@@ -81,7 +81,7 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
     // bakım (selfUpdate sürerken/yeniden başlatma beklenirken): yalnız ping/op-status/script-list; uçuşta sayılanlar selfUpdate başlamadan önce denetlenir
     if (counted) {
       if (maint.on) throw new Fail("busy", "busy: [maintenance] Agent kendini güncelliyor; kısa süre sonra tekrar dene");
-      maint.begin(req.opId); began = true;
+      maint.begin(req.opId, req.op); began = true;
     }
     const ctx = { from: req.from, opId: req.opId };
     if (!(o.journaled?.(req.op, req.args) ?? defaultJournaled(req.op))) return sign("ok", { result: await handler(req.args, ctx) });

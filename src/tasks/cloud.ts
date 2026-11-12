@@ -4,7 +4,7 @@ import { join, relative, resolve } from "node:path";
 import { getSection, getVladHome, kbPaths, kbRelativePath, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
 import { splitSkills } from "../roles/store.js";
-import { PONYTAIL_OFF_NOTE, ponytailArm, ponytailOffRoleBody, withoutPonytail } from "./experiment.js";
+import { ponytailArm, ponytailOffRoleBody, withoutPonytail } from "./experiment.js";
 import type { PonytailArm } from "./experiment.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
@@ -271,13 +271,14 @@ function buildCloudPrompt(
   parts.push(...gateRules(readonly ? undefined : gate));
   if (role) {
     const { load, vendored } = splitSkills(role.skills, role.file);
-    if (vladSha) {
+    // F-vlad-175: the off arm never reads the role file from the clone (its ponytail bullet would reach the worker), so it takes the inline path
+    const pinned = !!vladSha && !role.ponytailOff;
+    if (pinned && vladSha) {
       const rel = (f: string) => relative(getVladHome(), f).split("\\").join("/");
       parts.push(vladOpening(vladSha, { title: role.title, rel: rel(role.file) }, vendored.map((v) => ({ name: v.name, rel: rel(v.file) }))));
     } else {
       parts.push(`## Rolün: ${role.title}\n${role.ponytailOff ? ponytailOffRoleBody(role.file) : readDoc<unknown>(role.file).body.trim()}`);
     }
-    if (role.ponytailOff && vladSha) parts.push(PONYTAIL_OFF_NOTE); // pinned clone: the worker reads the role file itself
     if (load.length) {
       parts.push(
         `İşe başlamadan şu skill'leri yüklemeyi dene: ${load.map((s) => `\`${s}\``).join(", ")}. ` +
@@ -285,7 +286,7 @@ function buildCloudPrompt(
       );
     }
     // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline (or is read from the pinned clone)
-    if (!vladSha) for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
+    if (!pinned) for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
   }
   for (const d of readonly ? [] : task.data.depends_on ?? []) {
     let report: string | null = null;

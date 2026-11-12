@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync } from "node:fs";
+import { mkdtempSync, realpathSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,7 +6,8 @@ import { runSpawn } from "../support/spawn-vlad.js";
 import { rmTemp } from "../helpers.js";
 
 const root = join(import.meta.dirname, "..", "..");
-const node = (script: string, args: string[], cwd = root) => runSpawn(process.execPath, [join(root, "scripts", script), ...args], { cwd, timeoutMs: 60_000 });
+// global-setup already built (or verified) dist/ before any test file runs; VLAD_SKIP_BUILD=1 keeps the nested test-run from re-running tsc over the shared dist/ while other files import it (F-vlad-319; workers do not see global-setup env changes)
+const node = (script: string, args: string[], cwd = root) => runSpawn(process.execPath, [join(root, "scripts", script), ...args], { cwd, timeoutMs: 60_000, env: { VLAD_SKIP_BUILD: "1" } });
 
 describe("u2 scope CLI", () => {
   it("--files … --json prints the selection", () => {
@@ -23,6 +24,13 @@ describe("u2 scope CLI", () => {
     expect(r.status, r.stderr + r.stdout).toBe(0);
     // eslint-disable-next-line no-control-regex
     expect((r.stdout + r.stderr).replace(/\u001b\[[0-9;]*m/g, "")).toMatch(/Test Files\s+1 passed/);
+  });
+  it("F-vlad-319: --run does not rebuild the shared dist/ that other test files are importing", () => {
+    const cli = join(root, "dist", "cli.js");
+    const before = statSync(cli).mtimeMs;
+    const r = node("test-scope.mjs", ["--files", "test/kb/doc.test.ts", "--run"]);
+    expect(r.status, r.stderr + r.stdout).toBe(0);
+    expect(statSync(cli).mtimeMs).toBe(before);
   });
   it("an unmapped path is reported on stderr and selects everything", () => {
     const r = node("test-scope.mjs", ["--files", "tools/x.bin"]);

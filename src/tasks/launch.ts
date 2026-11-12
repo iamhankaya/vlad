@@ -6,6 +6,7 @@ import {
   unlinkReparsePoints, worktreePath,
 } from "../git/git.js";
 import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
+import { readSessionFile, SESSION_NAME_RE } from "../kb/session.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { relatedOpenFindings } from "../findings/similar.js";
@@ -51,7 +52,17 @@ function projectCard(slug: string): ProjectCard {
   return readDoc<ProjectCard>(file).data;
 }
 
-const projectPath = (slug: string): string => projectCard(slug).path;
+/**
+ * Card path as is when it exists here; a path from another OS (C:\\dev\\x on the Mac brain) is resolved as
+ * `<brain root>/<repo name>` against the brain's `roots` (F-vlad-200). No match keeps the card path (the git error names it).
+ */
+export function projectPath(slug: string, cfg?: VladConfig): string {
+  const path = projectCard(slug).path;
+  if (existsSync(path) || !cfg?.brain) return path;
+  const name = repoNameOf(path);
+  const hit = (machineDef(cfg, cfg.brain)?.roots ?? []).map((r) => join(r, name)).find((d) => name && existsSync(join(d, ".git")));
+  return hit ?? path;
+}
 const projectDefaultBranch = (slug: string): string | undefined => projectCard(slug).default_branch ?? undefined;
 
 /** Persists the last error on a task without touching its state. */
@@ -126,7 +137,7 @@ export function ensureIntegration(
   const p = getTask(parentId);
   if (CLOSED.includes(p.data.state)) throw new Error(`çatı görev ${parentId} ${p.data.state}; fazı başlatılamaz`);
   const slug = project ?? p.data.project;
-  const repo = projectPath(slug);
+  const repo = projectPath(slug, cfg);
   const { branch, worktree } = ensureIntegrationGit(repo, parentId, cfg, projectDefaultBranch(slug));
   recordIntegration(parentId, slug, branch, worktree);
   return { repo, branch, worktree };
@@ -157,7 +168,7 @@ export function integrationWorktrees(
   for (const project of projects) {
     // a phase project whose card is gone must not block listing or cleanup of the rest
     if (!existsSync(join(kbPaths().projects, `${project}.md`))) continue;
-    const repo = projectPath(project);
+    const repo = projectPath(project, cfg);
     const worktree = worktreePath(cfg, repo, parentId, process.platform as "win32" | "darwin" | "linux");
     if (!out.some((w) => w.worktree === worktree)) out.push({ project, repo, branch, worktree });
   }
@@ -297,7 +308,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
     arm = ponytailArm(id, role, cfg);
     if (arm === "off") role = withoutPonytail(role!);
-    repo = projectPath(task.data.project);
+    repo = projectPath(task.data.project, cfg);
     wt = worktreePath(cfg, repo, id, process.platform as "win32" | "darwin" | "linux");
     // a pipeline phase branches from the pipeline's integration branch; the rollback in launchCore leaves it alone
     base = task.data.parent ? (await withKbLock(() => ensureIntegration(task.data.parent!, cfg, task.data.project))).branch : undefined;
@@ -520,6 +531,21 @@ async function pollLaunch(transport: RemoteTransport, machine: string, op: strin
 interface RemoteLaunched { branch: string; worktree: string; method?: string; integration?: { branch: string; worktree: string } }
 interface OpStatus { state: string; result?: RemoteLaunched; truncated?: boolean }
 
+/**
+ * F-vlad-199: the brain's session name goes to the worker so its notifications reach the live brain session (the worker's own
+ * vlad-session.txt is local and stale). Sent only when the worker's ping lists the `session` cap: an old worker rejects unknown
+ * args, so it (and an unreachable ping) gets none and keeps the old behaviour.
+ */
+export async function sessionArg(transport: RemoteTransport, machine: string): Promise<{ sessionName?: string }> {
+  let name: string | null = null;
+  try { name = readSessionFile(); } catch { return {}; }
+  if (!name || !SESSION_NAME_RE.test(name)) return {};
+  try {
+    const { caps } = (await transport.call<{ caps?: unknown }>(machine, "ping", {}, { timeoutMs: 10_000 })).result ?? {};
+    return Array.isArray(caps) && caps.includes("session") ? { sessionName: name } : {};
+  } catch { return {}; }
+}
+
 async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: RemoteDeps): Promise<Task> {
   const { cfg } = o;
   const { transport } = remote;
@@ -592,6 +618,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
     // F-vlad-239: a recorded worktree on a queued task means an earlier run ended (failed → queued); the worker re-adopts it
     ...(task.data.worktree && !old ? { retry: true } : {}),
+    ...(await sessionArg(transport, machine)),
   };
   const op = await reserve(old);
 
@@ -663,11 +690,11 @@ export function cleanupTask(
     } catch {
       /* a window that could not be closed is reported by the removal below */
     }
-    removeTaskWorktree(projectPath(t.data.project), wt, id);
+    removeTaskWorktree(projectPath(t.data.project, o.cfg), wt, id);
     // F-vlad-231/244: a cancelled task's branch without own commits would block a relaunch. Proof is "no commits beyond the base it was
     // cut from" (the integration branch for a phase), not `-d`'s HEAD comparison; no proof (null) keeps the branch.
     if (t.data.state === "cancelled") {
-      const repo = projectPath(t.data.project), branch = `vlad/${id}`;
+      const repo = projectPath(t.data.project, o.cfg), branch = `vlad/${id}`;
       const parentBranch = t.data.parent ? `vlad/${t.data.parent}` : null;
       const base = parentBranch && runGit(repo, ["rev-parse", "--verify", "-q", `refs/heads/${parentBranch}`]) ? parentBranch : "HEAD";
       if (unmergedCommits(repo, branch, base) === 0) runGit(repo, ["branch", "-D", branch]);

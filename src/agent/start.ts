@@ -19,12 +19,13 @@ import { agentEnv, setAgentEnv } from "./ops/env.js";
 import { reconcileApplyWrite } from "./ops/apply-write.js";
 import { execIsWrite } from "./ops/exec.js";
 import { flushQueue } from "./ops/forward-write.js";
-import { reconcileScriptRun } from "./ops/script.js";
+import { reconcileScriptRun, startupRecover, updaterPidFile } from "./ops/script.js";
 import { buildAktarim } from "./ops/index.js";
 import { createProdDeps } from "../transfer/deps.js";
 import { startClipSync } from "../clip/index.js";
 import { reconcileLaunch } from "./ops/launch.js";
 import { reconcileMerge } from "./ops/merge-reconcile.js";
+import { reconcileBranchPush } from "./ops/branch-push.js";
 import { sweepScriptDir } from "./scripts/run.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
@@ -97,8 +98,9 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   const queue = kind === "worker-agent" ? new AgentQueue(join(dir, "queue"), nowMs) : undefined;
   const build = buildId();
   setAgentEnv({ self, kind, cfg, startedAt: nowMs(), build, journal, queue, now: nowMs, transport: new AgentClient({ self, keys, config: () => loadConfig() }) });
-  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge, "script-run": reconcileScriptRun }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
+  reconcile(journal, { "apply-write": reconcileApplyWrite, launch: reconcileLaunch, merge: reconcileMerge, "branch-push": reconcileBranchPush, "script-run": reconcileScriptRun }); // merge uzlaştırıcısı işçi bağlamını (ortam) ister, bu yüzden setAgentEnv'den sonra
 
+  startupRecover(getVladHome(), { pidFile: updaterPidFile(dir) }); // F-vlad-274: önceki süreç selfUpdate ortasında öldüyse yarım node_modules/dist geri alınır, bitene dek bakım (op kabul yok)
   sweepScriptDir(join(dir, "scripts-run")); // çökmüş çalışmadan kalan geçici betikler
 
   const deps = createProdDeps();

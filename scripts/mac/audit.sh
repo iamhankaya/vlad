@@ -103,7 +103,12 @@ else row ci-user eksik "$CI_USER hesabı yok (docs/mac-ci-runner.md §2, kullan�
 # eval yok (F-vlad-251): ev dizini dscl'den, yoksa /Users/<ad>
 CI_HOME="${VLAD_CI_HOME:-$(dscl . -read "/Users/$CI_USER" NFSHomeDirectory 2>/dev/null | awk '{print $2; exit}' || true)}"
 [ -n "$CI_HOME" ] || CI_HOME="/Users/$CI_USER"
-if [ -n "$CI_HOME" ] && [ -f "$CI_HOME/actions-runner/.runner" ]; then row ci-runner ok "$CI_HOME/actions-runner kayıtlı"; else row ci-runner eksik "runner kayıtlı değil (scripts/mac/ci-runner.sh)"; fi
+# F-vlad-260: runner dizini CI hesabında 0700 olabilir; beyin hesabı erişemeyince "yok" demek yanlış (doğru kurulumda --strict kırılır), "ok" demek de: erişim reddi ayrı sınıf (uyarı)
+RUNNER_DIR="$CI_HOME/actions-runner"
+if [ -f "$RUNNER_DIR/.runner" ]; then row ci-runner ok "$RUNNER_DIR kayıtlı"
+elif { [ -e "$CI_HOME" ] && [ ! -x "$CI_HOME" ]; } || { [ -e "$RUNNER_DIR" ] && { [ ! -x "$RUNNER_DIR" ] || [ ! -r "$RUNNER_DIR" ]; }; }; then
+  row ci-runner uyarı "erişim reddi: runner dizini bu hesaba kapalı, doğrulanamadı; $CI_USER hesabıyla doğrula (sudo -u $CI_USER test -f $RUNNER_DIR/.runner)"
+else row ci-runner eksik "runner kayıtlı değil (scripts/mac/ci-runner.sh)"; fi
 
 # --- çıktı ---
 jesc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
