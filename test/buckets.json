@@ -144,6 +144,7 @@
     "test/machines/c2-kb-sync.test.ts",
     "test/machines/c2-remote.test.ts",
     "test/machines/c2-worker-ops.test.ts",
+    "test/machines/f199-session.test.ts",
     "test/machines/close.test.ts",
     "test/machines/close-branch-push.test.ts",
     "test/machines/d2-launch-gate-fixes.test.ts",

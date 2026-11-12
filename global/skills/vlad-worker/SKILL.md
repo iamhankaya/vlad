@@ -111,7 +111,7 @@ Görev `awaiting_approval` olur. Ardından **bildirim gönder** (adım 7).
 Durum değiştiğinde (soru sordun, rapor yazdın):
 1. `vlad session name` çalıştır ve `ListAgents` çalıştır.
 2. Hedef adı seç:
-   - `vlad session name`'in döndürdüğü ad `ListAgents` listesinde varsa onu kullan.
+   - `vlad session name`'in döndürdüğü ad `ListAgents` listesinde varsa onu kullan. Uzak işçide beyin adı `VLAD_SESSION` ortam değişkeniyle gelir ve `vlad session name` onu dosyadan önce döndürür (F-vlad-199; makinedeki `vlad-session.txt` eski olabilir).
    - Yoksa (komut başarısız veya ad listede değil): `ListAgents`'ta adı `vlad-` ile başlayan session'lara bak (VLAD `C:\dev\vlad`'da çalışır). Tam olarak bir tane varsa onu kullan.
    - Hiçbiri yoksa veya birden fazla `vlad-` session'ı varsa bildirimi **sessizce atla**.
 3. Hedef varsa:

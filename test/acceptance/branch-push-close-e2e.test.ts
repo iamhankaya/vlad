@@ -57,7 +57,8 @@ describe("task close (uzak tek görev): push → fetch → beyinde merge", () =>
     const txt = x.w.readTask(x.w.brain, x.id);
     expect(front(txt, "state")).toBe("done");
     expect(txt).toContain(`branch-push: vlad/${x.id} @ ${gated.slice(0, 12)} origin'e itildi (windows)`);
-    expect(journalOps(x, "branch-push")).toHaveLength(1);
+    // 2 op: ilki gerçek push, ikincisi push değil merge öncesi uç doğrulaması (aynı sha, idempotent; F-vlad-320, karar T20261112-08); gerçek push yine 1 (aşağıda)
+    expect(journalOps(x, "branch-push")).toHaveLength(2);
     expect(journalOps(x, "merge")).toHaveLength(0); // merge işçiye gitmedi
     expect(x.pushes()).toHaveLength(1);
   }, T);
@@ -162,7 +163,8 @@ describe("task close (uzak tek görev): yeniden koşu (done) — idempotent", ()
     expect(again.json, again.out + again.err).toMatchObject({ ok: true });
     for (const s of ["push", "fetch", "merge"]) expect(["skipped", undefined], s).toContain(status(again.json, s));
     expect(brainMain(x)).toBe(mainAfter);
-    expect(journalOps(x, "branch-push")).toHaveLength(1);
+    // ilk koşudaki push + merge öncesi doğrulama = 2; yeniden koşu (done) üçüncüyü eklemez (F-vlad-320, karar T20261112-08)
+    expect(journalOps(x, "branch-push")).toHaveLength(2);
   }, T);
 
   it("F-vlad-308 uzak kısmı: görev done ama gate'lenen head hedefte değil → precheck'te durur (merge edilmemiş)", async () => {
