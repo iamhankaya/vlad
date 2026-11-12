@@ -80,8 +80,6 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     machine: (t) => (cfg.machines ? gateMachineOf(t, cfg) : null),
     gate: async (t, target, m) => { const tr = transport(); await syncKb(tr, m); return remoteGateRun(tr, m, t, target); },
     push: (t, m, head) => remoteBranchPush(transport(), m, t, head),
-    // branch-push idempotenttir ve işçide ucu expectHead'e karşı denetler (stale_tip); origin zaten güncelse yeniden itmez
-    verifyTip: async (t, m, head) => { const r = await remoteBranchPush(transport(), m, t, head); if (r.head !== head) throw new Error("işçi dal ucu doğrulanamadı: yanıt gate'lenen sha'yı içermiyor"); },
     fetch: (t, head) => fetchTaskBranch(t, head),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),
