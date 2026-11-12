@@ -71,6 +71,7 @@ function remoteFor(head: string): CloseRemote {
     preview: vi.fn(async () => ({ log: "", diffStat: "", conflicts: [] })),
     merge: vi.fn(async () => ({ head: "c".repeat(40), merged: true })),
     cleanup: vi.fn(async () => {}),
+    verifyTip: vi.fn(async () => {}), // F-vlad-328: verifyTip zorunlu
   };
 }
 const deps = (remote: CloseRemote): Partial<CloseDeps> => ({ cfg, kbCommit, closeWorker: () => {}, remote });
