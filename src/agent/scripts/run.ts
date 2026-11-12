@@ -63,6 +63,8 @@ export interface RunSpec {
   env: NodeJS.ProcessEnv; timeoutMs: number; stdoutCapKb: number; platform?: NodeJS.Platform;
   /** zaman aşımında ağacı öldürür; true = bittiği doğrulandı (varsayılan killTreeWait; testler değiştirir) */
   killTree?: (p: ReturnType<typeof spawn>) => Promise<boolean>;
+  /** süreç başlar başlamaz pid ile çağrılır (POSIX: süreç grubu lideri); selfUpdate sidecar'ı için (F-vlad-274) */
+  onSpawn?: (pid: number) => void;
 }
 export type RunOut = Pick<ScriptRunResult, "exit" | "timedOut" | "durationMs" | "stdout" | "stderr" | "truncated" | "data" | "dataError" | "recovery"> & {
   /** yalnız recovery:"pending" iken: öldürmeyi yeniden dener (iç kullanım; sonuca girmez) */
@@ -113,7 +115,7 @@ function spawnScript(cmd: string, args: string[], s: RunSpec): Promise<RunOut> {
     const t0 = Date.now();
     const p = spawn(cmd, args, { cwd: s.cwd, env: s.env, shell: false, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     let outBuf = Buffer.alloc(0), errBuf = Buffer.alloc(0), outTotal = 0, errTotal = 0, started = false, finished = false;
-    p.once("spawn", () => { started = true; });
+    p.once("spawn", () => { started = true; if (p.pid) { try { s.onSpawn?.(p.pid); } catch { /* sidecar yazılamadı: betik yine çalışır, açılış kurtarması güvenli tarafta kalır */ } } });
     p.stdout.on("data", (d: Buffer) => { outTotal += d.length; outBuf = Buffer.concat([outBuf, d]).subarray(-outKeep); }); // bellek sınırı (bayt)
     p.stderr.on("data", (d: Buffer) => { errTotal += d.length; errBuf = Buffer.concat([errBuf, d]).subarray(-2 * errCap); });
     const done = (exit: number, timedOut: boolean, extraErr = "", unkilled = false) => {

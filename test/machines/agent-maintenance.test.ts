@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { renameSync, symlinkSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,7 +29,7 @@ function halfUpdated(dir: string) {
 }
 /** ilk n rename çağrısı EBUSY ile patlar */
 const flaky = (n: number) => { let c = 0; return (a: string, b: string) => { if (c++ < n) throw Object.assign(new Error("EBUSY"), { code: "EBUSY" }); renameSync(a, b); }; };
-import { renameSync } from "node:fs";
+
 
 describe("F-vlad-275: recoverSelfUpdate sonucu bildirir", () => {
   it("işaret yok → true; başarılı geri yükleme → true", () => {
@@ -67,6 +67,8 @@ describe("F-vlad-275: scriptRun geri yükleme başarısızsa bakım bayrağını
   }, 20_000);
 });
 
+/** ölü güncelleyiciyi gösteren sidecar (isAlive varsayılanı gerçek pid yoklaması: çok büyük pid yok sayılır) */
+const deadPid = () => { const f = join(tmp(), "self-update.pid"); writeFileSync(f, "2147483646"); return f; };
 describe("F-vlad-274: açılışta işaret varsa kurtarma; tavan + uyarı + görünürlük", () => {
   it("işaret yok → bakım açılmaz", () => {
     startupRecover(tmp());
@@ -74,13 +76,13 @@ describe("F-vlad-274: açılışta işaret varsa kurtarma; tavan + uyarı + gör
   });
   it("işaret var, kurtarma başarılı → yarım güncelleme geri alınır, bayrak kalkar", () => {
     const d = tmp(); halfUpdated(d);
-    startupRecover(d);
+    startupRecover(d, { pidFile: deadPid() });
     expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
     expect(maint.on).toBe(false);
   });
   it("işaret var, kurtarma başarısız → bakımda kalır, yeniden dener, sonunda kalkar", async () => {
     const d = tmp(); halfUpdated(d);
-    startupRecover(d, { rename: flaky(3), everyMs: 20, warn: () => {} });
+    startupRecover(d, { pidFile: deadPid(), rename: flaky(3), everyMs: 20, warn: () => {} });
     expect(maint.on).toBe(true);
     expect(maint.snapshot().reason).toBe("recovery");
     await vi.waitFor(() => expect(maint.on).toBe(false), { timeout: 5_000 });
@@ -89,7 +91,7 @@ describe("F-vlad-274: açılışta işaret varsa kurtarma; tavan + uyarı + gör
   it("tavan aşılınca bir kez uyarı yazılır ve durum 'stuck' olur (ping'te görünür); yeniden denemeye devam", async () => {
     const d = tmp(); halfUpdated(d);
     const warns: string[] = [];
-    startupRecover(d, { rename: flaky(99), everyMs: 10, maxTries: 3, warn: (m) => warns.push(m) });
+    startupRecover(d, { pidFile: deadPid(), rename: flaky(99), everyMs: 10, maxTries: 3, warn: (m) => warns.push(m) });
     await vi.waitFor(() => expect(maint.snapshot().stuck).toBe(true), { timeout: 5_000 });
     await new Promise((r) => setTimeout(r, 80));
     expect(warns).toHaveLength(1);
@@ -126,25 +128,88 @@ describe("F-vlad-278: uçuştaki op'lar görünür", () => {
   });
 });
 
-describe("F-vlad-272: killTreeWait yeniden denemede eski pid'e taskkill atmaz", () => {
+describe("F-vlad-272: killTreeWait Windows yeniden deneme", () => {
   const proc = (o: { exitCode: number | null }) => ({ pid: 4242, exitCode: o.exitCode, signalCode: null, kill: () => true }) as unknown as Parameters<typeof killTreeWait>[0];
-  const deps = (calls: string[]): KillDeps => ({
+  const deps = (calls: string[], code: number | null = 0): KillDeps => ({
     platform: "win32", waitMs: 200, pollMs: 50, sleep: async () => {}, isAlive: () => true,
-    spawnTaskkill: async (pid) => { calls.push(`taskkill:${pid}`); return 0; },
+    spawnTaskkill: async (pid) => { calls.push(`taskkill:${pid}`); return code; },
   });
-  it("kök süreç tutamacı çıkmış (pid başkasına geçmiş olabilir) → taskkill YOK, true", async () => {
+  it("ağaç öldürme hiç doğrulanmadıysa (ilk taskkill başarısız) kök tutamaç çıksa da false: torunlar yaşıyor olabilir; eski pid'e taskkill YOK", async () => {
     const calls: string[] = [];
-    expect(await killTreeWait(proc({ exitCode: 0 }), { ...deps(calls), recheck: true })).toBe(true);
+    const p = proc({ exitCode: null });
+    expect(await killTreeWait(p, deps(calls, 1))).toBe(false); // taskkill erişim reddi; yalnız p.kill()
+    (p as { exitCode: number | null }).exitCode = 0; // kök çıktı, torunlar belirsiz
+    calls.length = 0;
+    expect(await killTreeWait(p, { ...deps(calls), recheck: true })).toBe(false);
     expect(calls).toEqual([]);
   });
-  it("kök süreç hâlâ bizim ve canlı → yeniden denemede taskkill atılır", async () => {
+  it("taskkill /T başarılı (0) ama kök süre içinde ölmediyse, sonra tutamaç çıkınca yeniden denemede taskkill'siz true", async () => {
+    const calls: string[] = [];
+    const p = proc({ exitCode: null });
+    expect(await killTreeWait(p, deps(calls, 0))).toBe(false); // isAlive hep true → süre doldu
+    (p as { exitCode: number | null }).exitCode = 0;
+    calls.length = 0;
+    expect(await killTreeWait(p, { ...deps(calls), recheck: true })).toBe(true);
+    expect(calls).toEqual([]);
+  });
+  it("kök süreç hâlâ bizim ve ağaç öldürme doğrulanmadı → yeniden denemede taskkill atılır", async () => {
     const calls: string[] = [];
     await killTreeWait(proc({ exitCode: null }), { ...deps(calls), recheck: true });
     expect(calls).toEqual(["taskkill:4242"]);
   });
-  it("ilk denemede (recheck yok) tutamaç çıkmış olsa da taskkill davranışı değişmez", async () => {
-    const calls: string[] = [];
-    await killTreeWait(proc({ exitCode: null }), deps(calls));
-    expect(calls).toEqual(["taskkill:4242"]);
+});
+
+describe("F-vlad-274 P1: açılış kurtarması güncelleyicinin durduğunu doğrular", () => {
+  const side = (d: string) => join(d, "self-update.pid");
+  it("sidecar yok (eski biçim) → geri alınmaz, bakımda kalır, uyarı", () => {
+    const d = tmp(); halfUpdated(d);
+    const warns: string[] = [];
+    startupRecover(d, { pidFile: side(tmp()), rename: renameSync, everyMs: 10_000, warn: (m) => warns.push(m) });
+    expect(maint.on).toBe(true);
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("YENI");
+    expect(existsSync(join(d, ".vlad-npm-ci-running"))).toBe(true);
+    expect(warns.join("\n")).toMatch(/pid/);
+  });
+  it("sidecar'daki süreç grubu canlı → dokunulmaz (bakımda bekler); ölünce geri alınır ve sidecar silinir", async () => {
+    const d = tmp(); halfUpdated(d);
+    const pf = side(tmp()); writeFileSync(pf, "4242");
+    let alive = true;
+    startupRecover(d, { pidFile: pf, isAlive: () => alive, everyMs: 20, warn: () => {} });
+    expect(maint.on).toBe(true);
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("YENI");
+    await new Promise((r) => setTimeout(r, 80));
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8"), "canlı güncelleyici varken geri yükleme yarışı olmamalı").toBe("YENI");
+    alive = false;
+    await vi.waitFor(() => expect(maint.on).toBe(false), { timeout: 5_000 });
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
+    expect(existsSync(pf)).toBe(false);
+  });
+  it("sidecar'daki süreç ölü → hemen geri alınır", () => {
+    const d = tmp(); halfUpdated(d);
+    const pf = side(tmp()); writeFileSync(pf, "4242");
+    startupRecover(d, { pidFile: pf, isAlive: () => false });
+    expect(maint.on).toBe(false);
+    expect(readFileSync(join(d, "node_modules", "f"), "utf8")).toBe("ESKI");
+  });
+  posix("scriptRun selfUpdate: spawn anında güncelleyici pid'i sidecar'a yazılır, kurtarma bitince silinir", async () => {
+    const f = scriptRepo(OS, "x", `cd "$VLAD_REPO"\ncat "$VLAD_STATE_PID_PROBE" 2>/dev/null\nexit 1\n`, { class: "write", selfUpdate: true });
+    fixtures.push(f);
+    const state = tmp();
+    const seen: string[] = [];
+    const deps: ScriptDeps = { home: f.dir, platform: OS, machine: "win", roots: [], stateDir: state, env: { PATH: process.env.PATH ?? "" }, warn: () => {}, onUpdaterSpawn: (pid) => seen.push(String(pid)) };
+    const approval = { planId: scriptPlanId({ machine: "win", name: "x", platform: OS, sha256: f.entry.sha256, params: {} }) };
+    await scriptRun({ name: "x", approval }, deps, { opId: "op-pid" });
+    expect(seen).toHaveLength(1);
+    expect(existsSync(join(state, "self-update.pid")), "betik bittikten sonra sidecar kalmaz").toBe(false);
+  });
+});
+
+describe("symlink yedek reddi (güvenlik, düşük)", () => {
+  posix("node_modules-old symlink ise geri yüklenmez (false, işaret kalır)", () => {
+    const d = tmp(); writeFileSync(join(d, ".vlad-npm-ci-running"), "");
+    const target = tmp();
+    symlinkSync(target, join(d, "node_modules-old"));
+    expect(recoverSelfUpdate(d)).toBe(false);
+    expect(existsSync(join(d, ".vlad-npm-ci-running"))).toBe(true);
   });
 });
