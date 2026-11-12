@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getVladHome } from "../../kb/home.js";
 import { agentDir } from "../../fleet/state.js";
@@ -40,7 +40,27 @@ export interface ScriptDeps {
   killTree?: RunSpec["killTree"];
   /** süreç ağacı doğrulanamayan selfUpdate zaman aşımında yeniden deneme aralığı (varsayılan 5 sn) */
   retryMs?: number;
+  /** geri yükleme rename'i (testler için); varsayılan renameSync */
+  rename?: (a: string, b: string) => void;
+  /** kurtarma bu kadar denemede başarısız olursa bir kez uyarı + ping `stuck` (varsayılan 120 ≈ 10 dk) */
+  recoverMaxTries?: number;
+  /** uyarı çıktısı (varsayılan stderr) */
+  warn?: (msg: string) => void;
+  /** selfUpdate betiği başlayınca pid ile çağrılır (test gözlemi; sidecar yine yazılır) */
+  onUpdaterSpawn?: (pid: number) => void;
 }
+
+/** selfUpdate güncelleyicisinin pid'i (POSIX: süreç grubu lideri); işaret dosyası güncelleyicinin durduğunu kanıtlamaz, bu kanıtlar (F-vlad-274) */
+export const updaterPidFile = (stateDir: string): string => join(stateDir, "self-update.pid");
+/** true = ölü, false = canlı, "unknown" = sidecar yok/okunamadı (eski biçim: güvenli tarafta kal) */
+function updaterGone(pidFile: string, isAlive: (pid: number) => boolean): boolean | "unknown" {
+  let pid: number;
+  try { pid = Number(readFileSync(pidFile, "utf8").trim()); } catch { return "unknown"; }
+  if (!Number.isInteger(pid) || pid <= 0) return "unknown";
+  return !isAlive(pid);
+}
+/** POSIX'te negatif pid = süreç grubu (torunlar dahil); Windows'ta yalnız kök pid (torunlar doğrulanamaz: [kalan F-vlad-272]) */
+const procAlive = (pid: number): boolean => { try { process.kill(process.platform === "win32" ? pid : -pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code === "EPERM"; } };
 export const defaultScriptDeps = (): ScriptDeps => {
   // çalışan Agent'ın kendi config'i (diskten/şemadan okumaz: VLAD_HOME yalnız git deposu olarak gerekir)
   const e = agentEnv();
@@ -92,7 +112,10 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
   if (active) throw new RemoteError("busy", `busy: başka bir betik sürüyor: ${active}`);
   // selfUpdate: başlamadan uçuşta başka op varsa busy (npm ci altlarından çekmesin); denetim ile bayrak arasında await yok (tek tur)
   if (entry.selfUpdate) {
-    if (maint.others(ctx.opId) > 0) throw new RemoteError("busy", "busy: [maintenance] uçuşta başka işlemler var; bitince selfUpdate betiğini tekrar çalıştır");
+    if (maint.others(ctx.opId) > 0) {
+      const l = maint.list(ctx.opId).slice(0, 5).map((o) => `${o.op}(${o.opId}, ${Math.round(o.ageMs / 1000)}s)`).join(", "); // F-vlad-278: neyin beklendiği görünsün
+      throw new RemoteError("busy", `busy: [maintenance] uçuşta başka işlemler var: ${l}; bitince selfUpdate betiğini tekrar çalıştır`);
+    }
     maint.enter();
   }
   active = entry.name;
@@ -102,11 +125,12 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
       bytes: chk.bytes!, name: entry.name, ext: entry.file.endsWith(".ps1") ? "ps1" : "sh", opId: ctx.opId, cwd: st.repo, dir: join(d.stateDir, "scripts-run"),
       env: scriptEnv(d.env, { home: d.home, repo: st.repo, machine: d.machine, opId: ctx.opId, script: entry.name, params, roots: d.roots }),
       timeoutMs: entry.timeoutSec * 1000, stdoutCapKb: entry.outputMaxKb, platform: d.platform, killTree: d.killTree,
+      ...(entry.selfUpdate ? { onSpawn: (pid: number) => { d.onUpdaterSpawn?.(pid); writeFileSync(updaterPidFile(d.stateDir), String(pid), { mode: 0o600 }); } } : {}),
     });
     const { retryKill, ...res } = out;
     if (res.recovery === "pending" && retryKill) {
       // süreç ağacı hâlâ koşuyor olabilir (npm/tsc node_modules'a yazıyor): geri yükleme, bakım bayrağı ve `active` ertelenir, Agent sınırsız yeniden dener
-      deferred = true; deferRecovery(st.repo, retryKill, d.retryMs ?? 5000, entry.selfUpdate);
+      deferred = true; holdAndRecover({ repo: st.repo, retryKill, selfUpdate: entry.selfUpdate, pidFile: entry.selfUpdate ? updaterPidFile(d.stateDir) : undefined, ...recoverOpts(d) });
       return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
     }
     // restart yalnız Agent koyar: selfUpdate ∧ exit 0 ∧ data.ok === true ∧ değişiklik var (changed:false iken yalnız çalışan derleme diskteki dist/.build-head'den farklıysa: önceki yardımcı başarısız olduysa yeniden denenebilsin) ∧ yeniden başlatma yolu var (başarısız bakım betiğinde Agent çalışmaya devam eder)
@@ -116,24 +140,61 @@ export async function scriptRun(args: unknown, d: ScriptDeps = defaultScriptDeps
     }
     return { name: entry.name, platform: entry.platform, head: st.head, sha256: entry.sha256, ...res };
   } finally {
+    // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
+    if (!deferred) {
+      // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar; başarısızsa (EBUSY…) bayrak AÇIK kalır ve yeniden denenir (F-vlad-275)
+      // sidecar yalnız geri alma başarılı olunca silinir (P2): başarısızsa kalır, yeniden başlatmada startupRecover ölü pid'i görüp geri almayı dener
+      const pidFile = updaterPidFile(d.stateDir);
+      if (entry.selfUpdate && !restarting && !recoverSelfUpdate(st.repo, d.rename)) { deferred = true; holdAndRecover({ repo: st.repo, selfUpdate: true, pidFile, ...recoverOpts(d) }); }
+      else if (entry.selfUpdate) { if (!restarting) maint.leave(); try { rmSync(pidFile, { force: true }); } catch { /* dizin yok */ } }
+    }
     if (!deferred) active = null;
-    if (entry.selfUpdate && !restarting && !deferred) {
-      recoverSelfUpdate(st.repo); // betik zaman aşımıyla/çökmeyle öldüyse kendi geri yüklemesini yapamadı: bayrak kalkmadan Agent yapar
-      maint.leave();
-    } // yeniden başlatma bekleyen Agent yeni op almaz: bayrak yeniden başlayana kadar açık
   }
 }
 
-/** Öldürme doğrulanana dek aralıkla yeniden dener; doğrulanınca kurtarmayı yapar ve bakım bayrağını kaldırır. Zamanlayıcı süreci tutmaz (unref). */
-function deferRecovery(repo: string, retryKill: () => Promise<boolean>, everyMs: number, selfUpdate: boolean): void {
-  const tick = (): void => {
-    void retryKill().catch(() => false).then((ok) => {
-      if (!ok) { setTimeout(tick, everyMs).unref(); return; }
-      if (selfUpdate) { recoverSelfUpdate(repo); maint.leave(); }
-      active = null;
-    });
+const recoverOpts = (d: Pick<ScriptDeps, "retryMs" | "rename" | "recoverMaxTries" | "warn">) => ({ everyMs: d.retryMs ?? 5000, rename: d.rename, maxTries: d.recoverMaxTries ?? 120, warn: d.warn });
+
+interface HoldOpts { pidFile?: string; repo: string; retryKill?: () => Promise<boolean>; selfUpdate: boolean; everyMs: number; rename?: (a: string, b: string) => void; maxTries?: number; warn?: (m: string) => void }
+/**
+ * Öldürme doğrulanana ve (selfUpdate'te) geri yükleme başarılı olana dek aralıkla yeniden dener; bitince bakım bayrağını ve `active`'i kaldırır.
+ * Tavan (`maxTries`): aşılınca bir kez uyarı yazılır ve ping `stuck:true` gösterir; bayrak yine kalkmaz (yarım node_modules ile op kabul edilmez), deneme sürer.
+ * Zamanlayıcı süreci tutmaz (unref).
+ */
+function holdAndRecover(o: HoldOpts): void {
+  let tries = 0, killed = !o.retryKill;
+  const warn = o.warn ?? ((m: string) => { process.stderr.write(`${m}\n`); });
+  const tick = async (): Promise<void> => {
+    if (!killed) killed = await o.retryKill!().catch(() => false);
+    if (killed && (!o.selfUpdate || recoverSelfUpdate(o.repo, o.rename))) { if (o.selfUpdate) maint.leave(); if (o.pidFile) { try { rmSync(o.pidFile, { force: true }); } catch { /* yok */ } } active = null; return; }
+    tries++; maint.attempt(tries);
+    if (o.maxTries !== undefined && tries === o.maxTries) {
+      maint.markStuck();
+      warn(`vlad agent: bakım kurtarması ${tries} denemede tamamlanamadı (${killed ? "geri yükleme" : "süreç ağacı"}); Agent bakımda kalıyor, yeni op almıyor. node_modules/dist yedeklerini elle denetle ve Agent'ı yeniden başlat.`);
+    }
+    setTimeout(() => void tick(), o.everyMs).unref();
   };
-  setTimeout(tick, everyMs).unref();
+  setTimeout(() => void tick(), o.everyMs).unref();
+}
+
+/**
+ * Açılışta (F-vlad-274): önceki süreç selfUpdate ortasında öldüyse (`.vlad-npm-ci-running` kaldı) yarım güncellemeyi geri alır. İşaret güncelleyicinin
+ * durduğunu kanıtlamaz (POSIX'te detached npm/tsc Agent çökse de yaşar): önce sidecar pid'indeki süreç grubunun öldüğü doğrulanır; canlıysa ÖLDÜRÜLMEZ
+ * (pid yeniden kullanılmış olabilir), bakımda beklenir. Sidecar yoksa (eski biçim) güvenli tarafta kalınır: bakımda + uyarı. Geri alma başarısızsa yeniden dener.
+ */
+export function startupRecover(repo: string, o: { pidFile: string; platform?: NodeJS.Platform; isAlive?: (pid: number) => boolean; rename?: (a: string, b: string) => void; everyMs?: number; maxTries?: number; warn?: (m: string) => void }): void {
+  if (!existsSync(join(repo, ".vlad-npm-ci-running"))) return;
+  const warn = o.warn ?? ((m: string) => { process.stderr.write(`${m}\n`); });
+  const isAlive = o.isAlive ?? procAlive;
+  maint.enter("recovery");
+  // Windows: yalnız kök pid yoklanabilir, torunlar (npm/tsc) yaşıyor olabilir; kanıtlanamadığından geri alma yapılmaz (bakımda kal + uyarı, stuck görünür)
+  const win = (o.platform ?? process.platform) === "win32";
+  const gone = win ? "unknown" : updaterGone(o.pidFile, isAlive);
+  if (win) warn("vlad agent: açılışta yarım selfUpdate işareti var; Windows'ta güncelleyicinin torun süreçlerinin (npm/tsc) durduğu doğrulanamadığından geri alma yapılmadı, Agent bakımda. Süreçlerin bittiğini denetleyip .vlad-npm-ci-running ve yedek dizinleri (node_modules-old, dist-old) elle çöz, Agent'ı yeniden başlat.");
+  else if (gone === "unknown") warn("vlad agent: açılışta yarım selfUpdate işareti var ama güncelleyici pid kaydı yok (eski biçim); durduğu doğrulanamadığından geri alma yapılmadı, Agent bakımda. Güncelleyicinin bittiğini denetleyip .vlad-npm-ci-running ve yedek dizinleri elle çöz, Agent'ı yeniden başlat.");
+  if (gone === true && recoverSelfUpdate(repo, o.rename)) { maint.leave(); rmSync(o.pidFile, { force: true }); return; }
+  // sidecar yoksa pid bilinmez: retryKill hep false (bakımda kal); canlıysa ölünce true
+  holdAndRecover({ repo, selfUpdate: true, pidFile: o.pidFile, everyMs: o.everyMs ?? 5000, rename: o.rename, maxTries: o.maxTries ?? 120, warn: o.warn,
+    ...(gone === true ? {} : { retryKill: async () => !win && updaterGone(o.pidFile, isAlive) === true }) });
 }
 
 /**
@@ -152,11 +213,12 @@ export function diskBuildHead(repo: string): string | undefined {
 /**
  * selfUpdate betiği `.vlad-npm-ci-running` işaretini bıraktıysa (başarıyla bitmedi: zaman aşımı/öldürme/çökme) yarım güncellemeyi geri alır:
  * node_modules-old → node_modules, dist yoksa dist-old → dist, dist-next silinir, işaret kalkar. İşaret yoksa (betik kendi temizledi ya da
- * yedek önceki başarılı güncellemeye ait) hiçbir şeye dokunmaz. Hata yutulur: bayrak yine kalkmalı, kurtarma elle yapılabilir.
+ * yedek önceki başarılı güncellemeye ait) hiçbir şeye dokunmaz. Dönüş: true = temiz (işaret yoktu ya da geri yüklendi); false = başarısız,
+ * işaret kalır (F-vlad-275: çağıran bakım bayrağını KALDIRMAZ, yeniden dener).
  */
-export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) => void = renameSync): void {
+export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) => void = renameSync): boolean {
   const mark = join(repo, ".vlad-npm-ci-running");
-  if (!existsSync(mark)) return;
+  if (!existsSync(mark)) return true;
   try {
     const nm = join(repo, "node_modules"), nmOld = join(repo, "node_modules-old");
     // F-vlad-281: eskiyi geri koymadan önce mevcut olanı silme; rename patlarsa mevcut geri konur
@@ -167,6 +229,8 @@ export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) =
       try { rename(old, cur); } catch (e) { if (existsSync(trash)) rename(trash, cur); throw e; }
       rmSync(trash, { recursive: true, force: true });
     };
+    // güvenlik: yedek dizin symlink ise (başka yeri gösterebilir) geri yükleme yapılmaz; işaret kalır, elle çözülür
+    for (const q of [nmOld, join(repo, "dist-old")]) { try { if (lstatSync(q).isSymbolicLink()) return false; } catch { /* yok */ } }
     if (existsSync(nmOld)) restore(nm, nmOld);
     const dist = join(repo, "dist"), distOld = join(repo, "dist-old");
     // işaret "swap" ise dist değişimi başlamıştı: dist-old ile eş geri yükle (yeni dist + eski node_modules tutarsız); işaretsiz/boş işarette dist-old önceki güncellemeden kalmış olabilir, dokunulmaz
@@ -174,5 +238,6 @@ export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) =
     if (existsSync(distOld) && (swapped || !existsSync(dist))) restore(dist, distOld);
     rmSync(join(repo, "dist-next"), { recursive: true, force: true });
     rmSync(mark, { force: true });
-  } catch { /* geri yükleme başarısızsa işaret kalır; sonraki vlad-guncelle koşusu başında yeniden dener */ }
+    return true;
+  } catch { return false; /* işaret kalır; çağıran yeniden dener, vlad-guncelle de koşusu başında dener */ }
 }

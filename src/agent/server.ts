@@ -81,7 +81,7 @@ export async function handleRequest(o: ServerOpts, raw: unknown): Promise<WireRe
     // bakım (selfUpdate sürerken/yeniden başlatma beklenirken): yalnız ping/op-status/script-list; uçuşta sayılanlar selfUpdate başlamadan önce denetlenir
     if (counted) {
       if (maint.on) throw new Fail("busy", "busy: [maintenance] Agent kendini güncelliyor; kısa süre sonra tekrar dene");
-      maint.begin(req.opId); began = true;
+      maint.begin(req.opId, req.op); began = true;
     }
     const ctx = { from: req.from, opId: req.opId };
     if (!(o.journaled?.(req.op, req.args) ?? defaultJournaled(req.op))) return sign("ok", { result: await handler(req.args, ctx) });
