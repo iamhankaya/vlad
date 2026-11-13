@@ -1,6 +1,7 @@
 import { realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, basename, isAbsolute, join, resolve } from "node:path";
+import { secretDir } from "../mode/token.js";
 
 /** F-vlad-287: çalışan oturumunda mod değişikliğini ve korumayı söken yazmaları PreToolUse'ta keser (saf). Komut kalıbı env/cwd'den bağımsızdır: `env -u VLAD_TASK_ID` ya da worktree dışı cd işe yaramaz. */
 export const MODE_GUARD_TOOLS = ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"];
@@ -23,12 +24,17 @@ function globHits(base: string, name: string): boolean {
   const re = base.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[[^\]]*\]/g, ".").replace(/\*/g, ".*").replace(/\?/g, ".");
   try { return new RegExp(`^${re}$`, "i").test(name); } catch { return true; }
 }
+/** F-vlad-287: imzalı mod belirtecinin anahtarı (gizli dizin); hook en iyi çaba katmanı, gerçek sınır CLI'daki belirteç doğrulaması. */
+const SECRET = /\.vlad-secret/i; // `mode.key` tek başına aranmaz (grep/commit mesajı yanlış pozitifi); parçalı yol/joker kaçışı en iyi çaba sınırı
+
+const secretHit = (t: string): boolean => { const n = norm(expand(t.replace(/["'\\]/g, ""))); return SECRET.test(n) || n === norm(secretDir()) || n.startsWith(norm(secretDir()) + "/"); };
 const SETTINGS = ["settings.json", "settings.local.json"];
 const expand = (t: string): string => t.replace(/^~(?=\/|\\|$)|\$\{?HOME\}?/g, homedir().replace(/\\/g, "/"));
 
 /** Yol (dosya aracı ya da komut parçası) korunan mı: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config.json`. */
 /** `anyDir`: komut parçalarında yol çözülemez (`$KB/mode.json`); mode.json adı her dizinde korunur. Dosya araçlarında yalnız kb'nin mode.json'u. */
 function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = false): string | null {
+  if (secretHit(p)) return "anahtar";
   const t = expand(p.replace(/\\/g, "/"));
   const base = basename(t);
   if (globHits(base, "mode.json")) return anyDir || kbDir === null || GLOB.test(base) || norm(real(resolve(ctx.cwd ?? ".", t))) === norm(real(join(kbDir, "mode.json"))) ? "mode.json" : null; // kb dışındaki (jokersiz) mode.json projenin kendi dosyasıdır
@@ -69,6 +75,7 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
     const inner = m[1] ?? m[2] ?? m[3] ?? m[4];
     if (inner && depth < 3) { const r = checkBash(inner, kbDir, ctx, depth + 1); if (r) return r; }
   }
+  if (secretHit(cmd)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
   for (const seg of segments(cmd)) {
     const mm = MODE_CMD.exec(seg);
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;

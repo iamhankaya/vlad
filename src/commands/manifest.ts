@@ -63,6 +63,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["mode", "night"], { lock: "outer", console: { kind: "write" } }),
   c(["mode", "watch"], { lock: "outer", console: { kind: "write" } }),
   c(["mode", "off"], { lock: "outer", console: { kind: "write" } }),
+  c(["mode", "token"], { json: true, console: none("belirteç yalnız kullanıcının terminalinde (TTY) üretilir; uzaktan konsola verilmez (F-vlad-287)") }),
   c(["mode", "status"], { lock: "outer", console: { kind: "read" } }),
   c(["audit", "skills"], { worker: LOCAL, console: { kind: "read" } }),
   c(["audit", "setup"], { console: none("konsol kataloğunda yoktu (U1 öncesi de); konsolda açmak ayrı karar") }),

@@ -26,8 +26,8 @@ const trustPreflight = (cwd: string): string =>
 export function buildPosixScript(req: LaunchRequest): string {
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);
-  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
-  const lines = ["#!/usr/bin/env bash", "unset VLAD_DESKTOP_QUEUE"];
+  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches); nor the VLAD session's mode token (F-vlad-287)
+  const lines = ["#!/usr/bin/env bash", "unset VLAD_DESKTOP_QUEUE", "unset VLAD_MODE_TOKEN"];
   for (const [k, v] of Object.entries(req.env)) {
     if (!ENV_NAME.test(k)) throw new Error(`geçersiz env adı: ${JSON.stringify(k)}`);
     lines.push(`export ${k}=${q(v)}`);
@@ -80,10 +80,13 @@ export function externalPosixLaunch(req: LaunchRequest, scriptDir?: string): Lau
   return { ok: true, method: "external", script, command, cwd: req.cwd, scriptSha256, detail: command };
 }
 
+/** F-vlad-287: tmux sunucusu ilk kez bu çağrıyla başlarsa global ortamı miras alır; çalışan `tmux show-environment -g` ile belirteci okuyamasın. */
+export function envWithoutModeToken(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv { const { VLAD_MODE_TOKEN: _t, ...rest } = env; return rest; }
+
 function defaultRun(file: string, args: string[]): Promise<void> {
   assertRealLauncherAllowed();
   return new Promise((resolve, reject) =>
-    execFile(file, args, { timeout: 20000 }, (err, _o, stderr) =>
+    execFile(file, args, { timeout: 20000, env: envWithoutModeToken() }, (err, _o, stderr) =>
       err ? reject(new Error(String(stderr).trim() || err.message)) : resolve()));
 }
 
@@ -114,6 +117,8 @@ export class PosixLauncher implements Launcher {
       securePosixDir(dirname(scriptPath));
       writeFileSync(scriptPath, buildPosixScript(req), { encoding: "utf8", mode: 0o700 });
       chmodSync(scriptPath, 0o700);
+      // F-vlad-287: çalışan tmux sunucusunun global ortamından belirteci okuyamasın (sunucu önceden başlamış olabilir); sunucu yoksa hata yutulur
+      if (method === "tmux") { try { await (this.o.run ?? defaultRun)("tmux", ["set-environment", "-gu", "VLAD_MODE_TOKEN"]); } catch { /* best effort */ } }
       await (this.o.run ?? defaultRun)(cmd.file, cmd.args);
       return { ok: true, method, detail: JSON.stringify(cmd) };
     } catch (e) {

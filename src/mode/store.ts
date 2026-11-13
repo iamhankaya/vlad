@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, nowIso, writeFileAtomic } from "../kb/index.js";
 import { getTask } from "../tasks/store.js";
+import { nightSigOk, signNight } from "./token.js";
 
 /** Night (authority) window and watch flag, kept in the kb (`mode.json`) so every VLAD session sees the same state. */
 export interface NightMode {
@@ -12,6 +13,8 @@ export interface NightMode {
   except: string[];
   /** window also closes once all of these tasks are done/cancelled; `until` stays as the 24 h safety ceiling */
   untilTasks: string[];
+  /** F-vlad-287: HMAC imzası (anahtar etkinse); yalnız setNight yazar, geçersiz/eksik pencere yetki sayılmaz */
+  sig?: string;
 }
 /** Irreversible classes: always excepted, `--except` can only add to them. */
 export const DEFAULT_EXCEPT = ["deploy", "backfill", "keychain"];
@@ -77,6 +80,8 @@ export function setNight(
   for (const x of added) if (!/^[\p{L}\p{N}_-]+$/u.test(x)) throw new Error(`geçersiz istisna sınıfı: ${x}`);
   const except = [...new Set([...DEFAULT_EXCEPT, ...added])];
   const night: NightMode = { until: nowIso(until), started: nowIso(now), projects: o.projects ?? [], note: o.note ?? null, push: o.push === true, except, untilTasks };
+  const sig = signNight(night);
+  if (sig) night.sig = sig;
   write({ ...read(), night });
   return night;
 }
@@ -92,15 +97,17 @@ export function setOff(): void {
   rmSync(file(), { force: true });
 }
 
-export function modeStatus(now: Date): { night: NightMode | null; watch: boolean; watching: boolean; expired: boolean; remaining: string[]; timedOut: boolean } {
+export function modeStatus(now: Date): { night: NightMode | null; watch: boolean; watching: boolean; expired: boolean; remaining: string[]; timedOut: boolean; forged: boolean } {
   const m = read();
+  // F-vlad-287: imzası geçersiz/eksik pencere (mode.json'a doğrudan yazılmış) yetki vermez ve süre dolmuş gibi duyurulmaz
+  if (m.night && !nightSigOk(m.night, m.night.sig)) return { night: null, watch: m.watch, watching: m.watch, expired: false, remaining: [], timedOut: false, forged: true };
   const remaining = (m.night?.untilTasks ?? []).filter(taskOpen);
   // F-vlad-283: elle uzatılmış until kabul edilmez: tavan started+24h (started okunamıyorsa pencere kapalı)
   const ceiling = m.night ? Date.parse(m.night.started) + 24 * 3_600_000 : NaN;
   const timedOut = !!m.night && !(Math.min(Date.parse(m.night.until), ceiling) > now.getTime());
   const tasksDone = !!m.night && m.night.untilTasks.length > 0 && remaining.length === 0;
   const live = !!m.night && !timedOut && !tasksDone;
-  return { night: live ? m.night : null, watch: m.watch, watching: live || m.watch, expired: !!m.night && !live, remaining, timedOut };
+  return { night: live ? m.night : null, watch: m.watch, watching: live || m.watch, expired: !!m.night && !live, remaining, timedOut, forged: false };
 }
 
 /** Drops an elapsed night window (keeps an explicit watch flag); true if there was one. */
@@ -120,6 +127,7 @@ export function modeLine(now: Date): string | null {
     const push = n.push ? `push yetkisi açık${n.projects.length ? "" : " (tüm projeler)"} (yalnız gate/CI yeşil, açık P1 yok; istisna: ${n.except.join(",")})` : "push yok";
     return `gece modu etkin (${bound}${n.projects.length ? `; ${n.projects.join(", ")}` : ""}${n.note ? `; ${n.note}` : ""}; ${push}), bekçi açık`;
   }
+  if (s.forged) return "UYARI: mode.json'daki gece penceresinin imzası geçersiz (elle yazılmış?); yetki sayılmıyor";
   if (s.expired) {
     if (s.timedOut && s.remaining.length) return `gece modu bitti: süre doldu, açık görev: ${s.remaining.join(", ")}; devam için kullanıcı yenilemeli, sormadan merge yok`;
     return `gece modu bitti: ${s.timedOut ? "yetki penceresi doldu" : "görevler bitti"}, sormadan merge yok`;

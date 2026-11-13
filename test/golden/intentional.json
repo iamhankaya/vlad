@@ -106,6 +106,14 @@
         "task --help",
         "task (bare)"
       ]
+    },
+    {
+      "id": "T20261113-18",
+      "keys": [
+        "mode --help",
+        "mode (bare)",
+        "mode token --help"
+      ]
     }
   ]
 }

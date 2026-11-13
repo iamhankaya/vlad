@@ -49,6 +49,7 @@ export const COMMAND_DOCS: Readonly<Record<string, string>> = {
   "mode night": "Gece/yetki modunu açar (pencere `kb/mode.json`'da).",
   "mode watch": "Bekçi modunu açar.",
   "mode off": "Modu kapatır.",
+  "mode token": "VLAD oturumu için imzalı mod belirteci üretir (`export VLAD_MODE_TOKEN=$(vlad mode token)`; `--ttl <saat>`, varsayılan 24, en çok 72). Yalnız etkileşimli terminalde (TTY) çalışır; ilk çalıştırmada anahtarı gizli dizinde (`~/.vlad-secret`, passwd ev dizini; ortam değişkeniyle değiştirilemez; 0700/0600; `--reset` bozuk anahtarı yeniden üretir) üretir. Anahtar etkinken `mode night|watch|off`, `setup` ve `install` (`--check`/`--dry-run` hariç) geçerli `VLAD_MODE_TOKEN` ister; çalışan başlatma betikleri belirteci temizler. Tasarım: `docs/superpowers/specs/2026-11-13-vlad-mode-token-design.md`.",
   "mode status": "Mod durumunu gösterir.",
   "audit skills": "`audit skills [--since] [--project]`: beklenen/yüklenen/eksik skill denetimi.",
   "audit setup": "`audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. `/setup-audit` kullanır.",

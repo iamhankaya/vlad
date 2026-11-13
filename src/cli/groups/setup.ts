@@ -1,3 +1,4 @@
+import { requireModeAuthority } from "../../mode/token.js";
 import type { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
@@ -49,6 +50,7 @@ export function registerSetup(program: Command, k: Kit): void {
       return;
     }
 
+    if (!o.dryRun) requireModeAuthority(); // F-vlad-287: settings/hook yazan kurulum belirteç ister (--check ve --dry-run salt okunur)
     let answers: SetupAnswers = {};
     let wizard = false;
     const needsAnswers = !o.upgrade && !o.uninstall && !o.addWorker;

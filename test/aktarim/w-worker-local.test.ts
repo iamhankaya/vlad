@@ -79,7 +79,7 @@ const BRAIN_ONLY = new Set([
   "project write", "project set", "project note", "project summary", "project refresh",
   "finding add", "finding set", "idea add", "idea set", "idea promote", "idea from-finding",
   "task new", "task launch", "task release", "task repin", "task ingest", "task answer", "task set", "task deps", "task resume", "task cleanup", "task close", "task gate", "task merge-preview", "task merge", "task digested",
-  "mode night", "mode watch", "mode off", "mode status",
+  "mode night", "mode watch", "mode off", "mode status", "mode token",
   "audit setup",
   "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append",
   "kb commit", "kb maintain", "kb lint", "session register", "machine scripts", "machine run",
