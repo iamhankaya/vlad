@@ -44,6 +44,9 @@ export interface CloseOpts {
   head?: string;
   /** require the green-gate evidence of every card machine even when this is not the final gate */
   allMachines?: boolean;
+  /** F-vlad-339: kullanıcı onaylı atlama: bu makinelerin yeşil gate satırı aranmaz; `skipReason` (kullanıcının onay metni) zorunlu, `allMachines` ile birlikte reddedilir */
+  skipMachines?: string[];
+  skipReason?: string;
 }
 
 /** Remote (worker machine) half of the gate; defaults go through the Agent transport. */
@@ -145,6 +148,17 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
     const card = cardOf(t0.data.project);
     const repoDir = brainRepoPath(t0.data.project, d.cfg); // kart yolu başka OS'tansa brain roots (F-vlad-200)
     const remoteMachine = isResearch ? null : d.remote.machine(t0);
+    const skip = (opts.skipMachines ?? []).map((m) => m.trim()).filter(Boolean);
+    const skipReason = (opts.skipReason ?? "").replace(/\s+/g, " ").trim();
+    if (skip.length) {
+      if (opts.allMachines) stop("precheck", "--skip-machine ile --all-machines birlikte verilemez (biri her makineyi zorunlu kılar, diğeri atlar)");
+      if (!skipReason) stop("precheck", "--skip-machine için --reason \"<kullanıcının onay metni>\" zorunlu (atlama onaylı olmalı ve kayda geçer)");
+      const listed = card.machines ?? [];
+      const bad = skip.filter((m) => !listed.includes(m));
+      if (bad.length) stop("precheck", `--skip-machine: kartın machines listesinde olmayan makine: ${bad.join(", ")} (kart: ${listed.join(", ") || "yok"})`);
+      const ran = remoteMachine ?? d.self;
+      if (ran && skip.includes(ran)) stop("precheck", `--skip-machine: gate'i koşan makine (${ran}) atlanamaz`);
+    }
     if (parent && !isResearch && !wasDone) {
       const tests = sub(report, "Test sonuçları");
       if (!/entegrasyon/i.test(tests)) stop("precheck", `pipeline fazı: raporun "Test sonuçları"nda entegrasyon branch'i (vlad/${parent}) merge + gate kanıtı yok; çalışandan düzeltme iste`);
@@ -233,7 +247,13 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         const has = (text: string, m: string) => [...text.matchAll(new RegExp(`Gate ${m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: yeşil ([0-9a-f]{7,40})\\b`, "g"))].some((x) => gatedHead.startsWith(x[1]));
         await withKbLock(() => { if (!has(getTask(id).body, ranOn)) logTask(id, `Gate ${ranOn}: yeşil ${short}`); });
         const logs = `${getTask(id).body}\n${parent ? getTask(parent).body : ""}`;
-        const missing = card.machines!.filter((m) => m !== ranOn && !has(logs, m));
+        const skipped = skip.filter((m) => m !== ranOn);
+        for (const m of skipped) {
+          const line = `Gate ${m}: ATLANDI @ ${short} — kullanıcı onayı: ${skipReason}`;
+          await withKbLock(() => { if (!getTask(id).body.includes(line)) logTask(id, line); });
+          r.warnings.push(`${m} gate'i kullanıcı onayıyla atlandı (${skipReason})`);
+        }
+        const missing = card.machines!.filter((m) => m !== ranOn && !skipped.includes(m) && !has(logs, m));
         if (missing.length && !enforce) r.warnings.push(`${missing.join(", ")} için bu commit'te (${short}) yeşil gate satırı yok (son kapı değil: yalnız uyarı; zorunlu kılmak için --all-machines)`);
         else if (missing.length) stop("gate", `${missing.join(", ")} için bu commit'te (${short}) yeşil gate yok: o makinede \`vlad task gate ${id} --target ${target} --json\` koş, sonra \`vlad task log ${id} "Gate <makine>: yeşil ${short}"\``);
       }

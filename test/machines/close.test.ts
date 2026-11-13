@@ -494,6 +494,57 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(strict).toMatchObject({ ok: false, stopped_at: "gate" });
   });
 
+  // F-vlad-339: kullanıcı onaylı makine gate atlaması (elle merge yerine)
+  it("--skip-machine <ad> --reason: onaylı atlama merge eder ve onay metnini görev günlüğüne yazar", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    const head = git(getTask(id).data.worktree!, "rev-parse", "HEAD").trim();
+    const r = await closeTask(id, { yes: true, allMachines: false, skipMachines: ["win"], skipReason: "kullanıcı: Windows erişilemiyor" }, deps({ self: "mac" }));
+    expect(r.ok).toBe(true);
+    expect(existsSync(join(repo, "b.txt"))).toBe(true);
+    expect(r.warnings.join("\n")).toMatch(/win.*atlandı/);
+    const body = getTask(id).body;
+    expect(body).toContain(`Gate win: ATLANDI @ ${head.slice(0, 12)} — kullanıcı onayı: kullanıcı: Windows erişilemiyor`);
+  });
+  it("atlama gerekçesiz reddedilir (merge yok, kayıt yok)", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    for (const skipReason of [undefined, "", "   "]) {
+      const r = await closeTask(id, { yes: true, skipMachines: ["win"], ...(skipReason !== undefined ? { skipReason } : {}) }, deps({ self: "mac" }));
+      expect(r).toMatchObject({ ok: false, stopped_at: "precheck" });
+      expect(r.reason).toMatch(/--reason/);
+    }
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+    expect(getTask(id).body).not.toMatch(/ATLANDI/);
+  });
+  it("atlama --all-machines ile birlikte reddedilir", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    const r = await closeTask(id, { yes: true, allMachines: true, skipMachines: ["win"], skipReason: "x onay" }, deps({ self: "mac" }));
+    expect(r).toMatchObject({ ok: false, stopped_at: "precheck" });
+    expect(r.reason).toMatch(/--all-machines/);
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+  });
+  it("atlama yalnız kartta listeli ve gate'i koşan makine dışındaki makine için geçerlidir", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    const unknown = await closeTask(id, { yes: true, skipMachines: ["linux"], skipReason: "onay" }, deps({ self: "mac" }));
+    expect(unknown).toMatchObject({ ok: false, stopped_at: "precheck" });
+    expect(unknown.reason).toMatch(/linux/);
+    const own = await closeTask(id, { yes: true, skipMachines: ["mac"], skipReason: "onay" }, deps({ self: "mac" }));
+    expect(own).toMatchObject({ ok: false, stopped_at: "precheck" });
+    expect(own.reason).toMatch(/gate'i koşan makine/);
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+  });
+  it("atlama yalnız belirtilen makineyi kapsar: diğer eksik makine yine durdurur", async () => {
+    card(GREEN, "machines: [mac, win, linux]\n");
+    const id = await ready();
+    const r = await closeTask(id, { yes: true, skipMachines: ["win"], skipReason: "onay" }, deps({ self: "mac" }));
+    // son kapı değil → linux yalnız uyarı; pipeline/--all-machines olmadan bu kasıtlı
+    expect(r.ok).toBe(true);
+    expect(r.warnings.join("\n")).toMatch(/linux/);
+  });
+
   it("pipeline çatı kapanış raporu olmadan precheck'ten geçer", async () => {
     const t = createTask({ project: "alpha", title: "çatı", kind: "pipeline", body: "## Tanım\nx\n" });
     await launchTask(t.data.id, { launcher: fake, cfg }).catch(() => {});

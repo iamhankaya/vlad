@@ -45,8 +45,8 @@ ifade eder. Sınır, çalışanın **ne yazdığına** değil **neye sahip oldu�
 6. **Geriye uyum / kurulmamış makine:** gizli dizin hiç yoksa mekanizma etkin değildir; davranış bugünküyle aynıdır
    (mevcut testler, kurulmamış makineler). Dizin var ama anahtar yoksa ya da bozuksa **fail-closed**: korunan işlemler reddedilir
    (`vlad mode token --reset` terminalde anahtarı yeniden üretir). Gizli dizin **silinirse** imzalı bir gece penceresi yine
-   yetki sayılmaz (imza var, anahtar yok = geçersiz); ama imzasız pencere + silinmiş dizin eski davranışa düşer (aynı UID'de
-   kalan açık; tespit için `modeLine`/`setup --check` uyarısı ayrı iş).
+   yetki sayılmaz (imza var, anahtar yok = geçersiz); imzasız pencere + silinmiş dizin eski davranışa düşmez: etkinleştirme işareti
+   anahtar dizininin dışında kalır (§Düşürme tespiti, F-vlad-336).
    Etkinleştirme: kullanıcı terminalinde `vlad mode token` ilk çalışınca anahtarı üretir.
 7. **Hook en iyi çaba katmanı olarak kalır** ve gizli dizin yolunu da korunan yollara ekler (çalışanın `cat`/`cp` ile anahtara
    uzanması ek bir engelle karşılaşır; mutlak sınır değildir, §Tehdit modeli).
@@ -81,6 +81,19 @@ Env'den açılan her seam çalışanın kontrolündedir; bu yüzden üretim `dis
 doğrudan `node -e` ile keyfi kod çalıştırabilir. Bu zaten §Tehdit modeli'nin "kapsam dışı: aynı UID'de keyfi kod" sınıfıdır
 (anahtar dosyası da aynı UID ile okunabilir); yeni bir yetenek sınıfı eklemez. Gerçek sınır: ayrı OS kullanıcısı/Keychain.
 Etkinleştirme: `docs/mod-belirteci-etkinlestirme.md`.
+
+## Düşürme tespiti (F-vlad-336, T20261113-41)
+
+**Sorun:** gizli dizin silinip `mode.json`'dan `sig` çıkarılırsa sistem imzasız eski moda sessizce düşerdi (anahtar yok = mekanizma kapalı).
+
+**Karar:** etkinleştirme **anahtar dizininin dışında** ayrı bir işaretle kaydedilir: `<gizli-dizin>.active` (kardeş dosya, 0600, anahtardan önce yazılır; yarıda kalırsa fail-closed).
+Durum `keyState()`: `off` (dizin yok, işaret yok), `ok`, `dropped` (işaret var, dizin yok), `broken` (dizin var, anahtar sorunlu).
+- `readKey`: dizin yok + işaret var → fail-closed (throw "düşürülmüş"); `requireModeAuthority`, `mintToken`, `nightSigOk` (imzası çıkarılmış pencere `forged` olur) ve sıfırlamasız `initKey` hepsi reddeder.
+- `modeLine` (`vlad status`, SessionStart özeti) "UYARI: mod belirteci düşürülmüş" basar; `kb lint`'e ayrı kod eklenmedi (modeLine zaten özetlerde).
+- **Meşru kapatma:** `vlad mode token --disable` (TTY): `authorizeReset` aynı yetkiyi kullanır (geçerli belirteç; anahtar yok/bozuk/düşürülmüş ise elle `SIFIRLA`), sonra gizli dizin **ve** işaret silinir. `--reset` düşürülmüş makinede (SIFIRLA ile) yeniden etkinleştirir.
+- **Fail-closed seçildi, yalnız uyarı değil:** yanlış alarmın maliyeti (kullanıcı terminalde `--disable`/`--reset` çalıştırır) sessiz yetki yükseltmeden çok küçüktür.
+- **Tehdit modeli:** aynı UID'li çalışan hem dizini hem işareti silebilir; bu §Tehdit modeli'ndeki "aynı UID keyfi kod" sınıfıdır (çözüm: ayrı OS kullanıcısı/Keychain). Kazanım: tek adımlı sessiz "anahtarı sil + `sig`'i çıkar" düşürmesi engellenir ve görünür; hook'un gizli dizin koruması işaret adını da kapsar (aynı önek).
+- Test: `test/mode/mode-token.test.ts` "düşürme tespiti".
 
 ## Açık noktalar (kapsam dışı)
 
