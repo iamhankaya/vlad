@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initKey, mintToken, requireModeAuthority, secretDir, setSecretDirForTests, verifyToken } from "../../src/mode/token.js";
+import { authorizeReset, initKey, mintToken, requireModeAuthority, secretDir, setSecretDirForTests, verifyToken } from "../../src/mode/token.js";
 import { modeStatus, setNight } from "../../src/mode/store.js";
 import { kbPaths } from "../../src/kb/index.js";
 import { buildPosixScript, envWithoutModeToken } from "../../src/launcher/posix.js";
@@ -153,6 +153,59 @@ describe("incelemede çıkan kaçışlar", () => {
   });
   it("hook: `mode.key` geçen salt grep/commit mesajı yanlış pozitif vermez", () => {
     expect(checkWorkerMode("Bash", { command: "grep -rn mode.key src" }, "/kb", { cwd: "/work" })).toBeNull();
+  });
+});
+
+describe("2. tur (VLAD değişiklik turu): fail-closed sertleştirme", () => {
+  const posix = process.platform !== "win32";
+  it.runIf(posix)("1. gizli dizin okunamıyorsa (EACCES) mekanizma kapalı sayılmaz: fail-closed", () => {
+    initKey();
+    const parent = join(sdir, "..");
+    chmodSync(parent, 0o000);
+    try { expect(() => requireModeAuthority({}, now)).toThrow(/gizli dizin|fail-closed/); } finally { chmodSync(parent, 0o700); }
+  });
+  it.runIf(posix)("1. gizli dizin sembolik bağsa fail-closed (yönlendirme)", () => {
+    const real = join(sdir, "..", "gercek"); mkdirSync(real, { mode: 0o700 });
+    symlinkSync(real, sdir);
+    expect(() => requireModeAuthority({}, now)).toThrow(/sembolik|fail-closed/);
+  });
+  it.runIf(posix)("4. dizin ya da anahtar grup/diğer okunabilirse fail-closed (tercih: ret, uyarı değil)", () => {
+    initKey();
+    chmodSync(join(sdir, "mode.key"), 0o644);
+    expect(() => requireModeAuthority({}, now)).toThrow(/izin|0600/);
+    chmodSync(join(sdir, "mode.key"), 0o600);
+    expect(() => requireModeAuthority({}, now)).not.toThrow(/izin/);
+    chmodSync(sdir, 0o755);
+    expect(() => requireModeAuthority({}, now)).toThrow(/izin|0700/);
+  });
+  it("2. --reset: geçerli anahtar varken geçerli belirteç şart; belirteçsiz/geçersiz reddedilir", async () => {
+    initKey();
+    const ask = async () => { throw new Error("sorulmamalı"); };
+    await expect(authorizeReset({}, now, ask)).rejects.toThrow(/VLAD_MODE_TOKEN/);
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: "VMT1.1.00" }, now, ask)).rejects.toThrow(/VLAD_MODE_TOKEN/);
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: mintToken(H, now) }, now, ask)).resolves.toBeUndefined();
+  });
+  it("2. --reset: anahtar bozukken yalnız elle yazılan SIFIRLA onayı kabul edilir (belirteç yetmez/istenmez)", async () => {
+    initKey();
+    writeFileSync(join(sdir, "mode.key"), "bozuk\n");
+    await expect(authorizeReset({}, now, async () => "evet")).rejects.toThrow(/SIFIRLA/);
+    await expect(authorizeReset({}, now, async () => "sifirla")).rejects.toThrow(/SIFIRLA/);
+    await expect(authorizeReset({}, now, async () => "SIFIRLA")).resolves.toBeUndefined();
+  });
+  it.runIf(posix)("2. --reset: izinleri geniş (okunamaz sayılan) anahtar da SIFIRLA ister", async () => {
+    initKey();
+    const tok = mintToken(H, now); // anahtar bozulmadan önce üretilmiş geçerli belirteç bile yetmez: doğrulanamaz
+    chmodSync(join(sdir, "mode.key"), 0o644);
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: tok }, now, async () => "")).rejects.toThrow(/SIFIRLA/);
+  });
+  it("2. --reset: gizli dizin hiç yoksa sıfırlama gerekmez (ilk kurulum, belirteç/onay istenmez)", async () => {
+    await expect(authorizeReset({}, now, async () => { throw new Error("sorulmamalı"); })).resolves.toBeUndefined();
+  });
+  it("2. CLI: mode token --reset TTY'siz yine reddedilir (belirteç şartı ek katman)", async () => {
+    initKey();
+    const r = await runCli(["mode", "token", "--reset"], { env: { VLAD_HOME: home } });
+    expect(r.code).not.toBe(0);
+    expect(readFileSync(join(sdir, "mode.key"), "utf8").trim()).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 

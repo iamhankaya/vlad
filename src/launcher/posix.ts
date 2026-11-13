@@ -117,6 +117,8 @@ export class PosixLauncher implements Launcher {
       securePosixDir(dirname(scriptPath));
       writeFileSync(scriptPath, buildPosixScript(req), { encoding: "utf8", mode: 0o700 });
       chmodSync(scriptPath, 0o700);
+      // F-vlad-287: çalışan tmux sunucusunun global ortamından belirteci okuyamasın (sunucu önceden başlamış olabilir); sunucu yoksa hata yutulur
+      if (method === "tmux") { try { await (this.o.run ?? defaultRun)("tmux", ["set-environment", "-gu", "VLAD_MODE_TOKEN"]); } catch { /* best effort */ } }
       await (this.o.run ?? defaultRun)(cmd.file, cmd.args);
       return { ok: true, method, detail: JSON.stringify(cmd) };
     } catch (e) {

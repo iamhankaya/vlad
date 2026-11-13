@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { userInfo } from "node:os";
 import { join } from "node:path";
@@ -28,10 +28,19 @@ export function initKey(reset = false): boolean {
   return true;
 }
 
-/** null = mekanizma etkin değil (gizli dizin yok). Dizin var ama anahtar yok/bozuk = fail-closed (throw). */
+/** null = mekanizma etkin değil: YALNIZ gizli dizin yok (ENOENT). Başka her hata (EACCES, EMFILE, sembolik bağ, geniş izin), dizin var ama anahtar yok/bozuk = fail-closed (throw). */
 export function readKey(): string | null {
-  if (!existsSync(secretDir())) return null;
+  let st;
+  try { st = lstatSync(secretDir()); } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null;
+    throw new Error(`gizli dizin denetlenemedi (${code ?? "hata"}): fail-closed; \`vlad mode token --reset\` terminalde onayla`);
+  }
+  if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("gizli dizin sembolik bağ ya da dizin değil: fail-closed");
+  // POSIX izin denetimi: fail-closed seçildi (uyarı değil); grup/diğer biti açık dizin ya da anahtar güvenilmez. Windows'ta ACL ayrı iş.
+  if (process.platform !== "win32" && (st.mode & 0o077)) throw new Error("gizli dizin izinleri fazla geniş (0700 olmalı): fail-closed");
   let k: string;
+  try { const ks = lstatSync(keyFile()); if (process.platform !== "win32" && (ks.mode & 0o077)) throw new Error("mod anahtarı izinleri fazla geniş (0600 olmalı): fail-closed"); } catch (e) { if ((e as Error).message.includes("fazla geniş")) throw e; /* yok: aşağıda okunamadı */ }
   try { k = readFileSync(keyFile(), "utf8").trim(); } catch { throw new Error("mod anahtarı okunamadı (gizli dizin var, anahtar yok): fail-closed; `vlad mode token --reset` terminalde yeniden üretir"); }
   if (!/^[0-9a-f]{64}$/i.test(k)) throw new Error("mod anahtarı bozuk: fail-closed");
   return k;
@@ -77,4 +86,17 @@ export function signNight(n: SignableNight): string | null { const k = readKey()
 /** true = anahtar yok ve pencere imzasız (eski davranış) ya da imza geçerli. Bozuk anahtar ve "imzalı pencere var ama anahtar kayıp" (gizli dizin silindi) fail-closed (false). */
 export function nightSigOk(n: SignableNight, sig: unknown): boolean {
   try { const k = readKey(); if (!k) return sig === undefined; return typeof sig === "string" && same(sig, mac(k, "VLAD-NIGHT1|" + canon(n))); } catch { return false; }
+}
+
+/**
+ * `mode token --reset` yetkisi (anahtarı yeniden üretmek eski belirteçleri ve imzalı pencereyi geçersiz kılar):
+ * gizli dizin yoksa gerekmez (ilk kurulum); geçerli anahtar varken geçerli VLAD_MODE_TOKEN şart; anahtar bozuk/okunamaz/izni geniş
+ * ise belirteç doğrulanamayacağından yalnız elle yazılan `SIFIRLA` onayı kabul edilir.
+ */
+export async function authorizeReset(env: Record<string, string | undefined>, now: Date, ask: (prompt: string) => Promise<string>): Promise<void> {
+  let broken = false;
+  try { if (readKey() === null) return; } catch { broken = true; }
+  if (!broken) { requireModeAuthority(env, now); return; }
+  const ans = (await ask("Mod anahtarı bozuk/okunamıyor; sıfırlamak eski belirteçleri ve imzalı gece penceresini geçersiz kılar. Onay için SIFIRLA yazın: ")).trim();
+  if (ans !== "SIFIRLA") throw new Error("sıfırlama onaylanmadı (SIFIRLA yazılmadı)");
 }

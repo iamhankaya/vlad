@@ -110,13 +110,21 @@ describe.skipIf(WIN)("PosixLauncher", () => {
     const r = await l.launch(req());
     expect(r).toMatchObject({ ok: true, method: "tmux" });
     expect(readFileSync(join(dir, "T20261101-18.sh"), "utf8")).toContain("claude \"$p\"");
-    expect(calls).toEqual([["tmux", buildTmuxArgs(req(), join(dir, "T20261101-18.sh"))]]);
+    expect(calls).toEqual([["tmux", ["set-environment", "-gu", "VLAD_MODE_TOKEN"]], ["tmux", buildTmuxArgs(req(), join(dir, "T20261101-18.sh"))]]); // F-vlad-287: önce global ortamdan belirteç silinir
   });
   it("tmux missing → ok:false with the brew hint, nothing launched", async () => {
     const l = new PosixLauncher({ mode: "tmux", scriptDir: sd(), hasTmux: () => false, run: () => { throw new Error("no"); } });
     const r = await l.launch(req());
     expect(r.ok).toBe(false);
     expect(r.detail).toContain("brew install tmux");
+  });
+  it("tmux: launch öncesi sunucu global ortamından VLAD_MODE_TOKEN silinir; hatası launch'ı engellemez (F-vlad-287)", async () => {
+    const calls: Array<[string, string[]]> = [];
+    const l = new PosixLauncher({ mode: "tmux", scriptDir: sd(), hasTmux: () => true, run: (f, a) => { calls.push([f, a]); if (a[0] === "set-environment") throw new Error("no server"); } });
+    const r = await l.launch(req());
+    expect(r.ok).toBe(true);
+    expect(calls[0]).toEqual(["tmux", ["set-environment", "-gu", "VLAD_MODE_TOKEN"]]);
+    expect(calls[1]![1][0]).toBe("new-session");
   });
   it("terminal mode runs osascript", async () => {
     const calls: string[] = [];
