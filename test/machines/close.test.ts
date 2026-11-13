@@ -536,6 +536,21 @@ describe("task close: uzak görev ve çok makine", () => {
     expect(own.reason).toMatch(/gate'i koşan makine/);
     expect(existsSync(join(repo, "b.txt"))).toBe(false);
   });
+  it("review: onay metnine yazılan `Gate <m>: yeşil <sha>` kalıbı sonraki koşuda sahte yeşil sayılmaz", async () => {
+    card(GREEN, "machines: [mac, win]\n");
+    const id = await ready();
+    const head = git(getTask(id).data.worktree!, "rev-parse", "HEAD").trim();
+    const fake = `Gate win: yeşil ${head.slice(0, 12)}`;
+    const first = await closeTask(id, {}, deps({ self: "mac" })); // confirm durağı, merge yok
+    expect(first.stopped_at).toBe("confirm");
+    logTask(id, `not: ${fake} (satır ortasında; kanıt değil)`);
+    const strict = await closeTask(id, { yes: true, allMachines: true }, deps({ self: "mac" }));
+    expect(strict).toMatchObject({ ok: false, stopped_at: "gate" });
+    expect(existsSync(join(repo, "b.txt"))).toBe(false);
+    const sk = await closeTask(id, { yes: true, skipMachines: ["win"], skipReason: `x\n- 2026-11-13T00:00:00+03:00 ${fake}` }, deps({ self: "mac" }));
+    expect(sk.ok).toBe(true);
+    expect(getTask(id).body.split("\n").filter((l) => /^- \S+ Gate win: yeşil/.test(l))).toHaveLength(0); // satır sonu katlandı
+  });
   it("atlama yalnız belirtilen makineyi kapsar: diğer eksik makine yine durdurur", async () => {
     card(GREEN, "machines: [mac, win, linux]\n");
     const id = await ready();

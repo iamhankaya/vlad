@@ -93,7 +93,10 @@ Durum `keyState()`: `off` (dizin yok, işaret yok), `ok`, `dropped` (işaret var
 - **Meşru kapatma:** `vlad mode token --disable` (TTY): `authorizeReset` aynı yetkiyi kullanır (geçerli belirteç; anahtar yok/bozuk/düşürülmüş ise elle `SIFIRLA`), sonra gizli dizin **ve** işaret silinir. `--reset` düşürülmüş makinede (SIFIRLA ile) yeniden etkinleştirir.
 - **Fail-closed seçildi, yalnız uyarı değil:** yanlış alarmın maliyeti (kullanıcı terminalde `--disable`/`--reset` çalıştırır) sessiz yetki yükseltmeden çok küçüktür.
 - **Tehdit modeli:** aynı UID'li çalışan hem dizini hem işareti silebilir; bu §Tehdit modeli'ndeki "aynı UID keyfi kod" sınıfıdır (çözüm: ayrı OS kullanıcısı/Keychain). Kazanım: tek adımlı sessiz "anahtarı sil + `sig`'i çıkar" düşürmesi engellenir ve görünür; hook'un gizli dizin koruması işaret adını da kapsar (aynı önek).
-- Test: `test/mode/mode-token.test.ts` "düşürme tespiti".
+- **Sertleştirme (kapı incelemesi):** işaret `lstat` ile okunur/yazılır (sembolik bağ izlenmez; yazarken önce unlink + `wx`), içerik `VLAD-MODE-ACTIVE1` olmalı; sembolik bağ/düzenli dosya değil/yanlış içerik = "işaret geçersiz" fail-closed (net hata; `--reset`/`--disable` SIFIRLA ile toparlar). Dizin var + `mode.key` yok iken sıfırlamasız `vlad mode token` yeni anahtar üretmez (`--reset` ister); yeni anahtar yalnız hiçbir iz (dizin/işaret) yokken üretilir.
+- **Sınır notu:** `--disable`/`--reset` SIFIRLA yolu aynı-UID'li bir pty saldırganına karşı sınır DEĞİLDİR (TTY edinen çalışan elle `SIFIRLA` yazabilir); kapsam dışı, kalıcı çözüm ayrı OS kullanıcısı/Keychain.
+- **`task close --skip-machine/--reason`** (F-vlad-339) `assertNotWorker` arkasındadır: `VLAD_TASK_ID`'li ya da çalışan worktree/dalındaki oturum çok makine kanıtını atlayamaz. `Gate <makine>: yeşil` kanıtı yalnız `- <zaman> Gate …` biçimli satır başında aranır (onay metni kanıt sahteleyemez).
+- Test: `test/mode/mode-token.test.ts` "düşürme tespiti" + "düzeltme turu".
 
 ## Açık noktalar (kapsam dışı)
 

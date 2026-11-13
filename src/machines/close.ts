@@ -244,7 +244,8 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         if (!/^[0-9a-f]{40}$/.test(gatedHead)) stop("gate", "gate head'i (sha) belirlenemedi; çok makine kanıtı sha'ya bağlanır");
         const short = gatedHead.slice(0, 12);
         // evidence is bound to the gated commit: "Gate <makine>: yeşil <sha>" (sha ≥7 hex prefix of the head)
-        const has = (text: string, m: string) => [...text.matchAll(new RegExp(`Gate ${m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: yeşil ([0-9a-f]{7,40})\\b`, "g"))].some((x) => gatedHead.startsWith(x[1]));
+        // satır başına çıpalı (`- <zaman> Gate …`): onay metni/serbest metin içinde geçen kalıp kanıt sayılmaz
+        const has = (text: string, m: string) => [...text.matchAll(new RegExp(`^- \\S+ Gate ${m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}: yeşil ([0-9a-f]{7,40})\\b`, "gm"))].some((x) => gatedHead.startsWith(x[1]));
         await withKbLock(() => { if (!has(getTask(id).body, ranOn)) logTask(id, `Gate ${ranOn}: yeşil ${short}`); });
         const logs = `${getTask(id).body}\n${parent ? getTask(parent).body : ""}`;
         const skipped = skip.filter((m) => m !== ranOn);

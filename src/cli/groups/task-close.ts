@@ -1,11 +1,13 @@
 import type { Command } from "commander";
 import { closeTask } from "../../machines/close.js";
+import { assertNotWorker } from "../../mode/guard.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
 export function registerTaskClose(task: Command, k: Kit): void {
   const { out, def } = k;
   def(task, "close <id>", "Kapıyı tek komutta yürütür: ön kontrol, gate, çakışma, onay sınırı, merge --no-ff, done, cleanup, Kapatılan bulgular, kb commit --push (push yalnız kb; kod push'u yok). Durursa kalan adımlar yapılmaz; çıkış 1", async (id: string, o: Opts) => {
+    if (o.skipMachine !== undefined || o.reason !== undefined) assertNotWorker(); // çalışan kendi görevinde çok makine kanıtını atlayamaz (VLAD/kullanıcı yetkisi)
     const r = await closeTask(id, { yes: !!o.yes, allMachines: !!o.allMachines, ...(o.skipMachine ? { skipMachines: String(o.skipMachine).split(",") } : {}), ...(o.reason !== undefined ? { skipReason: String(o.reason) } : {}), ...(o.into ? { into: o.into as string } : {}), ...(o.head ? { head: String(o.head) } : {}) });
     const mark = { ok: "✓", skipped: "-", stopped: "■", failed: "✗" } as const;
     const lines = [

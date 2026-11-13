@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -302,5 +302,47 @@ describe("düşürme tespiti: etkinleştirme işareti anahtar dizini dışında"
     expect(r.code).not.toBe(0);
     expect(existsSync(join(sdir, "mode.key"))).toBe(true);
     expect(existsSync(marker())).toBe(true);
+  });
+});
+
+// Kapı incelemesi düzeltme turu
+describe("düzeltme turu: initKey/işaret sertleştirme", () => {
+  const marker = () => `${sdir}.active`;
+  it("dizin var + mode.key yok iken sıfırlamasız initKey yeni anahtar üretmez (fırlatır), --reset üretir", () => {
+    initKey();
+    rmSync(join(sdir, "mode.key"));
+    expect(() => initKey()).toThrow(/--reset/);
+    expect(existsSync(join(sdir, "mode.key"))).toBe(false);
+    expect(initKey(true)).toBe(true);
+  });
+  it("işaret sembolik bağsa initKey bağı izleyip hedefe yazmaz; geçersiz işaret net hatayla fail-closed", () => {
+    const target = join(sdir, "..", "hedef.txt");
+    writeFileSync(target, "dokunma");
+    symlinkSync(target, marker());
+    expect(() => initKey()).toThrow(/işaret/);
+    expect(readFileSync(target, "utf8")).toBe("dokunma");
+    expect(() => requireModeAuthority({}, now)).toThrow(/işaret/);
+    expect(keyState()).toBe("broken");
+    // --reset geçersiz işareti bağı izlemeden kaldırıp yeniden yazar
+    expect(initKey(true)).toBe(true);
+    expect(lstatSync(marker()).isSymbolicLink()).toBe(false);
+    expect(readFileSync(target, "utf8")).toBe("dokunma");
+  });
+  it("işaret içeriği VLAD-MODE-ACTIVE1 değilse (boş/rastgele) dizin yokken fail-closed 'geçersiz işaret'", () => {
+    writeFileSync(marker(), "");
+    expect(() => requireModeAuthority({}, now)).toThrow(/işaret.*geçersiz|geçersiz.*işaret/);
+    writeFileSync(marker(), "VLAD-MODE-ACTIVE1\n");
+    expect(() => requireModeAuthority({}, now)).toThrow(/düşürül/);
+  });
+});
+
+describe("düzeltme turu: task close --skip-machine çalışana kapalı", () => {
+  const close = (env: Record<string, string>) => runCli(["task", "close", "T20261113-99", "--yes", "--skip-machine", "win", "--reason", "onay"], { env: { VLAD_HOME: home, ...env } });
+  it("VLAD_TASK_ID'li çalışan bağlamında reddedilir; çalışan değilse bayrak kabul edilir (görev bulunamaz hatası)", async () => {
+    const w = await close({ VLAD_TASK_ID: "T20261113-77" });
+    expect(w.code).not.toBe(0);
+    expect(`${w.out}${w.err}`).toMatch(/çalışan/);
+    const u = await close({ VLAD_TASK_ID: "" });
+    expect(`${u.out}${u.err}`).not.toMatch(/çalışan oturumu/);
   });
 });

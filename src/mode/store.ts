@@ -120,6 +120,7 @@ export function expireMode(now: Date): boolean {
 /** One-line state for `vlad status` and the SessionStart summary; null when nothing is on. */
 export function modeLine(now: Date): string | null {
   if (keyState() === "dropped") return "UYARI: mod belirteci düşürülmüş (etkinleştirme işareti var, gizli dizin/anahtar yok): koruma kapalı sayılmaz, korunan işlemler fail-closed; kasıtlıysa `vlad mode token --disable`";
+  if (keyState() === "broken") return "UYARI: mod belirteci anahtarı/etkinleştirme işareti geçersiz ya da okunamıyor: korunan işlemler fail-closed; `vlad mode token --reset` (SIFIRLA onayı)";
   const s = modeStatus(now);
   if (s.night) {
     const n = s.night;
