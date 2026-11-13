@@ -2,10 +2,10 @@ import { mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { initKey, mintToken, requireModeAuthority, secretDir, verifyToken } from "../../src/mode/token.js";
+import { initKey, mintToken, requireModeAuthority, secretDir, setSecretDirForTests, verifyToken } from "../../src/mode/token.js";
 import { modeStatus, setNight } from "../../src/mode/store.js";
 import { kbPaths } from "../../src/kb/index.js";
-import { buildPosixScript } from "../../src/launcher/posix.js";
+import { buildPosixScript, envWithoutModeToken } from "../../src/launcher/posix.js";
 import { buildScript } from "../../src/launcher/terminal.js";
 import { checkWorkerMode } from "../../src/hooks/mode-guard.js";
 import { makeHome } from "../helpers.js";
@@ -19,9 +19,9 @@ const H = 3_600_000;
 beforeEach(() => {
   home = makeHome(); process.chdir(home);
   sdir = join(mkdtempSync(join(tmpdir(), "vlad-secret-")), "s"); // henüz yok = mekanizma etkin değil
-  vi.stubEnv("VLAD_SECRET_DIR", sdir);
+  setSecretDirForTests(sdir);
 });
-afterEach(() => { process.chdir(cwd0); vi.unstubAllEnvs(); rmSync(join(sdir, ".."), { recursive: true, force: true }); });
+afterEach(() => { process.chdir(cwd0); vi.unstubAllEnvs(); setSecretDirForTests(null); rmSync(join(sdir, ".."), { recursive: true, force: true }); });
 const modeFile = () => join(kbPaths().kb, "mode.json");
 
 describe("anahtar ve belirteç", () => {
@@ -87,7 +87,7 @@ describe("imzalı gece penceresi: mode.json'u doğrudan yazmak yetki vermez", ()
 });
 
 describe("CLI: hook'u atlatsa da belirteçsiz korunan işlem reddedilir", () => {
-  const vlad = (args: string[], env: Record<string, string> = {}) => runCli(args, { env: { VLAD_HOME: home, VLAD_SECRET_DIR: sdir, ...env } });
+  const vlad = (args: string[], env: Record<string, string> = {}) => runCli(args, { env: { VLAD_HOME: home, ...env } });
   it("mode night/watch/off belirteçsiz reddedilir, belirteçle çalışır; status serbest", async () => {
     initKey();
     for (const a of [["mode", "night", "--until", "23:59"], ["mode", "watch", "on"], ["mode", "off"]]) {
@@ -117,6 +117,42 @@ describe("CLI: hook'u atlatsa da belirteçsiz korunan işlem reddedilir", () => 
     expect(r.code).not.toBe(0);
     expect(r.err + r.out).toMatch(/TTY|terminal/i);
     expect(existsSync(join(sdir, "mode.key"))).toBe(false);
+  });
+});
+
+describe("incelemede çıkan kaçışlar", () => {
+  const vlad = (args: string[], env: Record<string, string> = {}) => runCli(args, { env: { VLAD_HOME: home, ...env } });
+  it("VLAD_SECRET_DIR / HOME ortamıyla gizli dizin değiştirilemez: mekanizma kapanmaz", async () => {
+    initKey();
+    const r = await vlad(["mode", "night", "--until", "23:59", "--push"], { VLAD_SECRET_DIR: join(sdir, "yok"), HOME: join(sdir, "yok2") });
+    expect(r.code).not.toBe(0);
+    expect(r.err + r.out).toMatch(/VLAD_MODE_TOKEN/);
+    expect(existsSync(modeFile())).toBe(false);
+  });
+  it("imzalı pencere varken gizli dizin silinirse pencere yetki sayılmaz (fail-closed)", () => {
+    initKey();
+    setNight({ until: "13:00" }, now);
+    expect(modeStatus(now).night).not.toBeNull();
+    rmSync(sdir, { recursive: true, force: true });
+    const s = modeStatus(now);
+    expect(s.night).toBeNull();
+    expect(s.forged).toBe(true);
+  });
+  it("bozuk anahtar mode token --reset ile kurtarılır (initKey(true)); eski belirteç geçersiz olur", () => {
+    initKey();
+    const old = mintToken(H, now);
+    writeFileSync(join(sdir, "mode.key"), "bozuk\n");
+    expect(() => requireModeAuthority({}, now)).toThrow(/bozuk/);
+    expect(initKey()).toBe(false);
+    expect(initKey(true)).toBe(true);
+    expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: old }, now)).toThrow(/geçersiz/);
+    expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: mintToken(H, now) }, now)).not.toThrow();
+  });
+  it("tmux/alt süreç ortamı belirteçsizdir", () => {
+    expect(envWithoutModeToken({ VLAD_MODE_TOKEN: "x", PATH: "p" })).toEqual({ PATH: "p" });
+  });
+  it("hook: `mode.key` geçen salt grep/commit mesajı yanlış pozitif vermez", () => {
+    expect(checkWorkerMode("Bash", { command: "grep -rn mode.key src" }, "/kb", { cwd: "/work" })).toBeNull();
   });
 });
 

@@ -80,10 +80,13 @@ export function externalPosixLaunch(req: LaunchRequest, scriptDir?: string): Lau
   return { ok: true, method: "external", script, command, cwd: req.cwd, scriptSha256, detail: command };
 }
 
+/** F-vlad-287: tmux sunucusu ilk kez bu çağrıyla başlarsa global ortamı miras alır; çalışan `tmux show-environment -g` ile belirteci okuyamasın. */
+export function envWithoutModeToken(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv { const { VLAD_MODE_TOKEN: _t, ...rest } = env; return rest; }
+
 function defaultRun(file: string, args: string[]): Promise<void> {
   assertRealLauncherAllowed();
   return new Promise((resolve, reject) =>
-    execFile(file, args, { timeout: 20000 }, (err, _o, stderr) =>
+    execFile(file, args, { timeout: 20000, env: envWithoutModeToken() }, (err, _o, stderr) =>
       err ? reject(new Error(String(stderr).trim() || err.message)) : resolve()));
 }
 

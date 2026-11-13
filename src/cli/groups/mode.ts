@@ -50,9 +50,10 @@ export function registerMode(program: Command, k: Kit): void {
     if (!process.stdin.isTTY) throw new Error("mode token yalnız etkileşimli terminalde (TTY) çalışır; çalışan oturumları belirteç alamaz");
     const hours = o.ttl === undefined ? 24 : Number(o.ttl);
     if (!(hours > 0 && hours <= 72)) throw new Error("--ttl 0-72 saat arası olmalı");
-    const created = initKey();
+    const created = initKey(o.reset === true);
     if (created) process.stderr.write("mod anahtarı üretildi (gizli dizin 0700, dosya 0600)\n");
     const token = mintToken(hours * 3_600_000);
     out(o, { token, hours }, token);
-  }).option("--ttl <saat>", "belirteç ömrü (varsayılan 24, en çok 72)");
+  }).option("--ttl <saat>", "belirteç ömrü (varsayılan 24, en çok 72)")
+    .option("--reset", "bozuk/kayıp anahtarı yeniden üretir (eski belirteçler ve imzalı pencere geçersiz olur)");
 }

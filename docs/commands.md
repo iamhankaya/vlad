@@ -72,7 +72,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad mode night` — Gece/yetki modunu açar (pencere `kb/mode.json`'da). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad mode watch` — Bekçi modunu açar. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad mode off` — Modu kapatır. _(işçide reddedilir; konsol: yazma; --json)_
-- `vlad mode token` — VLAD oturumu için imzalı mod belirteci üretir (`export VLAD_MODE_TOKEN=$(vlad mode token)`; `--ttl <saat>`, varsayılan 24, en çok 72). Yalnız etkileşimli terminalde (TTY) çalışır; ilk çalıştırmada anahtarı gizli dizinde (`VLAD_SECRET_DIR` ya da `~/.vlad-secret`, 0700/0600) üretir. Anahtar etkinken `mode night|watch|off`, `setup` ve `install` (`--check`/`--dry-run` hariç) geçerli `VLAD_MODE_TOKEN` ister; çalışan başlatma betikleri belirteci temizler. Tasarım: `docs/superpowers/specs/2026-11-13-vlad-mode-token-design.md`. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad mode token` — VLAD oturumu için imzalı mod belirteci üretir (`export VLAD_MODE_TOKEN=$(vlad mode token)`; `--ttl <saat>`, varsayılan 24, en çok 72). Yalnız etkileşimli terminalde (TTY) çalışır; ilk çalıştırmada anahtarı gizli dizinde (`~/.vlad-secret`, passwd ev dizini; ortam değişkeniyle değiştirilemez; 0700/0600; `--reset` bozuk anahtarı yeniden üretir) üretir. Anahtar etkinken `mode night|watch|off`, `setup` ve `install` (`--check`/`--dry-run` hariç) geçerli `VLAD_MODE_TOKEN` ister; çalışan başlatma betikleri belirteci temizler. Tasarım: `docs/superpowers/specs/2026-11-13-vlad-mode-token-design.md`. _(işçide reddedilir; konsolda yok; --json)_
 - `vlad mode status` — Mod durumunu gösterir. _(işçide reddedilir; konsol: okuma; --json)_
 
 ## audit

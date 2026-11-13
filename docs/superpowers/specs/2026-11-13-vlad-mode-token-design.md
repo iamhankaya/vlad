@@ -24,13 +24,16 @@ ifade eder. Sınır, çalışanın **ne yazdığına** değil **neye sahip oldu�
 
 ## Tasarım
 
-1. **Anahtar:** 32 bayt, 64 hex, `<gizli-dizin>/mode.key`. Gizli dizin `VLAD_SECRET_DIR` ya da `~/.vlad-secret`
-   (0700, dosya 0600). **kb'de, repoda, worktree'de ve `VLAD_HOME`'da değildir:** kb git'e gider, worktree'ler çalışanın
+1. **Anahtar:** 32 bayt, 64 hex, `<gizli-dizin>/mode.key`. Gizli dizin `~/.vlad-secret` (passwd kaydındaki ev dizini; **ortam değişkeniyle ya da `HOME` ile değiştirilemez**: çalışan
+   `VLAD_SECRET_DIR=/yok vlad …` ile mekanizmayı kapatabilirdi; yalnız süreç içi testler `setSecretDirForTests` kullanır) (0700, dosya 0600). **kb'de, repoda, worktree'de ve `VLAD_HOME`'da değildir:** kb git'e gider, worktree'ler çalışanın
    çalışma alanıdır. Anahtar hiçbir ortam değişkenine, loga ya da göreve yazılmaz.
 2. **Oturum belirteci:** `VMT1.<bitiş-ms>.<hmac-sha256(anahtar, "VLAD-MODE1|<bitiş-ms>")>`. Varsayılan 24 saat, tavan 72 saat.
    `vlad mode token` onu üretir ve **yalnız TTY'de** çalışır (kullanıcının terminali); çalışanın boru tabanlı Bash'i reddedilir.
+   **TTY bir sınır değildir:** çalışan `script`/`pty.spawn` ile TTY edinebilir; bu denetim yalnız saf borulu Bash'i keser. Gerçek
+   sınır için Keychain/Touch ID onayı ya da ayrı OS kullanıcısı gerekir (açık nokta).
    Kullanıcı VLAD oturumunu `export VLAD_MODE_TOKEN=$(vlad mode token)` ile başlatır; belirteç yalnız o oturumun ortamındadır.
-3. **Çalışan başlatma betikleri belirteci temizler** (`unset VLAD_MODE_TOKEN` / `Remove-Item Env:VLAD_MODE_TOKEN`; aynı
+3. **Çalışan başlatma betikleri belirteci temizler; tmux çağrısı belirteçsiz ortamla koşar** (sunucu ilk kez başlarsa global ortamı
+   miras alır, `tmux show-environment -g` ile okunamasın) (`unset VLAD_MODE_TOKEN` / `Remove-Item Env:VLAD_MODE_TOKEN`; aynı
    `VLAD_DESKTOP_QUEUE` mantığı). Çalışan belirteci kendi ortamında bulamaz.
 4. **Korunan CLI işlemleri belirteci CLI'da doğrular:** `vlad mode night|watch|off`, `vlad setup` (`--check` hariç) ve
    `vlad install`. Belirteç yoksa/geçersizse/süresi dolmuşsa işlem reddedilir; hook'tan bağımsızdır, yani hook atlatılsa da CLI
@@ -40,7 +43,10 @@ ifade eder. Sınır, çalışanın **ne yazdığına** değil **neye sahip oldu�
    `mode.json`'u Edit/`echo >` ile doğrudan yazsa bile `task close` gece yetkisi (`src/machines/close.ts`) açılmaz: gerçek
    sınır yazmayı değil **yetkiyi tüketmeyi** doğrular. `watch` bayrağı yetki taşımaz, imzasızdır.
 6. **Geriye uyum / kurulmamış makine:** gizli dizin hiç yoksa mekanizma etkin değildir; davranış bugünküyle aynıdır
-   (mevcut testler, kurulmamış makineler). Dizin var ama anahtar yoksa ya da bozuksa **fail-closed**: korunan işlemler reddedilir.
+   (mevcut testler, kurulmamış makineler). Dizin var ama anahtar yoksa ya da bozuksa **fail-closed**: korunan işlemler reddedilir
+   (`vlad mode token --reset` terminalde anahtarı yeniden üretir). Gizli dizin **silinirse** imzalı bir gece penceresi yine
+   yetki sayılmaz (imza var, anahtar yok = geçersiz); ama imzasız pencere + silinmiş dizin eski davranışa düşer (aynı UID'de
+   kalan açık; tespit için `modeLine`/`setup --check` uyarısı ayrı iş).
    Etkinleştirme: kullanıcı terminalinde `vlad mode token` ilk çalışınca anahtarı üretir.
 7. **Hook en iyi çaba katmanı olarak kalır** ve gizli dizin yolunu da korunan yollara ekler (çalışanın `cat`/`cp` ile anahtara
    uzanması ek bir engelle karşılaşır; mutlak sınır değildir, §Tehdit modeli).
@@ -59,6 +65,9 @@ Mac'te tamamlandı. Windows'ta `mkdirSync` modu yok sayılır; eşdeğeri `icacl
 kod yolu `chmod` hatasını yutar ve dosya var olduğu sürece çalışır. Windows başlatma betiği (`terminal.ts`) belirteci temizler (testli).
 
 ## Açık noktalar (kapsam dışı)
+
+- **Etkinleştirme öncesi:** anahtar etkinleşince gerçek `dist`'i çocuk süreç olarak koşan testler (`mode night|off`, `setup` çalıştıranlar: restructure-golden, e1-worker-readonly, setup-* kabul testleri) gerçek `~/.vlad-secret`'ı görür; ortam seam'i bilerek yok. Çocuk süreç testlerine güvenli bir seam (ör. test için derlenmiş ayrı giriş noktası) ayrı iş olarak çözülmeli; Mac'te anahtar üretilmeden bu iş kapanmamış sayılır.
+- Gece imzası kb/makine kimliğine bağlı değil (düşük).
 
 - Aynı UID'de anahtar dosyasını okumak / `ps -E` ile VLAD ortamını okumak: ayrı OS kullanıcısı ya da Keychain.
 - `settings.json` / hook / `vlad.config.json` / kb dosyalarına **doğrudan** (CLI dışı) yazma CLI'dan engellenemez; yalnız hook

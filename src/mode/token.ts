@@ -1,6 +1,6 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { homedir } from "node:os";
+import { userInfo } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -11,15 +11,19 @@ import { join } from "node:path";
 const MAX_TTL = 72 * 3_600_000;
 const PREFIX = "VLAD-MODE1|";
 
-export const secretDir = (): string => process.env.VLAD_SECRET_DIR?.trim() || join(homedir(), ".vlad-secret");
+// Ortam değişkeniyle değiştirilemez (çalışan `VLAD_SECRET_DIR=/yok` ile mekanizmayı kapatırdı); HOME da kullanılmaz, passwd kaydındaki ev dizini.
+let testDir: string | null = null;
+/** Yalnız süreç içi testler için (çalışan başka sürece bu yolla dokunamaz). */
+export const setSecretDirForTests = (d: string | null): void => { testDir = d; };
+export const secretDir = (): string => testDir ?? join(userInfo().homedir, ".vlad-secret");
 const keyFile = (): string => join(secretDir(), "mode.key");
 
-/** Anahtarı üretir (yoksa); dizin 0700, dosya 0600; var olan anahtar ezilmez. true = bu çağrı üretti. */
-export function initKey(): boolean {
+/** Anahtarı üretir (yoksa); dizin 0700, dosya 0600; var olan anahtar ezilmez. `reset`: bozuk/kayıp anahtarı yeniden üretir (eski belirteçler ve imzalı pencere geçersiz olur). true = bu çağrı üretti. */
+export function initKey(reset = false): boolean {
   const dir = secretDir();
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   try { chmodSync(dir, 0o700); } catch { /* shortcut: Windows ACL (icacls) ayrı iş; chmod yok sayılır */ }
-  if (existsSync(keyFile())) return false;
+  if (existsSync(keyFile())) { if (!reset) return false; rmSync(keyFile(), { force: true }); }
   writeFileSync(keyFile(), randomBytes(32).toString("hex") + "\n", { mode: 0o600, flag: "wx" });
   return true;
 }
@@ -28,7 +32,7 @@ export function initKey(): boolean {
 export function readKey(): string | null {
   if (!existsSync(secretDir())) return null;
   let k: string;
-  try { k = readFileSync(keyFile(), "utf8").trim(); } catch { throw new Error("mod anahtarı okunamadı (gizli dizin var, anahtar yok): fail-closed; `vlad mode token` terminalde yeniden üretir"); }
+  try { k = readFileSync(keyFile(), "utf8").trim(); } catch { throw new Error("mod anahtarı okunamadı (gizli dizin var, anahtar yok): fail-closed; `vlad mode token --reset` terminalde yeniden üretir"); }
   if (!/^[0-9a-f]{64}$/i.test(k)) throw new Error("mod anahtarı bozuk: fail-closed");
   return k;
 }
@@ -70,7 +74,7 @@ export interface SignableNight { until: string; started: string; projects: strin
 const canon = (n: SignableNight): string => JSON.stringify([n.until, n.started, n.projects, n.note, n.push, n.except, n.untilTasks]);
 /** Anahtar yoksa null (imzasız mod: eski davranış). */
 export function signNight(n: SignableNight): string | null { const k = readKey(); return k ? mac(k, "VLAD-NIGHT1|" + canon(n)) : null; }
-/** true = anahtar yok (kontrol yok) ya da imza geçerli; bozuk anahtar fail-closed (false). */
+/** true = anahtar yok ve pencere imzasız (eski davranış) ya da imza geçerli. Bozuk anahtar ve "imzalı pencere var ama anahtar kayıp" (gizli dizin silindi) fail-closed (false). */
 export function nightSigOk(n: SignableNight, sig: unknown): boolean {
-  try { const k = readKey(); if (!k) return true; return typeof sig === "string" && same(sig, mac(k, "VLAD-NIGHT1|" + canon(n))); } catch { return false; }
+  try { const k = readKey(); if (!k) return sig === undefined; return typeof sig === "string" && same(sig, mac(k, "VLAD-NIGHT1|" + canon(n))); } catch { return false; }
 }

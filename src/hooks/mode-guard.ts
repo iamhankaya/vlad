@@ -25,7 +25,8 @@ function globHits(base: string, name: string): boolean {
   try { return new RegExp(`^${re}$`, "i").test(name); } catch { return true; }
 }
 /** F-vlad-287: imzalı mod belirtecinin anahtarı (gizli dizin); hook en iyi çaba katmanı, gerçek sınır CLI'daki belirteç doğrulaması. */
-const SECRET = /\.vlad-secret|mode\.key/i;
+const SECRET = /\.vlad-secret/i; // `mode.key` tek başına aranmaz (grep/commit mesajı yanlış pozitifi); parçalı yol/joker kaçışı en iyi çaba sınırı
+
 const secretHit = (t: string): boolean => { const n = norm(expand(t.replace(/["'\\]/g, ""))); return SECRET.test(n) || n === norm(secretDir()) || n.startsWith(norm(secretDir()) + "/"); };
 const SETTINGS = ["settings.json", "settings.local.json"];
 const expand = (t: string): string => t.replace(/^~(?=\/|\\|$)|\$\{?HOME\}?/g, homedir().replace(/\\/g, "/"));
