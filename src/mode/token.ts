@@ -17,10 +17,30 @@ let testDir: string | null = null;
 export const setSecretDirForTests = (d: string | null): void => { testDir = d; };
 export const secretDir = (): string => testDir ?? join(userInfo().homedir, ".vlad-secret");
 const keyFile = (): string => join(secretDir(), "mode.key");
+/** F-vlad-336: etkinleştirme işareti anahtar dizininin DIŞINDA (kardeş dosya `<gizli-dizin>.active`). Dizin silinse bile işaret kalır = düşürme tespit edilir. */
+const markerFile = (): string => `${secretDir()}.active`;
 
-/** Anahtarı üretir (yoksa); dizin 0700, dosya 0600; var olan anahtar ezilmez. `reset`: bozuk/kayıp anahtarı yeniden üretir (eski belirteçler ve imzalı pencere geçersiz olur). true = bu çağrı üretti. */
+const MARKER_BODY = "VLAD-MODE-ACTIVE1\n";
+const BAD_MARKER = "etkinleştirme işareti geçersiz (sembolik bağ, düzenli dosya değil ya da içerik beklenenden farklı): fail-closed; terminalde `vlad mode token --reset` (SIFIRLA onayı) ya da `--disable`";
+/** lstat ile (sembolik bağ izlenmez): none = yok, valid = düzenli dosya + beklenen içerik, bad = başka her şey. */
+function markerState(): "none" | "valid" | "bad" {
+  let st;
+  try { st = lstatSync(markerFile()); } catch (e) { return (e as NodeJS.ErrnoException).code === "ENOENT" ? "none" : "bad"; }
+  if (!st.isFile()) return "bad";
+  try { return readFileSync(markerFile(), "utf8") === MARKER_BODY ? "valid" : "bad"; } catch { return "bad"; }
+}
+
+/** Anahtarı üretir (yoksa); dizin 0700, dosya 0600; var olan anahtar ezilmez. `reset`: bozuk/kayıp/düşürülmüş anahtarı yeniden üretir (eski belirteçler ve imzalı pencere geçersiz olur). Sıfırlamasız: dizin var + anahtar yok, düşürülmüş ya da geçersiz işaret fırlatır (yeni anahtar yalnız hiçbir iz yokken). true = bu çağrı üretti. */
 export function initKey(reset = false): boolean {
   const dir = secretDir();
+  const ms = markerState();
+  if (!reset) {
+    if (ms === "bad") throw new Error(BAD_MARKER);
+    if (!existsSync(dir) && ms === "valid") throw new Error(DROPPED);
+    if (existsSync(dir) && !existsSync(keyFile())) throw new Error("gizli dizin var ama mod anahtarı yok: fail-closed; `vlad mode token --reset` (SIFIRLA onayı) kullanın");
+  }
+  // önce işaret: yarıda kalırsa fail-closed (düşmüş sayılır). Önceden unlink + wx: sembolik bağ izlenmez.
+  if (ms !== "valid") { rmSync(markerFile(), { force: true }); writeFileSync(markerFile(), MARKER_BODY, { mode: 0o600, flag: "wx" }); }
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   try { chmodSync(dir, 0o700); } catch { /* shortcut: Windows ACL (icacls) ayrı iş; chmod yok sayılır */ }
   if (existsSync(keyFile())) { if (!reset) return false; rmSync(keyFile(), { force: true }); }
@@ -28,15 +48,30 @@ export function initKey(reset = false): boolean {
   return true;
 }
 
-/** null = mekanizma etkin değil: YALNIZ gizli dizin yok (ENOENT). Başka her hata (EACCES, EMFILE, sembolik bağ, geniş izin), dizin var ama anahtar yok/bozuk = fail-closed (throw). */
+const DROPPED = "mod belirteci düşürülmüş: etkinleştirme işareti var ama gizli dizin/anahtar yok (silinmiş olabilir): fail-closed; kasıtlıysa terminalde `vlad mode token --reset` (SIFIRLA onayı) ya da `--disable`";
+
+/** off = hiç etkinleştirilmedi; ok = anahtar okunabilir; dropped = işaret var, gizli dizin yok; broken = dizin var ama anahtar sorunlu. Asla fırlatmaz. */
+export function keyState(): "off" | "ok" | "dropped" | "broken" {
+  try { return readKey() === null ? "off" : "ok"; } catch (e) { return (e as Error).message === DROPPED ? "dropped" : "broken"; }
+}
+
+/** `--disable`: mekanizmayı tamamen kapatır (gizli dizin + işaret). Yetki çağıran CLI'da `authorizeReset` ile alınır. */
+export function disableKey(): void {
+  rmSync(secretDir(), { recursive: true, force: true });
+  rmSync(markerFile(), { force: true });
+}
+
+/** null = mekanizma etkin değil: gizli dizin yok (ENOENT) VE etkinleştirme işareti yok. Başka her hata (EACCES, EMFILE, sembolik bağ, geniş izin), dizin var ama anahtar yok/bozuk = fail-closed (throw). */
 export function readKey(): string | null {
   let st;
   try { st = lstatSync(secretDir()); } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code === "ENOENT") return null;
+    if (code === "ENOENT") { const ms = markerState(); if (ms === "bad") throw new Error(BAD_MARKER); if (ms === "valid") throw new Error(DROPPED); return null; }
     throw new Error(`gizli dizin denetlenemedi (${code ?? "hata"}): fail-closed; \`vlad mode token --reset\` terminalde onayla`);
   }
   if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("gizli dizin sembolik bağ ya da dizin değil: fail-closed");
+  // K2: işaret doğrulaması dizin ENOENT dalından bağımsız: bozuk/symlink işaret + sağlam anahtar = 'broken' (SIFIRLA ile kurtarılır; işaretin yokluğu ise geçerli: anahtar zorunlu kılar)
+  if (markerState() === "bad") throw new Error(BAD_MARKER);
   // POSIX izin denetimi: fail-closed seçildi (uyarı değil); grup/diğer biti açık dizin ya da anahtar güvenilmez. Windows'ta ACL ayrı iş.
   if (process.platform !== "win32" && (st.mode & 0o077)) throw new Error("gizli dizin izinleri fazla geniş (0700 olmalı): fail-closed");
   let k: string;

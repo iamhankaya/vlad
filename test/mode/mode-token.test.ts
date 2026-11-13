@@ -1,9 +1,9 @@
-import { chmodSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, statSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { authorizeReset, initKey, mintToken, requireModeAuthority, secretDir, setSecretDirForTests, verifyToken } from "../../src/mode/token.js";
-import { modeStatus, setNight } from "../../src/mode/store.js";
+import { authorizeReset, disableKey, initKey, keyState, mintToken, requireModeAuthority, secretDir, setSecretDirForTests, verifyToken } from "../../src/mode/token.js";
+import { modeLine, modeStatus, setNight } from "../../src/mode/store.js";
 import { kbPaths } from "../../src/kb/index.js";
 import { buildPosixScript, envWithoutModeToken } from "../../src/launcher/posix.js";
 import { buildScript } from "../../src/launcher/terminal.js";
@@ -227,5 +227,155 @@ describe("hook (en iyi çaba): gizli dizin yolu korunur", () => {
       expect(checkWorkerMode("Bash", { command: c }, "/kb", { cwd: "/work" }), c).toMatch(/anahtar|koruma/);
     expect(checkWorkerMode("Write", { file_path: "/Users/x/.vlad-secret/mode.key" }, "/kb", { cwd: "/work" })).toMatch(/anahtar|koruma/);
     expect(checkWorkerMode("Bash", { command: "ls /work" }, "/kb", { cwd: "/work" })).toBeNull();
+  });
+});
+
+// F-vlad-336: düşürme (gizli dizin sil + mode.json'dan sig çıkar) tespit edilir; etkinleştirme işareti anahtar dizininin DIŞINDA
+describe("düşürme tespiti: etkinleştirme işareti anahtar dizini dışında", () => {
+  const marker = () => `${sdir}.active`;
+  const night = () => setNight({ until: "2026-11-13T23:00:00+03:00" }, now);
+  it("initKey işareti anahtar dizininin dışına yazar; keyState off → ok", () => {
+    expect(keyState()).toBe("off");
+    initKey();
+    expect(existsSync(marker())).toBe(true);
+    expect(existsSync(join(sdir, ".active"))).toBe(false);
+    expect(keyState()).toBe("ok");
+  });
+  it("saldırı: gizli dizin silinir + mode.json'dan sig çıkarılır → imzasız moda DÜŞMEZ (pencere yetki değil, korunan işlem fail-closed)", () => {
+    initKey();
+    night();
+    const f = modeFile();
+    const j = JSON.parse(readFileSync(f, "utf8"));
+    delete j.night.sig;
+    rmSync(sdir, { recursive: true, force: true });
+    writeFileSync(f, JSON.stringify(j));
+    expect(keyState()).toBe("dropped");
+    expect(() => requireModeAuthority({}, now)).toThrow(/düşürül/);
+    expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: "VMT1.99999999999999.00" }, now)).toThrow(/düşürül/);
+    expect(modeStatus(now).night).toBeNull();
+    expect(modeStatus(now).forged).toBe(true);
+    expect(modeLine(now)).toMatch(/düşürülmüş|korumasız/);
+  });
+  it("dropped durumda modeLine (vlad status) uyarır; kapalı/sağlıklı makinede uyarı yok", () => {
+    expect(modeLine(now)).toBeNull();
+    initKey();
+    expect(modeLine(now)).toBeNull();
+    rmSync(sdir, { recursive: true, force: true });
+    expect(modeLine(now)).toMatch(/UYARI.*düşürülmüş/);
+  });
+  it("dropped durumda initKey (sıfırlamasız) sessizce yeniden üretmez; --reset üretir ve işareti geri yazar", () => {
+    initKey();
+    rmSync(sdir, { recursive: true, force: true });
+    expect(() => initKey()).toThrow(/düşürül/);
+    expect(existsSync(sdir)).toBe(false);
+    expect(initKey(true)).toBe(true);
+    expect(keyState()).toBe("ok");
+  });
+  it("meşru tamamen kapatma: geçerli belirteç şart; kapatınca dizin + işaret silinir, korunan işlemler yeniden belirteçsiz çalışır", async () => {
+    initKey();
+    await expect(authorizeReset({}, now, async () => "SIFIRLA")).rejects.toThrow(/VLAD_MODE_TOKEN/);
+    await authorizeReset({ VLAD_MODE_TOKEN: mintToken(H, now) }, now, async () => "");
+    disableKey();
+    expect(existsSync(sdir)).toBe(false);
+    expect(existsSync(marker())).toBe(false);
+    expect(keyState()).toBe("off");
+    expect(() => requireModeAuthority({}, now)).not.toThrow();
+  });
+  it("meşru kapatma düşürülmüş makinede: yalnız elle SIFIRLA onayı; sonra işaret de temizlenir", async () => {
+    initKey();
+    rmSync(sdir, { recursive: true, force: true });
+    await expect(authorizeReset({}, now, async () => "evet")).rejects.toThrow(/SIFIRLA/);
+    await authorizeReset({}, now, async () => "SIFIRLA");
+    disableKey();
+    expect(existsSync(marker())).toBe(false);
+    expect(() => requireModeAuthority({}, now)).not.toThrow();
+  });
+  it("sadece işareti silmek gizli dizin varken korumayı kapatmaz (anahtar hâlâ zorunlu kılar)", () => {
+    initKey();
+    rmSync(marker(), { force: true });
+    expect(keyState()).toBe("ok");
+    expect(() => requireModeAuthority({}, now)).toThrow(/VLAD_MODE_TOKEN/);
+  });
+  it("CLI: mode token --disable TTY'siz reddedilir ve hiçbir şeyi silmez", async () => {
+    initKey();
+    const r = await runCli(["mode", "token", "--disable"], { env: { VLAD_HOME: home } });
+    expect(r.code).not.toBe(0);
+    expect(existsSync(join(sdir, "mode.key"))).toBe(true);
+    expect(existsSync(marker())).toBe(true);
+  });
+});
+
+// Kapı incelemesi düzeltme turu
+describe("düzeltme turu: initKey/işaret sertleştirme", () => {
+  const marker = () => `${sdir}.active`;
+  it("dizin var + mode.key yok iken sıfırlamasız initKey yeni anahtar üretmez (fırlatır), --reset üretir", () => {
+    initKey();
+    rmSync(join(sdir, "mode.key"));
+    expect(() => initKey()).toThrow(/--reset/);
+    expect(existsSync(join(sdir, "mode.key"))).toBe(false);
+    expect(initKey(true)).toBe(true);
+  });
+  it("işaret sembolik bağsa initKey bağı izleyip hedefe yazmaz; geçersiz işaret net hatayla fail-closed", () => {
+    const target = join(sdir, "..", "hedef.txt");
+    writeFileSync(target, "dokunma");
+    symlinkSync(target, marker());
+    expect(() => initKey()).toThrow(/işaret/);
+    expect(readFileSync(target, "utf8")).toBe("dokunma");
+    expect(() => requireModeAuthority({}, now)).toThrow(/işaret/);
+    expect(keyState()).toBe("broken");
+    // --reset geçersiz işareti bağı izlemeden kaldırıp yeniden yazar
+    expect(initKey(true)).toBe(true);
+    expect(lstatSync(marker()).isSymbolicLink()).toBe(false);
+    expect(readFileSync(target, "utf8")).toBe("dokunma");
+  });
+  it("işaret içeriği VLAD-MODE-ACTIVE1 değilse (boş/rastgele) dizin yokken fail-closed 'geçersiz işaret'", () => {
+    writeFileSync(marker(), "");
+    expect(() => requireModeAuthority({}, now)).toThrow(/işaret.*geçersiz|geçersiz.*işaret/);
+    writeFileSync(marker(), "VLAD-MODE-ACTIVE1\n");
+    expect(() => requireModeAuthority({}, now)).toThrow(/düşürül/);
+  });
+});
+
+describe("düzeltme turu: task close --skip-machine çalışana kapalı", () => {
+  const close = (env: Record<string, string>) => runCli(["task", "close", "T20261113-99", "--yes", "--skip-machine", "win", "--reason", "onay"], { env: { VLAD_HOME: home, ...env } });
+  it("VLAD_TASK_ID'li çalışan bağlamında reddedilir; çalışan değilse bayrak kabul edilir (görev bulunamaz hatası)", async () => {
+    const w = await close({ VLAD_TASK_ID: "T20261113-77" });
+    expect(w.code).not.toBe(0);
+    expect(`${w.out}${w.err}`).toMatch(/çalışan/);
+    const u = await close({ VLAD_TASK_ID: "" });
+    expect(`${u.out}${u.err}`).not.toMatch(/çalışan oturumu/);
+  });
+});
+
+describe("K2: bozuk işaret + sağlam anahtar kilitlenme yapmaz", () => {
+  const marker = () => `${sdir}.active`;
+  it("bozuk/symlink işaret + sağlam anahtar + süresi dolmuş belirteç: 'broken'; --reset ve --disable yalnız SIFIRLA ile kurtarır", async () => {
+    initKey();
+    const old = mintToken(H, now);
+    const later = new Date(now.getTime() + 2 * H);
+    writeFileSync(marker() + ".x", "dokunma");
+    rmSync(marker(), { force: true });
+    symlinkSync(marker() + ".x", marker());
+    expect(keyState()).toBe("broken");
+    expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: old }, now)).toThrow(/işaret/); // sağlam belirteç bile geçmez (fail-closed)
+    expect(() => mintToken(H, now)).toThrow(/işaret/);
+    // belirteç süresi dolmuş: normal yol kilitli, kurtarma SIFIRLA ile
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: old }, later, async () => "evet")).rejects.toThrow(/SIFIRLA/);
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: old }, later, async () => "SIFIRLA")).resolves.toBeUndefined();
+    expect(initKey(true)).toBe(true);
+    expect(keyState()).toBe("ok");
+    expect(lstatSync(marker()).isSymbolicLink()).toBe(false);
+    expect(readFileSync(marker() + ".x", "utf8")).toBe("dokunma");
+    expect(() => mintToken(H, now)).not.toThrow();
+  });
+  it("aynı durumda --disable da SIFIRLA ile kurtarır (işaret bağı izlenmeden silinir)", async () => {
+    initKey();
+    rmSync(marker(), { force: true });
+    writeFileSync(marker(), "çöp");
+    expect(keyState()).toBe("broken");
+    await authorizeReset({}, now, async () => "SIFIRLA");
+    disableKey();
+    expect(existsSync(marker())).toBe(false);
+    expect(keyState()).toBe("off");
   });
 });

@@ -50,8 +50,18 @@ vlad setup --check --only permissions                           # doğrula
 - Belirteç kayboldu/süresi doldu: terminalde `vlad mode token` ile yenisini alın.
 - Anahtar bozuldu/okunamıyor (korunan işlemler "fail-closed" reddeder): `vlad mode token --reset` (geçerli belirteç ister; anahtar
   bozuksa elle `SIFIRLA` yazın). Eski belirteçler ve imzalı gece penceresi geçersiz olur; gerekirse `vlad mode night` ile yeniden açın.
-- Mekanizmayı tamamen kapatma: gizli dizini (`vlad mode token` çıktısındaki anahtarın bulunduğu ev dizini altındaki `.vlad-secret`)
-  kendi terminalinizde silin; korunan işlemler yeniden belirteçsiz çalışır. İmzalı bir gece penceresi varsa yetki saymaz
+- **Düşürme tespiti (F-vlad-336):** `vlad mode token` ilk çalışınca anahtar dizinine ek olarak onun **dışında** bir etkinleştirme işareti
+  yazar (ev dizininde gizli dizinin yanındaki `.active` dosyası). İşaret var ama gizli dizin/anahtar yoksa mekanizma "kapalı" sayılmaz:
+  korunan işlemler "mod belirteci düşürülmüş" ile reddedilir (fail-closed), `vlad status` ve SessionStart özeti
+  `UYARI: mod belirteci düşürülmüş` der, gece penceresi yetki vermez. Aynı UID'de hem dizini hem işareti silen biri hâlâ
+  kapatabilir (spec §Tehdit modeli: kapsam dışı); bu yalnız "anahtar dizinini sil + `sig`'i çıkar" sessiz düşürmesini kapatır.
+- **Mekanizmayı tamamen kapatma (meşru yol)**, kendi terminalinizde:
+  ```bash
+  vlad mode token --disable   # gizli dizin + etkinleştirme işaretini siler
+  ```
+  Geçerli `VLAD_MODE_TOKEN` ister; anahtar bozuk/kayıp/düşürülmüş ise belirteç doğrulanamaz, elle `SIFIRLA` yazılır. Sonra korunan işlemler
+  yeniden belirteçsiz çalışır. Gizli dizini elle silmek **yetmez**: işaret kalır ve makine "düşürülmüş" görünür (elle sildiyseniz
+  `vlad mode token --disable` ile temizleyin; yeniden etkinleştirmek için `--reset`). İmzalı bir gece penceresi varsa yetki saymaz
   (önce `vlad mode off` ile kapatın).
 - Hook'u kaldırma: `vlad setup --uninstall permissions` (kaldırılmazsa `settings.json`'dan ilgili PreToolUse girdisini kendiniz silin).
 

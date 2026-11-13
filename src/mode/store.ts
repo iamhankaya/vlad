@@ -2,7 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { kbPaths, nowIso, writeFileAtomic } from "../kb/index.js";
 import { getTask } from "../tasks/store.js";
-import { nightSigOk, signNight } from "./token.js";
+import { keyState, nightSigOk, signNight } from "./token.js";
 
 /** Night (authority) window and watch flag, kept in the kb (`mode.json`) so every VLAD session sees the same state. */
 export interface NightMode {
@@ -119,6 +119,8 @@ export function expireMode(now: Date): boolean {
 
 /** One-line state for `vlad status` and the SessionStart summary; null when nothing is on. */
 export function modeLine(now: Date): string | null {
+  if (keyState() === "dropped") return "UYARI: mod belirteci düşürülmüş (etkinleştirme işareti var, gizli dizin/anahtar yok): koruma kapalı sayılmaz, korunan işlemler fail-closed; kasıtlıysa `vlad mode token --disable`";
+  if (keyState() === "broken") return "UYARI: mod belirteci anahtarı/etkinleştirme işareti geçersiz ya da okunamıyor: korunan işlemler fail-closed; `vlad mode token --reset` (SIFIRLA onayı)";
   const s = modeStatus(now);
   if (s.night) {
     const n = s.night;
