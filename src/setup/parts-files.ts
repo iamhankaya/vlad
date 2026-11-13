@@ -173,14 +173,20 @@ export const WORKER_DENY = [
 ];
 /** F-vlad-324: PreToolUse(Bash) push-guard hook'u (çalışan `git push` argv doğrulaması). */
 const pushGuardCommand = (home: string): string => `node "${join(home, "dist", "hooks", "push-guard-hook.js").replace(/\\/g, "/")}"`;
-const hasPushGuard = (d: any, cmd: string): boolean => (d?.hooks?.PreToolUse ?? []).some((e: any) => Array.isArray(e?.hooks) && e.hooks.some((h: any) => h?.command === cmd));
+/** F-vlad-287: aynı hook mod korumasını da yürütür (Bash komutu + kb mode.json'a Edit/Write); matcher bu araçların hepsini kapsamalı. */
+const GUARD_MATCHER = "Bash|Edit|Write|MultiEdit|NotebookEdit";
+const hasPushGuard = (d: any, cmd: string): boolean => (d?.hooks?.PreToolUse ?? []).some((e: any) => e?.matcher === GUARD_MATCHER && Array.isArray(e?.hooks) && e.hooks.some((h: any) => h?.command === cmd));
 function mergePushGuard(d: any, cmd: string): any {
   if (hasPushGuard(d, cmd)) return d;
   if (d.hooks !== undefined && (d.hooks === null || typeof d.hooks !== "object")) throw new Error("settings.json: hooks bir nesne değil; elle düzeltin");
   if (d.hooks?.PreToolUse !== undefined && !Array.isArray(d.hooks.PreToolUse)) throw new Error("settings.json: hooks.PreToolUse bir dizi değil; elle düzeltin");
-  d.hooks = { ...(d.hooks ?? {}), PreToolUse: [...(d.hooks?.PreToolUse ?? []), { matcher: "Bash", hooks: [{ type: "command", command: cmd, timeout: HOOK_TIMEOUT_S }] }] };
+  // eski sürüm (matcher "Bash"): girdiyi genişletmek kullanıcının yan hook'unu da genişletirdi; VLAD'ın hook'u çıkarılıp yeni girdiye taşınır, kullanıcı girdisi olduğu gibi kalır
+  const rest = (d.hooks?.PreToolUse ?? []).map((e: any) => (Array.isArray(e?.hooks) ? { ...e, hooks: e.hooks.filter((h: any) => h?.command !== cmd) } : e)).filter((e: any) => !Array.isArray(e?.hooks) || e.hooks.length);
+  d.hooks = { ...(d.hooks ?? {}), PreToolUse: [...rest, { matcher: GUARD_MATCHER, hooks: [{ type: "command", command: cmd, timeout: HOOK_TIMEOUT_S }] }] };
   return d;
 }
+/** F-vlad-287: hook komutu `node …` ile başlar; node PATH'te yoksa hook hiç çalışmaz (çıkış ≠ 2 = engelleme yok, sessizce fail-open). Komutu `|| exit 2` ile sarmak bilerek yapılmadı: dist silinirse/taşınırsa TÜM Claude oturumlarının her Bash/Edit çağrısı kilitlenirdi. */
+const nodeOnPath = (env: NodeJS.ProcessEnv = process.env): boolean => (env.PATH ?? env.Path ?? "").split(process.platform === "win32" ? ";" : ":").filter(Boolean).some((d) => ["node", "node.exe", "node.cmd"].some((n) => existsSync(join(d, n))));
 const isWorktreeRoot = (home: string): boolean => existsSync(join(home, ".git")) && statSync(join(home, ".git")).isFile();
 function kbOutside(c: SetupContext): string | null {
   const kb = resolveKbDir(c.vladHome).dir;
@@ -196,11 +202,12 @@ export const permissionsPart: SetupPart = {
     const deny: string[] = s.data?.permissions?.deny ?? [];
     const miss = [...WORKER_PERMISSIONS.filter((p) => !allow.includes(p)), ...WORKER_DENY.filter((p) => !deny.includes(p))];
     const kb = kbOutside(c);
-    const guardOk = hasPushGuard(s.data, pushGuardCommand(c.vladHome)) && existsSync(join(c.vladHome, "dist", "hooks", "push-guard-hook.js"));
+    const nodeOk = nodeOnPath();
+    const guardOk = hasPushGuard(s.data, pushGuardCommand(c.vladHome)) && existsSync(join(c.vladHome, "dist", "hooks", "push-guard-hook.js")) && nodeOk;
     const dirs: string[] = s.data?.permissions?.additionalDirectories ?? [];
     return compose("permissions", [
       { required: "isteğe bağlı", item: item("permissions:worker-push-ci", miss.length ? "eksik" : "ok", miss.length ? `${miss.length}/${WORKER_PERMISSIONS.length + WORKER_DENY.length} çalışan push/CI allow+deny kalıbı eksik` : "çalışan push/CI kalıpları var", "vlad setup --only permissions (onay ister)") },
-      { required: "isteğe bağlı", item: isWorktreeRoot(c.vladHome) ? item("permissions:push-guard", "n/a", "VLAD kökü worktree: hook yolu gömülmez (ana kopyadan kurun)") : item("permissions:push-guard", guardOk ? "ok" : "eksik", guardOk ? "PreToolUse push-guard hook'u kayıtlı" : "PreToolUse push-guard hook'u yok ya da dist/hooks/push-guard-hook.js derlenmemiş", "vlad setup --only permissions (onay ister); önce npm run build") },
+      { required: "isteğe bağlı", item: isWorktreeRoot(c.vladHome) ? item("permissions:push-guard", "n/a", "VLAD kökü worktree: hook yolu gömülmez (ana kopyadan kurun)") : item("permissions:push-guard", guardOk ? "ok" : "eksik", guardOk ? "PreToolUse push-guard hook'u kayıtlı" : !nodeOk ? "koruma çalışmıyor: node PATH'te bulunamadı (hook komutu `node …` ile başlar)" : "PreToolUse push-guard hook'u yok, eski matcher ile kayıtlı ya da dist/hooks/push-guard-hook.js derlenmemiş (koruma çalışmıyor)", "vlad setup --only permissions (onay ister); önce npm run build") },
       { required: "isteğe bağlı", item: kb ? item("permissions:additional-dirs", dirs.includes(kb) ? "ok" : "eksik", dirs.includes(kb) ? "kb additionalDirectories'te" : "kb additionalDirectories'te yok", "vlad setup --only permissions (onay ister)") : item("permissions:additional-dirs", "n/a", "kb VLAD_HOME içinde") },
     ]);
   },

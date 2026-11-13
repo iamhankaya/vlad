@@ -10,6 +10,8 @@ function ownId(cwd: string): string | null {
   } catch { return null; }
 }
 const block = (msg: string) => { process.stderr.write(msg + "\n"); process.exitCode = 2; };
+// catch yolunda import kullanılamaz: <repo>-wt/T… dizini satır içi kalıpla tanınır (F-vlad-287)
+const WT_DIR = /[\\/][^\\/]*-wt[\\/]T\d{8}-\d+(?:[\\/]|$)/i;
 const mentionsPush = (raw: string) => /\bgit\b[\s\S]*\bpush\b/.test(raw);
 
 let raw = "";
@@ -18,14 +20,24 @@ process.stdin.on("data", (d) => (raw += d));
 process.stdin.on("end", async () => {
   try {
     const { checkWorkerPush } = await import("./push-guard.js");
+    const { checkWorkerMode, MODE_GUARD_TOOLS } = await import("./mode-guard.js");
     const j = JSON.parse(raw);
+    const tool = j?.tool_name;
+    if (typeof tool !== "string" || !MODE_GUARD_TOOLS.includes(tool)) return;
+    const cwd = typeof j.cwd === "string" ? j.cwd : process.cwd();
+    const id = ownId(cwd);
+    // F-vlad-287: çalışan = VLAD_TASK_ID (hook, Claude sürecinin ortamını miras alır; komuttaki `env -u` ona dokunmaz) ya da vlad/T… dalı ya da <repo>-wt/T… dizini
+    const worker = id !== null || !!process.env.VLAD_TASK_ID?.trim() || (await import("../mode/guard.js")).inWorkerWorktreeDir(cwd);
+    if (!worker) return; // ana VLAD / kullanıcı oturumu
+    let kb: string | null = null, home: string | null = null;
+    try { const h = await import("../kb/home.js"); home = h.getVladHome(); kb = h.resolveKbDir(home).dir; } catch { /* kb çözülemedi: mode.json yazımı fail-closed */ }
+    const modeWhy = checkWorkerMode(tool, j.tool_input, kb, { vladHome: home, cwd });
+    if (modeWhy) return block(modeWhy);
     const cmd = j?.tool_input?.command;
-    if (j?.tool_name !== "Bash" || typeof cmd !== "string") return;
-    const id = ownId(typeof j.cwd === "string" ? j.cwd : process.cwd());
-    if (id === null && !process.env.VLAD_TASK_ID) return; // çalışan değil (ana VLAD / kullanıcı oturumu)
+    if (tool !== "Bash" || typeof cmd !== "string" || (id === null && !process.env.VLAD_TASK_ID)) return; // push doğrulaması önceki koşulla aynı
     const why = checkWorkerPush(cmd, id);
     if (why) block(why);
   } catch (e) {
-    if (mentionsPush(raw)) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
+    if (mentionsPush(raw) || (/mode|settings|vlad\.config|dist.hooks/i.test(raw) && (process.env.VLAD_TASK_ID || ownId(process.cwd()) || WT_DIR.test(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
   }
 });
