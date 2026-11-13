@@ -4,6 +4,7 @@
     "agent start": "uzun ömürlü süreç, ağ portu dinler",
     "agent keygen": "rastgele anahtar üretir, çıktı deterministik değil",
     "agent setkey": "anahtarı stdin'den yazar; anahtar maddesi golden/küme testlerinde kapsanır",
+    "mode token": "yeni komut (T20261113-18): yalnız TTY'de çalışır, anahtar üretir; davranış test/mode/mode-token.test.ts",
     "task deny": "yeni komut (T20261110-13): tabanda yok, eski/yeni CLI eşdeğerliği anlamsız; davranış test/tasks/denials.test.ts",
     "agent install": "işletim sistemi hizmeti kurar",
     "vlad setup": "makine durumuna (araçlar, ~/.claude, kb) bağlı kurulum sihirbazı; çıktı deterministik değil, davranış test/setup/*'da",

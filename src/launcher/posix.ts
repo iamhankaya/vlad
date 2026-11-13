@@ -26,8 +26,8 @@ const trustPreflight = (cwd: string): string =>
 export function buildPosixScript(req: LaunchRequest): string {
   if (req.model !== undefined && !MODEL.test(req.model)) throw new Error(`geçersiz model: ${JSON.stringify(req.model)}`);
   if (req.autoCompact !== undefined && !AUTOCOMPACT.test(req.autoCompact)) throw new Error(`geçersiz autoCompact: ${JSON.stringify(req.autoCompact)}`);
-  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
-  const lines = ["#!/usr/bin/env bash", "unset VLAD_DESKTOP_QUEUE"];
+  // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches); nor the VLAD session's mode token (F-vlad-287)
+  const lines = ["#!/usr/bin/env bash", "unset VLAD_DESKTOP_QUEUE", "unset VLAD_MODE_TOKEN"];
   for (const [k, v] of Object.entries(req.env)) {
     if (!ENV_NAME.test(k)) throw new Error(`geçersiz env adı: ${JSON.stringify(k)}`);
     lines.push(`export ${k}=${q(v)}`);

@@ -26,7 +26,7 @@ afterEach(() => { for (const d of dirs.splice(0)) rmTemp(d); delete process.env.
 
 describe("test env isolation (F-vlad-172)", () => {
   it("the worker process carries no user VLAD_* variables beyond the config-provided ones", () => {
-    const extra = Object.keys(process.env).filter((k) => k.startsWith("VLAD_") && !["VLAD_LAUNCHER", "VLAD_CLAUDE_JSON", "VLAD_NO_NATIVE", "VLAD_REAL_KB"].includes(k) && !k.startsWith("VLAD_GOLDEN_"));
+    const extra = Object.keys(process.env).filter((k) => k.startsWith("VLAD_") && !["VLAD_LAUNCHER", "VLAD_CLAUDE_JSON", "VLAD_NO_NATIVE", "VLAD_REAL_KB", "VLAD_SECRET_DIR"].includes(k) && !k.startsWith("VLAD_GOLDEN_"));
     expect(extra).toEqual([]);
   });
 

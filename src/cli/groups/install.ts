@@ -1,3 +1,4 @@
+import { requireModeAuthority } from "../../mode/token.js";
 import type { Command } from "commander";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +26,7 @@ export function registerInstall(program: Command, k: Kit): void {
   }
 
   def(program, "install", "SessionEnd hook'unu ve vlad-worker skill'ini ~/.claude'a kurar", async (o: Opts) => {
+    if (!o.dryRun) requireModeAuthority(); // F-vlad-287: ~/.claude yazan kurulum belirteç ister
     const claudeDir = ctx.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");
     const actions = o.removeMenu ? [] : installGlobal({ home: getVladHome(), claudeDir, dryRun: !!o.dryRun }).actions;
     actions.push(...(await sendMenuActions(!!o.dryRun, !!o.removeMenu)));

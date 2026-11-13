@@ -1,8 +1,12 @@
 import type { Command } from "commander";
 import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "../../mode/store.js";
-import { assertNotWorker } from "../../mode/guard.js";
+import { assertNotWorker as assertNotWorkerBase } from "../../mode/guard.js";
+import { initKey, mintToken, requireModeAuthority } from "../../mode/token.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
+
+/** Çalışan değil + (anahtar etkinse) geçerli VLAD_MODE_TOKEN: doğrulama CLI tarafındadır, hook'tan bağımsız (F-vlad-287). */
+function assertNotWorker(): void { assertNotWorkerBase(); requireModeAuthority(); }
 
 export function registerMode(program: Command, k: Kit): void {
   const { out, def } = k;
@@ -41,4 +45,14 @@ export function registerMode(program: Command, k: Kit): void {
     expireMode(now);
     out(o, { ...s, line }, line);
   });
+  def(mode, "token", "VLAD oturumu için imzalı mod belirteci üretir (yalnız kullanıcının terminalinde; ilk çalıştırmada anahtarı üretir)", (o: Opts) => {
+    assertNotWorkerBase();
+    if (!process.stdin.isTTY) throw new Error("mode token yalnız etkileşimli terminalde (TTY) çalışır; çalışan oturumları belirteç alamaz");
+    const hours = o.ttl === undefined ? 24 : Number(o.ttl);
+    if (!(hours > 0 && hours <= 72)) throw new Error("--ttl 0-72 saat arası olmalı");
+    const created = initKey();
+    if (created) process.stderr.write("mod anahtarı üretildi (gizli dizin 0700, dosya 0600)\n");
+    const token = mintToken(hours * 3_600_000);
+    out(o, { token, hours }, token);
+  }).option("--ttl <saat>", "belirteç ömrü (varsayılan 24, en çok 72)");
 }

@@ -161,6 +161,7 @@
     "test/memory/cli.test.ts",
     "test/memory/digest-pending.test.ts",
     "test/mode/cli.test.ts",
+    "test/mode/mode-token.test.ts",
     "test/findings/add-similar-cli.test.ts",
     "test/findings/set-cli.test.ts",
     "test/ideas/cli.test.ts",

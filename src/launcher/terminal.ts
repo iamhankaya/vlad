@@ -29,7 +29,7 @@ const MAX_ARG = 30000;
 
 export function buildScript(req: LaunchRequest): string {
   // the worker must not inherit the desktop queue (v2 contract: it would otherwise enqueue its own launches)
-  const lines: string[] = ["Remove-Item Env:VLAD_DESKTOP_QUEUE -ErrorAction SilentlyContinue"];
+  const lines: string[] = ["Remove-Item Env:VLAD_DESKTOP_QUEUE -ErrorAction SilentlyContinue", "Remove-Item Env:VLAD_MODE_TOKEN -ErrorAction SilentlyContinue"]; // F-vlad-287: the worker never inherits the VLAD session's mode token
   for (const [k, v] of Object.entries(req.env)) lines.push(`$env:${k} = ${q(v)}`);
   lines.push(`Set-Location -LiteralPath ${q(req.cwd)}`);
   lines.push(`$host.UI.RawUI.WindowTitle = ${q(req.title)}`);

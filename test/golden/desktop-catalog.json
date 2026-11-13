@@ -482,6 +482,17 @@
   {
    "path": [
     "mode",
+    "token"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "belirteç yalnız kullanıcının terminalinde (TTY) üretilir; uzaktan konsola verilmez (F-vlad-287)"
+   }
+  },
+  {
+   "path": [
+    "mode",
     "status"
    ],
    "json": true,
