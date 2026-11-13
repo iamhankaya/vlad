@@ -64,9 +64,26 @@ Mac'te tamamlandı. Windows'ta `mkdirSync` modu yok sayılır; eşdeğeri `icacl
 (yalnız geçerli kullanıcı, T20261103 `%TEMP%\vlad` ACL kalıbı gibi). Bu adım Windows işçisine bırakıldı (D-genel-014);
 kod yolu `chmod` hatasını yutar ve dosya var olduğu sürece çalışır. Windows başlatma betiği (`terminal.ts`) belirteci temizler (testli).
 
+## Test yalıtımı (F-vlad-337, T20261113-22)
+
+Anahtar etkinleşince gerçek `dist`'i çocuk süreç koşan testler gerçek gizli dizini görüp belirteç isterdi. Çözüm **üretim koduna
+dokunmaz**: `vitest.config.ts` testlerin ortamına `NODE_OPTIONS=--import=<test/support/no-secret-shim.mjs>` koyar; shim çocuk
+süreçte `setSecretDirForTests(<var olmayan geçici dizin>)` çağırır (`VLAD_TEST_SECRET_DIR` yalnız **shim** okur: etkin makine
+taklidi testi anahtarlı geçici dizin verir). Böylece çocuk süreç gerçek gizli dizini görmez; testler `spawnVlad` allowlist'i ve
+`process.env` mirasıyla bunu alır.
+
+**İlk tasarım reddedildi (güvenlik incelemesi):** `token.ts` içinde `VLAD_TEST_SECRET_DIR` + "HOME/dizin tmp altında" koşulu.
+`os.tmpdir()` `TMPDIR`'dan türer; çalışan `TMPDIR=$HOME` ile sınırı kendi belirlerdi, `VLAD_CLAUDE_DIR` ile gerçek `~/.claude`'a yazardı.
+Env'den açılan her seam çalışanın kontrolündedir; bu yüzden üretim `dist`'inde env ile açılan seam **yoktur** (test: `test/mode/test-seam.test.ts`:
+`TMPDIR/HOME/VLAD_TEST_SECRET_DIR` verilse de `secretDir()` passwd ev dizini; kaynakta seam adı geçmez).
+
+**Kalan sınır:** shim dosyası repoda; aynı UID'li çalışan `node --import test/support/no-secret-shim.mjs dist/cli.js …` ya da
+doğrudan `node -e` ile keyfi kod çalıştırabilir. Bu zaten §Tehdit modeli'nin "kapsam dışı: aynı UID'de keyfi kod" sınıfıdır
+(anahtar dosyası da aynı UID ile okunabilir); yeni bir yetenek sınıfı eklemez. Gerçek sınır: ayrı OS kullanıcısı/Keychain.
+Etkinleştirme: `docs/mod-belirteci-etkinlestirme.md`.
+
 ## Açık noktalar (kapsam dışı)
 
-- **Etkinleştirme öncesi:** anahtar etkinleşince gerçek `dist`'i çocuk süreç olarak koşan testler (`mode night|off`, `setup` çalıştıranlar: restructure-golden, e1-worker-readonly, setup-* kabul testleri) gerçek `~/.vlad-secret`'ı görür; ortam seam'i bilerek yok. Çocuk süreç testlerine güvenli bir seam (ör. test için derlenmiş ayrı giriş noktası) ayrı iş olarak çözülmeli; Mac'te anahtar üretilmeden bu iş kapanmamış sayılır.
 - Gece imzası kb/makine kimliğine bağlı değil (düşük).
 
 - Aynı UID'de anahtar dosyasını okumak / `ps -E` ile VLAD ortamını okumak: ayrı OS kullanıcısı ya da Keychain.

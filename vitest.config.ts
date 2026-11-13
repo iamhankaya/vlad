@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { cpus, tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { defineConfig } from "vitest/config";
 
 // test/buckets.json is the source of truth for which file runs in which bucket (partition is enforced by test/infra/buckets.test.ts)
@@ -23,7 +24,7 @@ export default defineConfig({
     maxWorkers: half,
     globalSetup: ["test/global-setup.ts"],
     setupFiles: ["test/setup-cleanup.ts"],
-    env: { CLAUDE_CODE_REMOTE: "", VLAD_LAUNCHER: "noop", VLAD_NO_NATIVE: "1", VLAD_CLAUDE_JSON: join(tmpdir(), "vlad-test-claude.json") },
+    env: { CLAUDE_CODE_REMOTE: "", VLAD_LAUNCHER: "noop", VLAD_NO_NATIVE: "1", VLAD_CLAUDE_JSON: join(tmpdir(), "vlad-test-claude.json"), NODE_OPTIONS: `--import=${pathToFileURL(join(import.meta.dirname, "test", "support", "no-secret-shim.mjs")).href} ${process.env.NODE_OPTIONS ?? ""}`.trim() },
     projects: [bucket("unit", 5_000), bucket("process", 30_000), bucket("agent", 30_000), bucket("platform", 30_000)],
   },
 });
