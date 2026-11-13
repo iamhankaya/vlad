@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { makeFixtureRoot } from "../helpers.js";
-import { makeSandbox } from "./setup-sandbox.js";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
+import { makeSandbox, repoRoot } from "./setup-sandbox.js";
 
 describe("setup sandbox koruması", () => {
   it("her sahte araç sandbox bin'indeki dosyaya çözülür (win32'de .cmd, PATHEXT)", () => {
@@ -28,5 +31,24 @@ describe("setup sandbox koruması", () => {
     const sb = makeSandbox({ withDist: false, srcRoot: src });
     for (const f of ["vlad.local.json", "vlad.local.json.bak", "vlad.config.local.json", "vlad.config.local.json.bak-1", "vlad-session.txt", ".vlad.lock", "kb", ".vlad-agent"]) expect(existsSync(join(sb.vladHome, f)), f).toBe(false);
     expect(existsSync(join(sb.vladHome, "vlad.config.json"))).toBe(true); // tracked dosyalar kopyalanır
+  });
+  // F-vlad-337 kalanı: env() sıfırdan kurulduğu için NODE_OPTIONS (no-secret-shim) çocuğa geçmiyor, çocuk gerçek gizli dizini görüyordu.
+  describe("F-vlad-337: gizli dizin yalıtımı shim'i sandbox çocuğunda yüklenir", () => {
+    const secretDirOf = (env: NodeJS.ProcessEnv): string => {
+      const tokenUrl = pathToFileURL(join(repoRoot, "dist", "mode", "token.js")).href;
+      const r = spawnSync(process.execPath, ["-e", `import("${tokenUrl}").then(m => console.log(m.secretDir()))`], { encoding: "utf8", env, timeout: 30_000, killSignal: "SIGKILL" });
+      return (r.stdout ?? "").trim();
+    };
+    it("VLAD_TEST_SECRET_DIR verilince çocuğun gizli dizini o geçici dizindir", () => {
+      const sb = makeSandbox({ withDist: false });
+      const dir = join(sb.root, "gizli-seam");
+      expect(secretDirOf(sb.env({ VLAD_TEST_SECRET_DIR: dir }))).toBe(dir);
+    });
+    it("seam verilmese de çocuk gerçek gizli dizini görmez (shim varsayılanı geçici dizin)", () => {
+      const sb = makeSandbox({ withDist: false });
+      const d = secretDirOf(sb.env());
+      expect(d).toContain("vlad-test-nosecret-child");
+      expect(d.startsWith(tmpdir())).toBe(true);
+    });
   });
 });

@@ -26,6 +26,8 @@ export interface Sandbox {
   root: string; home: string; claudeDir: string; vladHome: string; kbDir: string; bin: string; log: string;
   /** vlad setup (ve diğer komutlar); gerçek dist/cli.js, sahte araçlar PATH başında. */
   run(args: string[], o?: { input?: string; env?: Record<string, string>; cwd?: string }): { code: number | null; out: string; err: string };
+  /** Alt süreç ortamı (sıfırdan kurulur; yalıtım shim'i için NODE_OPTIONS/VLAD_TEST_SECRET_DIR aktarılır). */
+  env(extra?: Record<string, string>): NodeJS.ProcessEnv;
   /** Sahte araç çağrıları (`<araç> <argv>` satırları). */
   calls(): string[];
   /** Her sahte araç, setup'ın kullandığı çözümlemeyle (Windows: PATH+PATHEXT) 'bin'deki dosyaya çözülmeli; gerçek araca düşerse fırlatır (F-vlad-310). */
@@ -81,11 +83,13 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
       GIT_CONFIG_GLOBAL: join(home, ".gitconfig"), GIT_CONFIG_NOSYSTEM: "1", ...extra,
     };
     for (const k of ["SYSTEMROOT", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"]) if (process.env[k] !== undefined) e[k] = process.env[k] as string;
+    // F-vlad-337: NODE_OPTIONS (vitest.config.ts'in --import=no-secret-shim'i) ve test gizli dizini çocuğa geçmezse çocuk GERÇEK gizli dizini görür
+    for (const k of ["NODE_OPTIONS", "VLAD_TEST_SECRET_DIR"]) if (process.env[k] !== undefined && !(k in extra)) e[k] = process.env[k] as string;
     if (o.platform) e.VLAD_SETUP_PLATFORM = o.platform;
     return e;
   };
   return {
-    root, home, claudeDir, vladHome, kbDir, bin, log,
+    root, home, claudeDir, vladHome, kbDir, bin, log, env,
     run(args0, ro = {}) {
       // Onay artık cevap dosyasında değil `--confirm` bayrağında (T20261110-05 güvenlik kararı): testlerin cevaplarındaki confirm bayrağa taşınır.
       const args = [...args0];
