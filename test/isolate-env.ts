@@ -4,7 +4,7 @@
 const isVlad = (k: string) => k.toUpperCase().startsWith("VLAD_");
 const KEEP = (k: string) => {
   const u = k.toUpperCase();
-  return u === "VLAD_LAUNCHER" || u === "VLAD_NO_NATIVE" || u === "VLAD_REAL_KB" || u === "VLAD_CLAUDE_JSON" || u === "VLAD_TEST_SECRET_DIR" || u.startsWith("VLAD_GOLDEN_");
+  return u === "VLAD_LAUNCHER" || u === "VLAD_NO_NATIVE" || u === "VLAD_REAL_KB" || u === "VLAD_CLAUDE_JSON" || u.startsWith("VLAD_GOLDEN_");
 };
 
 /** Copy of `base` without user VLAD_* variables; spawn helpers use it as their base env. */

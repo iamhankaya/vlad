@@ -27,7 +27,7 @@ export interface SpawnResult {
 const CLI = join(import.meta.dirname, "..", "..", "dist", "cli.js");
 
 /** Config-provided guards that every spawned CLI keeps (vitest.config.ts env); the rest of the shell is not inherited. */
-const GUARDS = ["VLAD_LAUNCHER", "VLAD_NO_NATIVE", "VLAD_CLAUDE_JSON", "VLAD_TEST_SECRET_DIR", "CLAUDE_CODE_REMOTE"] as const;
+const GUARDS = ["VLAD_LAUNCHER", "VLAD_NO_NATIVE", "VLAD_CLAUDE_JSON", "NODE_OPTIONS", "CLAUDE_CODE_REMOTE"] as const;
 // Windows needs these to start a process at all
 const OS_BASE = ["SYSTEMROOT", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"] as const;
 

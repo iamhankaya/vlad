@@ -57,5 +57,5 @@ vlad setup --check --only permissions                           # doğrula
 
 ## Geliştirici notu: test yalıtımı
 
-Alt süreç testleri gerçek gizli dizini görmez: `vitest.config.ts` `VLAD_TEST_SECRET_DIR`'ı var olmayan geçici bir dizine ayarlar.
-Seam yalnız gizli dizin ve HOME geçici dizin altındaysa geçerlidir (`seamSecretDir`, `src/mode/token.ts`).
+Alt süreç testleri gerçek gizli dizini görmez: `vitest.config.ts` çocuk süreçlere `NODE_OPTIONS=--import=test/support/no-secret-shim.mjs`
+verir, shim süreç içi test seam'ini geçici bir dizine çevirir. Üretim kodunda env ile açılan seam yoktur (spec §Test yalıtımı).

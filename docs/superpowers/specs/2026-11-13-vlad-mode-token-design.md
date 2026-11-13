@@ -66,17 +66,21 @@ kod yolu `chmod` hatasını yutar ve dosya var olduğu sürece çalışır. Wind
 
 ## Test yalıtımı (F-vlad-337, T20261113-22)
 
-Anahtar etkinleşince gerçek `dist`'i çocuk süreç koşan testler gerçek gizli dizini görüp belirteç isterdi. Çözüm: `VLAD_TEST_SECRET_DIR`
-(`seamSecretDir`, `src/mode/token.ts`); `vitest.config.ts` onu var olmayan geçici bir dizine ayarlar (= mekanizma kapalı). Seam
-**yalnız** şu koşullarda geçerlidir: dizin mutlak, ve (sembolik bağlar çözülmüş, `..` temizlenmiş) hem dizin hem **HOME** işletim
-sistemi geçici dizini altında. Aksi halde yok sayılır ve gerçek dizin kullanılır.
+Anahtar etkinleşince gerçek `dist`'i çocuk süreç koşan testler gerçek gizli dizini görüp belirteç isterdi. Çözüm **üretim koduna
+dokunmaz**: `vitest.config.ts` testlerin ortamına `NODE_OPTIONS=--import=<test/support/no-secret-shim.mjs>` koyar; shim çocuk
+süreçte `setSecretDirForTests(<var olmayan geçici dizin>)` çağırır (`VLAD_TEST_SECRET_DIR` yalnız **shim** okur: etkin makine
+taklidi testi anahtarlı geçici dizin verir). Böylece çocuk süreç gerçek gizli dizini görmez; testler `spawnVlad` allowlist'i ve
+`process.env` mirasıyla bunu alır.
 
-**Üretimde korumayı neden aşamaz:** çalışan `VLAD_TEST_SECRET_DIR=...` ayarlasa bile (a) gerçek HOME'unda seam yok sayılır, anahtar
-kapatılamaz; (b) geçici HOME'la ayarlarsa `setup`/`install` yalnız o geçici HOME'daki `.claude`'a yazar, gerçek `~/.claude`'a değil;
-(c) o süreçle üretilen gece penceresi gerçek anahtarla imzalı olmaz, etkin makinede `nightSigOk` imzasız pencereyi reddeder
-(`forged`) ve `task close` yetkisi açılmaz; (d) `mode off` yalnız yetkiyi kaldırır. Kalan: çalışan geçici HOME ile gerçek kb'ye
-`VLAD_KB_DIR` verip imzasız `watch`/`off` yazabilir; bunlar yetki taşımaz. Ayrı giriş noktası/derleme seçilmedi: üretim `dist`'inde
-ek bir bypass dosyası olurdu. Testler: `test/mode/test-seam.test.ts`. Etkinleştirme: `docs/mod-belirteci-etkinlestirme.md`.
+**İlk tasarım reddedildi (güvenlik incelemesi):** `token.ts` içinde `VLAD_TEST_SECRET_DIR` + "HOME/dizin tmp altında" koşulu.
+`os.tmpdir()` `TMPDIR`'dan türer; çalışan `TMPDIR=$HOME` ile sınırı kendi belirlerdi, `VLAD_CLAUDE_DIR` ile gerçek `~/.claude`'a yazardı.
+Env'den açılan her seam çalışanın kontrolündedir; bu yüzden üretim `dist`'inde env ile açılan seam **yoktur** (test: `test/mode/test-seam.test.ts`:
+`TMPDIR/HOME/VLAD_TEST_SECRET_DIR` verilse de `secretDir()` passwd ev dizini; kaynakta seam adı geçmez).
+
+**Kalan sınır:** shim dosyası repoda; aynı UID'li çalışan `node --import test/support/no-secret-shim.mjs dist/cli.js …` ya da
+doğrudan `node -e` ile keyfi kod çalıştırabilir. Bu zaten §Tehdit modeli'nin "kapsam dışı: aynı UID'de keyfi kod" sınıfıdır
+(anahtar dosyası da aynı UID ile okunabilir); yeni bir yetenek sınıfı eklemez. Gerçek sınır: ayrı OS kullanıcısı/Keychain.
+Etkinleştirme: `docs/mod-belirteci-etkinlestirme.md`.
 
 ## Açık noktalar (kapsam dışı)
 
