@@ -346,3 +346,36 @@ describe("düzeltme turu: task close --skip-machine çalışana kapalı", () => 
     expect(`${u.out}${u.err}`).not.toMatch(/çalışan oturumu/);
   });
 });
+
+describe("K2: bozuk işaret + sağlam anahtar kilitlenme yapmaz", () => {
+  const marker = () => `${sdir}.active`;
+  it("bozuk/symlink işaret + sağlam anahtar + süresi dolmuş belirteç: 'broken'; --reset ve --disable yalnız SIFIRLA ile kurtarır", async () => {
+    initKey();
+    const old = mintToken(H, now);
+    const later = new Date(now.getTime() + 2 * H);
+    writeFileSync(marker() + ".x", "dokunma");
+    rmSync(marker(), { force: true });
+    symlinkSync(marker() + ".x", marker());
+    expect(keyState()).toBe("broken");
+    expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: old }, now)).toThrow(/işaret/); // sağlam belirteç bile geçmez (fail-closed)
+    expect(() => mintToken(H, now)).toThrow(/işaret/);
+    // belirteç süresi dolmuş: normal yol kilitli, kurtarma SIFIRLA ile
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: old }, later, async () => "evet")).rejects.toThrow(/SIFIRLA/);
+    await expect(authorizeReset({ VLAD_MODE_TOKEN: old }, later, async () => "SIFIRLA")).resolves.toBeUndefined();
+    expect(initKey(true)).toBe(true);
+    expect(keyState()).toBe("ok");
+    expect(lstatSync(marker()).isSymbolicLink()).toBe(false);
+    expect(readFileSync(marker() + ".x", "utf8")).toBe("dokunma");
+    expect(() => mintToken(H, now)).not.toThrow();
+  });
+  it("aynı durumda --disable da SIFIRLA ile kurtarır (işaret bağı izlenmeden silinir)", async () => {
+    initKey();
+    rmSync(marker(), { force: true });
+    writeFileSync(marker(), "çöp");
+    expect(keyState()).toBe("broken");
+    await authorizeReset({}, now, async () => "SIFIRLA");
+    disableKey();
+    expect(existsSync(marker())).toBe(false);
+    expect(keyState()).toBe("off");
+  });
+});

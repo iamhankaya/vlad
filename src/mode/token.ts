@@ -70,6 +70,8 @@ export function readKey(): string | null {
     throw new Error(`gizli dizin denetlenemedi (${code ?? "hata"}): fail-closed; \`vlad mode token --reset\` terminalde onayla`);
   }
   if (st.isSymbolicLink() || !st.isDirectory()) throw new Error("gizli dizin sembolik bağ ya da dizin değil: fail-closed");
+  // K2: işaret doğrulaması dizin ENOENT dalından bağımsız: bozuk/symlink işaret + sağlam anahtar = 'broken' (SIFIRLA ile kurtarılır; işaretin yokluğu ise geçerli: anahtar zorunlu kılar)
+  if (markerState() === "bad") throw new Error(BAD_MARKER);
   // POSIX izin denetimi: fail-closed seçildi (uyarı değil); grup/diğer biti açık dizin ya da anahtar güvenilmez. Windows'ta ACL ayrı iş.
   if (process.platform !== "win32" && (st.mode & 0o077)) throw new Error("gizli dizin izinleri fazla geniş (0700 olmalı): fail-closed");
   let k: string;
