@@ -64,9 +64,22 @@ Mac'te tamamlandı. Windows'ta `mkdirSync` modu yok sayılır; eşdeğeri `icacl
 (yalnız geçerli kullanıcı, T20261103 `%TEMP%\vlad` ACL kalıbı gibi). Bu adım Windows işçisine bırakıldı (D-genel-014);
 kod yolu `chmod` hatasını yutar ve dosya var olduğu sürece çalışır. Windows başlatma betiği (`terminal.ts`) belirteci temizler (testli).
 
+## Test yalıtımı (F-vlad-337, T20261113-22)
+
+Anahtar etkinleşince gerçek `dist`'i çocuk süreç koşan testler gerçek gizli dizini görüp belirteç isterdi. Çözüm: `VLAD_TEST_SECRET_DIR`
+(`seamSecretDir`, `src/mode/token.ts`); `vitest.config.ts` onu var olmayan geçici bir dizine ayarlar (= mekanizma kapalı). Seam
+**yalnız** şu koşullarda geçerlidir: dizin mutlak, ve (sembolik bağlar çözülmüş, `..` temizlenmiş) hem dizin hem **HOME** işletim
+sistemi geçici dizini altında. Aksi halde yok sayılır ve gerçek dizin kullanılır.
+
+**Üretimde korumayı neden aşamaz:** çalışan `VLAD_TEST_SECRET_DIR=...` ayarlasa bile (a) gerçek HOME'unda seam yok sayılır, anahtar
+kapatılamaz; (b) geçici HOME'la ayarlarsa `setup`/`install` yalnız o geçici HOME'daki `.claude`'a yazar, gerçek `~/.claude`'a değil;
+(c) o süreçle üretilen gece penceresi gerçek anahtarla imzalı olmaz, etkin makinede `nightSigOk` imzasız pencereyi reddeder
+(`forged`) ve `task close` yetkisi açılmaz; (d) `mode off` yalnız yetkiyi kaldırır. Kalan: çalışan geçici HOME ile gerçek kb'ye
+`VLAD_KB_DIR` verip imzasız `watch`/`off` yazabilir; bunlar yetki taşımaz. Ayrı giriş noktası/derleme seçilmedi: üretim `dist`'inde
+ek bir bypass dosyası olurdu. Testler: `test/mode/test-seam.test.ts`. Etkinleştirme: `docs/mod-belirteci-etkinlestirme.md`.
+
 ## Açık noktalar (kapsam dışı)
 
-- **Etkinleştirme öncesi:** anahtar etkinleşince gerçek `dist`'i çocuk süreç olarak koşan testler (`mode night|off`, `setup` çalıştıranlar: restructure-golden, e1-worker-readonly, setup-* kabul testleri) gerçek `~/.vlad-secret`'ı görür; ortam seam'i bilerek yok. Çocuk süreç testlerine güvenli bir seam (ör. test için derlenmiş ayrı giriş noktası) ayrı iş olarak çözülmeli; Mac'te anahtar üretilmeden bu iş kapanmamış sayılır.
 - Gece imzası kb/makine kimliğine bağlı değil (düşük).
 
 - Aynı UID'de anahtar dosyasını okumak / `ps -E` ile VLAD ortamını okumak: ayrı OS kullanıcısı ya da Keychain.

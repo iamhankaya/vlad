@@ -23,7 +23,7 @@ export default defineConfig({
     maxWorkers: half,
     globalSetup: ["test/global-setup.ts"],
     setupFiles: ["test/setup-cleanup.ts"],
-    env: { CLAUDE_CODE_REMOTE: "", VLAD_LAUNCHER: "noop", VLAD_NO_NATIVE: "1", VLAD_CLAUDE_JSON: join(tmpdir(), "vlad-test-claude.json") },
+    env: { CLAUDE_CODE_REMOTE: "", VLAD_LAUNCHER: "noop", VLAD_NO_NATIVE: "1", VLAD_CLAUDE_JSON: join(tmpdir(), "vlad-test-claude.json"), VLAD_TEST_SECRET_DIR: join(tmpdir(), `vlad-test-nosecret-${process.ppid}`) },
     projects: [bucket("unit", 5_000), bucket("process", 30_000), bucket("agent", 30_000), bucket("platform", 30_000)],
   },
 });

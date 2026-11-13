@@ -1,7 +1,7 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { userInfo } from "node:os";
-import { join } from "node:path";
+import { homedir, tmpdir, userInfo } from "node:os";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 /**
  * F-vlad-287: imzalı mod belirteci. Anahtar kb/repo/worktree dışında bir gizli dizindedir; korunan CLI işlemleri
@@ -15,7 +15,31 @@ const PREFIX = "VLAD-MODE1|";
 let testDir: string | null = null;
 /** Yalnız süreç içi testler için (çalışan başka sürece bu yolla dokunamaz). */
 export const setSecretDirForTests = (d: string | null): void => { testDir = d; };
-export const secretDir = (): string => testDir ?? join(userInfo().homedir, ".vlad-secret");
+/** Var olan en yakın atayı realpath'ler (sembolik bağ kaçışı); henüz olmayan kuyruk eklenir. */
+function realish(p: string): string {
+  const tail: string[] = [];
+  let c = resolve(p);
+  for (;;) {
+    try { return join(realpathSync(c), ...tail.reverse()); } catch { /* yok: bir üst atayı dene */ }
+    const up = dirname(c);
+    if (up === c) return resolve(p);
+    tail.push(c.slice(up.length + 1)); c = up;
+  }
+}
+const under = (p: string, root: string): boolean => p === root || p.startsWith(root.endsWith(sep) ? root : root + sep);
+/**
+ * F-vlad-337: alt süreç testleri için yalıtım. `VLAD_TEST_SECRET_DIR` YALNIZ gizli dizin ve ev dizini (HOME) geçici dizin
+ * altındaysa geçerlidir. Çalışan gerçek HOME'unda bunu ayarlasa yok sayılır (gerçek anahtar kapatılamaz); geçici HOME'la
+ * ayarlarsa yalnız o geçici dizine yazar (setup/install ~/.claude'u HOME'dan çözer) ve gerçek anahtarla imzalı gece
+ * penceresi üretemez (imzasız pencere etkin makinede yetki sayılmaz). Tasarım: spec §Test yalıtımı.
+ */
+export function seamSecretDir(env: Record<string, string | undefined>, home: string, tmp: string): string | null {
+  const d = env.VLAD_TEST_SECRET_DIR;
+  if (!d || !isAbsolute(d)) return null;
+  const root = realish(tmp);
+  return under(realish(d), root) && under(realish(home), root) ? resolve(d) : null;
+}
+export const secretDir = (): string => testDir ?? seamSecretDir(process.env, homedir(), tmpdir()) ?? join(userInfo().homedir, ".vlad-secret");
 const keyFile = (): string => join(secretDir(), "mode.key");
 
 /** Anahtarı üretir (yoksa); dizin 0700, dosya 0600; var olan anahtar ezilmez. `reset`: bozuk/kayıp anahtarı yeniden üretir (eski belirteçler ve imzalı pencere geçersiz olur). true = bu çağrı üretti. */
