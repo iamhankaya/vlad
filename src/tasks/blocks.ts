@@ -70,6 +70,8 @@ function pipelineBlock(parent: string, mode: BlockCtx["mode"]): string {
     `Pipeline fazı: dalın entegrasyon dalı \`vlad/${parent}\`'tan açıldı. Rapordan önce entegrasyon dalını **kendi dalına** al (${merge}; ` +
     "entegrasyon dalına merge değildir), sonra lint + proje `gate` komutu; çakışma/kırmızıysa kapsam dışıysa çözmeye çalışma, " +
     "`### Test sonuçları` ve `### Açık noktalar`'a `- [yüksek] entegrasyon kontrolü kırmızı — …` yaz. " +
+    `Raporun \`### Test sonuçları\` bölümüne tam şu satırı yaz (\`task close\` bunu arar; eksik/başka biçimde kapanış durur): ` +
+    `\`Entegrasyon öncesi kontrol: vlad/${parent} merge (<sha>) + lint + gate yeşil\` (<sha> = merge sonrası HEAD; kırmızıysa "yeşil" yerine sonucu yaz). ` +
     `Entegrasyon dalına merge/PR/push yok (kapıyı VLAD yürütür). ${SHARED_FILES}`
   );
 }

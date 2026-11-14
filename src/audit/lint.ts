@@ -118,7 +118,8 @@ function sentenceAt(line: string, at: number): string {
   return line.slice(start);
 }
 
-interface Ctx { file: string; project: string | null; kind: "card" | "decision" | "memory"; own?: string }
+/** `dead` (F-vlad-342): the line sits in an invalid/superseded/expired decision block, a dead record is history, not a live listing. */
+interface Ctx { file: string; project: string | null; kind: "card" | "decision" | "memory"; own?: string; dead?: boolean }
 
 function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, push: (f: Omit<LintFlag, "file" | "project">) => void): void {
   const inOpenSection = /^Açık konular\b/i.test(tl.h2);
@@ -151,7 +152,7 @@ function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, pus
     } else if (st.type === "task" && (status === "done" || status === "cancelled")) {
       if (ctx.kind === "memory") {
         if (!closed && AUTHORITY_CTX.test(text)) emit({ code: "memory_stale_task", line: tl.n, id, actual_state: status, message: `hafıza notu ${status} göreve (${id}) bağlı yetki/plan içeriyor`, suggestion: "notu sil ya da güncelle (görev bittiği için artık geçerli olmayabilir)" });
-      } else if (!narrative && !closed && ACTIVE_CTX.test(text) && !inParens(tl.text, m.index ?? 0) && !USER_PENDING_CTX.test(text)) {
+      } else if (!ctx.dead && !narrative && !closed && ACTIVE_CTX.test(text) && !inParens(tl.text, m.index ?? 0) && !USER_PENDING_CTX.test(text)) {
         // the id itself must be named as running work: a "(T…)" source reference or a user-pending / unfinished-chore item is not (T20261103-14 FP table)
         emit({ code: "finished_task_listed_active", line: tl.n, id, actual_state: status, message: `${id} ${status} ama sürüyor/bekliyor bağlamında geçiyor`, suggestion: `satırı kaldır ya da "${id} ${status === "done" ? "tamamlandı" : "iptal edildi"}" diye geçmişe çevir` });
       }
@@ -256,15 +257,25 @@ export function lintKb(o: LintOptions = {}): LintResult {
     const ownAt = (i: number) => { const h = heads.filter((x) => x <= i).pop(); return h === undefined ? undefined : /^- \*\*ID:\*\* (\S+)/.exec(lines.slice(h + 1, h + 6).find((l) => /^- \*\*ID:\*\*/.test(l)) ?? "")?.[1]; };
     const ctx: Ctx = { file: path, project: slug, kind: "decision" };
     const push = mk(ctx, rel(p.kb, path));
-    for (const tl of textLines(lines)) lineFlags(tl, { ...ctx, own: ownAt(tl.n - 1) }, states, push);
-    heads.forEach((h, k) => {
-      const id = ownAt(h);
-      if (!id || decisionStatus.get(id) !== "geçerli") return;
+    const expiryOf = (h: number, k: number) => {
       const end = k + 1 < heads.length ? heads[k + 1] : lines.length;
       const metaAt = lines.findIndex((l, i) => i > h && i < end && /^- \*\*Süre:\*\* /.test(l));
       const until = metaAt >= 0 ? parseUntil(lines[metaAt].replace(/^- \*\*Süre:\*\* /, "")) : null;
       // an explicit `--until` is authoritative; otherwise a "…'e kadar" date in the text counts
-      const exp = until ? { at: until, line: metaAt + 1 } : latestExpiry(lines, h, end);
+      return until ? { at: until, line: metaAt + 1 } : latestExpiry(lines, h, end);
+    };
+    const deadHeads = new Set<number>(); // F-vlad-342: invalid/superseded/expired blocks are history
+    heads.forEach((h, k) => {
+      const st = decisionStatus.get(ownAt(h) ?? "");
+      if (st === "geçersiz" || st === "yerine-geçti") deadHeads.add(h);
+      else if (st === "geçerli") { const e = expiryOf(h, k); if (e && e.at < now) deadHeads.add(h); }
+    });
+    const headAt = (i: number) => heads.filter((x) => x <= i).pop() ?? -1;
+    for (const tl of textLines(lines)) lineFlags(tl, { ...ctx, own: ownAt(tl.n - 1), dead: deadHeads.has(headAt(tl.n - 1)) }, states, push);
+    heads.forEach((h, k) => {
+      const id = ownAt(h);
+      if (!id || decisionStatus.get(id) !== "geçerli") return;
+      const exp = expiryOf(h, k);
       if (exp && exp.at < now) {
         push({
           code: "expired_decision_valid", line: exp.line, id, actual_state: "geçerli",
