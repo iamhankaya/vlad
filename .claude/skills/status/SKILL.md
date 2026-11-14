@@ -84,7 +84,7 @@ Pipeline'da kural entegrasyon branch'ine uyarlanır: `kabul`/`karakterizasyon` f
 
 **`role: devops` ise:** `### Prova matrisi`ni ve `### Prova edilemeyenler`'i göster; kırmızı senaryo varsa merge/canlıya alma önerme. Devops gerçek sunucuya dağıtım yapmaz; canlıya alma ayrıca onaylanır.
 
-**`role: developer` ve UI'ya dokunan faz/görevde:** raporun `### Test sonuçları`/`### Açık noktalar`'ında UI öz-kontrolü (ekran görüntüsü) yoksa ya da "öz-kontrol yapılamadı" somut hata çıktısı (denenen komut + hata metni) olmadan yazılmışsa değişiklik isteğiyle geri çevir (gerekçesiz "yapılamadı" kabul edilmez); `impeccable audit` bulguları düzeltilmemiş ve açık noktada da yoksa aynı şekilde sor.
+**`role: developer` ve UI'ya dokunan faz/görevde:** raporun `### Test sonuçları`/`### Açık noktalar`'ında UI öz-kontrolü (ekran görüntüsü) yoksa ya da "öz-kontrol yapılamadı" somut hata çıktısı (denenen komut + hata metni) olmadan yazılmışsa değişiklik isteğiyle geri çevir (gerekçesiz "yapılamadı" kabul edilmez); raporda `impeccable audit:` özet satırı yoksa ya da bulgular ne düzeltilmiş ne `### Açık noktalar`'da ise aynı şekilde sor.
 
 **Tasarım kapısında ek seçim:** kullanıcı `tasarım` kapısında tasarımda çizilmemiş bir ek/varyant seçerse sözleşme fazını başlatmadan önce `delegate` skill'indeki "Tasarımdan sonra gelen kullanıcı seçimi" kuralını uygula (designer ek turu, DESIGN.md'ye ekleme; gece modunda da).
 
