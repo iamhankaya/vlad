@@ -87,6 +87,26 @@ describe("task store", () => {
     expect(answerTask(t.data.id, "bu").data.state).toBe("running");
     expect(getSection(getTask(t.data.id).body, "## Sorular")).toContain("**Cevap:** bu");
   });
+  it("answer on awaiting_approval with an open question writes Cevap and keeps the state (F-vlad-341)", () => {
+    const t = mk();
+    setState(t.data.id, "running");
+    askTask(t.data.id, "push edeyim mi?");
+    reportTask(t.data.id, "### Yapılanlar\nx");
+    const a = answerTask(t.data.id, "hayır");
+    expect(a.data.state).toBe("awaiting_approval");
+    const got = getTask(t.data.id);
+    expect(got.data.state).toBe("awaiting_approval");
+    expect(getSection(got.body, "## Sorular")).toContain("**Cevap:** hayır");
+    expect(getSection(got.body, "## İlerleme")).toMatch(/Cevap yazıldı/);
+    // the question is answered now: a second answer is rejected
+    expect(() => answerTask(t.data.id, "tekrar")).toThrow(/cevapsız soru yok/);
+  });
+  it("answer on awaiting_approval without any question is still rejected (F-vlad-238)", () => {
+    const t = mk();
+    setState(t.data.id, "running");
+    reportTask(t.data.id, "bitti");
+    expect(() => answerTask(t.data.id, "x")).toThrow();
+  });
   it("reportTask from blocked (open question) awaits approval and notes the unanswered question in İlerleme (F-vlad-279)", () => {
     const t = mk();
     setState(t.data.id, "running");

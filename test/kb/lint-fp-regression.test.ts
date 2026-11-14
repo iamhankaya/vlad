@@ -2,7 +2,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { addDecision } from "../../src/kb/decisions.js";
+import { addDecision, setDecisionStatus } from "../../src/kb/decisions.js";
 import { lintKb } from "../../src/audit/lint.js";
 import { makeHome } from "../helpers.js";
 
@@ -47,6 +47,26 @@ describe("finished_task_listed_active: false-positive classes stay quiet", () =>
     expect(flagged("## Açık konular\n- Pi alınmıyor. T20261024-94 kayıtta running görünür ama bilinçli bekletiliyor; D0B açılmaz.\n")).toEqual(["finished_task_listed_active:T20261024-94"]);
     expect(flagged("## Açık konular\n- T20261027-07 sürüyor\n")).toEqual(["finished_task_listed_active:T20261027-07"]);
     expect(flagged("T20261027-06 hâlâ çalışıyor.\n")).toEqual(["finished_task_listed_active:T20261027-06"]);
+  });
+});
+
+describe("F-vlad-342: inactive/expired decision blocks are exempt from finished_task_listed_active", () => {
+  it("a superseded decision naming a done task as running stays quiet; a valid one is still flagged", () => {
+    task("T20261027-07", "done");
+    addDecision({ project: "vlad", title: "Eski", body: "- **Karar:** T20261027-07 sürüyor, bekleniyor." }, new Date(2026, 9, 25));
+    addDecision({ project: "vlad", title: "Yeni", body: "- **Karar:** yeni yol." }, new Date(2026, 9, 26));
+    setDecisionStatus("D-vlad-001", "yerine-geçti", "D-vlad-002");
+    writeCard(FRESH + "x\n");
+    expect(lintKb({ now: NOW }).flags.map((f) => f.code)).toEqual([]);
+    setDecisionStatus("D-vlad-001", "geçerli");
+    expect(lintKb({ now: NOW }).flags.map((f) => `${f.code}:${f.id}`)).toEqual(["finished_task_listed_active:T20261027-07"]);
+  });
+  it("an invalid decision is exempt too", () => {
+    task("T20261027-07", "done");
+    addDecision({ project: "vlad", title: "Eski", body: "- **Karar:** T20261027-07 sürüyor." }, new Date(2026, 9, 25));
+    setDecisionStatus("D-vlad-001", "geçersiz");
+    writeCard(FRESH + "x\n");
+    expect(lintKb({ now: NOW }).flags.map((f) => f.code)).toEqual([]);
   });
 });
 

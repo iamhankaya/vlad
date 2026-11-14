@@ -23,7 +23,7 @@ export const COMMAND_DOCS: Readonly<Record<string, string>> = {
   "task ingest": "Bulut çalışanının `list_events` çıktısındaki `[VLAD:*]` işaretlerini (`LOG`/`ASK`/`REPORT`/`FAIL`) görev dosyasına işler (idempotent).",
   "task log": "`task log <id> \"<metin>\"`: `## İlerleme`'ye satır ekler. İşçide beyne iletilir.",
   "task ask": "`task ask <id> \"<soru>\"`: `## Sorular`'a soru yazar, görev `blocked` olur. İşçide beyne iletilir.",
-  "task answer": "`task answer <id> \"<cevap>\"`: soruya `**Cevap:**` yazar.",
+  "task answer": "`task answer <id> \"<cevap>\"`: soruya `**Cevap:**` yazar; blocked görevi running'e alır. Rapor açık soruyla yazılıp awaiting_approval'a geçmiş görevde (cevapsız soru varsa) yalnız Cevap yazar, durum awaiting_approval kalır (F-vlad-341).",
   "task report": "`task report <id> --file <md>`: kapanış raporunu yazar, görev `awaiting_approval` olur. Rapordaki `### Kapatılan bulgular` satırlarında kısaltılmış/bilinmeyen/kapalı ID için uyarır. İşçide beyne iletilir.",
   "task set": "`task set <id> <durum>`: durumu değiştirir (geçersiz geçiş reddedilir). `cancelled` için `--reason \"<metin>\"` zorunlu (gerekçesiz hata verir); `## İlerleme`'ye `İptal: <metin>` yazılır. `done` sonrası ilgili kart bloğu tazelenir; `done` çıktısı kartın durum özeti bayatsa (ya da yoksa) `summaryStale: true` ve `warnings` verir (özet güncelse `false`, kart okunamazsa alan yok).",
   "task deps": "`task deps <id>`: queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod).",

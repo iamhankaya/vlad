@@ -459,7 +459,17 @@ export function askTask(id: string, q: string): Task {
 
 /** F-vlad-238: an answer only resumes a task that asked; from any other state `running` would skip the launch checks. */
 export function answerTask(id: string, a: string): Task {
-  const state = getTask(id).data.state;
+  const t = getTask(id);
+  const state = t.data.state;
+  // F-vlad-341: a report written over an open question leaves the task awaiting_approval with that question unanswered; the answer is recorded, the state stays (resuming would skip the gate)
+  if (state === "awaiting_approval") {
+    const sorular = getSection(t.body, "## Sorular") ?? "";
+    if (sorular.lastIndexOf("**Soru:**") <= sorular.lastIndexOf("**Cevap:**")) throw new Error(`answer: cevapsız soru yok (${state}): ${id}`);
+    t.body = appendToSection(t.body, "## Sorular", `- ${nowIso()} **Cevap:** ${a}`);
+    t.body = appendToSection(t.body, "## İlerleme", `- ${nowIso()} Cevap yazıldı (rapor açık soruyla verilmişti; durum awaiting_approval kaldı)`);
+    saveTask(t);
+    return t;
+  }
   if (state !== "blocked") throw new Error(`answer yalnızca blocked görevde yapılır (${state}): ${id}`);
   return transitionWith(id, "running", (b) =>
     appendToSection(b, "## Sorular", `- ${nowIso()} **Cevap:** ${a}`));

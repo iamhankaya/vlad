@@ -44,6 +44,14 @@ describe("blocks/ standardBlocks matrix", () => {
     expect(t).not.toMatch(/git merge vlad\//);
   });
 
+  it("F-vlad-340: pipeline block spells out the exact Test sonuçları line with the parent id, local and cloud", () => {
+    for (const mode of ["local", "cloud"] as const) {
+      const t = text({ autonomy: "commit", parent: "T20261028-12", mode });
+      expect(t).toContain("Entegrasyon öncesi kontrol: vlad/T20261028-12 merge (<sha>) + lint + gate yeşil");
+      expect(t).toContain("`### Test sonuçları`");
+    }
+  });
+
   it("local pipeline block allows pulling the integration branch into the own branch, not the reverse", () => {
     const t = text({ autonomy: "commit", parent: "T20261028-12" });
     expect(t).toContain("git merge vlad/T20261028-12");
