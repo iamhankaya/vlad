@@ -156,6 +156,7 @@
     "test/machines/close-brain-path.test.ts",
     "test/machines/d2-launch-gate-fixes.test.ts",
     "test/machines/f1-b-gate.test.ts",
+    "test/machines/gate-env.test.ts",
     "test/machines/f1-b-launch.test.ts",
     "test/machines/f1-b-release.test.ts",
     "test/machines/g-slice-a.test.ts",

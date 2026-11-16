@@ -276,22 +276,17 @@ describe("ponytail (vendored, developer + game-developer only)", () => {
     expect(existsSync(resolve(root, ".claude/skills/ponytail"))).toBe(false);
   });
 
-  it("only developer and game-developer list ponytail in skills", () => {
+  it("no role lists ponytail after the experiment was closed (T20261116-22)", () => {
     const { roles } = listRolesWithWarnings(dir);
-    expect(roles.filter((r) => r.skills.includes("ponytail")).map((r) => r.slug).sort()).toEqual(["developer", "game-developer"]);
+    expect(roles.filter((r) => r.skills.includes("ponytail")).map((r) => r.slug)).toEqual([]);
   });
 
-  it("both roles state the priority rules: TDD/gate first, tests for behavior change, full level only, skipped items in Açık noktalar", () => {
-    for (const r of ["developer", "game-developer"]) {
-      const body = read(`roles/${r}.md`);
-      for (const w of ["ponytail", "gate", "davranış değişikliği = test", "yalnız `full`", "vlad task ask", "### Açık noktalar"]) expect(body, `${r}: ${w}`).toContain(w);
-    }
+  it("developer roles carry no ponytail rule bullet", () => {
+    for (const r of ["developer", "game-developer"]) expect(read(`roles/${r}.md`), r).not.toContain("ponytail");
   });
 
-  it("CLAUDE.md notes the trial in the roles paragraph", () => {
-    const c = read("CLAUDE.md");
-    expect(c).toContain("ponytail");
-    expect(c).toMatch(/ponytail.*deneme/);
+  it("CLAUDE.md notes the experiment was closed", () => {
+    expect(read("CLAUDE.md")).toMatch(/ponytail.*kapatıldı/);
   });
 });
 

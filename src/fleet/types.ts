@@ -17,6 +17,8 @@ export interface MachineDef {
   roots?: string[];
   /** İşçide kb klonu (yoksa VLAD_HOME/kb). */
   kbDir?: string;
+  /** proje slug'ı → ortam değişkenleri; bu makinede koşan gate'e (task gate/close, çalışan prompt'u) verilir; `$VAR` açılır (T20261117-04). */
+  gateEnv?: Record<string, Record<string, string>>;
 }
 /** Kullanıcının kendisi (vlad-desktop/telefon); ayrı kimlik ve anahtar. */
 export interface ConsoleDef { name: string }

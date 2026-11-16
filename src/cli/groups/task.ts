@@ -19,6 +19,7 @@ import { closedFindingWarnings } from "../../findings/closed-report.js";
 import { doneSummaryNote } from "../../projects/status.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
+import { denyLogHint } from "../../tasks/denials.js";
 
 export function registerTask(program: Command, k: Kit): void {
   const { ctx, out, def } = k;
@@ -168,6 +169,8 @@ export function registerTask(program: Command, k: Kit): void {
 
   def(task, "log <id> <mesaj>", "## İlerleme'ye zaman damgalı satır ekler", (id: string, msg: string, o: Opts) => {
     logTask(id, msg);
+    const hint = denyLogHint(msg);
+    if (hint) ctx.stderr.write(`${hint}\n`);
     out(o, { id }, "eklendi");
   });
   def(task, "deny <id>", "İzin reddini kaydeder: İlerleme'ye [İZİN] satırı + kb/logs/denials.jsonl (audit setup tekrarlayan kalıpları aday sayar)", (id: string, o: Opts) => {

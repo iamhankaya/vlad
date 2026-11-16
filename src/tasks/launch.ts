@@ -37,6 +37,7 @@ import { ensureIntegrationGit, launchCore, unmergedCommits } from "./launch-core
 import { nowMs } from "../fleet/clock.js";
 import { capsOf, machineLoad, pickMachine } from "../fleet/placement.js";
 import { machineDef, machinesOf } from "../fleet/registry.js";
+import { rawGateEnv } from "../fleet/gate-env.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
 import type { AgentCode, RemoteTransport } from "../fleet/types.js";
@@ -83,12 +84,12 @@ function relatedFindingsOf(task: Task): NonNullable<BlockCtx["relatedFindings"]>
 
 export function buildPrompt(
   taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; ponytailOff?: boolean },
-  ctx?: { taskId: string; parent: string | null; projectSkills?: string[]; relatedFindings?: BlockCtx["relatedFindings"] },
+  ctx?: { taskId: string; parent: string | null; projectSkills?: string[]; relatedFindings?: BlockCtx["relatedFindings"]; gateEnv?: Record<string, string> },
   portable = false,
 ): string {
   const core = promptCore(taskFile, autonomy, role, portable);
   if (!ctx) return core;
-  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local", projectSkills: ctx.projectSkills, relatedFindings: ctx.relatedFindings });
+  const blocks = standardBlocks({ taskId: ctx.taskId, autonomy: autonomy as BlockCtx["autonomy"], parent: ctx.parent, mode: "local", projectSkills: ctx.projectSkills, relatedFindings: ctx.relatedFindings, gateEnv: ctx.gateEnv });
   return [core, BLOCKS_HEADING, ...blocks].join("\n\n");
 }
 
@@ -364,7 +365,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   try {
     ({ reused = false, queued } = await launchCore({
       taskId: id, repo, worktree: wt, branch, ...(adopt ? { adopt } : {}), ...(base ? { base } : {}), ...(o.branchOf ? { branchOf: o.branchOf } : {}),
-      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills, relatedFindings: relatedFindingsOf(task) }),
+      prompt: buildPrompt(task.file, task.data.autonomy, role, { taskId: id, parent: task.data.parent ?? null, projectSkills: projectCard(task.data.project).skills, relatedFindings: relatedFindingsOf(task), gateEnv: rawGateEnv(cfg, patch.machine, task.data.project) }),
       env: { VLAD_TASK_ID: id, VLAD_HOME: kbPaths().home },
       title: `VLAD ${id} — ${task.data.title}`,
       ...(model ? { model } : {}),
@@ -612,7 +613,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   const args = {
     taskId: id, project: task.data.project, repoName: repoNameOf(card.path), branch: `vlad/${id}`,
     base: parent ? { kind: "integration", parent, ...(def ? { defaultBranch: def } : {}) } : { kind: "default", ...(def ? { defaultBranch: def } : {}) },
-    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills, relatedFindings: relatedFindingsOf(task) }, true),
+    promptTemplate: buildPrompt("{{TASK_FILE}}", task.data.autonomy, role, { taskId: id, parent, projectSkills: card.skills, relatedFindings: relatedFindingsOf(task), gateEnv: rawGateEnv(cfg, machine, task.data.project) }, true),
     title: `VLAD ${id} — ${task.data.title}`,
     ...(model ? { model } : {}),
     ...(cfg.workerAutoCompact ? { autoCompact: cfg.workerAutoCompact } : {}),
