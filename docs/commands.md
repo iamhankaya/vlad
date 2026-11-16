@@ -73,7 +73,19 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad mode watch` — Bekçi modunu açar. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad mode off` — Modu kapatır. _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad mode token` — VLAD oturumu için imzalı mod belirteci üretir (`export VLAD_MODE_TOKEN=$(vlad mode token)`; `--ttl <saat>`, varsayılan 24, en çok 72). Yalnız etkileşimli terminalde (TTY) çalışır; ilk çalıştırmada anahtarı gizli dizinde (`~/.vlad-secret`, passwd ev dizini; ortam değişkeniyle değiştirilemez; 0700/0600; `--reset` bozuk/düşürülmüş anahtarı yeniden üretir; `--disable` mekanizmayı tamamen kapatır: gizli dizin + dışındaki etkinleştirme işareti silinir; ikisi de geçerli VLAD_MODE_TOKEN ister, anahtar yok/bozuksa elle SIFIRLA onayı) üretir. Etkinleştirme işareti anahtar dizininin dışındadır: dizin silinip `mode.json`'dan imza çıkarılsa bile (düşürme, F-vlad-336) korunan işlemler fail-closed reddedilir ve `vlad status` "düşürülmüş" uyarısı verir. Anahtar etkinken `mode night|watch|off`, `setup` ve `install` (`--check`/`--dry-run` hariç) geçerli `VLAD_MODE_TOKEN` ister; çalışan başlatma betikleri belirteci temizler. Tasarım: `docs/superpowers/specs/2026-11-13-vlad-mode-token-design.md`. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad mode request` — `mode request [--wait [saniye]] [--json] <night|watch|off|install|setup> [argümanlar...]`: korunan işlem için telefondan onay ister (yalnız VLAD; çalışan reddedilir; `VLAD_MODE_TOKEN` istemez, anahtarı okumaz). İstek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi tek kullanımlık yetkiyle kendisi çalıştırır. Bayraklar işlemden önce verilir. `--wait` varsayılanı 310 sn (sonuç yoksa çıkış 1, `wait_timeout`; istek iptal edilmez). Hata sırası: çalışan → geçersiz argüman → approver kurulu değil → servis (kilitli/meşgul/hız sınırı) → yanıt yok. Tasarım ve güvenlik sınırı (aynı-UID kapsam dışı): `docs/uzaktan-onay.md`. _(işçide reddedilir; konsolda yok; --json)_
 - `vlad mode status` — Mod durumunu gösterir. _(işçide reddedilir; konsol: okuma; --json)_
+
+## approver
+
+- `vlad approver install` — `approver install [--server <url>]`: uzaktan onay servisini kurar (`channel.json` + launchd plist `com.vlad.approver`); gizli abonelik URL'sini yalnız stdout TTY ise basar. Terminalde, mod yetkisiyle (`VLAD_MODE_TOKEN`); çalışan reddedilir; yalnız macOS. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad approver uninstall` — `approver uninstall`: servisi durdurur, plist'i ve `approver/` altını siler; `used/` ve `mode.key`'e dokunmaz. Terminalde, mod yetkisiyle. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad approver rotate` — `approver rotate`: yeni gizli istek konusu üretir, bekleyen isteği reddeder (`denied: rotated`), yeni abonelik URL'sini TTY'ye basar; eski konu etkisiz kalır. Terminalde, mod yetkisiyle. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad approver unlock` — `approver unlock`: 3 art arda ret/süre dolumunun açtığı 1 saatlik kilidi açar. Terminalde, mod yetkisiyle; çalışan reddedilir. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad approver run` — Servis girişi (launchd girişi): bekleyen istekleri izler, telefona bildirir, onayı tüketir ve işlemi çalıştırır. Gelen port açmaz. Elle çalıştırılmaz. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad approver status` — `approver status [--json]`: servis durumu (kurulu/çalışıyor, bekleyen istek, kilit). Salt okuma; konu/nonce/tag göstermez. _(işçide reddedilir; konsol: okuma; --json)_
+- `vlad approver requests` — `approver requests [--json] [--limit N]`: son istekler ve sonuçları. Salt okuma; sır içermez. _(işçide reddedilir; konsol: okuma; --json)_
+- `vlad approver show` — `approver show <id>`: tek isteğin ayrıntısı (işlem, argümanlar, isteyen, durum). Salt okuma. _(işçide reddedilir; konsol: okuma; --json)_
 
 ## audit
 

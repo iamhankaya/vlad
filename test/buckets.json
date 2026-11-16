@@ -52,6 +52,7 @@
     "test/memory/search.test.ts",
     "test/memory/stale-summary.test.ts",
     "test/memory/summary-reliability.test.ts",
+    "test/mode/mode-token-vmt2.test.ts",
     "test/mode/mode.test.ts",
     "test/mode/review.test.ts",
     "test/projects/derived.test.ts",
@@ -73,6 +74,8 @@
     "test/tasks/transitions-consistency.test.ts"
   ],
   "process": [
+    "test/approver/**/*.test.ts",
+    "test/acceptance/approver-*.test.ts",
     "test/machines/branch-push-op.test.ts",
     "test/machines/branch-push-verify.test.ts",
     "test/tasks/gate-compare.test.ts",

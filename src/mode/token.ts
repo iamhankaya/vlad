@@ -16,6 +16,9 @@ let testDir: string | null = null;
 /** Yalnız süreç içi testler için (çalışan başka sürece bu yolla dokunamaz). */
 export const setSecretDirForTests = (d: string | null): void => { testDir = d; };
 export const secretDir = (): string => testDir ?? join(userInfo().homedir, ".vlad-secret");
+/** Uzaktan onay (T20261116-04): servisin spool'u ve tek kullanımlık token tüketim kayıtları. `used/` approver/ DIŞINDADIR: yaşam döngüsü işlemleri (rotate/uninstall) kayıt silmez. */
+export const approverDir = (): string => join(secretDir(), "approver");
+export const usedDir = (): string => join(secretDir(), "used");
 const keyFile = (): string => join(secretDir(), "mode.key");
 /** F-vlad-336: etkinleştirme işareti anahtar dizininin DIŞINDA (kardeş dosya `<gizli-dizin>.active`). Dizin silinse bile işaret kalır = düşürme tespit edilir. */
 const markerFile = (): string => `${secretDir()}.active`;
@@ -102,8 +105,19 @@ function parse(token: string): { exp: number; ok: boolean } | null {
 }
 export const verifyToken = (token: string, now: Date): boolean => { try { const p = parse(token); return !!p && p.ok && p.exp > now.getTime(); } catch { return false; } };
 
-/** Korunan işlem kapısı. Mekanizma etkin değilse (gizli dizin yok) geçer; etkinse geçerli VLAD_MODE_TOKEN şart. */
-export function requireModeAuthority(env: Record<string, string | undefined> = process.env, now: Date = new Date()): void {
+/**
+ * VMT2 (SÖZLEŞME, gövde U1'de): işlem bağlı, tek kullanımlık token. Biçim `VMT2.<exp>.<nonce32hex>.<argvSha256>.<hmac>`;
+ * hmac = HMAC(modeKey, "VLAD-MODE2|"+exp+"|"+nonce+"|"+argvSha); argvSha = sha256(JSON.stringify(argv)). ttlMs ≤ 0 ya da > LIMITS.maxTokenTtlMs: "ttl geçersiz".
+ */
+export function mintOpToken(argv: string[], ttlMs: number, now: Date = new Date()): string {
+  if (!(ttlMs > 0 && ttlMs <= 120_000)) throw new Error("ttl geçersiz");
+  void argv; void now;
+  throw new Error("not implemented");
+}
+
+/** Korunan işlem kapısı. Mekanizma etkin değilse (gizli dizin yok) geçer; etkinse geçerli VLAD_MODE_TOKEN şart. `argv` yalnız VMT2 için (U1); VMT1 yolu bugünkü gibidir. */
+export function requireModeAuthority(env: Record<string, string | undefined> = process.env, now: Date = new Date(), argv: string[] = process.argv.slice(2)): void {
+  void argv;
   if (readKey() === null) return;
   const t = env.VLAD_MODE_TOKEN?.trim();
   const how = "korunan işlem için geçerli VLAD_MODE_TOKEN gerekli (VLAD oturumunu `export VLAD_MODE_TOKEN=$(vlad mode token)` ile terminalde başlat; çalışan oturumu bunu alamaz)";

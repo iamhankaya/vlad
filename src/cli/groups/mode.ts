@@ -11,7 +11,7 @@ function assertNotWorker(): void { assertNotWorkerBase(); requireModeAuthority()
 
 export function registerMode(program: Command, k: Kit): void {
   const { out, def } = k;
-  const mode = program.command("mode").description("Gece / bekçi modu (yetki penceresi kb/mode.json)");
+  const mode = program.command("mode").description("Gece / bekçi modu (yetki penceresi kb/mode.json)").enablePositionalOptions(); // `mode request` bayrakları işlemden önce (passThroughOptions)
   const modeText = (now: Date) => modeLine(now) ?? "mod kapalı";
   def(mode, "night", "Gece (yetki) modunu açar: pencere boyunca faz ve son kapı merge'ü sormadan", (o: Opts) => {
     assertNotWorker();
@@ -39,6 +39,12 @@ export function registerMode(program: Command, k: Kit): void {
     setOff();
     out(o, modeStatus(new Date()), "mod kapalı");
   });
+  // Uzaktan onay (T20261116-04, sözleşme iskeleti; gövde U4'te). Yalnız VLAD (çalışan reddi); VLAD_MODE_TOKEN istemez, anahtar okumaz; istek approver servisine inbox/ ile gider.
+  // Hata öncelik sırası: (1) çalışan, (2) geçersiz işlem/argüman, (3) approver kurulu değil, (4) servis ack'i (invalid/locked/busy/rate_limited), (5) approver yanıt vermiyor.
+  def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", (_op: string, _args: string[], _o: Opts) => {
+    throw new Error("not implemented");
+  }).passThroughOptions()
+    .option("--wait [saniye]", "sonuç gelene kadar bekle (varsayılan 310 sn; süre dolarsa çıkış 1, istek iptal edilmez)");
   def(mode, "status", "Mod durumu (biten pencere bir kez bildirilir, sonra temizlenir)", (o: Opts) => {
     const now = new Date();
     const s = modeStatus(now);

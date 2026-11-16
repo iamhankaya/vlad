@@ -591,6 +591,27 @@
     "set"
    ],
    "kind": "write"
+  },
+  {
+   "path": [
+    "approver",
+    "status"
+   ],
+   "kind": "read"
+  },
+  {
+   "path": [
+    "approver",
+    "requests"
+   ],
+   "kind": "read"
+  },
+  {
+   "path": [
+    "approver",
+    "show"
+   ],
+   "kind": "read"
   }
  ]
 }

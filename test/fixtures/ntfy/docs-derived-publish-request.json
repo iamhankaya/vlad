@@ -1,0 +1,12 @@
+{
+  "_doc": "ntfy JSON publish biçimi (kök URL'ye POST). Belge: https://docs.ntfy.sh/publish/#publish-as-json . Başarı yanıt gövdesi örneği YOK (açık nokta).",
+  "url": "https://ntfy.sh/",
+  "method": "POST",
+  "body": {
+    "topic": "vlad-q-aaaaaaaaaaaaaaaaaaaaaaaaaa", "title": "VLAD onay: mode night", "message": "İşlem: vlad mode night --until 23:00", "priority": 4, "tags": ["warning"],
+    "actions": [
+      { "action": "http", "label": "Reddet", "url": "https://ntfy.sh/vlad-r-aaaaaaaaaaaaaaaaaaaaaaaaaa", "method": "POST", "body": "d1.mfrggzdfmztwq2lknnwg23tpoa.bbbb", "clear": true },
+      { "action": "http", "label": "Onayla", "url": "https://ntfy.sh/vlad-r-aaaaaaaaaaaaaaaaaaaaaaaaaa", "method": "POST", "body": "a1.mfrggzdfmztwq2lknnwg23tpoa.aaaa", "clear": true }
+    ]
+  }
+}

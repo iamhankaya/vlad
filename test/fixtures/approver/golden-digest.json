@@ -1,0 +1,30 @@
+{
+  "_doc": "Formül: sha256hex(JSON.stringify([\"VLAD-APPROVE1\", id, argv, requestedAt, expiresAt, nonce, requester, ctx.home, ctx.kb, ctx.cli])). Uygulamadan bağımsız `node` ile hesaplandı (T20261116-04 S4). Değişirse tester + developer birlikte (itiraz yolu).",
+  "input": {
+    "id": "mfrggzdfmztwq2lknnwg23tpoa",
+    "argv": [
+      "mode",
+      "night",
+      "--until",
+      "23:00",
+      "--note",
+      "gece işi"
+    ],
+    "requestedAt": "2026-11-16T14:20:00+03:00",
+    "expiresAt": "2026-11-16T14:25:00+03:00",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "requester": "vlad-07",
+    "ctx": {
+      "home": "/Users/test/dev/vlad",
+      "kb": "/Users/test/dev/vlad-kb",
+      "cli": "/Users/test/dev/vlad/dist/cli.js"
+    }
+  },
+  "expected": "c6526417ca13470f7396b884e3a7046d8ce8436f87decf6fc3faa1a7dbecc023",
+  "variants": {
+    "base": "c6526417ca13470f7396b884e3a7046d8ce8436f87decf6fc3faa1a7dbecc023",
+    "argv": "6da3df4f7ef039c6e0015fb5df45d571057f022f7f546c42486033997a62d8d7",
+    "ctx_cli": "047d3d096cc9ebb9ba8f49dba20c365cc78aee3ee39130171b84cf38627a74c6",
+    "nonce": "c6c43323d0cc04045913f9abd9c87cf5755e927e1c099b353d8adde344e80e49"
+  }
+}
