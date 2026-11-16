@@ -35,7 +35,8 @@ export function assertSecureDir(path: string): void {
 /** Gizli dizinin ÜST dizini (ör. $HOME): grup/dünya yazılabilirse (sticky hariç) reddeder; macOS varsayılanı 0750/0755 geçer. Dizini oluşturmaz. */
 export function assertSecretParentSecure(secretDir: string): void {
   const parent = dirname(secretDir);
-  const ps = statSync(parent);
+  let ps;
+  try { ps = statSync(parent); } catch (e) { throw new Error(`gizli dizinin üst dizini okunamadı: ${parent} (${(e as NodeJS.ErrnoException).code ?? "hata"})`); }
   if (!ps.isDirectory()) throw new Error(`üst dizin dizin değil: ${parent}`);
   if (posix && (ps.mode & 0o022) && !(ps.mode & 0o1000)) throw new Error(`gizli dizinin üst dizini grup/dünya tarafından yazılabilir: ${parent} (chmod go-w ile düzeltin)`);
 }

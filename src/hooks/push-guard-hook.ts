@@ -38,6 +38,9 @@ process.stdin.on("end", async () => {
     const why = checkWorkerPush(cmd, id);
     if (why) block(why);
   } catch (e) {
+    const asWorker = !!process.env.VLAD_TASK_ID || ownId(process.cwd()) !== null || WT_DIR.test(process.cwd());
+    // okuma/yazma araçları: hata halinde koşulsuz ret (bozuk JSON'da tool_name regex ile okunur); sadece çalışan oturumunda
+    if (asWorker && /"tool_name"\s*:\s*"(?:Read|Grep|Glob|NotebookEdit|Edit|Write|MultiEdit)"/.test(raw)) return block(`mod-koruma hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
     if (mentionsPush(raw) || (/mode|settings|vlad\.config|dist.hooks|vlad-secret/i.test(raw) && (process.env.VLAD_TASK_ID || ownId(process.cwd()) || WT_DIR.test(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
   }
 });
