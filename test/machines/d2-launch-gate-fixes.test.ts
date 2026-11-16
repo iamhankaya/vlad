@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -119,7 +119,9 @@ describe("son kapı düzeltmeleri — launch", () => {
 
   it("P2-5: uzak istem rol dosyası ve vendored skill yolunu beynin yolu olarak taşımaz (yer tutucu)", async () => {
     mkdirSync(join(home, "roles"), { recursive: true });
-    copyFileSync(join(process.cwd(), "roles", "developer.md"), join(home, "roles", "developer.md"));
+    // ponytail is no longer in any shipped role (experiment closed, T20261116-22); a role that still lists a vendored skill must keep the placeholder
+    const dev = readFileSync(join(process.cwd(), "roles", "developer.md"), "utf8");
+    writeFileSync(join(home, "roles", "developer.md"), dev.replace("---\n\nSen", "  - ponytail\n---\n\nSen"), "utf8");
     const task = mk({ role: "developer" });
     const f = fakeTransport({ ...ok, launch: () => launched });
     await launchTask(task.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });

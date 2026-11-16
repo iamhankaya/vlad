@@ -229,22 +229,15 @@ describe("ponytail (T20261026-04)", () => {
       .toEqual(["vendor/skills/ponytail/LICENSE", "vendor/skills/ponytail/SKILL.md", "vendor/skills/ponytail/SOURCE.md"]);
   });
 
-  it("vlad role list --json: ponytail yalnız developer ve game-developer skills'inde", () => {
+  it("vlad role list --json: deney kapandı (T20261116-22), hiçbir rolün skills'inde ponytail yok", () => {
     const r = vlad(root, ["role", "list", "--json"]);
     expect(r.code, r.err).toBe(0);
     const j = JSON.parse(r.out) as { roles: Array<{ slug: string; skills: string[] }>; warnings: string[] };
     expect(j.warnings).toEqual([]);
-    expect(j.roles.filter((x) => x.skills.includes("ponytail")).map((x) => x.slug).sort()).toEqual(["developer", "game-developer"]);
+    expect(j.roles.filter((x) => x.skills.includes("ponytail")).map((x) => x.slug)).toEqual([]);
   });
 
-  it("iki rolde de TDD ve gate önceliği, yalnız full seviye ve kapsam itirazı vlad task ask ile", () => {
-    for (const f of ["roles/developer.md", "roles/game-developer.md"]) {
-      const line = read(f).split(/\r?\n/).find((l) => l.includes("**ponytail (deneme):**"))!;
-      expect(line, f).toBeTruthy();
-      expect(line, f).toMatch(/yalnız `full` seviyede/);
-      expect(line, f).toMatch(/TDD/);
-      expect(line, f).toMatch(/gate/);
-      expect(line, f).toMatch(/vlad task ask/);
-    }
+  it("developer rolleri ponytail kuralı taşımaz (deney kapandı)", () => {
+    for (const f of ["roles/developer.md", "roles/game-developer.md"]) expect(read(f), f).not.toContain("ponytail");
   });
 });
