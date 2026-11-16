@@ -6,8 +6,8 @@ import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 import { getVladHome } from "../../kb/home.js";
 import { assertNotWorker } from "../../mode/guard.js";
-import { NAME_RE, assertSecureDir, readSecureFile, writeAtomic } from "../../mode/secure-fs.js";
-import { approverDir, keyState, requireModeAuthority } from "../../mode/token.js";
+import { NAME_RE, assertSecretParentSecure, assertSecureDir, readSecureFile, writeAtomic } from "../../mode/secure-fs.js";
+import { approverDir, keyState, requireModeAuthority, secretDir } from "../../mode/token.js";
 import { createExecutor } from "../../approver/exec.js";
 import { NtfyChannel } from "../../approver/ntfy.js";
 import { newId, newTopic, validateRequest, type RandomSource } from "../../approver/request.js";
@@ -186,6 +186,7 @@ async function install(o: Opts, cx: Cx): Promise<void> {
   if (!o.json && !stdoutOf(cx).isTTY) throw new Error("abonelik URL'si yalnız terminale (stdout TTY) basılır; stdout bir terminal değil (kurulum yapılmadı)");
 
   const dir = approverDir();
+  assertSecretParentSecure(secretDir());
   assertSecureDir(dir);
   const store = createStore(dir);
   const prev = store.readChannel();

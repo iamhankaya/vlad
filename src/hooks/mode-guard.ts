@@ -4,7 +4,9 @@ import { dirname, basename, isAbsolute, join, resolve } from "node:path";
 import { secretDir } from "../mode/token.js";
 
 /** F-vlad-287: çalışan oturumunda mod değişikliğini ve korumayı söken yazmaları PreToolUse'ta keser (saf). Komut kalıbı env/cwd'den bağımsızdır: `env -u VLAD_TASK_ID` ya da worktree dışı cd işe yaramaz. */
-export const MODE_GUARD_TOOLS = ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"];
+export const MODE_GUARD_TOOLS = ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read", "Grep", "Glob"];
+/** Okuma araçları: yalnız gizli dizine (anahtar/approver spool) erişim reddedilir; başka okuma serbest. */
+const READ_TOOLS = ["Read", "Grep", "Glob"];
 const HINT = "ana VLAD'san ana repo dizininden çalıştır; çalışansan `vlad task ask` ile VLAD'a sor";
 const WHY = `çalışan oturumu mod/koruma yazamaz: gece-bekçi modunu (kb mode.json), hook'u ve settings/vlad.config dosyalarını yalnız VLAD/kullanıcı değiştirir (${HINT})`;
 
@@ -92,10 +94,33 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
   return null;
 }
 
+/** Okuma aracı yolu gizli dizine çözülüyor mu: `~`, `..`, sembolik bağ (tam yol realpath) ve joker kökü dahil. */
+function readsSecret(p: string, ctx: GuardCtx): boolean {
+  if (secretHit(p)) return true;
+  const sd = norm(real(secretDir()));
+  const t = expand(p.replace(/\\/g, "/"));
+  const abs = resolve(ctx.cwd ?? ".", t);
+  let full = abs;
+  try { full = realpathSync.native(abs); } catch { full = real(abs); }
+  const hit = (x: string): boolean => { const n = norm(x); return n === sd || n.startsWith(sd + "/"); };
+  if (hit(full) || hit(abs)) return true;
+  // joker: sabit kök (ilk jokerden önceki dizin) gizli dizinin içindeyse reddet; `~/.vlad-sec*` gibi ad jokeri en iyi çaba (shortcut: ad jokeri çözülmez, asıl sınır belirteç doğrulaması)
+  const cut = abs.search(/[*?[{]/);
+  if (cut >= 0) return hit(real(abs.slice(0, cut) || "/")) || globHits(basename(abs.slice(0, abs.indexOf("/", cut) < 0 ? undefined : abs.indexOf("/", cut))), basename(sd));
+  return false;
+}
+
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
 export function checkWorkerMode(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx = {}): string | null {
   if (tool === "Bash") return checkBash(typeof input?.command === "string" ? input.command : "", kbDir, ctx, 0);
   if (!MODE_GUARD_TOOLS.includes(tool)) return null;
+  if (READ_TOOLS.includes(tool)) {
+    for (const k of ["file_path", "path", "glob", ...(tool === "Glob" ? ["pattern"] : [])]) {
+      const v = input?.[k];
+      if (typeof v === "string" && readsSecret(v, ctx)) return `${WHY} (okuma: gizli mod anahtarı/approver dizini ${k}: ${v})`;
+    }
+    return null;
+  }
   const f = input?.file_path ?? input?.notebook_path;
   if (typeof f !== "string") return null;
   const hit = protectedPath(f, kbDir, ctx);

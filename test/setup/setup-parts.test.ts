@@ -341,7 +341,7 @@ describe("güvenlik kararları (değişiklik turu)", () => {
       await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
       await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });
       expect(guardEntries()).toHaveLength(1);
-      expect(tools(guardEntries()[0])).toEqual(["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"]);
+      expect(tools(guardEntries()[0])).toEqual(["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit", "Read", "Grep", "Glob"]);
     });
     it("yükseltme: eski matcher 'Bash' girdisi yeni matcher'a taşınır, kullanıcının hook'u ve izinleri korunur; check 'eski' → 'ok'", async () => {
       await runSetup(ctx(perms(), { yes: true }), { only: ["permissions"] });

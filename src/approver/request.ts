@@ -14,12 +14,13 @@ type Bad = { reason: RejectReason; detail: string };
 const no = (reason: RejectReason, detail: string): Verdict => ({ ok: false, reason, detail });
 const bytes = (s: string): number => Buffer.byteLength(s, "utf8");
 
+const NOTE_CUT = 60;
 const OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
 const KEYS = ["v", "cid", "op", "argv", "requestedAt", "requester"];
 /** İstemcinin yazabileceği ama servisin ASLA kullanmadığı alanlar (bildirim/nonce/id/konu/tag servisin kendi verisinden): yok sayılır. */
 const IGNORED_KEYS = ["title", "message", "nonce", "id", "respTopic", "tag", "topic"];
 // NUL/C0/C1, satır-paragraf ayracı, sıfır genişlik ve çift yönlü (bidi) biçim karakterleri
-const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/;
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u115f\u1160\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb\u{e0000}-\u{e007f}]/u;
 const CID_RE = /^[a-z2-7]{26}$/;
 const REQUESTER_RE = /^[\w.@:-]{1,64}$/;
 const TASK_LIST = /^T\d{8}-\d+(,T\d{8}-\d+)*$/;
@@ -151,7 +152,6 @@ const flagValue = (argv: string[], f: string): string | undefined => { const i =
 
 /** Bildirimin eylem bölümü (İşlem/bayrak satırları) üst sınırı (UTF-8 bayt); aşan istek validateRequest'te too_large (telefonda eksiksiz gösterilemez). */
 const MAX_ACTION_BYTES = 700;
-const NOTE_CUT = 60;
 
 /** Eylem satırları: `İşlem: vlad <op ve pozisyonel>` + bayrak başına ayrı satır (kırpma yok; yalnız --note değeri alıntılı, ilk 60 bayt + "…"). Setup: yapılandırılmış etki özeti + `--yes` satırı. */
 function actionLines(op: string, a: string[]): string[] {
