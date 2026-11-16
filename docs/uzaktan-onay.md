@@ -46,7 +46,7 @@ vlad approver requests --json --limit 5
 | Sonuç `interrupted` | servis çöktü; işlem çalışmış olabilir, terminalde `vlad mode status` ile doğrulayın (otomatik yeniden çalıştırma yoktur) |
 | Günlük | gizli dizin altında `approver/approver.log` (gövde/sır içermez) |
 
-Gizli dizinin üst dizini grup yazılabilirse (`$HOME` 0775) kurulum reddedilir (kasıtlı). Sonuç bildirimi güvenlik kanıtı değildir; kesin durum için `approver requests`/`mode status`.
+Gizli dizinin üst dizini grup/dünya yazılabilirse (`$HOME` 0775; sticky hariç) `approver install` ve servis başlangıcı reddedilir (kasıtlı; macOS varsayılanı 0750/0755 geçer). İstek metinlerinde (`--note` dahil) kontrol/biçim/boşluk karakterleri (Unicode Cc, Cf, Zs, Zl, Zp; ASCII boşluk hariç) ve görünmez dolgu/varyasyon karakterleri reddedilir; bu yüzden emoji varyasyon seçicisi U+FE0F içeren emoji (ör. ❤️) `control_char` ile reddedilir (bilinçli). Çalışan oturumlarında hook, Read/Grep/Glob araçlarının gizli dizine (anahtar, approver spool) erişimini de reddeder (`vlad setup --upgrade` yeni matcher'ı yazar). Sonuç bildirimi güvenlik kanıtı değildir; kesin durum için `approver requests`/`mode status`.
 
 ## Bilinen sınırlar
 

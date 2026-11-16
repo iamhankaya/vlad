@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { getVladHome, resolveKbDir } from "../kb/home.js";
 import { keyState, mintOpToken, readKey } from "../mode/token.js";
+import { assertSecretParentSecure } from "../mode/secure-fs.js";
 import type { ApproverChannel } from "./ntfy.js";
 import type { Executor } from "./exec.js";
 import { approveTag, computeDigest, denyTag, keyGen, newId, newNonce, newTopic, parseDecision, validateRequest, type RandomSource } from "./request.js";
@@ -49,6 +50,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
   const iso = (ms: number): string => new Date(ms).toISOString();
   const nowMs = (): number => clock.now().getTime();
 
+  assertSecretParentSecure(dirname(store.dir)); // gizli dizin = approver/ üst dizini; onun üst dizini denetlenir
   if (store.acquireLock(process.pid, clock.now()) === "busy") throw Object.assign(new Error("başka servis çalışıyor"), { code: "SERVICE_BUSY" });
 
   let cur: PendingRecord | null = null, pendingBad = false, watch: AbortController | null = null, running: Promise<void> | null = null;
