@@ -106,3 +106,7 @@ Durum `keyState()`: `off` (dizin yok, işaret yok), `ok`, `dropped` (işaret var
 - `settings.json` / hook / `vlad.config.json` / kb dosyalarına **doğrudan** (CLI dışı) yazma CLI'dan engellenemez; yalnız hook
   (en iyi çaba). Bütünlük tespiti (imza/özet kontrolü `vlad setup --check`) ayrı iş.
 - `task close --yes` gibi çalışanın kendisi verebileceği onay bayrakları ayrı değerlendirilir.
+
+## Uzaktan onay (VMT2) notu
+
+T20261116 serisi: telefondan onay için işlem bağlı, tek kullanımlık `VMT2` token eklendi (`VMT2.<exp>.<nonce>.<argvSha256>.<hmac>`; tüketim kayıtları `<gizli-dizin>/used/`). `VMT1` davranışı değişmedi. Telefon onayı kimlik doğrulaması değildir; aynı-UID tehdidi kapsam dışıdır. Ayrıntı: `docs/uzaktan-onay.md`.

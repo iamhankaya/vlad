@@ -17,7 +17,11 @@ export interface CliCtx {
   env: NodeJS.ProcessEnv;
 }
 
+/** Mesaj basmadan verilen çıkış kodu (ör. `mode request --wait` sonucu): komut kendi çıktısını yazmış, yalnız kodu taşır. */
+export class SilentExit extends Error { constructor(readonly code: number) { super(`exit ${code}`); } }
+
 export function failWith(ctx: CliCtx, e: unknown): never {
+  if (e instanceof SilentExit) return ctx.exit(e.code);
   let error = e instanceof Error ? e.message : String(e);
   let details: string[] = [];
   if (e instanceof ValidationError) details = e.details;

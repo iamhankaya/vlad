@@ -69,3 +69,7 @@ vlad setup --check --only permissions                           # doğrula
 
 Alt süreç testleri gerçek gizli dizini görmez: `vitest.config.ts` çocuk süreçlere `NODE_OPTIONS=--import=test/support/no-secret-shim.mjs`
 verir, shim süreç içi test seam'ini geçici bir dizine çevirir. Üretim kodunda env ile açılan seam yoktur (spec §Test yalıtımı).
+
+## Uzaktan onay (telefondan)
+
+Terminalden uzakta korunan işlem gerekirse VLAD `vlad mode request` ile telefondan onay isteyebilir: kurulum ve sınırlar `docs/uzaktan-onay.md`. Bu yol işleme bağlı, tek kullanımlık VMT2 token kullanır; yukarıdaki terminal akışı (VMT1) değişmeden çalışır.
