@@ -409,6 +409,31 @@ describe("approver: service yürütme sonucu", () => {
     expect(store.readRate().consecutiveDenied).toBe(0);
   });
 
+  it("F-vlad-353: ntfy bağlantısı hiç kurulamazsa (ready yok) 3 süre dolumu ret sayacına/kilide girmez", async () => {
+    ch.failWatch = true; // onReady hiç çalışmaz
+    start();
+    for (let n = 1; n <= 3; n++) {
+      request(n);
+      expect((await ackOf(n)).status).toBe("pending");
+      const p = pend();
+      t += LIMITS.approveTtlMs + 1;
+      expect((await resultOf(p.id)).status).toBe("expired");
+      await waitFor(() => store.readPending() === null, "pending temizlendi");
+    }
+    expect(store.readRate().consecutiveDenied).toBe(0);
+    expect(store.readRate().lockedUntil).toBeNull();
+    request(4);
+    expect((await ackOf(4)).status).toBe("pending"); // kilit yok
+  });
+
+  it("F-vlad-353: yayın başarılı olmuş (kullanıcıya ulaşmış) ve yanıtsız istek yine ret sayacına girer", async () => {
+    start();
+    const p = await open(1);
+    t += LIMITS.approveTtlMs + 1;
+    expect((await resultOf(p.id)).status).toBe("expired");
+    expect(store.readRate().consecutiveDenied).toBe(1);
+  });
+
   it("F-vlad-349: requestedAt makul aralık dışındaysa (±10 dk) istek reddedilir; içindeyse kabul", async () => {
     const send = (n: number, at: number) => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op: "mode off", argv: ["mode", "off"], requestedAt: new Date(at).toISOString(), requester: "vlad-07" }), { mode: 0o600 });
     start();

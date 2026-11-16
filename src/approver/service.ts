@@ -56,7 +56,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
   let cur: PendingRecord | null = null, pendingBad = false, watch: AbortController | null = null, running: Promise<void> | null = null;
   const dropSeen = new Map<DropReason, number>();
   const backoff = deps.publishBackoffMs ?? [2000, 5000, 15_000];
-  let unpublished: string | null = null; // yayını hiç başarılamayan isteğin kimliği: süre dolumu ret sayacına girmez
+  let unpublished: string | null = null; // yayını henüz başarılamayan isteğin kimliği (yeni istekte başlangıçta set; bağlantı hiç kurulamazsa da kalır): süre dolumu ret sayacına girmez
 
   const ack = (a: AckRecord): void => { try { store.writeAck(a); } catch (e) { L(`ack yazılamadı: ${msg(e)}`); } };
   const drop = (r: DropReason): void => {
@@ -144,6 +144,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     const ac = new AbortController();
     watch = ac;
     const stop = (): void => ac.abort();
+    unpublished = p.id; // F-vlad-353: yalnız başarılı yayın temizler
     signal.addEventListener("abort", stop, { once: true });
     let published = false;
     const onReady = (): void => { // `ready` olmadan yayın yok; yeniden bağlanmada tekrar yayınlanmaz
