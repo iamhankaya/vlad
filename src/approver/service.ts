@@ -18,7 +18,7 @@ import { LIMITS, type AckRecord, type Ctx, type DropReason, type PendingRecord, 
 export interface Clock { now(): Date }
 export interface ApproverDeps { channel: ApproverChannel; clock: Clock; random: RandomSource; executor: Executor; store: Store; log(l: string): void; signal: AbortSignal; /** ntfy yayını yeniden deneme bekleme süreleri (ms); varsayılan [2000, 5000, 15000] */ publishBackoffMs?: number[] }
 
-const SHUTDOWN_WAIT_MS = 6000, POLL_MS = 200, DROP_LOG_MS = 10_000, TEXT_MAX = 2048, HOUR = 3_600_000, DAY = 86_400_000;
+const REQUEST_SKEW_MS = 10 * 60_000, SHUTDOWN_WAIT_MS = 6000, POLL_MS = 200, DROP_LOG_MS = 10_000, TEXT_MAX = 2048, HOUR = 3_600_000, DAY = 86_400_000;
 const clip = (s: string): string => (Buffer.byteLength(s) <= TEXT_MAX ? s : Buffer.from(s).subarray(0, TEXT_MAX).toString("utf8"));
 const REDACT: Array<[RegExp, string]> = [ // store.ts günlük maskesiyle aynı desenler; sonuç dosyası/bildirimine sır sızmasın
   [/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/gi, "[gizli]"], [/VMT[12]\.\S+/g, "[gizli]"], [/VLAD_MODE_TOKEN=\S*/g, "[gizli]"], [/vlad-[qr]-[a-z2-7]{26}/g, "[gizli]"],
@@ -174,6 +174,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     const v = validateRequest(raw);
     if (!v.ok) { L(`istek reddedildi: ${v.reason}`); return ack({ v: 1, cid, status: "invalid", reason: v.reason }); }
     if (v.req.cid !== cid) return ack({ v: 1, cid, status: "invalid", reason: "bad_value" });
+    if (Math.abs(Date.parse(v.req.requestedAt) - nowMs()) > REQUEST_SKEW_MS) { L("istek reddedildi: requestedAt makul aralık dışında"); return ack({ v: 1, cid, status: "invalid", reason: "bad_value" }); } // F-vlad-349
     const key = keyOk();
     if (!key) return ack({ v: 1, cid, status: "invalid", reason: "key_disabled" });
     const rate = rateCheck();

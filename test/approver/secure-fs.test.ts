@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NAME_RE, assertSecureDir, readSecureFile, writeAtomic } from "../../src/mode/secure-fs.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NAME_RE, assertSecretParentSecure, assertSecureDir, readSecureFile, writeAtomic } from "../../src/mode/secure-fs.js";
 
 // approver: secure-fs (T20261116-04 sözleşme): gerçek uygulama; yalnız geçici dizinde koşar.
 const posix = process.platform !== "win32";
@@ -69,6 +69,20 @@ describe.runIf(posix)("approver: writeAtomic", () => {
     const p = join(root, "race");
     const r = ["a", "b"].map((v) => { try { writeAtomic(p, v); return true; } catch { return false; } });
     expect(r.filter(Boolean)).toHaveLength(1);
+  });
+});
+
+describe("F-vlad-351: assertSecretParentSecure üst dizin sahibi", () => {
+  it("üst dizin geçerli kullanıcıya ya da root'a aitse geçer; başka kullanıcıya aitse reddedilir", () => {
+    if (process.platform === "win32") return;
+    const d = realpathSync(mkdtempSync(join(tmpdir(), "vlad-psec-")));
+    try {
+      chmodSync(d, 0o755);
+      expect(() => assertSecretParentSecure(join(d, "gizli"))).not.toThrow(); // sahibi biz
+      expect(() => assertSecretParentSecure("/gizli")).not.toThrow(); // "/" root'a ait
+      const spy = vi.spyOn(process, "getuid").mockReturnValue((process.getuid!() + 1) as never); // dizin artık "başkasının"
+      try { expect(() => assertSecretParentSecure(join(d, "gizli"))).toThrow(/sahib/); } finally { spy.mockRestore(); }
+    } finally { rmSync(d, { recursive: true, force: true }); }
   });
 });
 

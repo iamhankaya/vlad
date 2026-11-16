@@ -43,7 +43,7 @@ const deps = (over: Partial<ApproverDeps> = {}): ApproverDeps => ({
 const start = (over: Partial<ApproverDeps> = {}) => { svc = runApprover(deps(over)); svc.catch(() => {}); return svc; };
 const stop = async () => { ac.abort(); if (svc) await svc.catch(() => {}); svc = null; };
 const waitFor = async (cond: () => unknown, what = "koşul") => { for (let i = 0; i < 250; i++) { if (cond()) return; await new Promise((r) => setTimeout(r, 20)); } throw new Error(`zaman aşımı: ${what}`); };
-const request = (n: number, argv: string[] = ["mode", "off"], op = "mode off") => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op, argv, requestedAt: "2026-11-16T12:00:00Z", requester: "vlad-07" }), { mode: 0o600 });
+const request = (n: number, argv: string[] = ["mode", "off"], op = "mode off") => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op, argv, requestedAt: new Date(t).toISOString(), requester: "vlad-07" }), { mode: 0o600 }); // istemci saati ≈ servis saati (F-vlad-349: ±10 dk)
 const ackOf = async (n: number): Promise<AckRecord> => { const p = join(store.dir, "ack", `${cid(n)}.json`); await waitFor(() => existsSync(p), `ack ${n}`); return JSON.parse(readFileSync(p, "utf8")) as AckRecord; };
 const pend = (): PendingRecord => store.readPending()!;
 const body = (kind: "a1" | "d1", p: PendingRecord, key = readKey()!) => `${kind}.${p.id}.${(kind === "a1" ? approveTag : denyTag)(key, p.digest)}`;
@@ -407,6 +407,14 @@ describe("approver: service yürütme sonucu", () => {
     t += LIMITS.approveTtlMs + 1;
     expect((await resultOf(p.id)).status).toBe("expired");
     expect(store.readRate().consecutiveDenied).toBe(0);
+  });
+
+  it("F-vlad-349: requestedAt makul aralık dışındaysa (±10 dk) istek reddedilir; içindeyse kabul", async () => {
+    const send = (n: number, at: number) => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op: "mode off", argv: ["mode", "off"], requestedAt: new Date(at).toISOString(), requester: "vlad-07" }), { mode: 0o600 });
+    start();
+    send(1, START - 11 * 60_000); expect(await ackOf(1)).toMatchObject({ status: "invalid", reason: "bad_value" });
+    send(2, START + 11 * 60_000); expect(await ackOf(2)).toMatchObject({ status: "invalid", reason: "bad_value" });
+    send(3, START - 9 * 60_000); expect((await ackOf(3)).status).toBe("pending");
   });
 
   it("yanıt akışı hatası: servis ayakta, istek süresi dolar", async () => {

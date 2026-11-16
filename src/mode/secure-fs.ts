@@ -38,6 +38,7 @@ export function assertSecretParentSecure(secretDir: string): void {
   let ps;
   try { ps = statSync(parent); } catch (e) { throw new Error(`gizli dizinin üst dizini okunamadı: ${parent} (${(e as NodeJS.ErrnoException).code ?? "hata"})`); }
   if (!ps.isDirectory()) throw new Error(`üst dizin dizin değil: ${parent}`);
+  if (posix && ps.uid !== uid() && ps.uid !== 0) throw new Error(`gizli dizinin üst dizininin sahibi ne biz ne root: ${parent}`); // F-vlad-351
   if (posix && (ps.mode & 0o022) && !(ps.mode & 0o1000)) throw new Error(`gizli dizinin üst dizini grup/dünya tarafından yazılabilir: ${parent} (chmod go-w ile düzeltin)`);
 }
 

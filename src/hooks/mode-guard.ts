@@ -88,12 +88,31 @@ function segments(cmd: string): string[] {
 const MODE_CMD = /^(?:[\w.-]+=\S*\s+|(?:env|command|exec|nohup|time|sudo|npx|tsx|node)\b(?:\s+-\S+(?:\s+[A-Z_]+)?)*\s+)*(?:\S*[/\\])?(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/i;
 const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?sh\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
 
+/** Komutun yol çözümü statik değil mi (cd, pushd, değişken, komut ikamesi, `-C`, eval…): göreli sözcük cwd'ye göre çözülemez, eski sıkı metin denetimi geçerli. */
+const DYNAMIC = /\b(?:cd|pushd|popd|eval|exec|source)\b|\$(?!\{?HOME\}?(?!\w))|`|\s-C\b|--(?:git-dir|work-tree)/i;
+/** F-vlad-350: komut metninde gizli dizin adının geçmesi tek başına ret sebebi değil. Statik komutta (cd/değişken/ikame yok) ilgili her sözcük cwd'ye göre gerçek yola çözülür; gizli dizinin içine/kendisine çözülen ret. Dinamik komutta eski metin denetimi korunur. */
+function bashSecretHit(cmd: string, ctx: GuardCtx): boolean {
+  if (!secretHit(cmd)) return false;
+  if (DYNAMIC.test(cmd)) return true;
+  const base = ctx.cwd ?? ".";
+  for (const w of cmd.split(/[\s;&|<>()=,]+/).filter(Boolean)) {
+    if (!secretHit(w)) continue;
+    const abs = resolve(base, expand(w.replace(/["'\\]/g, "")));
+    const cut = abs.search(/[*?[{]/);
+    const f = real(cut < 0 ? abs : abs.slice(0, cut).replace(/[^/]*$/, "") || "/");
+    const def = norm(real(join(homedir(), ".vlad-secret"))); // test geçersiz kılması olsa da gerçek varsayılan konum her zaman korunur
+    const inDef = (x: string): boolean => { const n = norm(x); return n === def || n.startsWith(def + "/"); };
+    if (insideSecret(f) || insideSecret(abs) || inDef(f) || inDef(abs)) return true;
+  }
+  return false;
+}
+
 function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: number): string | null {
   for (const m of cmd.matchAll(SHELL_C)) { // `bash -c '…'` / `eval '…'` yükü ayrıca denetlenir
     const inner = m[1] ?? m[2] ?? m[3] ?? m[4];
     if (inner && depth < 3) { const r = checkBash(inner, kbDir, ctx, depth + 1); if (r) return r; }
   }
-  if (secretHit(cmd)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
+  if (bashSecretHit(cmd, ctx)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
   for (const seg of segments(cmd)) {
     const mm = MODE_CMD.exec(seg);
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;

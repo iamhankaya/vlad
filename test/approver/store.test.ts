@@ -29,6 +29,19 @@ const result = (over: Partial<ResultRecord> = {}): ResultRecord => ({ v: 1, id: 
 const rate = (): RateState => ({ v: 1, decisions: [NOW.toISOString()], consecutiveDenied: 1, lockedUntil: null });
 const idN = (n: number) => "b".repeat(24) + String.fromCharCode(97 + Math.floor(n / 26)) + String.fromCharCode(97 + (n % 26));
 
+describe("F-vlad-348: claimed/ ack/ claims/ budama", () => {
+  it("TTL'den eski dosyalar budanır (yeni olanlar kalır); writeResult budamayı tetikler", () => {
+    const old = new Date(NOW.getTime() - 8 * day), fresh = new Date(NOW.getTime() - day);
+    const mk = (rel: string, t: Date) => { const p = put(rel, "{}"); utimesSync(p, t, t); };
+    mk(`claimed/${CID}.json`, old); mk(`ack/${CID}.json`, old); mk(`claims/${ID}`, old); mk(`claims/${ID}.exec`, old);
+    const C2 = "b".repeat(26), I2 = "c".repeat(26);
+    mk(`claimed/${C2}.json`, fresh); mk(`ack/${C2}.json`, fresh); mk(`claims/${I2}`, fresh);
+    st.writeResult(result({ id: "d".repeat(26) }));
+    for (const f of [`claimed/${CID}.json`, `ack/${CID}.json`, `claims/${ID}`, `claims/${ID}.exec`]) expect(existsSync(join(dir, f)), f).toBe(false);
+    for (const f of [`claimed/${C2}.json`, `ack/${C2}.json`, `claims/${I2}`]) expect(existsSync(join(dir, f)), f).toBe(true);
+  });
+});
+
 describe("approver: store kurulum", () => {
   it("dizin ağacı 0700", () => {
     for (const d of ["", "inbox", "claimed", "ack", "claims", "results"]) {

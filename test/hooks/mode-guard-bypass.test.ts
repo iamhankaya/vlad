@@ -18,6 +18,18 @@ beforeEach(() => {
 afterEach(() => setSecretDirForTests(null));
 const run = (tool: string, input: Record<string, unknown>, at = cwd) => checkWorkerMode(tool, input, null, { vladHome: "/home/u/vlad", cwd: at });
 
+describe("F-vlad-350: Bash metin yanlış pozitifleri (komut metni yerine gerçek yol çözümü)", () => {
+  const bash = (command: string, at = cwd) => checkWorkerMode("Bash", { command }, null, { vladHome: "/home/u/vlad", cwd: at });
+  it("yolu gizli dizine çözülmeyen metin anması serbest (commit mesajı, worktree içi aynı adlı dosya)", () => {
+    for (const c of [`git commit -m "docs: .vlad-secret dizini notu"`, `echo ".vlad-secret"`, "cat .vlad-secret/x", "grep -rn vlad-secret docs"]) expect(bash(c), c).toBeNull();
+  });
+  it("gerçek yol/joker/değişken/cd kaçışları hâlâ reddedilir", () => {
+    for (const c of [`cat ${secret}/mode.key`, "cat ~/.vlad-secret/mode.key", `cat "${root}/.vlad-sec"ret/mode.key`, `cat ${secret}/*`, "cat ../.vlad-secret/mode.key", `cd ${root} && cat .vlad-secret/mode.key`, "cd ~ && cat .vlad-secret/mode.key", `D=${root}; cat $D/.vlad-secret/mode.key`, `echo x; cat $(echo ${secret})/mode.key`])
+      expect(bash(c), c).not.toBeNull();
+    expect(bash("cat .vlad-secret/mode.key", root)).not.toBeNull(); // cwd HOME iken göreli yol gerçekten gizli dizin
+  });
+});
+
 describe("(1) Grep/Glob kök verilmezse etkin kök cwd'dir", () => {
   it("cwd gizli dizinin atasıysa path'siz Grep/Glob reddedilir; cwd worktree ise serbest", () => {
     expect(run("Grep", { pattern: "." }, root)).not.toBeNull();
