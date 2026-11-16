@@ -1,7 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { disableKey } from "../../src/mode/token.js";
 import { LIMITS } from "../../src/approver/types.js";
 import { secretHits, SECRET_PATTERNS } from "../support/approver-secrets.js";
 import { spawnVlad } from "../support/spawn-vlad.js";
@@ -71,7 +70,7 @@ describe("approver-kabul: `mode request` servis ile", () => {
     expect(Date.parse(j.expiresAt)).toBe(Date.parse(w.store.readPending()!.expiresAt));
     expect(w.store.readPending()!.id).toBe(j.id);
     expect(w.store.readPending()!.requester).toMatch(/\S/);
-    await waitFor(() => w.ntfy.published.length === 1, "bildirim");
+    await waitFor(() => w.ntfy.requests.length === 1, "bildirim");
     expect(secretHits(r.out + r.err)).toEqual([]);
   });
 
@@ -83,12 +82,13 @@ describe("approver-kabul: `mode request` servis ile", () => {
     expect(busy.code).toBe(1);
     expect(err(busy).error).toMatch(/meşgul: bekleyen istek var \([a-z2-7]{8}\)/);
     const id = w.store.readPending()!.id;
-    await w.ntfy.press(w.ntfy.published[0]!, "Onayla");
+    await w.ntfy.press(w.ntfy.requests[0]!, "Onayla");
     await resultOf(w, id);
     const rl = await request(["off"]);
     expect(err(rl).error).toMatch(/hız sınırı/);
     w.clock.advance(LIMITS.cooldownMs + 1000);
-    disableKey();
+    // `mode token --disable` gizli dizini (approver/ dahil) siler; o durumda "kurulu değil" doğru mesajdır. Burada approver/ ayakta, anahtar bozuk (keyState≠ok):
+    chmodSync(join(w.secret, "mode.key"), 0o644);
     const kd = await request(["off"]);
     expect(err(kd).error).toMatch(/mod belirteci etkin değil: önce vlad mode token/);
   }, 45_000);
@@ -101,7 +101,7 @@ describe("approver-kabul: `mode request` servis ile", () => {
     expect(j.status).toBe("wait_timeout");
     const p = w.store.readPending()!;
     expect(p.id).toBe(j.id); expect(p.status).toBe("pending");
-    await w.ntfy.press(w.ntfy.published[0]!, "Onayla");
+    await w.ntfy.press(w.ntfy.requests[0]!, "Onayla");
     expect((await resultOf(w, j.id)).status).toBe("done");
     expect(w.exec.calls).toHaveLength(1);
   }, 30_000);
@@ -109,15 +109,15 @@ describe("approver-kabul: `mode request` servis ile", () => {
   it("--wait: sonuç `done` ise çıkış 0; ret ise çıkış 1", async () => {
     startService(w); await untilWatching(w);
     const run = request(["--wait", "--wait-seconds", "20", "--json", "night", "--until", "23:00"]);
-    await waitFor(() => w.ntfy.published.length === 1, "bildirim");
-    await w.ntfy.press(w.ntfy.published[0]!, "Onayla");
+    await waitFor(() => w.ntfy.requests.length === 1, "bildirim");
+    await w.ntfy.press(w.ntfy.requests[0]!, "Onayla");
     const ok = await run;
     expect(ok.code, ok.err).toBe(0);
     expect(JSON.parse(ok.out)).toMatchObject({ status: "done" });
     w.clock.advance(LIMITS.cooldownMs + 1000);
     const run2 = request(["--wait", "--wait-seconds", "20", "--json", "off"]);
-    await waitFor(() => w.ntfy.published.length === 2, "ikinci bildirim");
-    await w.ntfy.press(w.ntfy.published[1]!, "Reddet");
+    await waitFor(() => w.ntfy.requests.length === 2, "ikinci bildirim");
+    await w.ntfy.press(w.ntfy.requests[1]!, "Reddet");
     const no = await run2;
     expect(no.code).toBe(1);
     expect(JSON.parse(no.out)).toMatchObject({ status: "denied" });

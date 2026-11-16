@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { chmodSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { requireModeAuthority } from "../../src/mode/token.js";
@@ -73,7 +73,7 @@ describe("approver-kabul: KK1 bildirim servis tarafında", () => {
 
   it("bildirimde ve loglarda anahtar/token/not'un 60 baytından sonrası/mutlak yol yok (konu yalnız action URL'sinde)", async () => {
     await boot();
-    const note = "açıklama ".repeat(12); // > 60 bayt, çok baytlı
+    const note = Array.from({ length: 14 }, (_, i) => `ş${((i + 3) * 7919 % 9973).toString(36)}q${i}`).join("-"); // ~120 bayt (≤ 200) // > 60 bayt, çok baytlı, APERİYODİK (kuyruk başka yerde eşleşmez)
     const { msg: m } = await submit(w, [...NIGHT, "--note", note]);
     const shown = `${m!.title}\n${m!.message}`;
     expect(secretHits(shown), "bildirim metni").toEqual([]);
@@ -115,6 +115,7 @@ describe("approver-kabul: KK2 özete bağlı onay, KK3 tek kullanım, karar yar�
     const b = await submit(w, ["mode", "off"]);
     expect(b.ack.status).toBe("pending");
     const [, , tagA] = aApprove.split(".");
+    await waitFor(() => w.ntfy.connections.some((c) => c.topic === b.pending!.respTopic), "B'nin respTopic akışı");
     w.ntfy.emit(b.pending!.respTopic, `a1.${b.pending!.id}.${tagA}`); // B'nin id'si + A'nın tag'i
     w.ntfy.emit(b.pending!.respTopic, aApprove); // A'nın gövdesi aynen
     await waitFor(() => /bad_tag/.test(logText(w)) && /unknown_id/.test(logText(w)), "reddedilen yanıtların logu");
@@ -323,8 +324,8 @@ describe("approver-kabul: istemci–servis protokolü ve allowlist", () => {
 
   it("anahtar kapalıyken (mode token --disable) yeni istek invalid:key_disabled", async () => {
     await boot();
-    const { disableKey } = await import("../../src/mode/token.js");
-    disableKey();
+    // `mode token --disable` secretDir'i (approver/ dahil) siler; servisin gördüğü durum keyState≠ok. approver/ ayakta kalsın diye anahtarı bozuyoruz (geniş izin ⇒ broken).
+    chmodSync(join(w.secret, "mode.key"), 0o644);
     const cid = writeRequest(w, { argv: NIGHT });
     const ack = await waitAck(w, cid);
     expect(ack).toMatchObject({ status: "invalid", reason: "key_disabled" });
