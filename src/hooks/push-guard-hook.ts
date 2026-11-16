@@ -38,6 +38,6 @@ process.stdin.on("end", async () => {
     const why = checkWorkerPush(cmd, id);
     if (why) block(why);
   } catch (e) {
-    if (mentionsPush(raw) || (/mode|settings|vlad\.config|dist.hooks/i.test(raw) && (process.env.VLAD_TASK_ID || ownId(process.cwd()) || WT_DIR.test(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
+    if (mentionsPush(raw) || (/mode|settings|vlad\.config|dist.hooks|vlad-secret/i.test(raw) && (process.env.VLAD_TASK_ID || ownId(process.cwd()) || WT_DIR.test(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
   }
 });

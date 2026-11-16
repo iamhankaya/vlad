@@ -30,6 +30,15 @@ describe("okuma araçları gizli dizin koruması", () => {
     expect(run("Glob", { pattern: `${secret}/approver/*.json` })).not.toBeNull();
     expect(run("Glob", { pattern: "*", path: join(secret, "approver") })).not.toBeNull();
   });
+  it("ata dizinden özyinelemeli arama, süslü parantez, `*` ad jokeri ve joker ortasında symlink reddedilir", () => {
+    symlinkSync(secret, join(cwd, "s"));
+    expect(run("Grep", { pattern: ".", path: root })).not.toBeNull();
+    expect(run("Grep", { pattern: ".", path: "/" })).not.toBeNull();
+    expect(run("Glob", { pattern: "**/mode.key", path: root })).not.toBeNull();
+    expect(run("Glob", { pattern: `${root}/*/mode.key` })).not.toBeNull();
+    expect(run("Glob", { pattern: `${root}/.vlad-{secret,x}/*` })).not.toBeNull();
+    expect(run("Glob", { pattern: "s/*/channel.json" })).not.toBeNull();
+  });
   it("başka dosyalar, Grep regex'i ve kendi worktree okuması serbest", () => {
     writeFileSync(join(cwd, "a.ts"), "x");
     expect(run("Read", { file_path: join(cwd, "a.ts") })).toBeNull();

@@ -95,19 +95,20 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
 }
 
 /** Okuma aracı yolu gizli dizine çözülüyor mu: `~`, `..`, sembolik bağ (tam yol realpath) ve joker kökü dahil. */
-function readsSecret(p: string, ctx: GuardCtx): boolean {
+const fullReal = (p: string): string => { try { return realpathSync.native(p); } catch { return real(p); } };
+/** `dirRoot`: Grep/Glob `path`/joker kökü gibi arama kökleri; gizli dizinin ATASI (HOME, `/`) da reddedilir (özyinelemeli arama içeri iner). Read dosya yolu için yalnız içeri/eşit. */
+function readsSecret(p: string, ctx: GuardCtx, dirRoot: boolean): boolean {
   if (secretHit(p)) return true;
-  const sd = norm(real(secretDir()));
+  const sd = norm(fullReal(secretDir()));
   const t = expand(p.replace(/\\/g, "/"));
   const abs = resolve(ctx.cwd ?? ".", t);
-  let full = abs;
-  try { full = realpathSync.native(abs); } catch { full = real(abs); }
-  const hit = (x: string): boolean => { const n = norm(x); return n === sd || n.startsWith(sd + "/"); };
-  if (hit(full) || hit(abs)) return true;
-  // joker: sabit kök (ilk jokerden önceki dizin) gizli dizinin içindeyse reddet; `~/.vlad-sec*` gibi ad jokeri en iyi çaba (shortcut: ad jokeri çözülmez, asıl sınır belirteç doğrulaması)
+  const inside = (x: string): boolean => { const n = norm(x); return n === sd || n.startsWith(sd + "/"); };
+  const ancestor = (x: string): boolean => { const n = norm(x); return n === "" || sd.startsWith(n + "/"); };
   const cut = abs.search(/[*?[{]/);
-  if (cut >= 0) return hit(real(abs.slice(0, cut) || "/")) || globHits(basename(abs.slice(0, abs.indexOf("/", cut) < 0 ? undefined : abs.indexOf("/", cut))), basename(sd));
-  return false;
+  if (cut < 0) { const f = fullReal(abs); return inside(f) || inside(abs) || (dirRoot && (ancestor(f) || ancestor(abs))); }
+  // joker: ilk jokerden önceki dizin (süslü parantez dahil) tam realpath ile çözülür; gizli dizinin içi ya da atası ise reddedilir (ad jokeri atadan erişebildiği için)
+  const root = fullReal(abs.slice(0, cut).replace(/[^/]*$/, "") || "/");
+  return inside(root) || ancestor(root);
 }
 
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
@@ -117,7 +118,7 @@ export function checkWorkerMode(tool: string, input: Record<string, unknown> | u
   if (READ_TOOLS.includes(tool)) {
     for (const k of ["file_path", "path", "glob", ...(tool === "Glob" ? ["pattern"] : [])]) {
       const v = input?.[k];
-      if (typeof v === "string" && readsSecret(v, ctx)) return `${WHY} (okuma: gizli mod anahtarı/approver dizini ${k}: ${v})`;
+      if (typeof v === "string" && readsSecret(v, ctx, k !== "file_path")) return `${WHY} (okuma: gizli mod anahtarı/approver dizini ${k}: ${v})`;
     }
     return null;
   }
