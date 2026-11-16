@@ -14,6 +14,13 @@ describe("approver sözleşmesi: golden digest (uygulamadan bağımsız formül)
     expect(g.expected).toBe(d(g.input));
     expect(g.expected).toMatch(/^[0-9a-f]{64}$/);
     for (const [k, v] of Object.entries(g.variants as Record<string, string>)) k === "base" ? expect(v).toBe(g.expected) : expect(v, k).not.toBe(g.expected);
+    // her alan digest'e girer: alan değişince yeniden hesaplanan özet değişir (computeDigest bir alanı dışarıda bırakamaz)
+    const mut: Record<string, (i: typeof g.input) => typeof g.input> = {
+      id: (i) => ({ ...i, id: "a".repeat(26) }), argv: (i) => ({ ...i, argv: [...i.argv, "--push"] }), requestedAt: (i) => ({ ...i, requestedAt: "2026-11-16T14:21:00+03:00" }),
+      expiresAt: (i) => ({ ...i, expiresAt: "2026-11-16T14:26:00+03:00" }), nonce: (i) => ({ ...i, nonce: "f".repeat(32) }), requester: (i) => ({ ...i, requester: "x" }),
+      home: (i) => ({ ...i, ctx: { ...i.ctx, home: "/h" } }), kb: (i) => ({ ...i, ctx: { ...i.ctx, kb: "/k" } }), cli: (i) => ({ ...i, ctx: { ...i.ctx, cli: "/c" } }),
+    };
+    for (const [k, m] of Object.entries(mut)) expect(d(m(g.input)), k).not.toBe(g.expected);
   });
 });
 

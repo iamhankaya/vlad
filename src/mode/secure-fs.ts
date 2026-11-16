@@ -38,7 +38,9 @@ export function readSecureFile(path: string, maxBytes: number): Buffer {
   try {
     const st = fstatSync(fd);
     if (!st.isFile()) throw new Error(`düzenli dosya değil: ${path}`);
-    if (st.nlink !== 1) throw new Error(`nlink != 1 (hardlink): ${path}`);
+    // writeAtomic(overwrite:false) link→unlink arasında nlink kısa süre 2 olur: kısa yeniden deneme (kalıcı hardlink yine reddedilir)
+    for (let i = 0; i < 5 && fstatSync(fd).nlink === 2; i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+    if (fstatSync(fd).nlink !== 1) throw new Error(`nlink != 1 (hardlink): ${path}`);
     if (posix && st.uid !== uid()) throw new Error(`dosya sahibi biz değiliz: ${path}`);
     if (posix && (st.mode & 0o777) !== 0o600) throw new Error(`dosya izni 0600 olmalı: ${path}`);
     if (st.size > maxBytes) throw new Error(`boyut sınırı aşıldı (${st.size} > ${maxBytes}): ${path}`);
@@ -62,7 +64,8 @@ export function writeAtomic(path: string, data: string | Buffer, opts: { overwri
   closeSync(fd);
   try {
     if (opts.overwrite) renameSync(tmp, path);
-    else { linkSync(tmp, path); unlinkSync(tmp); }
+    else linkSync(tmp, path); // shortcut: hardlink'siz dosya sisteminde (EPERM/ENOTSUP) başarısız olur; macOS APFS/ev dizini için yeterli
   } catch (e) { try { unlinkSync(tmp); } catch { /* temizlik en iyi çaba */ } throw e; }
+  if (!opts.overwrite) { try { unlinkSync(tmp); } catch { /* hedef yayınlandı; artık temp en iyi çaba silinir */ } }
   try { const d = openSync(dirname(path), constants.O_RDONLY); try { fsyncSync(d); } finally { closeSync(d); } } catch { /* en iyi çaba */ }
 }

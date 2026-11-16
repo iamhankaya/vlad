@@ -37,6 +37,8 @@ describe("approver sözleşmesi: CLI iskeleti (komutlar kayıtlı, --help yazıl
     expect(find(p, "mode", "request")).toBeTruthy();
     expect(find(p, "approver", "run")!.description()).toContain("launchd girişi");
     expect(find(p, "approver", "install")!.options.some((o) => o.long === "--server")).toBe(true);
-    expect(find(p, "mode", "request")!.options.some((o) => o.long === "--wait")).toBe(true);
+    const req = find(p, "mode", "request")!;
+    expect(req.options.some((o) => o.long === "--wait" && !o.required && !o.optional)).toBe(true); // değer almaz: işlem adını yutmaz
+    expect(req.options.some((o) => o.long === "--wait-seconds")).toBe(true);
   });
 });

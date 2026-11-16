@@ -44,7 +44,8 @@ export function registerMode(program: Command, k: Kit): void {
   def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", (_op: string, _args: string[], _o: Opts) => {
     throw new Error("not implemented");
   }).passThroughOptions()
-    .option("--wait [saniye]", "sonuç gelene kadar bekle (varsayılan 310 sn; süre dolarsa çıkış 1, istek iptal edilmez)");
+    .option("--wait", "sonuç gelene kadar bekle (varsayılan 310 sn; süre dolarsa çıkış 1, istek iptal edilmez)")
+    .option("--wait-seconds <n>", "--wait süresi (saniye); isteğe bağlı değerli --wait işlem adını yuttuğu için ayrı bayrak");
   def(mode, "status", "Mod durumu (biten pencere bir kez bildirilir, sonra temizlenir)", (o: Opts) => {
     const now = new Date();
     const s = modeStatus(now);
