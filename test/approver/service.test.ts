@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, symlinkSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -97,7 +97,7 @@ describe("approver: service onay akışı", () => {
     expect(ch.published[0]!.tags.approve).toBe(approveTag(readKey()!, p.digest));
     ch.h!.onBody(body("a1", p));
     const r = await resultOf(p.id);
-    expect(r).toMatchObject({ status: "done", exitCode: 0, stdout: "tamam" });
+    expect(r).toMatchObject({ status: "done", exitCode: 0, stdout: "tamam", op: "mode off", argv: ["mode", "off"], requester: expect.any(String) });
     expect(execRun).toHaveBeenCalledTimes(1);
     const [argv, token, ctx] = execRun.mock.calls[0]!;
     expect(argv).toEqual(["mode", "off"]);
@@ -116,6 +116,39 @@ describe("approver: service onay akışı", () => {
     await resultOf(p.id);
     expect(execRun).toHaveBeenCalledTimes(1);
     expect(store.readResult(p.id)!.status).toBe("done");
+  });
+
+  it("sonuçtan sonra yanıt akışı açık kalır: tekrar oynatılan onay yürütmez ve not_pending loglanır", async () => {
+    start();
+    const p = await open(1);
+    ch.h!.onBody(body("a1", p));
+    await resultOf(p.id);
+    await waitFor(() => store.readPending() === null);
+    ch.h!.onBody(body("a1", p));
+    expect(execRun).toHaveBeenCalledTimes(1);
+    expect(logText()).toContain("not_pending");
+  });
+
+  it("durdurma: sinyali yok sayan yürütücü kapanışı sonsuza kadar tutmaz (sınırlı bekleme), kilit bırakılır", async () => {
+    execRun = vi.fn(() => new Promise<never>(() => undefined)); // asla bitmez, signal'i yok sayar
+    start();
+    const p = await open(1);
+    ch.h!.onBody(body("a1", p));
+    await waitFor(() => execRun.mock.calls.length === 1);
+    const t0 = Date.now();
+    await stop();
+    expect(Date.now() - t0).toBeLessThan(8000);
+    expect(existsSync(join(store.dir, "service.lock"))).toBe(false);
+  }, 15_000);
+
+  it("servis çalışırken pending.json bozulursa yeni istek locked, dosya üzerine yazılmaz, yayın yok", async () => {
+    start();
+    await new Promise((r) => setTimeout(r, 300));
+    writeFileSync(join(store.dir, "pending.json"), '{"v":1,"id":"', { mode: 0o600 });
+    request(1);
+    expect(await ackOf(1)).toMatchObject({ status: "locked" });
+    expect(readFileSync(join(store.dir, "pending.json"), "utf8")).toBe('{"v":1,"id":"');
+    expect(ch.published).toHaveLength(0);
   });
 
   it("ret: çalıştırma yok, denied, ret sayacı artar", async () => {
@@ -160,6 +193,9 @@ describe("approver: service onay akışı", () => {
     ch.h?.onBody(body("a1", p));
     expect(execRun).not.toHaveBeenCalled();
     expect(store.readRate().consecutiveDenied).toBe(1);
+    expect(store.readRate().decisions).toEqual([]); // süre dolumu soğuma/kota başlatmaz
+    request(2);
+    expect((await ackOf(2)).status).toBe("pending"); // süresi dolan istek yenisini engellemez
   });
 
   it("tam sınırda gelen onay reddedilir (parseDecision expired)", async () => {
@@ -199,7 +235,7 @@ describe("approver: service istek kontrolleri", () => {
     start();
     await open(1);
     request(2);
-    expect(await ackOf(2)).toMatchObject({ status: "busy" });
+    expect(await ackOf(2)).toMatchObject({ status: "busy", id: pend().id }); // CLI "meşgul: bekleyen istek var (<shortId>)" için
   });
 
   it("soğuma: ret sonrası rate_limited; 3 ret locked; kilit dolunca yeniden kabul", async () => {
@@ -246,6 +282,18 @@ describe("approver: service istek kontrolleri", () => {
     request(1);
     expect(await ackOf(1)).toMatchObject({ status: "locked", reason: "rate_state_corrupt" });
     expect(readFileSync(join(store.dir, "rate.json"), "utf8")).toBe("{kesik");
+  });
+});
+
+describe("approver: service ctx gerçek yol", () => {
+  it("VLAD_HOME sembolik bağ olsa da ctx.home/kb gerçek yoldur (macOS /var → /private/var)", async () => {
+    const real = join(base, "gercek"); mkdirSync(real, { mode: 0o700 });
+    const link = join(base, "bag"); symlinkSync(real, link);
+    process.env.VLAD_HOME = link;
+    start();
+    const p = await open(1);
+    expect(p.ctx.home).toBe(realpathSync(real));
+    expect(p.ctx.kb.startsWith(realpathSync(real))).toBe(true);
   });
 });
 

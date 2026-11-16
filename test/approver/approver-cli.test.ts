@@ -240,6 +240,14 @@ describe("approver: status / requests / show", () => {
     expect(JSON.stringify(r)).not.toContain("a".repeat(32));
     expect((await cli(["show", newId({ bytes: (n) => Buffer.alloc(n, 5) })])).err).toContain("kayıt bulunamadı");
   });
+  it("show: bekleyen silindikten sonra sonuç kaydındaki op/argv/requester gösterilir (kırpılı)", async () => {
+    enableKey(); await cli(["install"]);
+    const rec = { v: 1, id: ID, status: "done", exitCode: 0, stdout: "", stderr: "", finishedAt: "2030-01-01T00:01:00.000Z", op: "mode night", argv: ["mode", "night", "--note", "n".repeat(100)], requester: "vlad-07" };
+    createStore(approverDir()).writeResult(rec as never);
+    const r = JSON.parse((await cli(["show", ID, "--json"])).out);
+    expect(r.result).toMatchObject({ op: "mode night", requester: "vlad-07", status: "done" });
+    expect(r.result.argv[3].length).toBeLessThan(70);
+  });
   it("çalışan oturumunda reddeder", async () => {
     process.env.VLAD_TASK_ID = "T20261116-99";
     for (const a of [["status"], ["requests"], ["show", ID]]) expect((await cli(a)).code).toBe(1);

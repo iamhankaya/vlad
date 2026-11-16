@@ -17,7 +17,8 @@ export interface PendingRecord {
 export type AckStatus = "pending" | "busy" | "rate_limited" | "locked" | "invalid";
 export interface AckRecord { v: 1; cid: string; status: AckStatus; id?: string; expiresAt?: string; reason?: RejectReason }
 export type ResultStatus = "done" | "failed" | "interrupted" | "denied" | "expired";
-export interface ResultRecord { v: 1; id: string; status: ResultStatus; exitCode: number | null; stdout: string; stderr: string; reason?: string; finishedAt: string }
+export interface ResultRecord { v: 1; id: string; status: ResultStatus; exitCode: number | null; stdout: string; stderr: string; reason?: string; finishedAt: string;
+  /** Geriye uyumlu eklemeler (salt okuma CLI'si için): isteğin işlemi, argv'si ve beyan edilen isteyeni. */ op?: Op; argv?: string[]; requester?: string }
 export type RejectReason =
   | "not_allowlisted" | "bad_flag" | "bad_value" | "too_large" | "control_char" | "duplicate_flag" | "conflicting"
   | "setup_answers_unsupported" | "key_disabled" | "key_changed" | "ctx_changed" | "rate_state_corrupt" | "oversize";

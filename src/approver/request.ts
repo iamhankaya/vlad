@@ -17,6 +17,8 @@ const bytes = (s: string): number => Buffer.byteLength(s, "utf8");
 
 const OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
 const KEYS = ["v", "cid", "op", "argv", "requestedAt", "requester"];
+/** İstemcinin yazabileceği ama servisin ASLA kullanmadığı alanlar (bildirim/nonce/id/konu/tag servisin kendi verisinden): yok sayılır. */
+const IGNORED_KEYS = ["title", "message", "nonce", "id", "respTopic", "tag", "topic"];
 // NUL/C0/C1, satır-paragraf ayracı, sıfır genişlik ve çift yönlü (bidi) biçim karakterleri
 const CONTROL = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/;
 const CID_RE = /^[a-z2-7]{26}$/;
@@ -28,16 +30,16 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})?$/;
 const UNINSTALL_PARTS = ["hooks", "global-skills", "config"];
 
-type FlagSpec = { value: false } | { value: true; ok: (v: string) => boolean };
+type FlagSpec = { value: false } | { value: true; ok: (v: string) => boolean; empty?: boolean };
 const bool: FlagSpec = { value: false };
-const val = (ok: (v: string) => boolean): FlagSpec => ({ value: true, ok });
+const val = (ok: (v: string) => boolean, empty = false): FlagSpec => ({ value: true, ok, empty });
 
 /** ARGV_SCHEMA: bayrak başına tür/arite/doğrulama. Dışındaki her şey (bilinmeyen bayrak, `--x=y`, `--`, pozisyonel) bad_flag. */
 const ARGV_SCHEMA: Record<"mode night" | "install" | "setup --upgrade", Record<string, FlagSpec>> = {
   "mode night": {
     "--until": val((v) => HHMM.test(v) || (ISO.test(v) && !Number.isNaN(Date.parse(v)))),
     "--until-task": val((v) => TASK_LIST.test(v)), "--push": bool, "--except": val((v) => SLUG_LIST.test(v)),
-    "--projects": val((v) => PROJECT_LIST.test(v)), "--note": val(() => true),
+    "--projects": val((v) => PROJECT_LIST.test(v)), "--note": val(() => true, true),
   },
   install: { "--remove-menu": bool },
   "setup --upgrade": {
@@ -55,7 +57,7 @@ function parseFlags(argv: string[], from: number, spec: Record<string, FlagSpec>
     seen.add(t);
     if (!s.value) continue;
     const v = argv[++i];
-    if (v === undefined || v === "" || v.startsWith("-") || !s.ok(v)) return { reason: "bad_value", detail: `${t} için geçersiz değer` };
+    if (v === undefined || (v === "" && !s.empty) || v.startsWith("-") || !s.ok(v)) return { reason: "bad_value", detail: `${t} için geçersiz değer` };
   }
   return null;
 }
@@ -83,7 +85,7 @@ function checkSetup(argv: string[]): Bad | null {
 export function validateRequest(raw: unknown): Verdict {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return no("bad_value", "istek nesne değil");
   const r = raw as Record<string, unknown>;
-  if (Object.keys(r).some((k) => !KEYS.includes(k)) || KEYS.some((k) => !(k in r))) return no("bad_value", "alan kümesi beklenenden farklı");
+  if (Object.keys(r).some((k) => !KEYS.includes(k) && !IGNORED_KEYS.includes(k)) || KEYS.some((k) => !(k in r))) return no("bad_value", "alan kümesi beklenenden farklı");
   const { v, cid, op, argv, requestedAt, requester } = r;
   if (v !== 1 || typeof cid !== "string" || typeof op !== "string" || typeof requestedAt !== "string" || typeof requester !== "string" || !Array.isArray(argv) || argv.some((a) => typeof a !== "string"))
     return no("bad_value", "alan türleri geçersiz");

@@ -128,7 +128,12 @@ export async function requestApproval(op: string, args: string[], o: Record<stri
 
 // --- approver komutları ---
 interface Cx { k: Kit; deps: ApproverCliDeps }
-const stdoutOf = (cx: Cx) => cx.deps.stdout ?? process.stdout;
+/** Gizli çıktı akışı: enjekte `stdout`; yoksa (yalnız testte `isTTY` enjeksiyonu varsa) kitin çıktı akışı; üretimde process.stdout. */
+const stdoutOf = (cx: Cx): { isTTY?: boolean; write(s: string): unknown } => {
+  if (cx.deps.stdout) return cx.deps.stdout;
+  if (cx.deps.isTTY) { const w = cx.k.ctx.stdout; return { isTTY: cx.deps.isTTY(), write: (s) => w.write(s) }; }
+  return process.stdout;
+};
 const randomOf = (cx: Cx) => cx.deps.random ?? realRandom;
 const nowOf = (cx: Cx) => (cx.deps.now ?? (() => new Date()))();
 
@@ -263,10 +268,14 @@ function show(id: string, o: Opts, cx: Cx): void {
   const p = store?.readPending();
   const pending = p && p.id === id ? { status: p.status, op: p.op, argv: p.argv.map(clip), requester: p.requester, requestedAt: p.requestedAt, expiresAt: p.expiresAt } : null;
   const r = store?.readResult(id) ?? null;
-  const result = r ? { status: r.status, exitCode: r.exitCode, ...(r.reason ? { reason: r.reason } : {}), finishedAt: r.finishedAt } : null;
+  // Sonuç kaydı op/argv/requester taşıyorsa (servis settle'da yazar) bekleyen kayıt silindikten sonra da gösterilir; değerler 60 karakterde kırpılı.
+  const rx = r as (ResultRecord & { op?: unknown; argv?: unknown; requester?: unknown }) | null;
+  const origin = !pending && rx && typeof rx.op === "string" ? { op: rx.op, argv: Array.isArray(rx.argv) ? rx.argv.map((a) => clip(String(a))) : [], requester: typeof rx.requester === "string" ? clip(rx.requester) : "?" } : null;
+  const result = r ? { status: r.status, exitCode: r.exitCode, ...(r.reason ? { reason: r.reason } : {}), finishedAt: r.finishedAt, ...(origin ?? {}) } : null;
   if (!pending && !result) throw new Error(`kayıt bulunamadı: ${id}`);
   const lines = [`kimlik: ${id}`];
   if (pending) lines.push(`işlem: ${pending.op} ${pending.argv.join(" ")}`, `isteyen: ${pending.requester} (beyan, doğrulanmamış)`, `durum: ${pending.status}`, `geçerli: ${pending.expiresAt}`);
+  if (origin) lines.push(`işlem: ${origin.op} ${origin.argv.join(" ")}`, `isteyen: ${origin.requester} (beyan, doğrulanmamış)`);
   if (result) lines.push(`sonuç: ${result.status}${result.reason ? ` (${result.reason})` : ""}, çıkış ${result.exitCode ?? "-"}, ${result.finishedAt}`);
   cx.k.out(o, { id, pending, result }, lines.join("\n"));
 }

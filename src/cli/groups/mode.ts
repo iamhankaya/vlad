@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { authorizeReset, disableKey, initKey, mintToken, requireModeAuthority } from "../../mode/token.js";
 import { requestApproval } from "./approver.js";
 import type { Kit } from "../kit.js";
-import type { Opts } from "../ctx.js";
+import { SilentExit, type Opts } from "../ctx.js";
 
 /** Çalışan değil + (anahtar etkinse) geçerli VLAD_MODE_TOKEN: doğrulama CLI tarafındadır, hook'tan bağımsız (F-vlad-287). */
 function assertNotWorker(): void { assertNotWorkerBase(); requireModeAuthority(); }
@@ -45,7 +45,7 @@ export function registerMode(program: Command, k: Kit): void {
   def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", async (op: string, args: string[], o: Opts) => {
     const r = await requestApproval(op, args, o);
     out(o, r.data, r.text);
-    if (r.exit) process.exitCode = r.exit;
+    if (r.exit) throw new SilentExit(r.exit); // def sarmalayıcısı failWith ile mesajsız çıkar (ctx.exit)
   }).passThroughOptions()
     .option("--wait", "sonuç gelene kadar bekle (varsayılan 310 sn; süre dolarsa çıkış 1, istek iptal edilmez)")
     .option("--wait-seconds <n>", "--wait süresi (saniye); isteğe bağlı değerli --wait işlem adını yuttuğu için ayrı bayrak");

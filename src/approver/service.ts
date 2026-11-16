@@ -17,7 +17,7 @@ import { LIMITS, type AckRecord, type Ctx, type DropReason, type PendingRecord, 
 export interface Clock { now(): Date }
 export interface ApproverDeps { channel: ApproverChannel; clock: Clock; random: RandomSource; executor: Executor; store: Store; log(l: string): void; signal: AbortSignal }
 
-const POLL_MS = 200, DROP_LOG_MS = 10_000, TEXT_MAX = 2048, HOUR = 3_600_000, DAY = 86_400_000;
+const SHUTDOWN_WAIT_MS = 6000, POLL_MS = 200, DROP_LOG_MS = 10_000, TEXT_MAX = 2048, HOUR = 3_600_000, DAY = 86_400_000;
 const clip = (s: string): string => (Buffer.byteLength(s) <= TEXT_MAX ? s : Buffer.from(s).subarray(0, TEXT_MAX).toString("utf8"));
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((res) => {
@@ -28,11 +28,13 @@ const sleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((r
 });
 
 /** Servisin bağlamı: VLAD_HOME (tek izinli VLAD_* okuması, `getVladHome`), kb dizini, çalışan CLI'nin gerçek yolu. İstek içeriğinden etkilenmez; yürütmeden hemen önce yeniden çözülüp pending'dekiyle karşılaştırılır. */
+const real = (p: string): string => { try { return realpathSync(p); } catch { return p; } }; // yoksa olduğu gibi (ctx_changed karşılaştırması aynı çözümü kullanır)
 function resolveCtx(): Ctx {
-  const home = getVladHome();
-  let cli = join(home, "dist", "cli.js");
-  try { if (process.argv[1]) cli = realpathSync(process.argv[1]); } catch { /* varsayılan kalır */ }
-  return { home, kb: resolveKbDir(home).dir, cli };
+  const home = real(getVladHome());
+  // Çalışan CLI: argv[1] cli.js ise o; değilse (süreç içi/test) bu modülün kardeşi `../cli.js` (dist/cli.js); realpath çözümü yoksa olduğu gibi.
+  const argv1 = process.argv[1];
+  const cli = real(argv1 && /(^|[\\/])cli\.js$/.test(argv1) ? argv1 : join(import.meta.dirname, "..", "cli.js"));
+  return { home, kb: real(resolveKbDir(home).dir), cli };
 }
 const sameCtx = (a: Ctx, b: Ctx): boolean => a.home === b.home && a.kb === b.kb && a.cli === b.cli;
 const keyOk = (): string | null => { if (keyState() !== "ok") return null; try { return readKey(); } catch { return null; } };
@@ -61,7 +63,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     const r = store.readRate(), t = nowMs();
     const consecutive = kind === "approve" ? 0 : r.consecutiveDenied + 1;
     store.writeRate({
-      v: 1, decisions: [...r.decisions.filter((d) => !(t - Date.parse(d) >= DAY)), iso(t)], consecutiveDenied: consecutive,
+      v: 1, decisions: [...r.decisions.filter((d) => !(t - Date.parse(d) >= DAY)), ...(kind === "expire" ? [] : [iso(t)])], consecutiveDenied: consecutive, // süre dolumu soğuma/kota başlatmaz; yalnız art arda sayacına girer
       lockedUntil: consecutive >= LIMITS.lockAfterDenied ? iso(t + LIMITS.lockMs) : r.lockedUntil,
     });
   };
@@ -83,11 +85,11 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
 
   // --- sonuçlandırma ---
   const settle = (p: PendingRecord, r: { status: ResultStatus; exitCode?: number | null; stdout?: string; stderr?: string; reason?: string }, kind: "approve" | "deny" | "expire" | null): void => {
-    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(r.stdout ?? ""), stderr: clip(r.stderr ?? ""), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()) };
+    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(r.stdout ?? ""), stderr: clip(r.stderr ?? ""), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester };
     try { store.writeResult(rec); } catch (e) { L(`sonuç yazılamadı: ${msg(e)}`); }
     if (kind) { try { recordRate(kind); } catch (e) { L(`hız sınırı yazılamadı: ${msg(e)}`); } }
     try { store.clearPending(); } catch (e) { L(`pending.json silinemedi: ${msg(e)}`); }
-    if (cur?.id === p.id) { cur = null; watch?.abort(); watch = null; }
+    if (cur?.id === p.id) cur = null; // yanıt akışı açık kalır (tekrar oynatma `not_pending` olarak loglanır); yeni istek ya da servis durması kapatır
     void Promise.resolve().then(() => channel.publishResult(rec)).catch((e) => L(`sonuç bildirimi gönderilemedi: ${msg(e)}`));
   };
 
@@ -129,6 +131,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
   };
 
   const startWatch = (p: PendingRecord, sinceUnix: number): void => {
+    watch?.abort(); // önceki isteğin artakalan akışı
     const ac = new AbortController();
     watch = ac;
     const stop = (): void => ac.abort();
@@ -157,9 +160,10 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     const key = keyOk();
     if (!key) return ack({ v: 1, cid, status: "invalid", reason: "key_disabled" });
     const rate = rateCheck();
+    if (!cur && !pendingBad) { try { store.readPending(); } catch (e) { pendingBad = true; L(`pending.json bozuk (fail-closed, kilitli): ${msg(e)}`); } } // çalışırken bozulduysa üzerine yazılmaz
     if (pendingBad) return ack({ v: 1, cid, status: "locked" });
     if (rate.lock) return ack({ v: 1, cid, status: "locked", ...(rate.lock === "corrupt" ? { reason: "rate_state_corrupt" as const } : {}) });
-    if (cur) return ack({ v: 1, cid, status: "busy" });
+    if (cur) return ack({ v: 1, cid, status: "busy", id: cur.id });
     if (rate.limited) return ack({ v: 1, cid, status: "rate_limited" });
 
     const t = nowMs(), id = newId(random), nonce = newNonce(random), respTopic = newTopic("vlad-r-", random), expiresAt = iso(t + LIMITS.approveTtlMs), ctx = resolveCtx();
@@ -209,7 +213,9 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     }
   } finally {
     (watch as AbortController | null)?.abort();
-    await (running as Promise<void> | null); // executor `signal` ile grubu öldürür; sonuç `interrupted` yazılır
+    // executor `signal` ile grubu öldürür (SIGTERM + 5 sn sonra SIGKILL); sonuç `interrupted` yazılır. Sinyali yok sayan yürütücü kapanışı kilitlemesin: sınırlı beklenir.
+    const r = running as Promise<void> | null;
+    if (r) await Promise.race([r, new Promise<void>((res) => setTimeout(res, SHUTDOWN_WAIT_MS).unref())]);
     store.releaseLock();
   }
 }

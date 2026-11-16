@@ -54,7 +54,8 @@ function validPending(x: unknown): PendingRecord {
   return x as unknown as PendingRecord;
 }
 function validResult(x: unknown): ResultRecord {
-  if (!obj(x) || x.v !== 1 || !str(x.id) || !NAME_RE.id.test(x.id) || !RESULT_STATUS.includes(x.status as ResultStatus) || !str(x.stdout) || !str(x.stderr) || !str(x.finishedAt) || !(x.exitCode === null || typeof x.exitCode === "number")) bad("sonuç kaydı");
+  if (!obj(x) || x.v !== 1 || !str(x.id) || !NAME_RE.id.test(x.id) || !RESULT_STATUS.includes(x.status as ResultStatus) || !str(x.stdout) || !str(x.stderr) || !str(x.finishedAt) || !(x.exitCode === null || typeof x.exitCode === "number")
+    || (x.op !== undefined && !OPS.includes(x.op as Op)) || (x.argv !== undefined && !strs(x.argv)) || (x.requester !== undefined && !str(x.requester))) bad("sonuç kaydı");
   return x as unknown as ResultRecord;
 }
 function validRate(x: unknown): RateState {

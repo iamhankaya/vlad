@@ -21,6 +21,11 @@ describe("approver: validateRequest zarf", () => {
     const r = validateRequest(raw);
     expect(r).toEqual({ ok: true, req: raw });
   });
+  it("istekteki title/message/nonce/id/respTopic/tag/topic alanları yok sayılır (kullanılmaz, çıktıya girmez); diğer bilinmeyen alan reddedilir", () => {
+    const raw = mk(["mode", "off"]);
+    const r = validateRequest({ ...raw, title: "T", message: "M", nonce: "f".repeat(32), id: "z".repeat(26), respTopic: "vlad-r-x", tag: "e".repeat(64), topic: "vlad-q-x" });
+    expect(r).toEqual({ ok: true, req: raw });
+  });
   it("şekil bozuklukları bad_value; bilinmeyen alan ve op uyuşmazlığı reddedilir", () => {
     for (const bad of [null, "x", 5, [], {}, mk(["mode", "off"], { v: 2 }), mk(["mode", "off"], { cid: "ABC" }), mk(["mode", "off"], { cid: "../../etc" }), mk(["mode", "off"], { argv: "mode off" }),
       mk(["mode", "off"], { argv: ["mode", 5] }), mk(["mode", "off"], { requestedAt: "dün" }), mk(["mode", "off"], { requester: "" }), mk(["mode", "off"], { requester: "x".repeat(65) }), mk(["mode", "off"], { extra: 1 })])
@@ -56,8 +61,12 @@ describe("approver: allowlist (mode/install)", () => {
     expect(argvReason(["mode", "night", "--push", "--push"])).toBe("duplicate_flag");
     expect(argvReason(["mode", "night", "--note", "a", "--note", "b"])).toBe("duplicate_flag");
   });
+  it("boş --note izinli (plan KK7); diğer bayraklarda boş değer bad_value", () => {
+    expect(argvReason(["mode", "night", "--note", ""])).toBe("ok");
+    expect(argvReason(["mode", "night", "--until", ""])).toBe("bad_value");
+  });
   it("boş, eksik ve '-' ile başlayan değer bad_value", () => {
-    for (const argv of [["mode", "night", "--note", ""], ["mode", "night", "--note"], ["mode", "night", "--until"], ["mode", "night", "--note", "-x"], ["mode", "night", "--until", "--push"]])
+    for (const argv of [["mode", "night", "--note"], ["mode", "night", "--until"], ["mode", "night", "--note", "-x"], ["mode", "night", "--until", "--push"]])
       expect(argvReason(argv), argv.join("|")).toBe("bad_value");
   });
   it("değer biçimleri", () => {
