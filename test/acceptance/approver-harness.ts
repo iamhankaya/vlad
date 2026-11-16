@@ -1,6 +1,7 @@
 // Uzaktan onay KABUL harness'i (T20261116-05). Yalnız spec/plan/sözleşmeden yazıldı; uygulamanın içine bakılmadı.
 // Gerçek kaynak koruması: gizli dizin (`setSecretDirForTests`), VLAD_HOME, saat, rastgelelik, yürütücü ve ntfy HEP sahte/geçici.
 // `http.createServer` YALNIZ test kodunda (sahte ntfy, loopback); üretim kodunda dinleyen soket yasaktır (test/arch/approver-no-listen).
+import { isolatedEnv } from "../support/spawn-vlad.js";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import http from "node:http";
@@ -285,7 +286,10 @@ const sink = () => { const c: string[] = []; return { w: new Writable({ write(ch
  */
 export async function runVlad(args: string[], o: { env?: Record<string, string | undefined>; approverDeps?: ApproverCliDeps } = {}): Promise<CliRun> {
   const out = sink(), err = sink();
-  const env: Record<string, string | undefined> = { ...process.env, ...(o.env ?? {}) };
+  const defined: Record<string, string> = {};
+  for (const [k, v] of Object.entries(o.env ?? {})) if (v !== undefined) defined[k] = v;
+  const env: Record<string, string | undefined> = isolatedEnv(defined);
+  for (const [k, v] of Object.entries(o.env ?? {})) if (v === undefined) delete env[k];
   const ctx: CliCtx = { cliPath: "vlad", argv: ["node", "vlad", ...args], stdout: out.w, stderr: err.w, exit: (c) => { throw new ExitSignal(c); }, env: env as NodeJS.ProcessEnv };
   const saved = new Map<string, string | undefined>();
   for (const [k, v] of Object.entries(o.env ?? {})) { saved.set(k, process.env[k]); if (v === undefined) delete process.env[k]; else process.env[k] = v; }
