@@ -31,9 +31,9 @@ Paylaşılan kayıt dosyaları (test_map, registry, `contract.ts` gibi üretilen
 ## 5. Merge adımları (yalnız açık onaydan sonra)
 - **Yerel faz/görev:** `git -C <proje-yolu> branch --show-current` ile hedefi göster ve hedefin bu olduğunu açık onayla; `git status` temizse `git -C <proje-yolu> merge --no-ff vlad/<id>`. Pipeline fazında hedef `vlad/<çatı-id>` ve çatının `worktree`'sidir: `git -C <çatı worktree> merge --no-ff vlad/<id>`.
 - **Son kapı (çatı → ana branch):** kaynak `vlad/<çatı-id>`, hedef projenin ana branch'i; `branch --show-current` ile hedefi göster ve onaylat, sonra `git -C <proje-yolu> merge --no-ff vlad/<çatı-id>`. Çok projeliyse her projede ayrı.
-- **Uzak görev/faz:** onaydan sonra `vlad task merge <id> [--into <dal>] [--message …] --json` ile işçide (push yok, çakışmada geri alır; çıkış 75'te elle yerel merge deneme); ayrıntı `reference/kapilar-ek.md` §Uzak merge.
+- **Uzak görev/faz:** onaydan sonra `vlad task merge <id> [--into <dal>] [--message …] --json` ile işçide (hedef dalı önce göster ve onaylat; push yok, çakışmada geri alır ve görev `done` yapılmaz; çıkış 75'te elle yerel merge deneme); ayrıntı `reference/kapilar-ek.md` §Uzak merge.
 - **Research fazında merge yoktur;** kabul = `vlad task set <id> done`.
-- **Çok projeli (faz projesi ≠ çatı projesi):** hedef worktree çatının `integration_worktrees` alanından faz projesinin satırından seçilir; ayrıntı `reference/kapilar-ek.md` §Çok projeli.
+- **Çok projeli (faz projesi ≠ çatı projesi):** hedef worktree çatının `integration_worktrees` alanından (`vlad task list --json --full`; kısa çıktıda yok) faz projesinin satırından seçilir (çatı görevin `worktree` alanı faz projesinin entegrasyon worktree'si **değildir**); ayrıntı `reference/kapilar-ek.md` §Çok projeli.
 - **Bulut:** merge yerel `git merge` değil GitHub PR'dır (`create_pull_request` açık onayla, sonra `merge_pull_request`); PR linkini ve base'i göster.
 - **Merge başarısızsa** (çakışma): `git -C <hedef worktree> merge --abort`, hatayı göster, görevi **`done` yapma**; "değişiklik iste" ile developer'a `vlad/<çatı-id>` üzerine rebase iste.
 - **Merge'süz `done` yasağı:** pipeline **dev** fazında "olduğu gibi kabul et" sunma (bağımlı fazlar değişikliği görmeden başlar); kullanıcı yine de isterse riski söyle ve bağımlıları başlatmadan önce ayrıca onay al.
@@ -58,6 +58,6 @@ Paylaşılan kayıt dosyaları (test_map, registry, `contract.ts` gibi üretilen
 
 **K6 — Çok makineli gate.** Adım 2'deki "Çok makineli proje" paragrafı bu kuralın tek tanımıdır; son kapıdan önce her makinede `Gate <makine>: yeşil <sha>` satırı yoksa merge/PR önerilmez (T20261109-20).
 
-**K7 — Gece modu.** `vlad mode status` gece modunu gösteriyorsa **`reference/gece-modu.md` K7'yi oku ve uygula**: pencere önceden verilmiş merge onayıdır; durdurma koşulları, `night.push` yetkisi, istisna sınıfları ve yasaklar orada. Etkin değilse her merge açık onay ister.
+**K7 — Gece modu.** `vlad mode status` gece modunu gösteriyorsa **`reference/gece-modu.md` K7'yi oku ve uygula**: pencere önceden verilmiş merge onayıdır; durdurma koşulları, `night.push` yetkisi, istisna sınıfları ve yasaklar orada. Etkin değilse her merge açık onay ister. Özet sınırlar (ayrıntı referansta): push yetkisi açık olsa da `--force`/`--no-verify`/silme yasak; `deploy`/`backfill`/`keychain` ve geri alınamaz eylemler her zaman sorulur; kırmızı gate/CI, kritik/yüksek bulgu ve `designer` `tasarım` kapısında dur.
 
 **K8 — Sabah raporu ve bayat özet.** Gece modu bittikten sonraki ilk `/status`'ta, ya da görev `done` sonrası/retrodan önce `staleSummaries` doluysa **`reference/gece-modu.md` K8'i uygula** (`vlad kb lint --json`, sabah raporu, bayat özet kontrolü).

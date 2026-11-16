@@ -54,7 +54,7 @@ Görev beyin dışında bir işçide koşuyorsa kapı komutları uzak op'larla y
   Diff ya da test çıktısı uzunsa özeti bir `sonnet` agent'ına yaptırabilirsin (isteğe bağlı; agent yalnız okur, sonucu VLAD kontrol eder).
 **`role: tester` ya da `kabul`/`karakterizasyon`/`doğrulama` fazı:** kırmızı test kuralı `reference/kapi-ayrintilari.md` §Tester ve kırmızı testler (`### Kırmızı bırakılan testler`'i seçeneklerden önce göster).
 **Güvenlik incelemesi:** kural `integrate` K1'dedir (tetikleyici, kademe, tur sınırı, `exposure` istisnası); merge'den önce uygula.
-**Bulgu turu kuralı (D-genel-008):** tek kaynak `digest` §4b (düzeltme fazında yalnız kritik/yüksek yeni bulgu tur açar; bulgu çözen görevin açık noktaları). Toplu kapanış `vlad finding set … --reason …`; eski düşük/bilgi yığını için `/bulgu-tarama`.
+**Bulgu turu kuralı (D-genel-008):** tek kaynak `digest` §4b (düzeltme fazında yalnız kritik/yüksek yeni bulgu tur açar; orta/düşük bulgu fazın merge'ünü durdurmaz, tur açmaz, son kapı listesine girer; bulgu çözen görevin açık noktaları için `digest` skill'ine bak). Toplu kapanış `vlad finding set … --reason …`; eski düşük/bilgi yığını için `/bulgu-tarama`.
 
 **Ara Codex kapısı:** tetikleyici, tur sınırı ve loglama `integrate` K2'dedir; faz merge'ünden önce uygula.
 

@@ -42,7 +42,7 @@ Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an)
 - Aynı `session_id`'ye sahip birden çok kayıt (devam ettirilmiş session) varsa bunları **tek** bir günlük maddesinde birleştir; her kayıt için ayrı madde yazma. Birleştirilen tüm dosyaları adım 6'da yine kapat.
 - Tahmin yürütme; rapordan çıkmayan bir şeyi yazma.
 
-**Çok rapor (>10 görev):** proje/çatı başına bir `sonnet` taslak agent'ı; ayrıntı `reference/toplu-ve-lint.md` §Çok rapor. Agent'lar kb'ye yazmaz.
+**Çok rapor (>10 görev):** proje/çatı başına bir `sonnet` taslak agent'ı; **agent prompt'una adım 3b (kullanıcı onayı kontrolü) aynen girer** (onaylanmış konuyu açık nokta yazmasın, kaynağını belirtsin). Agent'lar kb'ye yazmaz; taslağı VLAD kontrol eder, `vlad` CLI ile yazar ve kartı doğrular. Önce `reference/toplu-ve-lint.md` §Çok rapor'u oku.
 
 ## 3. Günlük
 
@@ -89,7 +89,7 @@ vlad project write <slug> --file <geçici.md> --json
 
 ## 4b. Bulgular
 
-Kapanış raporlarının `### Açık noktalar` bölümündeki (danışman rollerde `### Varsayımlar`, `### Açık sorular ve varsayımlar`; designer'da `### Bulgular`) **ertelenen/çözülmeyen** maddeleri bulgu kaydına geçir; kaybolmasınlar. Çalışanlar maddeleri `- [önem] başlık — ayrıntı` biçiminde yazar; önem yoksa içerikten tahmin etme, kullanıcıya sor (ya da `bilgi`). Yalnızca "yapılmadı / atlandı / sonraya" türü gerçek işleri kaydet; salt bilgi notlarını ve zaten düzeltilmiş maddeleri atla. Çalışanın kapsam dışı taramada bulup **bilerek dokunmadığı** ve somut etkisi olmadığını yazdığı `düşük`/`bilgi` maddeleri ("bırakıldı", "nadir", "yeni regresyon değil") de bulgu açmaz; yalnız günlük maddesinde tek satır anılır. Bulgu yalnız somut etkisi olan ya da gerçekten ertelenmiş iş için açılır (gerekçe: 2026-11-03 T20261103-28 — iki bulgu kapanırken iki etkisiz kenar notu bulgu olarak açıldı, F-vlad-192/193 wontfix).
+Kapanış raporlarının `### Açık noktalar` bölümündeki (danışman rollerde `### Varsayımlar`, `### Açık sorular ve varsayımlar`; designer'da `### Bulgular`) **ertelenen/çözülmeyen** maddeleri bulgu kaydına geçir; kaybolmasınlar. Çalışanlar maddeleri `- [önem] başlık — ayrıntı` biçiminde yazar; önem yoksa içerikten tahmin etme, kullanıcıya sor (ya da `bilgi`; otomatik modda tahmin etme, `digest pending add` ile listeye ekle). Yalnızca "yapılmadı / atlandı / sonraya" türü gerçek işleri kaydet; salt bilgi notlarını ve zaten düzeltilmiş maddeleri atla. Çalışanın kapsam dışı taramada bulup **bilerek dokunmadığı** ve somut etkisi olmadığını yazdığı `düşük`/`bilgi` maddeleri ("bırakıldı", "nadir", "yeni regresyon değil") de bulgu açmaz; yalnız günlük maddesinde tek satır anılır. Bulgu yalnız somut etkisi olan ya da gerçekten ertelenmiş iş için açılır (gerekçe: 2026-11-03 T20261103-28 — iki bulgu kapanırken iki etkisiz kenar notu bulgu olarak açıldı, F-vlad-192/193 wontfix).
 1. Önce yinelemeyi önle: `vlad finding list --project <slug> --json`; aynı başlık zaten kayıtlıysa yenisini ekleme.
 2. Ayrıntı varsa geçici dosyaya yaz, sonra:
    ```
