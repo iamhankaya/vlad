@@ -9,6 +9,7 @@ import { cleanupTask, removeTaskWorktree, sweepRememberLeftover } from "../../sr
 import { createTask, getTask, saveTask } from "../../src/tasks/index.js";
 import { pruneOrphanWorktrees } from "../../src/tasks/worktree-prune.js";
 import { makeHome, rmTemp } from "../helpers.js";
+import { spawnVlad } from "../support/spawn-vlad.js";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
 
@@ -105,6 +106,31 @@ describe("pruneOrphanWorktrees (F-vlad: artık worktree klasörleri)", () => {
     expect(existsSync(b)).toBe(false);
     expect(r.items.find((i) => i.dir === a)!.error).toMatch(/kilitli/);
     expect(r.removed).toBe(1);
+  });
+});
+
+describe("vlad worktree prune CLI: bayraklar", () => {
+  const run = (...flags: string[]) => spawnVlad({ args: ["worktree", "prune", "--json", ...flags], env: { VLAD_HOME: home } });
+  // varsayılan worktreeDir "{repo}-wt" → <base>/alpha-wt
+  const dirOf = (id: string) => join(base, "alpha-wt", id);
+  const mk = (id: string) => { mkdirSync(join(dirOf(id), ".remember"), { recursive: true }); return dirOf(id); };
+
+  it("--yes --dry-run birlikte: hiçbir klasör silinmez (--dry-run her zaman kazanır)", () => {
+    const id = task("done");
+    const d = mk(id);
+    const r = run("--yes", "--dry-run");
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(r.stdout)).toMatchObject({ dryRun: true, removed: 0 });
+    expect(existsSync(d)).toBe(true);
+  });
+  it("yalnız --yes siler; bayraksız dry-run silmez", () => {
+    const id = task("done");
+    const d = mk(id);
+    expect(run().status).toBe(0);
+    expect(existsSync(d)).toBe(true);
+    const r = run("--yes");
+    expect(JSON.parse(r.stdout)).toMatchObject({ dryRun: false, removed: 1 });
+    expect(existsSync(d)).toBe(false);
   });
 });
 
