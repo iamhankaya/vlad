@@ -238,8 +238,19 @@ export function startService(w: World, over: Partial<ApproverDeps> = {}): Servic
   return s;
 }
 
-/** Servisin bağlandığını (yanıt akışı açık) bekler. */
-export const untilWatching = (w: World, ms = 8000): Promise<void> => waitFor(() => w.ntfy.streamCount() > 0, "servis yanıt akışına bağlandı", ms).then(() => undefined);
+/**
+ * Servisin ayağa kalktığını bekler (boot). Plan (T20261116-03 Protokol 6): yanıt konusu İSTEK BAŞINA üretilir ve abonelik pending.json'dan sonra açılır;
+ * istek yokken yanıt akışı YOKTUR, bu yüzden boot'ta akış beklenmez. Gözlenebilir "hazır" sinyali olmadığından olay döngüsü birkaç tur döndürülür ve
+ * servisin hatayla çıkmadığı doğrulanır; istek yazıldıktan sonraki hazırlık için `submit`/`waitAck`, akış için `untilStream` kullanılır.
+ */
+export async function untilWatching(w: World, _ms = 8000): Promise<void> {
+  void _ms;
+  for (let i = 0; i < 50; i++) await new Promise<void>((r) => setImmediate(r));
+  const dead = w.services.find((x) => x.settled() && x.error());
+  if (dead) throw dead.error()!;
+}
+/** İstek yazıldıktan SONRA: servisin (yeni respTopic için) yanıt akışının bağlandığını bekler. */
+export const untilStream = (w: World, ms = 8000): Promise<void> => waitFor(() => w.ntfy.streamCount() > 0, "servis yanıt akışına bağlandı", ms).then(() => undefined);
 
 export function opOf(argv: string[]): Op {
   return (argv[0] === "mode" ? `mode ${argv[1]}` : argv[0]) as Op;

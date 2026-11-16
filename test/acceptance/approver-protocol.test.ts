@@ -5,7 +5,7 @@ import { requireModeAuthority } from "../../src/mode/token.js";
 import { LIMITS } from "../../src/approver/types.js";
 import type { RejectReason } from "../../src/approver/types.js";
 import { SECRET_PATTERNS, secretHits } from "../support/approver-secrets.js";
-import { dirFiles, logText, makeCid, makeWorld, resultOf, sleep, startService, submit, untilWatching, waitAck, waitFor, writeRequest } from "./approver-harness.js";
+import { dirFiles, logText, makeCid, makeWorld, resultOf, sleep, startService, submit, untilStream, untilWatching, waitAck, waitFor, writeRequest } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
 
 // approver-kabul: istemci↔servis protokolü, bildirim, tek kullanım, TTL, yetkisiz yanıt, allowlist.
@@ -132,7 +132,7 @@ describe("approver-kabul: KK2 özete bağlı onay, KK3 tek kullanım, karar yar�
     w.ntfy.emit(p!.respTopic, body);
     w.ntfy.dropStreams();
     await waitFor(() => w.ntfy.connections.length >= 2, "yeniden bağlanma", 10_000);
-    await untilWatching(w, 10_000);
+    await untilStream(w, 10_000);
     w.ntfy.emit(p!.respTopic, body);
     await waitFor(() => /not_pending|unknown_id/.test(logText(w)), "tekrar oynatma logu");
     await sleep(150);
