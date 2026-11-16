@@ -28,6 +28,14 @@ describe("F-vlad-350: Bash metin yanlış pozitifleri (komut metni yerine gerçe
       expect(bash(c), c).not.toBeNull();
     expect(bash("cat .vlad-secret/mode.key", root)).not.toBeNull(); // cwd HOME iken göreli yol gerçekten gizli dizin
   });
+  it("Codex P1: göreli glob/brace/tilde/kaçış içeren sözcük (cwd HOME) muhafazakâr reddedilir; düz joker'siz sözcük realpath ile karar verilir", () => {
+    const name = root.split("/").pop()!, deep = join(root, "a", "b"); mkdirSync(deep, { recursive: true });
+    for (const c of ["cat ../*/.vlad-secret/mode.key", `cat ../{${name},foo}/.vlad-secret/mode.key`, "cat ..//*/.vlad-secret/*", "cat ../?*/.vlad-secret/x", "cat ../[a-z]*/.vlad-secret/x", "cat ~x/.vlad-secret/x", "cat ..\\/*/.vlad-secret/x", "cat $X/.vlad-secret/x", "cat `echo ..`/.vlad-secret/x"])
+      expect(bash(c, cwd), c).not.toBeNull();
+    expect(bash(`cat ./../${name}/.vlad-secret/mode.key`, root), "düz ../<ad>/ cwd=HOME").not.toBeNull(); // cwd=HOME iken kendine geri dönen düz yol
+    expect(bash(`cat ../${name}/.vlad-secret/mode.key`, deep)).toBeNull(); // düz yol, gizli dizine çözülmüyor (deep/../name = a/name)
+    expect(bash("cat ../../.vlad-secret/mode.key", deep)).not.toBeNull(); // düz yol root/.vlad-secret'e çözülüyor
+  });
 });
 
 describe("(1) Grep/Glob kök verilmezse etkin kök cwd'dir", () => {

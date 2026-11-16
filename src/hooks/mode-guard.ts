@@ -95,11 +95,11 @@ function bashSecretHit(cmd: string, ctx: GuardCtx): boolean {
   if (!secretHit(cmd)) return false;
   if (DYNAMIC.test(cmd)) return true;
   const base = ctx.cwd ?? ".";
-  for (const w of cmd.split(/[\s;&|<>()=,]+/).filter(Boolean)) {
+  for (const w of cmd.split(/[\s;&|<>()=]+/).filter(Boolean)) {
     if (!secretHit(w)) continue;
-    const abs = resolve(base, expand(w.replace(/["'\\]/g, "")));
-    const cut = abs.search(/[*?[{]/);
-    const f = real(cut < 0 ? abs : abs.slice(0, cut).replace(/[^/]*$/, "") || "/");
+    if (/[*?[\]{}~\\$`]/.test(w)) return true; // joker/brace/tilde/kaçış/değişken: statik çözülemez, muhafazakâr ret (göreli glob ile cwd'ye göre bypass'ı kapatır)
+    const abs = resolve(base, expand(w.replace(/["']/g, "")));
+    const f = real(abs);
     const def = norm(real(join(homedir(), ".vlad-secret"))); // test geçersiz kılması olsa da gerçek varsayılan konum her zaman korunur
     const inDef = (x: string): boolean => { const n = norm(x); return n === def || n.startsWith(def + "/"); };
     if (insideSecret(f) || insideSecret(abs) || inDef(f) || inDef(abs)) return true;
