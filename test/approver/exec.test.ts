@@ -1,0 +1,78 @@
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir, userInfo } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { createExecutor, defaultExecEnv } from "../../src/approver/exec.js";
+import type { Ctx } from "../../src/approver/types.js";
+
+// approver: exec (T20261116-06 U4). Gerçek alt süreç, sahte "cli" (test/support/approver-exec-fixture.mjs); zamanlayıcılar kısa değerlerle enjekte edilir.
+const FIXTURE = join(import.meta.dirname, "..", "support", "approver-exec-fixture.mjs");
+let home: string, ctx: Ctx;
+beforeEach(() => { home = realpathSync(mkdtempSync(join(tmpdir(), "vlad-exec-"))); ctx = { home, kb: join(home, "kb"), cli: FIXTURE }; });
+afterEach(() => { rmSync(home, { recursive: true, force: true }); });
+const gone = async (pid: number): Promise<boolean> => {
+  for (let i = 0; i < 100; i++) { try { process.kill(pid, 0); } catch { return true; } await new Promise((r) => setTimeout(r, 50)); }
+  return false;
+};
+
+describe("approver: defaultExecEnv", () => {
+  it("yalnız izinli beş anahtar", () => {
+    const e = defaultExecEnv({ path: "/p", home: "/h", vladHome: "/v", token: "VMT2.x" });
+    expect(e).toEqual({ PATH: "/p", HOME: "/h", VLAD_HOME: "/v", LANG: "en_US.UTF-8", VLAD_MODE_TOKEN: "VMT2.x" });
+  });
+});
+
+describe("approver: createExecutor", () => {
+  it("argv, token ve temiz env ile çalışır; ortam sızmaz", async () => {
+    const saved = { t: process.env.VLAD_TASK_ID, u: process.env.USERPROFILE, n: process.env.NODE_OPTIONS, s: process.env.SECRET_X };
+    Object.assign(process.env, { VLAD_TASK_ID: "T1", USERPROFILE: "/u", SECRET_X: "s" });
+    try {
+      const r = await createExecutor().run(["env", "--a", "b"], "VMT2.tok", ctx);
+      expect(r.exitCode).toBe(0); expect(r.timedOut).toBe(false);
+      const o = JSON.parse(r.stdout) as { argv: string[]; env: Record<string, string>; cwd: string };
+      expect(o.argv).toEqual(["--a", "b"]);
+      expect(Object.keys(o.env).filter((k) => k !== "__CF_USER_TEXT_ENCODING").sort()).toEqual(["HOME", "LANG", "PATH", "VLAD_HOME", "VLAD_MODE_TOKEN"]);
+      expect(o.env).toMatchObject({ HOME: userInfo().homedir, VLAD_HOME: home, VLAD_MODE_TOKEN: "VMT2.tok" });
+      expect(o.cwd).toBe(home);
+    } finally {
+      for (const [k, v] of [["VLAD_TASK_ID", saved.t], ["USERPROFILE", saved.u], ["NODE_OPTIONS", saved.n], ["SECRET_X", saved.s]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  });
+
+  it("envExtra yalnız deps'ten eklenir", async () => {
+    const r = await createExecutor().run(["env"], "t", ctx, { envExtra: { FOO: "bar" } });
+    expect((JSON.parse(r.stdout) as { env: Record<string, string> }).env.FOO).toBe("bar");
+  });
+
+  it("sıfırdan farklı çıkış kodu ve stderr döner", async () => {
+    const r = await createExecutor().run(["exit", "7"], "t", ctx);
+    expect(r).toMatchObject({ exitCode: 7, stderr: "hata metni", timedOut: false });
+  });
+
+  it("olmayan cli: fırlatmaz, exitCode null", async () => {
+    const r = await createExecutor().run(["env"], "t", { ...ctx, cli: join(home, "yok.mjs") });
+    expect(r.exitCode).not.toBe(0);
+  });
+
+  it("zaman aşımı: SIGTERM'i yok sayan süreç ve torunu grup SIGKILL ile ölür", async () => {
+    const r = await createExecutor({ timeoutMs: 400, killGraceMs: 200 }).run(["stubborn"], "t", ctx);
+    expect(r.timedOut).toBe(true);
+    expect(r.exitCode).toBeNull();
+    const pid = Number(/pid (\d+)/.exec(r.stdout)![1]);
+    expect(await gone(pid)).toBe(true);
+  });
+
+  it("çıktı sınırı: bellekte ve sonuçta ≤ maxOutputBytes", async () => {
+    const r = await createExecutor({ maxOutputBytes: 1000 }).run(["flood", "500000"], "t", ctx);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.length).toBe(1000); expect(r.stderr.length).toBe(1000);
+  });
+
+  it("signal iptali grubu öldürür ve aborted döner", async () => {
+    const ac = new AbortController();
+    const p = createExecutor({ killGraceMs: 200 }).run(["hang"], "t", ctx, { signal: ac.signal });
+    setTimeout(() => ac.abort(), 300);
+    const r = await p;
+    expect(r).toMatchObject({ aborted: true, timedOut: false, exitCode: null });
+  });
+});
