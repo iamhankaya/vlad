@@ -123,7 +123,7 @@ Onay bekleyen digest maddeleri.
 
 ## worktree
 
-- `vlad worktree prune` — `worktree prune [--dry-run] [--yes] [--json]`: `<repo>-wt/` altında git'te kayıtlı olmayan, adı görev ID'si olan ve görevi done/cancelled olan artık klasörleri listeler; varsayılan dry-run, silmek için `--yes`; `--dry-run` ile birlikte verilirse `--dry-run` kazanır (hiçbir şey silinmez). Kayıtlı worktree'ye, running/queued/bilinmeyen göreve ve sembolik bağlantıya dokunmaz; `git worktree list` okunamayan kökte hiçbir şey silmez. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad worktree prune` — `worktree prune [--dry-run] [--yes] [--json]`: `<repo>-wt/` altında git'te kayıtlı olmayan, adı görev ID'si olan ve görevi done/cancelled olan, içinde yalnız `.remember` bulunan artık klasörleri listeler (başka içerik varsa 'içerik var, atlandı';kayıt `git worktree list --porcelain -z` ile literal yol karşılaştırmasıyla bulunur); varsayılan dry-run, silmek için `--yes`; `--dry-run` ile birlikte verilirse `--dry-run` kazanır (hiçbir şey silinmez). Kayıtlı worktree'ye, running/queued/bilinmeyen göreve ve sembolik bağlantıya dokunmaz; `git worktree list` okunamayan kökte hiçbir şey silmez. _(işçide reddedilir; konsolda yok; --json)_
 
 ## agent
 
