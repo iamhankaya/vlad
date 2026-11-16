@@ -1,3 +1,4 @@
+import { readText } from "../skill-text.js";
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -212,7 +213,7 @@ describe("T20261112-04 izin-mod regresyonları", () => {
     expect(modeStatus(now).night).toBeNull();
   });
   it("F-vlad-284: integrate skill'i except sınıflarını somut eyleme eşler ve --force/--no-verify'ı yasaklar", () => {
-    const t = readFileSync(join(import.meta.dirname, "..", "..", ".claude", "skills", "integrate", "SKILL.md"), "utf8");
+    const t = readText(join(import.meta.dirname, "..", "..", ".claude", "skills", "integrate", "SKILL.md"));
     expect(t).toMatch(/deploy[^\n]*(vercel|fly|eas|kubectl|ssh)/i);
     expect(t).toMatch(/backfill[^\n]*(migrasyon|migration|toplu)/i);
     expect(t).toMatch(/keychain[^\n]*(security|anahtar|gizli)/i);

@@ -1,3 +1,4 @@
+import { readText } from "../skill-text.js";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -46,7 +47,7 @@ describe("repo roles/", () => {
 
   it("specs and scan skill document exposure and its difference from local_only", () => {
     const root = resolve(dir, "..");
-    const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+    const read = (p: string) => readText(resolve(root, p));
     for (const p of [
       "docs/superpowers/specs/2026-10-15-vlad-roles-design.md",
       "docs/superpowers/specs/2026-10-16-vlad-pipeline-design.md",
@@ -64,7 +65,7 @@ describe("repo roles/", () => {
 
 describe("devops role and prova phase", () => {
   const root = resolve(dir, "..");
-  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const read = (p: string) => readText(resolve(root, p));
   it("devops carries the rehearsal scenarios and the three report sections", () => {
     const body = read("roles/devops.md");
     for (const w of ["umask 077", "bash -s < script", "pipefail", "grep -q", "SIGPIPE", "Boş volume", "Yedek alma", "İdempotent", "Yetkisiz kullanıcı",
@@ -98,7 +99,7 @@ describe("test hygiene rules", () => {
 
 describe("work notes (## Çalışma notları) wiring", () => {
   const root = resolve(dir, "..");
-  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const read = (p: string) => readText(resolve(root, p));
   it("every role's Kaynaklar and vlad-worker tell workers to read the card's Çalışma notları", () => {
     for (const f of readdirSync(dir).filter((n) => n.endsWith(".md"))) {
       expect(read(`roles/${f}`), f).toContain("`## Çalışma notları`");
@@ -126,7 +127,7 @@ describe("work notes (## Çalışma notları) wiring", () => {
 
 describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erken denetim, fixture)", () => {
   const root = resolve(dir, "..");
-  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const read = (p: string) => readText(resolve(root, p));
 
   it("delegate adds the sözleşme phase to tam/özellik and lists it in phase names", () => {
     const delegate = read(".claude/skills/delegate/SKILL.md");
@@ -206,7 +207,7 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
 
 describe("game/mobile roles and short-writing rule", () => {
   const root = resolve(dir, "..");
-  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const read = (p: string) => readText(resolve(root, p));
 
   it("game-developer covers the Godot toolchain and defers project lessons to the card", () => {
     const body = read("roles/game-developer.md");
@@ -259,7 +260,7 @@ describe("game/mobile roles and short-writing rule", () => {
 
 describe("ponytail (vendored, developer + game-developer only)", () => {
   const root = resolve(dir, "..");
-  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const read = (p: string) => readText(resolve(root, p));
   const SOURCE_BLOB = "d64edd32265ba21cbf5270158f04e97d96925f27"; // DietrichGebert/ponytail@09c434a skills/ponytail/SKILL.md
 
   it("SKILL.md is byte-identical to the source blob; only SOURCE.md and LICENSE sit beside it", () => {
@@ -292,7 +293,7 @@ describe("ponytail (vendored, developer + game-developer only)", () => {
 
 describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
   const root = resolve(dir, "..");
-  const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+  const read = (p: string) => readText(resolve(root, p));
   const section = (md: string, heading: string) => {
     const i = md.indexOf(heading);
     expect(i, heading).toBeGreaterThanOrEqual(0);
@@ -312,7 +313,7 @@ describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
   });
 
   it("status 1b: olay çekme haiku agent'ına verilebilir, ingest VLAD'da; A'nın result-first metni korunur", () => {
-    const s = section(read(".claude/skills/status/SKILL.md"), "### 1b.");
+    const s = section(read(".claude/skills/status/reference/bulut.md"), "### 1b.");
     for (const w of ["`haiku`", "ham çıktı", "yolunu", "`vlad task ingest`", "kinds=[\"result\"], limit=3"]) expect(s, w).toContain(w);
   });
 

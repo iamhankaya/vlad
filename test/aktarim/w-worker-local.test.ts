@@ -83,7 +83,7 @@ const BRAIN_ONLY = new Set([
   "approver install", "approver uninstall", "approver rotate", "approver unlock", "approver status", "approver requests", "approver show", "approver run",
   "audit setup",
   "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append",
-  "kb commit", "kb maintain", "kb lint", "session register", "machine scripts", "machine run",
+  "kb commit", "kb maintain", "kb lint", "session register", "machine scripts", "machine run", "worktree prune",
 ]);
 
 function defKeys(): string[] {

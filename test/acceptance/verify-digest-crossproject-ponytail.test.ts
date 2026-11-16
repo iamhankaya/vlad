@@ -1,3 +1,4 @@
+import { readText } from "../skill-text.js";
 // Doğrulama fazı (T20261026-05): T20261026-01 (digest kuralı, F-vlad-063, F-vlad-062) ve T20261026-04 (ponytail)
 // entegrasyon dalındaki birleşik sonucu. Gerçek CLI (dist/cli.js) + geçici kb ve geçici git depoları kullanır;
 // launch süreci sahte launcher ile (gerçek terminal/çalışan açılmaz).
@@ -14,7 +15,7 @@ import { isolatedEnv } from "../isolate-env.js";
 
 const root = resolve(import.meta.dirname, "..", "..");
 const cli = join(root, "dist", "cli.js");
-const read = (p: string) => readFileSync(join(root, p), "utf8");
+const read = (p: string) => readText(join(root, p));
 
 function git(cwd: string, ...args: string[]) {
   return execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });

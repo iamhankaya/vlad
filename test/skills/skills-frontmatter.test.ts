@@ -1,9 +1,10 @@
+import { readText } from "../skill-text.js";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..", "..");
-const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+const read = (p: string) => readText(resolve(root, p));
 const frontmatter = (md: string) => /^---\r?\n([\s\S]*?)\r?\n---/.exec(md)?.[1] ?? "";
 const field = (md: string, key: string) => new RegExp(`^${key}:\s*(.+)$`, "m").exec(frontmatter(md))?.[1].trim() ?? "";
 
@@ -125,10 +126,12 @@ describe("bulgu hijyeni (T20261109-24)", () => {
     for (const w of ["## Adım 1", "## Adım 2", "## Adım 3", "## Adım 4", "kör", "kapat-fixed", "kapat-wontfix", "birleştir", "kalsın", "Asla otomatik kapatılmaz", "kritik", "güvenlik etkili", "D-…", "kullanıcının açtığı", "vlad finding set <id...>", "vlad kb commit", "vlad finding set <id> open"]) expect(t, w).toContain(w);
   });
   it("D-genel-008 and the finding-resolving-task rule are in digest, status and vlad-worker", () => {
-    for (const f of [".claude/skills/digest/SKILL.md", ".claude/skills/status/SKILL.md"]) {
-      const t = read(f);
-      for (const w of ["D-genel-008", "yalnız kritik/yüksek", "[regresyon]", "[kalan F-…]"]) expect(t, `${f}: ${w}`).toContain(w);
-    }
+    // T20261117-07: digest §4b is the single source; status keeps a one-line pointer.
+    const t = read(".claude/skills/digest/SKILL.md");
+    for (const w of ["D-genel-008", "yalnız kritik/yüksek", "[regresyon]", "[kalan F-…]"]) expect(t, `digest: ${w}`).toContain(w);
+    const st = read(".claude/skills/status/SKILL.md");
+    for (const w of ["D-genel-008", "`digest` §4b"]) expect(st, `status: ${w}`).toContain(w);
+    expect(st, "status must not copy the finding-resolving-task rule").not.toContain("[kalan F-…]");
     const w = read("global/skills/vlad-worker/SKILL.md");
     for (const x of ["[regresyon]", "[kalan F-…]", "bulgu çözmekse"]) expect(w, x).toContain(x);
   });

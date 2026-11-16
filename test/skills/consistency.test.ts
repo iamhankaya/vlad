@@ -1,10 +1,11 @@
+import { readText } from "../skill-text.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // T20261110-16: gate rules (F-vlad-165 drift guard) live ONLY in integrate K1–K8. Other docs point to them; a number or definition copied elsewhere is a regression.
 const root = resolve(import.meta.dirname, "..", "..");
-const read = (p: string) => readFileSync(resolve(root, p), "utf8");
+const read = (p: string) => readText(resolve(root, p));
 const TEXT = {
   claude: read("CLAUDE.md"),
   status: read(".claude/skills/status/SKILL.md"),
