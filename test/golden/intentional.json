@@ -114,6 +114,15 @@
         "mode (bare)",
         "mode token --help"
       ]
+    },
+    {
+      "id": "T20261117-06",
+      "keys": [
+        "(root) --help",
+        "worktree (bare)",
+        "worktree --help",
+        "worktree prune --help"
+      ]
     }
   ]
 }

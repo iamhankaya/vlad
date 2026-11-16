@@ -1,4 +1,5 @@
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { spawnGuarded } from "../support/spawn-vlad.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,7 +68,7 @@ describe("worker prompt gate ortamı", () => {
     const block = standardBlocks({ taskId: "T20261117-06", autonomy: "commit", parent: null, mode: "local", gateEnv: tricky }).join("\n");
     const exports = block.split("\n").filter((l) => l.startsWith("export "));
     const script = `${exports.join("\n")}\nprintf '%s\\0' "$A" "$B" "$C" "$D" "$E" "$F"`;
-    const r = spawnSync("/bin/bash", ["-c", script], { encoding: "utf8", env: { PATH: "/usr/bin", HOME: "/h" } });
+    const r = spawnGuarded("/bin/bash", ["-c", script], { encoding: "utf8", env: { PATH: "/usr/bin", HOME: "/h" } });
     expect(r.stdout.split("\0").slice(0, 6)).toEqual(["A", "B", "C", "D", "E", "F"].map((k) => want[k]));
   });
   it("ortam yoksa, plan'da ve bulutta blok çıkmaz", () => {

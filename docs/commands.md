@@ -121,6 +121,10 @@ Onay bekleyen digest maddeleri.
 - `vlad session register` — `session register <ad>`: VLAD session adını kaydeder (çalışan bildirimleri için). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad session name` — Kayıtlı VLAD session adını verir. _(yerel; konsol: okuma; --json)_
 
+## worktree
+
+- `vlad worktree prune` — `worktree prune [--dry-run] [--yes] [--json]`: `<repo>-wt/` altında git'te kayıtlı olmayan, adı görev ID'si olan ve görevi done/cancelled olan artık klasörleri listeler; varsayılan dry-run, silmek için `--yes`. Kayıtlı worktree'ye, running/queued/bilinmeyen göreve ve sembolik bağlantıya dokunmaz; `git worktree list` okunamayan kökte hiçbir şey silmez. _(işçide reddedilir; konsolda yok; --json)_
+
 ## agent
 
 Çoklu makine (T20261101-19): yerel Agent. Alt komutları ilgili fazlar ekler.
