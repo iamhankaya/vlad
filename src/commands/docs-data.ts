@@ -74,6 +74,7 @@ export const COMMAND_DOCS: Readonly<Record<string, string>> = {
   "kb check": "kb reposunda yabancı commit/durum denetimi.",
   "session register": "`session register <ad>`: VLAD session adını kaydeder (çalışan bildirimleri için).",
   "session name": "Kayıtlı VLAD session adını verir.",
+  "worktree prune": "`worktree prune [--dry-run] [--yes] [--json]`: `<repo>-wt/` altında git'te kayıtlı olmayan, adı görev ID'si olan ve görevi done/cancelled olan, içinde yalnız `.remember` bulunan artık klasörleri listeler (başka içerik varsa 'içerik var, atlandı';kayıt `git worktree list --porcelain -z` ile literal yol karşılaştırmasıyla bulunur); varsayılan dry-run, silmek için `--yes`; `--dry-run` ile birlikte verilirse `--dry-run` kazanır (hiçbir şey silinmez). Kayıtlı worktree'ye, running/queued/bilinmeyen göreve ve sembolik bağlantıya dokunmaz; `git worktree list` okunamayan kökte hiçbir şey silmez.",
   "agent start": "Yerel VLAD Agent'ı başlatır (tek TCP portu, HMAC imzalı).",
   "agent status": "Yerel Agent durumu.",
   "agent keygen": "`keygen <karşı-taraf>`: yalnız o iki makinenin bildiği **çift anahtar** üretir (D-vlad-057); anahtarı yalnız `--show` ile basar. Karşı uçta `setkey` çalıştırılır.",

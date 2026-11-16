@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
   isWorktree, ReparseCleanupError, removeWorktree, runGit,
@@ -692,6 +692,7 @@ export function cleanupTask(
       /* a window that could not be closed is reported by the removal below */
     }
     removeTaskWorktree(projectPath(t.data.project, o.cfg), wt, id);
+    sweepRememberLeftover(wt);
     // F-vlad-231/244: a cancelled task's branch without own commits would block a relaunch. Proof is "no commits beyond the base it was
     // cut from" (the integration branch for a phase), not `-d`'s HEAD comparison; no proof (null) keeps the branch.
     if (t.data.state === "cancelled") {
@@ -705,6 +706,22 @@ export function cleanupTask(
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
   t.data.worktree = null;
   saveTaskQuiet(t);
+}
+
+/**
+ * The `remember` plugin's hook recreates `<worktree>/.remember/logs` after the worktree was removed, so cleanup "succeeded"
+ * yet left a stub (every one of the 84 leftover folders under `vlad-wt` held only `.remember`).
+ * Deletes the folder only when `.remember` is all that is in it; anything else is left alone. True when it was deleted.
+ */
+export function sweepRememberLeftover(dir: string): boolean {
+  try {
+    const names = readdirSync(dir);
+    if (!names.length || names.some((n) => n !== ".remember")) return false;
+    rmSync(dir, { recursive: true, force: true });
+    return !existsSync(dir);
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -73,7 +73,7 @@ export function registerTask(program: Command, k: Kit): void {
     .option("--model-reason <gerekçe>", "model gerekçesi; opus için zorunlu")
     .option("--parent <id>", "çatı (pipeline) görevi")
     .option("--depends-on <ids>", "virgülle ayrılmış, aynı pipeline'daki bağımlılıklar")
-    .option("--phase <ad>", "faz adı (spec, tasarım, plan, sözleşme, kabul, karakterizasyon, uygulama, doğrulama, denetim, prova, danışma)")
+    .option("--phase <ad>", "faz adı (spec, tasarım, plan, sözleşme, kabul, karakterizasyon, uygulama, tasarım-kontrolü, doğrulama, denetim, prova, danışma)")
     .requiredOption("--project <slug>", "proje slug'ı")
     .requiredOption("--title <başlık>", "görev başlığı")
     .option("--kind <kind>", "dev | research | pipeline", "dev")
