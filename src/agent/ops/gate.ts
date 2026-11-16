@@ -6,6 +6,7 @@ import { readDoc } from "../../kb/doc.js";
 import { RemoteError, type GateRunResult, type MergePreviewResult, type MergeResult } from "../../fleet/types.js";
 import { killTree } from "../proc.js";
 import { entriesOf, readRecord, verifiedRecord } from "./launch.js";
+import { gateEnvOf, withGateEnv } from "../../fleet/gate-env.js";
 import { argObject, bad, projectArg, repoNameArg, taskIdArg, workerCtx, workerKbDir, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";
 
@@ -94,12 +95,13 @@ export async function gateRun(args: unknown): Promise<GateRunResult> {
   try { gate = readDoc<{ gate?: string }>(join(workerKbDir(ctx.def), "projects", `${project}.md`)).data.gate; } catch { /* kart yok → aşağıda */ }
   if (gate !== undefined && gate !== null && typeof gate !== "string") throw failed(`projenin gate alanı metin olmalı: ${project}`);
   if (!gate?.trim()) throw failed(`projede gate tanımlı değil: ${project}`);
+  const env = gateEnvOf(ctx.cfg, ctx.self, project);
   if (a.target === "base") {
     // hedef dal: faz → çatı dalı (çatının worktree'sinde), çatı/tek görev → kartın ana dalı (proje reposunda); mergeCtx ile aynı eşleme
     const branch = front.parent ? `vlad/${front.parent}` : defaultBranchOf(ctx, project);
     if (!branch || !validRef(branch)) throw failed(`taban dalı belirlenemedi (kartta default_branch yok): ${project}`);
     const baseCwd = front.parent ? integrationWorktree(ctx, repo, front.parent) : repo;
-    return serialized(baseCwd, () => runBaseGate(baseCwd, branch, a.cachedHead as string | undefined, gate));
+    return serialized(baseCwd, () => runBaseGate(baseCwd, branch, a.cachedHead as string | undefined, gate, env));
   }
   let cwd = wt;
   if (a.target === "integration") {
@@ -108,14 +110,14 @@ export async function gateRun(args: unknown): Promise<GateRunResult> {
     cwd = integrationWorktree(ctx, repo, integ);
   }
   if (!existsSync(cwd)) throw new RemoteError("not_found", `not_found: worktree yok: ${cwd}`);
-  return serialized(cwd, () => runGate(gate, cwd));
+  return serialized(cwd, () => runGate(gate, cwd, GATE_TIMEOUT_MS, env));
 }
 
 /**
  * Taban koşusu (task gate --compare-base): cwd hedef dalda ve izlenen dosyalar temizse dal ucunda gate'i koşar.
  * cachedHead uçla aynıysa koşmaz (`cached: true`); ilerlemişse koşar, böylece bayat taban yanlış yeşil vermez.
  */
-export async function runBaseGate(cwd: string, branch: string, cachedHead: string | undefined, gate: string): Promise<GateRunResult> {
+export async function runBaseGate(cwd: string, branch: string, cachedHead: string | undefined, gate: string, env: Record<string, string> = {}): Promise<GateRunResult> {
   if (!existsSync(cwd)) throw new RemoteError("not_found", `not_found: worktree yok: ${cwd}`);
   const cur = (await runGit(cwd, ["branch", "--show-current"])).stdout.trim();
   if (cur !== branch) throw failed(`${cwd} dizini ${branch} dalında değil (${cur || "bilinmiyor"}); taban koşulamadı`);
@@ -126,7 +128,7 @@ export async function runBaseGate(cwd: string, branch: string, cachedHead: strin
   if (behind.code === 0 && Number(behind.stdout.trim()) > 0) throw failed(`${branch} işçide upstream'in ${behind.stdout.trim()} commit geride; taban koşulmadı (önce işçide güncelle)`);
   const tip = (await mustGit(cwd, ["rev-parse", "HEAD"])).trim();
   if (cachedHead === tip) return { exit: 0, stdout: "", stderr: "", head: tip, cached: true };
-  return runGate(gate, cwd);
+  return runGate(gate, cwd, GATE_TIMEOUT_MS, env);
 }
 
 /** cwd başına sıra: aynı worktree'de gate ve merge birbirinin altında dosya değiştirmesin. */
@@ -139,9 +141,9 @@ export function serialized<T>(key: string, fn: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export async function runGate(cmd: string, cwd: string, timeoutMs = GATE_TIMEOUT_MS): Promise<GateRunResult> {
+export async function runGate(cmd: string, cwd: string, timeoutMs = GATE_TIMEOUT_MS, env: Record<string, string> = {}): Promise<GateRunResult> {
   const before = (await runGit(cwd, ["rev-parse", "HEAD"])).stdout.trim() || undefined; // yeşil gate hangi commit'e ait (F-vlad-139)
-  const r = await spawnGate(cmd, cwd, timeoutMs);
+  const r = await spawnGate(cmd, cwd, timeoutMs, env);
   const after = (await runGit(cwd, ["rev-parse", "HEAD"])).stdout.trim() || undefined; // gate commit atabilir (F-vlad-154)
   if (before && after && before !== after) {
     // sonuç gate'in koştuğu commit'e ait değil: yeşil sayılmaz
@@ -151,10 +153,10 @@ export async function runGate(cmd: string, cwd: string, timeoutMs = GATE_TIMEOUT
   const head = after ?? before;
   return head ? { ...r, head } : r;
 }
-function spawnGate(cmd: string, cwd: string, timeoutMs: number): Promise<GateRunResult> {
+function spawnGate(cmd: string, cwd: string, timeoutMs: number, gateEnv: Record<string, string>): Promise<GateRunResult> {
   return new Promise((resolve) => {
     // stdin kapalı: girdi bekleyen gate asılı kalmaz; POSIX'te ayrı süreç grubu: zaman aşımında ağaç öldürülür
-    const p = spawn(cmd, { cwd, shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
+    const p = spawn(cmd, { cwd, shell: true, env: withGateEnv(gateEnv), windowsHide: true, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" });
     let stdout = "", stderr = "";
     const dec = [new StringDecoder("utf8"), new StringDecoder("utf8")];
     p.stdout.on("data", (d: Buffer) => { stdout = (stdout + dec[0]!.write(d)).slice(-2 * OUT_CAP); }); // bellek sınırı

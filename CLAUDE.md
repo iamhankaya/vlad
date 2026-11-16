@@ -77,6 +77,7 @@ Görevlerin:
 | `/second-opinion` | Codex 3. göz: plan eleştirisi, son kapı review'u |
 | `/integrate` | Kapı yordamı: ön kontrol, gate, ingest-preview, merge adımları (açık onayla) |
 | `/setup-audit` | Periyodik kurulum denetimi: `vlad audit setup` verisinden eksik/fazla/skill-mod-kural önerisi raporu (onaysız yürür, dosya değiştirmez; seçilenler `/delegate`) |
+| `/release` | Deploy ve APK: kartın `## Sürüm` bölümü, ayrı kullanıcı onayı (gece modu kapsamaz), `gh workflow run` → run takibi → sağlık/APK artifact → `task log` |
 | `/bulgu-tarama` | Biriken düşük/bilgi bulguları kodla karşılaştırıp kör ikinci gözle doğrulayarak toplu kapatmak (gri olanlar kullanıcıya) |
 | `/art-prompt` | Karakter konsepti için ChatGPT istemi (Codex değil); kullanıcı üretir |
 
