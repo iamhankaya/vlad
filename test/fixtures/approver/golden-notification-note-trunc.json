@@ -1,0 +1,35 @@
+{
+  "tz": "Europe/Istanbul",
+  "homedir": "/Users/test",
+  "_doc": "renderNotification(pending) bu girdiyle process.env.TZ=tz ve HOME=homedir altında expected'a eşit olmalı. Ayraç \\n; `~` = $HOME önekinin kısaltması; --note ilk 60 bayt + … Ek golden (T20261116-06 U2): kırpma kuralı.",
+  "pending": {
+    "v": 1,
+    "id": "mfrggzdfmztwq2lknnwg23tpoa",
+    "shortId": "mfrggzdf",
+    "cid": "aaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "op": "mode night",
+    "argv": [
+      "mode",
+      "night",
+      "--note",
+      "şşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşşş"
+    ],
+    "requestedAt": "2026-11-16T14:20:00+03:00",
+    "expiresAt": "2026-11-16T14:25:00+03:00",
+    "nonce": "00112233445566778899aabbccddeeff",
+    "respTopic": "vlad-r-aaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "ctx": {
+      "home": "/Users/test/dev/vlad",
+      "kb": "/Users/test/dev/vlad-kb",
+      "cli": "/Users/test/dev/vlad/dist/cli.js"
+    },
+    "keyGen": "0123456789abcdef",
+    "status": "pending",
+    "requester": "vlad-07"
+  },
+  "expected": {
+    "title": "VLAD onay: mode night",
+    "message": "İşlem: vlad mode night --note şşşşşşşşşşşşşşşşşşşşşşşşşşşşşş…\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
+  }
+}
