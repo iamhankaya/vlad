@@ -11,11 +11,13 @@ export function registerWorktree(program: Command, k: Kit): void {
     // --dry-run always wins: with both flags nothing on disk is touched
     const r = pruneOrphanWorktrees(loadConfig(), { yes: !!o.yes && !o.dryRun });
     const del = r.items.filter((i) => i.action === "delete");
+    const skipped = r.items.filter((i) => i.action !== "delete");
     const lines = [
       ...del.map((i) => `${i.removed ? "silindi" : i.error ? `HATA (${i.error})` : "silinecek"}: ${i.dir} (${i.id}, ${i.state})`),
+      ...skipped.map((i) => `atlandı: ${i.dir} (${i.id}): ${i.reason}`),
       r.dryRun
-        ? `${del.length} klasör silinecek, ${r.items.length - del.length} atlandı (dry-run; silmek için --yes)`
-        : `${r.removed} klasör silindi, ${r.errors} hata, ${r.items.length - del.length} atlandı`,
+        ? `${del.length} klasör silinecek, ${skipped.length} atlandı (dry-run; silmek için --yes)`
+        : `${r.removed} klasör silindi, ${r.errors} hata, ${skipped.length} atlandı`,
     ];
     out(o, r, lines.join("\n"));
     if (r.errors) process.exitCode = 1;

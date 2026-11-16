@@ -148,6 +148,15 @@ describe("vlad worktree prune CLI: bayraklar", () => {
     expect(JSON.parse(r.stdout)).toMatchObject({ dryRun: true, removed: 0 });
     expect(existsSync(d)).toBe(true);
   });
+  it("metin çıktısı atlanan klasörleri nedenleriyle listeler (yalnız sayı değil)", () => {
+    const idRun = task("running"), idContent = task("done");
+    const a = mk(idRun);
+    const b = mk(idContent); writeFileSync(join(b, "x.txt"), "x");
+    const r = spawnVlad({ args: ["worktree", "prune"], env: { VLAD_HOME: home } });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain(`atlandı: ${a} (${idRun}): görev running`);
+    expect(r.stdout).toContain(`atlandı: ${b} (${idContent}): içerik var, atlandı`);
+  });
   it("yalnız --yes siler; bayraksız dry-run silmez", () => {
     const id = task("done");
     const d = mk(id);

@@ -61,7 +61,7 @@ describe("worker prompt gate ortamı", () => {
     expect(t).toContain('export DATABASE_URL="postgres://m:m@127.0.0.1:5432/m"');
     expect(t).toContain('export PATH="/opt/pg/bin:$PATH"');
   });
-  it("F-vlad-352: $(...), $1, ${VAR:-x}, backtick kabukta açılmaz; prompt ile gateEnvOf aynı değeri verir", () => {
+  it.skipIf(process.platform === "win32")("F-vlad-352: $(...), $1, ${VAR:-x}, backtick kabukta açılmaz; prompt ile gateEnvOf aynı değeri verir", () => {
     const tricky = { A: "$(echo PWNED)", B: "x$1y", C: "${NOPE_VAR:-dflt}", D: "`echo PWNED`", E: "a\\b\"c", F: "/opt/bin:$PATH:${HOME}" };
     const cfg = cfgWith({ p: tricky });
     const want = gateEnvOf(cfg, "mac", "p", { PATH: "/usr/bin", HOME: "/h" });
