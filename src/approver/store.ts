@@ -100,6 +100,14 @@ export function createStore(dir: string, o: { now?: () => Date } = {}): Store {
     for (const f of resultFiles()) {
       try { const r = readResultFile(f); if (r && now().getTime() - Date.parse(r.finishedAt) > RESULT_TTL_MS) unlinkSync(join(sub("results"), f)); } catch { /* bozuk dosya listede loglanır; budama en iyi çaba */ }
     }
+    for (const d of ["claimed", "ack", "claims"]) { // F-vlad-348: sonuç TTL'sinden eski yardımcı kayıtlar (mtime); yeni olanlara dokunulmaz
+      let names: string[] = [];
+      try { names = readdirSync(sub(d)); } catch { continue; }
+      for (const n of names) {
+        const p = join(sub(d), n);
+        try { const s = lstatSync(p); if (s.isFile() && now().getTime() - s.mtimeMs > RESULT_TTL_MS) unlinkSync(p); } catch { /* en iyi çaba */ }
+      }
+    }
   };
   const claimPath = (id: string, kind: "decision" | "exec"): string => join(sub("claims"), checkId(id) + (kind === "exec" ? ".exec" : ""));
 

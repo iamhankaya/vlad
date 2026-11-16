@@ -133,6 +133,7 @@ function checkReadTool(tool: string, input: Record<string, unknown> | undefined,
   const hint = (k: string, v: string): string => `${WHY} (okuma: gizli mod anahtarı/approver dizini ${k}: ${v})`;
   const file = str("file_path");
   if (file !== undefined && readsSecret(file, cwd, false)) return hint("file_path", file);
+  if (tool === "Read") return null; // Read yalnız file_path okur; arama kökü (cwd/atalar) yok (F-vlad-347)
   const root = str("path");
   if (readsSecret(root ?? ".", cwd, true)) return hint(root === undefined ? "kök(cwd)" : "path", root ?? cwd); // path verilmezse etkin kök cwd'dir
   const rootAbs = resolve(cwd, expand((root ?? ".").replace(/\\/g, "/")));

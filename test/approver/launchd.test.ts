@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, writeFileSync, mkdtempSync, existsSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { statSync } from "node:fs";
@@ -81,6 +81,46 @@ describe("approver: launchd installer", () => {
       expect(t.calls[0]![0]).toBe("bootout");
       expect(existsSync(join(t.dir, "com.vlad.approver.plist"))).toBe(false);
       await inst.uninstall();
+    } finally { t.cleanup(); }
+  });
+  it("F-vlad-344: bootout 'zaten yüklü değil' (3/113) ise silinir; gerçek hatada dosya silinmez ve hata döner", async () => {
+    for (const code of [3, 113]) {
+      const t = mk();
+      try {
+        const inst = createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir });
+        await inst.install(ctx);
+        t.results.bootout = { code, stderr: "Boot-out failed: No such process" };
+        await inst.uninstall();
+        expect(existsSync(join(t.dir, "com.vlad.approver.plist"))).toBe(false);
+      } finally { t.cleanup(); }
+    }
+    const t = mk();
+    try {
+      const inst = createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir });
+      await inst.install(ctx);
+      t.results.bootout = { code: 5, stderr: "Input/output error" };
+      await expect(inst.uninstall()).rejects.toThrow(/bootout başarısız \(5\).*Input\/output error/);
+      expect(existsSync(join(t.dir, "com.vlad.approver.plist"))).toBe(true);
+    } finally { t.cleanup(); }
+  });
+  it("F-vlad-344: bootout başarılı ama servis hâlâ çalışıyorsa plist silinmez", async () => {
+    const t = mk();
+    try {
+      const inst = createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir, sleep: async () => undefined });
+      await inst.install(ctx);
+      t.results.print = { code: 0, stdout: "state = running" };
+      await expect(inst.uninstall()).rejects.toThrow(/sonlanmad/);
+      expect(existsSync(join(t.dir, "com.vlad.approver.plist"))).toBe(true);
+    } finally { t.cleanup(); }
+  });
+  it("F-vlad-346(c): install eski ~/.vlad-approver.log'u (yalnız o dosyayı) siler", async () => {
+    const t = mk();
+    try {
+      const home = join(t.dir, "h"); mkdirSync(home);
+      writeFileSync(join(home, ".vlad-approver.log"), "eski"); writeFileSync(join(home, "baska.log"), "kalmali");
+      await createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir, homeDir: home }).install({ ...ctx, home });
+      expect(existsSync(join(home, ".vlad-approver.log"))).toBe(false);
+      expect(existsSync(join(home, "baska.log"))).toBe(true);
     } finally { t.cleanup(); }
   });
   it("status: kurulu/çalışıyor ayrımı", async () => {

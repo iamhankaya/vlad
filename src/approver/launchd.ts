@@ -46,7 +46,12 @@ const realLaunchctl: Launchctl = (args) => new Promise((resolve) => {
   });
 });
 
-export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?: string } = {}): ServiceInstaller {
+/** "Servis zaten yüklü değil" çıkışları (ESRCH=3, 113 "Could not find service"); bunlar uninstall için başarıdır. */
+const notLoaded = (r: { code: number; stderr: string }): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
+const realSleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
+
+export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?: string; homeDir?: string; sleep?: (ms: number) => Promise<void> } = {}): ServiceInstaller {
+  const sleep = deps.sleep ?? realSleep;
   const lc = deps.launchctl ?? realLaunchctl;
   const plist = join(deps.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents"), `${LABEL}.plist`);
   const target = `gui/${process.getuid?.() ?? 501}`;
@@ -59,6 +64,7 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       writeFileSync(logPath, "", { flag: "a", mode: 0o600 });
       chmodSync(logPath, 0o600);
+      for (const h of new Set([c.home, deps.homeDir ?? userInfo().homedir])) rmSync(join(h, ".vlad-approver.log"), { force: true }); // eski günlük (F-vlad-346c); yalnız o dosya
       writeFileSync(plist, approverPlist(c, logPath), { mode: 0o600 });
       chmodSync(plist, 0o600);
       steps.push(`plist yazıldı: ${plist}`);
@@ -70,7 +76,15 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
     },
     async uninstall() {
       const steps: string[] = [];
-      await lc(["bootout", `${target}/${LABEL}`]); steps.push("launchctl bootout");
+      const b = await lc(["bootout", `${target}/${LABEL}`]);
+      if (b.code !== 0 && !notLoaded(b)) throw new Error(`launchctl bootout başarısız (${b.code}): ${b.stderr.trim() || b.stdout.trim()}; dosyalar silinmedi`);
+      steps.push("launchctl bootout");
+      for (let i = 0; ; i++) { // sonlanmayı doğrula: servis hâlâ yüklü/çalışıyorsa dosyalara dokunma
+        const r = await lc(["print", `${target}/${LABEL}`]);
+        if (r.code !== 0 || !/state = running/.test(r.stdout)) break;
+        if (i >= 9) throw new Error("servis bootout sonrası sonlanmadı; dosyalar silinmedi");
+        await sleep(200);
+      }
       if (existsSync(plist)) { rmSync(plist, { force: true }); steps.push(`plist silindi: ${plist}`); }
       return steps;
     },

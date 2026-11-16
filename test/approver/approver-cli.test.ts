@@ -35,7 +35,14 @@ beforeEach(() => {
 });
 afterEach(() => { process.chdir(cwd0); setSecretDirForTests(null); delete process.env.VLAD_MODE_TOKEN; delete process.env.VLAD_TASK_ID; runApprover.mockClear(); });
 
-const launchctl: Launchctl = async (a) => { calls.push(a); return { code: launchResult[a[0]!] ?? 0, stdout: a[0] === "print" ? "state = running" : "", stderr: "" }; };
+let loaded = true; // gerçek launchd gibi: bootout sonrası servis yüklü değil, bootstrap sonrası çalışır
+const launchctl: Launchctl = async (a) => {
+  calls.push(a);
+  if (a[0] === "bootout" && (launchResult.bootout ?? 0) === 0) loaded = false;
+  if (a[0] === "bootstrap" && (launchResult.bootstrap ?? 0) === 0) loaded = true;
+  if (a[0] === "print" && !loaded) return { code: 113, stdout: "", stderr: "Could not find service" };
+  return { code: launchResult[a[0]!] ?? 0, stdout: a[0] === "print" ? "state = running" : "", stderr: "" };
+};
 const enableKey = () => { initKey(); process.env.VLAD_MODE_TOKEN = mintToken(60_000); };
 
 /** Aynı ağaç: kit + registerApprover(deps). `exit` fırlatır, çıktılar yakalanır. */
@@ -146,7 +153,7 @@ describe("approver: uninstall", () => {
     expect(existsSync(join(plistDir, "com.vlad.approver.plist"))).toBe(false);
     expect(existsSync(join(secret, "used", "1.a"))).toBe(true);
     expect(existsSync(join(secret, "mode.key"))).toBe(true);
-    expect(calls.at(-1)![0]).toBe("bootout");
+    expect(calls.map((c) => c[0]).slice(-2)).toEqual(["bootout", "print"]); // bootout, sonra sonlanma doğrulaması
   });
   it("TTY yoksa reddeder", async () => {
     enableKey(); await cli(["install"]);
@@ -191,6 +198,16 @@ describe("approver: rotate", () => {
     expect(r.code).toBe(0);
     expect(ev).toEqual(["uninstall:old", "stopped", "install:new:clear"]);
     expect(sleeps.length).toBeGreaterThan(0);
+  });
+  it("F-vlad-346(b): servis kapanmazsa mesaj servisin kaldırıldığını ve yeniden kurulumu söyler", async () => {
+    enableKey();
+    await cli(["install"]);
+    const base = createLaunchdInstaller({ launchctl, plistDir });
+    const installer = { install: base.install, uninstall: base.uninstall, status: async () => ({ ...(await base.status()), running: true }) };
+    const r = await cli(["rotate"], { installer, sleep: async () => undefined });
+    expect(r.code).toBe(1);
+    expect(r.err).toContain("servis kaldırıldı");
+    expect(r.err).toContain("vlad approver install");
   });
   it("çalışmış (executing / sonucu olan) isteği rotated diye ezmez", async () => {
     enableKey();

@@ -18,6 +18,20 @@ beforeEach(() => {
 afterEach(() => setSecretDirForTests(null));
 const run = (tool: string, input: Record<string, unknown>, at = cwd) => checkWorkerMode(tool, input, null, { vladHome: "/home/u/vlad", cwd: at });
 
+describe("Bash gizli dizin metin reddi (F-vlad-350 gevşetmesi geri alındı: Codex 2×P1; komut metninde gizli dizin adı geçmesi ret sebebidir)", () => {
+  const bash = (command: string, at = cwd) => checkWorkerMode("Bash", { command }, null, { vladHome: "/home/u/vlad", cwd: at });
+  it("gerçek yol/joker/değişken/cd kaçışları reddedilir", () => {
+    for (const c of [`cat ${secret}/mode.key`, "cat ~/.vlad-secret/mode.key", `cat "${root}/.vlad-sec"ret/mode.key`, `cat ${secret}/*`, "cat ../.vlad-secret/mode.key", `cd ${root} && cat .vlad-secret/mode.key`, "cd ~ && cat .vlad-secret/mode.key", `D=${root}; cat $D/.vlad-secret/mode.key`, `echo x; cat $(echo ${secret})/mode.key`])
+      expect(bash(c), c).not.toBeNull();
+    expect(bash("cat .vlad-secret/mode.key", root)).not.toBeNull(); // cwd HOME iken göreli yol gerçekten gizli dizin
+  });
+  it("Codex bypass örnekleri: göreli glob/brace, ./.. dolaşımı, bitişik -f<mutlak yol>", () => {
+    const name = root.split("/").pop()!;
+    for (const c of ["cat ../*/.vlad-secret/mode.key", `cat ../{${name},foo}/.vlad-secret/mode.key`, `cat ./../${name}/.vlad-secret/mode.key`, "cat ..//*/.vlad-secret/*", "cat ../?*/.vlad-secret/x", "cat ../[a-z]*/.vlad-secret/x", `grep -f${secret}/mode.key /dev/null`])
+      for (const at of [cwd, root]) expect(bash(c, at), `${at}: ${c}`).not.toBeNull();
+  });
+});
+
 describe("(1) Grep/Glob kök verilmezse etkin kök cwd'dir", () => {
   it("cwd gizli dizinin atasıysa path'siz Grep/Glob reddedilir; cwd worktree ise serbest", () => {
     expect(run("Grep", { pattern: "." }, root)).not.toBeNull();

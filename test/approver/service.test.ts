@@ -43,7 +43,7 @@ const deps = (over: Partial<ApproverDeps> = {}): ApproverDeps => ({
 const start = (over: Partial<ApproverDeps> = {}) => { svc = runApprover(deps(over)); svc.catch(() => {}); return svc; };
 const stop = async () => { ac.abort(); if (svc) await svc.catch(() => {}); svc = null; };
 const waitFor = async (cond: () => unknown, what = "koşul") => { for (let i = 0; i < 250; i++) { if (cond()) return; await new Promise((r) => setTimeout(r, 20)); } throw new Error(`zaman aşımı: ${what}`); };
-const request = (n: number, argv: string[] = ["mode", "off"], op = "mode off") => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op, argv, requestedAt: "2026-11-16T12:00:00Z", requester: "vlad-07" }), { mode: 0o600 });
+const request = (n: number, argv: string[] = ["mode", "off"], op = "mode off") => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op, argv, requestedAt: new Date(t).toISOString(), requester: "vlad-07" }), { mode: 0o600 }); // istemci saati ≈ servis saati (F-vlad-349: ±10 dk)
 const ackOf = async (n: number): Promise<AckRecord> => { const p = join(store.dir, "ack", `${cid(n)}.json`); await waitFor(() => existsSync(p), `ack ${n}`); return JSON.parse(readFileSync(p, "utf8")) as AckRecord; };
 const pend = (): PendingRecord => store.readPending()!;
 const body = (kind: "a1" | "d1", p: PendingRecord, key = readKey()!) => `${kind}.${p.id}.${(kind === "a1" ? approveTag : denyTag)(key, p.digest)}`;
@@ -379,6 +379,42 @@ describe("approver: service yürütme sonucu", () => {
     await waitFor(() => logText().includes("istek bildirimi gönderilemedi"));
     t += LIMITS.approveTtlMs + 1;
     expect((await resultOf(p.id)).status).toBe("expired");
+  });
+
+  it("F-vlad-343: geçici yayın hatasında sınırlı geri çekilmeyle yeniden dener (tek yayın, uçuştaki ikinci yayın yok)", async () => {
+    let calls = 0;
+    ch.publishRequest = async (p, tags) => { calls++; if (calls < 3) throw new Error("ağ yok"); ch.published.push({ p, tags }); };
+    start({ publishBackoffMs: [5, 5, 5] });
+    request(1);
+    await ackOf(1);
+    await waitFor(() => ch.h);
+    ch.ready(); ch.ready();
+    await waitFor(() => ch.published.length === 1, "yeniden deneme sonrası yayın");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(ch.published).toHaveLength(1);
+    expect(calls).toBe(3);
+  });
+
+  it("F-vlad-343: yayın hiç başarılmazsa süre dolumu art arda ret sayacına/kilide girmez", async () => {
+    ch.failPublish = true;
+    start({ publishBackoffMs: [5, 5] });
+    request(1);
+    await ackOf(1);
+    await waitFor(() => ch.h);
+    ch.ready();
+    const p = pend();
+    await waitFor(() => (logText().match(/istek bildirimi gönderilemedi/g) ?? []).length >= 3, "tüm denemeler");
+    t += LIMITS.approveTtlMs + 1;
+    expect((await resultOf(p.id)).status).toBe("expired");
+    expect(store.readRate().consecutiveDenied).toBe(0);
+  });
+
+  it("F-vlad-349: requestedAt makul aralık dışındaysa (±10 dk) istek reddedilir; içindeyse kabul", async () => {
+    const send = (n: number, at: number) => writeFileSync(join(store.dir, "inbox", `${cid(n)}.json`), JSON.stringify({ v: 1, cid: cid(n), op: "mode off", argv: ["mode", "off"], requestedAt: new Date(at).toISOString(), requester: "vlad-07" }), { mode: 0o600 });
+    start();
+    send(1, START - 11 * 60_000); expect(await ackOf(1)).toMatchObject({ status: "invalid", reason: "bad_value" });
+    send(2, START + 11 * 60_000); expect(await ackOf(2)).toMatchObject({ status: "invalid", reason: "bad_value" });
+    send(3, START - 9 * 60_000); expect((await ackOf(3)).status).toBe("pending");
   });
 
   it("yanıt akışı hatası: servis ayakta, istek süresi dolar", async () => {
