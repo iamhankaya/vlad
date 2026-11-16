@@ -38,12 +38,14 @@ describe("approver-kabul: KK1 bildirim servis tarafında", () => {
     for (const bad of ["SAHTE-BASLIK", "SAHTE-MESAJ", "e".repeat(64)]) expect(all).not.toContain(bad);
     // şablon (plan "renderNotification"): satır sırası ve etiketleri
     const lines = m.message.split("\n");
-    expect(lines[0]).toBe("İşlem: vlad mode night --until 23:00 --note gece işi");
-    expect(lines[1]).toBe("İsteyen: vlad-07 (beyan, doğrulanmamış)");
-    expect(lines[2]).toMatch(/^Hedef: .+ \| kb: .+$/);
-    expect(lines[3]).toMatch(/^İstek: \d\d:\d\d:\d\d · Geçerli: \d\d:\d\d:\d\d$/);
-    expect(lines[4]).toBe(`Kimlik: ${p.shortId}`);
-    expect(lines).toHaveLength(5);
+    expect(lines[0]).toBe("İşlem: vlad mode night");
+    expect(lines[1]).toBe("--until 23:00");
+    expect(lines[2]).toBe('--note "gece işi"');
+    expect(lines[3]).toBe("İsteyen: vlad-07 (beyan, doğrulanmamış)");
+    expect(lines[4]).toMatch(/^Hedef: .+ \| kb: .+$/);
+    expect(lines[5]).toMatch(/^İstek: \d\d:\d\d:\d\d · Geçerli: \d\d:\d\d:\d\d$/);
+    expect(lines[6]).toBe(`Kimlik: ${p.shortId}`);
+    expect(lines).toHaveLength(7);
     // süre: son geçerlilik = istek + 5 dk (LIMITS.approveTtlMs)
     expect(new Date(p.expiresAt).getTime() - new Date(p.requestedAt).getTime()).toBe(LIMITS.approveTtlMs);
   });
