@@ -59,7 +59,7 @@ Görev şemasına eklenenler:
 - `kind`: `pipeline` değeri eklenir (çatı görev; kod çalıştırmaz, worktree'si entegrasyon branch'idir).
 - `parent: string | null` — çatı görevin ID'si.
 - `depends_on: string[]` — aynı `parent` altındaki görev ID'leri.
-- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `sözleşme`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `prova`, `danışma`).
+- `phase: string | null` — insan okunur faz adı (`spec`, `tasarım`, `plan`, `sözleşme`, `kabul`, `karakterizasyon`, `uygulama`, `doğrulama`, `denetim`, `tasarım-kontrolü`, `prova`, `danışma`).
 
 Kurallar (CLI doğrular):
 - `parent` var olan bir `pipeline` görevi olmalı; `depends_on`'daki her görev var olmalı ve aynı `parent`'a ait olmalı. Görevler sırayla oluşturulduğu ve yalnızca var olanlara bağlanılabildiği için döngü (cycle) oluşamaz.

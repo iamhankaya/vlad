@@ -21,7 +21,7 @@ export const COMMAND_DOCS: Readonly<Record<string, string>> = {
   "task release": "`task release <id> [--force]`: belirsiz uzak launch rezervasyonunu (ve çatı makine pin'ini) bırakır; işçi launch'ı görmediyse iptal işareti yazılır; ölü makinedeki rezervasyon için de kullanılır. `--force` işçi ulaşılamazken kullanılır; yetim pencere riski var.",
   "task repin": "`task repin <çatı-id> <makine> [--force] [--json]`: pipeline çatısının makine pin'ini başka makineye taşır (yalnız `pipeline`; hedef config'te ve kartın `machines` listesinde olmalı; eski makinede running faz varsa `--force` ister). `warnings`: entegrasyon dalı hedefte olmayabilir. İlerlemeye `Repin: <eski> → <yeni>` yazılır.",
   "task ingest": "Bulut çalışanının `list_events` çıktısındaki `[VLAD:*]` işaretlerini (`LOG`/`ASK`/`REPORT`/`FAIL`) görev dosyasına işler (idempotent).",
-  "task log": "`task log <id> \"<metin>\"`: `## İlerleme`'ye satır ekler. İşçide beyne iletilir.",
+  "task log": "`task log <id> \"<metin>\"`: `## İlerleme`'ye satır ekler. İşçide beyne iletilir. Metin `İzin reddi`/`reddetti`/`denied` içeriyorsa stderr'e `task deny` uyarısı verir (kayıt yine yazılır).",
   "task ask": "`task ask <id> \"<soru>\"`: `## Sorular`'a soru yazar, görev `blocked` olur. İşçide beyne iletilir.",
   "task answer": "`task answer <id> \"<cevap>\"`: soruya `**Cevap:**` yazar; blocked görevi running'e alır. Rapor açık soruyla yazılıp awaiting_approval'a geçmiş görevde (cevapsız soru varsa) yalnız Cevap yazar, durum awaiting_approval kalır (F-vlad-341).",
   "task report": "`task report <id> --file <md>`: kapanış raporunu yazar, görev `awaiting_approval` olur. Rapordaki `### Kapatılan bulgular` satırlarında kısaltılmış/bilinmeyen/kapalı ID için uyarır. İşçide beyne iletilir.",

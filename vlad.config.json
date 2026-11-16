@@ -1,5 +1,4 @@
 {
-  "experiments": { "ponytail": "ab" },
   "roots": ["/Users/metehankaya/dev"],
   "brain": "mac",
   "machines": [
