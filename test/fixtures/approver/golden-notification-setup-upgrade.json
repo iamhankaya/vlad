@@ -11,8 +11,6 @@
     "argv": [
       "setup",
       "--upgrade",
-      "--only",
-      "hooks,global-skills",
       "--yes",
       "--confirm",
       "agent-install,permissions-write"
@@ -33,6 +31,6 @@
   },
   "expected": {
     "title": "VLAD onay: setup",
-    "message": "Yükseltme: hooks, global-skills\nKapsam: hooks,global-skills\nDış etki: agent-install, permissions-write\nBayrak: --yes\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
+    "message": "Yükseltme: cli, global-skills, hooks\nKapsam: cli + global skill'ler + hooks (parça seçilemez)\nDış etki: agent-install, permissions-write\nBayrak: --yes\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
   }
 }

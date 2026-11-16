@@ -102,7 +102,7 @@ describe("approver: allowlist (mode/install)", () => {
 describe("approver: allowlist (setup)", () => {
   it("izinli iki biçim", () => {
     expect(argvReason(["setup", "--upgrade"])).toBe("ok");
-    expect(argvReason(["setup", "--upgrade", "--only", "hooks,global-skills", "--yes", "--confirm", "agent-install,permissions-write"])).toBe("ok");
+    expect(argvReason(["setup", "--upgrade", "--yes", "--confirm", "agent-install,permissions-write"])).toBe("ok");
     for (const p of ["hooks", "global-skills", "config"]) expect(argvReason(["setup", "--uninstall", p]), p).toBe("ok");
   });
   it("--answers ve düz setup setup_answers_unsupported", () => {
@@ -116,10 +116,11 @@ describe("approver: allowlist (setup)", () => {
     expect(argvReason(["setup", "--uninstall", "agent"])).toBe("bad_value");
     expect(argvReason(["setup", "--uninstall", "hooks", "--yes"])).toBe("bad_flag");
     expect(argvReason(["setup", "--upgrade", "--uninstall", "hooks"])).toBe("conflicting");
-    expect(argvReason(["setup", "--upgrade", "--only", "yok"])).toBe("bad_value");
-    expect(argvReason(["setup", "--upgrade", "--only", "hooks,,config"])).toBe("bad_value");
+    // --only uzaktan reddedilir: runUpgrade parça seçimini uygulamaz (cli+global-skills+hooks hepsi)
+    for (const only of [["hooks"], ["hooks,global-skills"], ["yok"], ["hooks,,config"]]) expect(argvReason(["setup", "--upgrade", "--only", ...only]), only[0]).toBe("bad_flag");
+    expect(argvReason(["setup", "--upgrade", "--yes", "--only", "hooks"])).toBe("bad_flag");
+    for (const v of ["hooks,config", "hooks,global-skills", "cli"]) expect(argvReason(["setup", "--uninstall", v]), v).toBe("bad_value"); // tek hedef
     expect(argvReason(["setup", "--upgrade", "--confirm", "rm-rf"])).toBe("bad_value");
-    expect(argvReason(["setup", "--upgrade", "--only", "hooks", "--only", "config"])).toBe("duplicate_flag");
     expect(argvReason(["setup", "--upgrade", "--yes", "--yes"])).toBe("duplicate_flag");
   });
 });

@@ -1,7 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { CONFIRM_ACTIONS } from "../setup/types.js";
-import { parseOnly } from "../setup/run.js";
 import { LIMITS, type ApprovalRequestFile, type Ctx, type DropReason, type Op, type PendingRecord, type RejectReason } from "./types.js";
 
 /**
@@ -43,7 +42,6 @@ const ARGV_SCHEMA: Record<"mode night" | "install" | "setup --upgrade", Record<s
   },
   install: { "--remove-menu": bool },
   "setup --upgrade": {
-    "--only": val((v) => { if (!SLUG_LIST.test(v)) return false; try { parseOnly(v); return true; } catch { return false; } }),
     "--yes": bool, "--confirm": val((v) => SLUG_LIST.test(v) && v.split(",").every((c) => (CONFIRM_ACTIONS as readonly string[]).includes(c))),
   },
 };
@@ -78,6 +76,8 @@ function checkSetup(argv: string[]): Bad | null {
     return UNINSTALL_PARTS.includes(rest[1] ?? "") ? null : { reason: "bad_value", detail: `--uninstall parçası: ${UNINSTALL_PARTS.join("|")}` };
   }
   if (rest[0] !== "--upgrade") return { reason: "bad_flag", detail: "setup --upgrade ilk bayrak olmalı" };
+  // --only reddedilir: runUpgrade parça seçimini uygulamaz (cli + global-skills + hooks hepsini yazar); dar kapsam göstermek yanıltıcı olurdu
+  if (rest.includes("--only")) return { reason: "bad_flag", detail: "setup --only uzaktan desteklenmez (--upgrade cli + global skill'ler + hooks uygular)" };
   return parseFlags(argv, 2, ARGV_SCHEMA["setup --upgrade"]);
 }
 
@@ -157,8 +157,8 @@ const NOTE_CUT = 60;
 function actionLines(op: string, a: string[]): string[] {
   if (op === "setup" && a.includes("--uninstall")) return [`Geri alma: ${flagValue(a, "--uninstall") ?? "?"}`, "Dış etki: yok"];
   if (op === "setup") {
-    const only = flagValue(a, "--only"), confirm = flagValue(a, "--confirm");
-    return [`Yükseltme: ${only ? only.split(",").join(", ") : "tüm parçalar"}`, ...(only ? [`Kapsam: ${only}`] : []), `Dış etki: ${confirm ? confirm.split(",").join(", ") : "yok"}`,
+    const confirm = flagValue(a, "--confirm");
+    return ["Yükseltme: cli, global-skills, hooks", "Kapsam: cli + global skill'ler + hooks (parça seçilemez)", `Dış etki: ${confirm ? confirm.split(",").join(", ") : "yok"}`,
       ...(a.includes("--yes") ? ["Bayrak: --yes"] : [])];
   }
   const first = a.findIndex((t) => t.startsWith("--")), cut0 = first < 0 ? a.length : first;

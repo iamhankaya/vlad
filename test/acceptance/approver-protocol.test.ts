@@ -298,7 +298,7 @@ describe("approver-kabul: istemci–servis protokolü ve allowlist", () => {
     const ok: string[][] = [
       ["mode", "night", "--until", "23:00", "--note", ""],
       ["mode", "night", "--note", "ş".repeat(100)],
-      ["setup", "--upgrade", "--only", "hooks", "--yes"],
+      ["setup", "--upgrade", "--yes"],
       ["setup", "--uninstall", "hooks"],
       ["install", "--remove-menu"],
       ["mode", "watch", "on"],
@@ -316,10 +316,10 @@ describe("approver-kabul: istemci–servis protokolü ve allowlist", () => {
 
   it("setup bildirimi yapılandırılmış etki özeti verir (Yükseltme/Kapsam/Dış etki); --answers görünmez", async () => {
     await boot();
-    const { msg: m } = await submit(w, ["setup", "--upgrade", "--only", "hooks,global-skills", "--yes", "--confirm", "agent-install"]);
+    const { msg: m } = await submit(w, ["setup", "--upgrade", "--yes", "--confirm", "agent-install"]);
     const lines = m!.message.split("\n");
-    expect(lines[0]).toBe("Yükseltme: hooks, global-skills");
-    expect(lines[1]).toBe("Kapsam: hooks,global-skills");
+    expect(lines[0]).toBe("Yükseltme: cli, global-skills, hooks");
+    expect(lines[1]).toBe("Kapsam: cli + global skill'ler + hooks (parça seçilemez)");
     expect(lines[2]).toMatch(/^Dış etki: .*agent-install/);
     expect(SECRET_PATTERNS.find((x) => x.name.startsWith("--answers"))!.re.test(m!.message)).toBe(false);
   });

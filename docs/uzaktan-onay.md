@@ -27,7 +27,7 @@ vlad approver status
 vlad approver requests --json --limit 5
 ```
 
-`--wait` değersizdir; süre için `--wait-seconds <n>`. İzinli biçimler: `night` (`--until`, `--until-task`, `--push`, `--except`, `--projects`, `--note`), `watch on|off`, `off`, `install` (`--remove-menu`), `setup --upgrade [--only] [--yes] [--confirm]` ve `setup --uninstall <hooks|global-skills|config>`. Uzaktan `setup --answers`/düz `setup` yoktur. `--note` üçüncü tarafa görünür (ilk 60 bayt); nota sır yazmayın.
+`--wait` değersizdir; süre için `--wait-seconds <n>`. İzinli biçimler: `night` (`--until`, `--until-task`, `--push`, `--except`, `--projects`, `--note`), `watch on|off`, `off`, `install` (`--remove-menu`), `setup --upgrade [--yes] [--confirm]` (cli + global skill'ler + hooks uygulanır; `--only` uzaktan reddedilir) ve `setup --uninstall <hooks|global-skills|config>`. Uzaktan `setup --answers`/düz `setup` yoktur. `--note` üçüncü tarafa görünür (ilk 60 bayt); nota sır yazmayın.
 
 ## Konu döndürme ve kaldırma
 
