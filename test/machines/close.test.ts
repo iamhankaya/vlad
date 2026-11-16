@@ -107,6 +107,21 @@ describe("task close: yerel tek görev", () => {
     expect(kbCommit).toHaveBeenCalledWith(expect.stringContaining(id));
   });
 
+  it("T20261117-04: makinenin gateEnv'i yerel gate'e verilir ($VAR açılır); olmadan gate kırmızı", async () => {
+    card(`node -e "process.exit(process.env.GATE_X==='ok'?0:1)"`);
+    const id = await ready();
+    cfg.machines = [{ name: "mac", os: "darwin", agent: { port: 7437 }, gateEnv: { alpha: { GATE_X: "o${GATE_SRC}" } } }];
+    cfg.brain = "mac";
+    process.env.GATE_SRC = "k";
+    const d = deps({ self: "mac", remote: { machine: () => null } as unknown as CloseDeps["remote"] });
+    try {
+      cfg.machines[0]!.gateEnv = {}; // ortam yok: gate kırmızı
+      expect(await closeTask(id, { yes: true }, d)).toMatchObject({ ok: false, stopped_at: "gate" });
+      cfg.machines[0]!.gateEnv = { alpha: { GATE_X: "o${GATE_SRC}" } };
+      expect(await closeTask(id, { yes: true }, d)).toMatchObject({ ok: true });
+    } finally { delete process.env.GATE_SRC; }
+  });
+
   it("--yes yok ve yetki penceresi kapalıysa merge öncesi durur; hiçbir şey değişmez", async () => {
     const id = await ready();
     const r = await closeTask(id, {}, deps());

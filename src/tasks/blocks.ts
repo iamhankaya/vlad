@@ -11,7 +11,14 @@ export type BlockCtx = {
   projectSkills?: string[];
   /** Open findings of the project near the task's area (chosen by the caller, `relatedOpenFindings`); local non-plan prompts only. */
   relatedFindings?: { id: string; severity: string; title: string }[];
+  /** Per-machine gate environment (`machines[].gateEnv[project]`, values as written, `$VAR` unexpanded); local non-plan prompts only. */
+  gateEnv?: Record<string, string>;
 };
+
+/** Gate environment block: workers must not trip over a missing DB URL / PATH entry and report a fake red (T20261117-04). */
+const gateEnvBlock = (env: Record<string, string>): string =>
+  "Gate ortamı (bu makinede kapı komutu ve testler bu ortamla koşar; değerleri aynen ver, `$PATH` kabukta açılır; sudo ya da elle kurulum isteyen betiğe takılma, bu ortam yeter):\n" +
+  Object.entries(env).map(([k, v]) => `export ${k}="${v.replace(/(["`\\])/g, "\\$1")}"`).join("\n");
 
 /** Prompt cap of the related-findings list and of a title in it (a big project must not bloat the prompt). */
 export const RELATED_FINDINGS_MAX = 15;
@@ -87,5 +94,6 @@ export function standardBlocks(ctx: BlockCtx): string[] {
     ? [`Projenin repo skill'leri: ${ctx.projectSkills.map((s) => `\`${s}\``).join(", ")}. İşe başlamadan hepsini Skill aracıyla yükle (zorunlu); yükleyemediysen nedenini kapanış raporuna yaz.`]
     : [];
   const related = mode === "local" && ctx.relatedFindings?.length ? [relatedFindingsBlock(ctx.relatedFindings)] : [];
-  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, ...related, realSource(mode)];
+  const gateEnv = mode === "local" && ctx.gateEnv && Object.keys(ctx.gateEnv).length ? [gateEnvBlock(ctx.gateEnv)] : [];
+  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, ...gateEnv, ...related, realSource(mode)];
 }

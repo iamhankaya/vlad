@@ -15,6 +15,7 @@ import { cleanupTask, getTask, integrationWorktrees, logTask, setState } from ".
 import type { Task } from "../tasks/index.js";
 import { closeWorkerWindow } from "../launcher/index.js";
 import { selfName } from "../fleet/state.js";
+import { gateEnvOf, withGateEnv } from "../fleet/gate-env.js";
 import type { BranchPushResult, GateRunResult, MergePreviewResult, MergeResult } from "../fleet/types.js";
 import { brainTransport, defaultGateTarget, brainRepoPath, fetchTaskBranch, gateMachineOf, markCleaned, recordGreenGate, remoteBranchPush, remoteCleanup, remoteGateRun, remoteMerge, remoteMergePreview, syncKb, verifyRemoteTip } from "./remote.js";
 
@@ -234,7 +235,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
         const wb = g(wt!, ["branch", "--show-current"]).out.trim();
         if (wb !== `vlad/${id}`) stop("gate", `görev worktree'si vlad/${id} dalında değil (${wb || "detached"})`);
         gatedHead = g(wt!, ["rev-parse", "HEAD"]).out.trim();
-        const gr = spawnSync(gateCmd, { cwd: wt!, shell: true, encoding: "utf8", timeout: 25 * 60_000, maxBuffer: 64 << 20 });
+        const gr = spawnSync(gateCmd, { cwd: wt!, shell: true, env: withGateEnv(gateEnvOf(d.cfg, d.self, t0.data.project)), encoding: "utf8", timeout: 25 * 60_000, maxBuffer: 64 << 20 });
         if (gr.status !== 0) stop("gate", `gate kırmızı (çıkış ${gr.status ?? "zaman aşımı"}):\n${tail(`${gr.stdout ?? ""}\n${gr.stderr ?? ""}`)}`);
       }
       // several platforms: every listed machine needs a green gate line for this commit ("Gate <makine>: yeşil <sha>"); enforced at the final gate (pipeline) or with --all-machines, a warning elsewhere
