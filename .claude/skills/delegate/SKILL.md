@@ -43,25 +43,13 @@ vlad project list --json
 
 **Sözleşme fazı (`tam` ve `özellik`):** kabul ∥ uygulama paralelinden önce standart `sözleşme` fazı (developer, dev; bağımlılık: `plan`, `plan` yoksa `spec`, UI varsa `tasarım`): tipler/imzalar/şema taslakları + sözleşme testleri (arayüzün şekli; iş mantığı yok). `kabul` ve `uygulama` ona bağlanır; tester kabul testlerini sözleşmeden yazar, böylece "testin kendisi yanlış" türü uyumsuzluk azalır. **Küçük işte atlanabilir** (tek modül, yeni arayüz/şema yok); atlanırsa taslakta gerekçesini yaz (ör. "sözleşme atlandı: arayüz değişmiyor"). `kısa`'da sözleşme fazı yoktur.
 
-**Arayüz varsa designer fazlarını ekle** (kullanıcıya görünen UI değişiyorsa; yoksa ekleme):
-- `tam` / `özellik`: spec'ten sonra `tasarım` (designer, dev, bağımlılık: spec); `tam`'da `plan` ve `özellik`'te tester/developer fazları `tasarım`'a bağlanır.
-- Üç döngüde de `doğrulama` ile paralel son `denetim` (designer, dev, bağımlılık: doğrulamayla aynı). `kısa`'da yalnızca `denetim` eklenir.
-- **Erken (ara) denetim:** UI'lı `tam`/`özellik` pipeline'ında, ilk kullanıcıya görünen dilim (ilk çalışan ekran/akış) `uygulama` fazlarından biri olarak bittiğinde ara bir `denetim` fazı öner (designer, dev, bağımlılık: o dilim). Bulgular geç değil, kalan uygulama fazları sürerken gelir (retro: manga 25 bulgu geç çıktı). Uygulamayı dilimlere bölmek gerekiyorsa taslakta dilim fazlarını ayrı göster; ara denetimin kritik/yüksek bulguları sonraki `uygulama` fazının girdisi olur. Tek dilimli, UI ağırlıklı `özellik` işinde tam ara `denetim` fazı eklenmez ama uygulama ortasında kısa bir **tasarım kontrolü** seçeneği önerilir: uygulama fazı ilk görünür ekranı ara commit'lediğinde (çalışan WIP commit + `vlad task log "kaldığım yer"` ile haber verir) designer rolüyle kısa bir faz (`--phase tasarım-kontrolü`, tür dev, bağımlılık yok, uygulama fazıyla paralel; faz adı serbesttir, CLI doğrulamaz) uygulama fazının `vlad/<faz-id>` dalını salt okur (`git worktree add --detach` ile ara commit'i alır, dala yazmaz), ekran görüntüsünü alır ve `impeccable critique` çalıştırır; çıktısı `docs/design/audit/<özellik>/FINDINGS.md` + rapor (`denetim` biçimi, kod değiştirmez); kritik/yüksek bulgular uygulama fazına girdi olur (`vlad task ask`/resume mesajıyla iletilir), orta/düşük son `denetim`'e kalır. Taslakta gerekçesiyle göster; kullanıcı istemezse atlanır. Şablon (`vlad task new --pipeline`) değişmez: faz şablon dışı olduğundan §4 Pipeline adım 1'deki "şablon dışına çıkan faz" yoluyla eklenir. UI'sız ya da çok küçük işte eklenmez; yalnızca son `denetim` kalır.
-- **Tasarımdan sonra gelen kullanıcı seçimi:** `tasarım` kapısında (görsel onay) kullanıcı tasarımda çizilmemiş bir ek ya da varyant seçerse (ör. yeni düğme, ek satır, süzgeç hatırlama) `sözleşme` fazını başlatmadan önce designer'a kısa bir ek tur yaptır: varsayılan: küçük bir ek `tasarım` fazı aç (`--phase tasarım`, `--depends-on <tasarım-faz-id>`, sözleşme fazının bağımlılığını `vlad task deps` ile ona bağla); tasarım fazı hâlâ `running`/`stalled` ise `vlad task resume` de olur (`done` görev geri açılmaz). Ekler `docs/design/DESIGN.md`'ye eklensin; sonraki `denetim` fazının Tanım'ına "bu ekleri özellikle denetle" yaz. Ek tur bitmeden sözleşme/uygulama başlamaz.
-- **UI öz-kontrolü:** UI'ya dokunan her `uygulama` fazının Tanım'ına şunu yaz: "rapordan önce tarayıcıda (Chromium/Playwright) çalıştırıp ekran görüntüsüyle öz-kontrol yap" (developer rolü).
-
-**Dağıtım/altyapıya dokunuyorsa `prova` fazını ekle** (iş dağıtım betiğini, CI tanımını, Dockerfile/compose/systemd'yi veya altyapıyı değiştiriyorsa; yoksa ekleme): `prova` (devops, dev, bağımlılık: `uygulama`) — `doğrulama` ile paralel ya da canlıya alma kapısından önce. Devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail/SIGPIPE, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder; Docker yoksa neyi prova edemediğini raporlar. Kırmızı prova canlıya almayı engeller (`/status` son kapı).
+**Arayüz varsa designer fazları, dağıtım/altyapıya dokunuyorsa `prova` fazı:** kullanıcıya görünen UI değişiyorsa (`tasarım`, ara ve son `denetim`, `tasarım-kontrolü`, tasarımdan sonra kullanıcı seçimi, UI öz-kontrol satırı) ya da iş dağıtım betiği/CI/Dockerfile/compose/systemd/altyapıyı değiştiriyorsa (`prova`) **önce `reference/ui-prova.md`'yi oku** ve faz tablosuna uygula; UI'sız ve altyapısız işte ekleme (yalnız `kısa`'da UI varsa `denetim`).
 
 **Güvenlik incelemesi:** bir faz auth, yetki, oturum veya veri silmeye dokunuyorsa ya da VLAD güvenlik etkili bir kararı otonom verecekse, ilgili fazın Tanım'ına "rapordan sonra kısa güvenlik incelemesi" ekle ve taslakta ayrıca belirt. İnceleme `security-reviewer` rolüyle arka plan agent'ı olarak yapılır (`security-audit` skill'i, guidance modu). Bulguların nasıl ele alınacağı `integrate` K1, ara Codex kapısı tetikleyicisi `integrate` K2'dedir; burada tekrarlanmaz. Ara kapı tetikleyen fazların Tanım'ına "faz merge'ünden önce ara Codex kapısı (`integrate` K2)" notu ekle ve taslakta belirt. Bu tür bir kararı kullanıcıya sormadan verme: gerekçesiyle taslağa yaz.
 
 **Dış API gerçek fixture'ı:** iş dış bir API/servis yanıtına dayanıyorsa `spec`/`plan` fazının Tanım'ına "plan öncesi gerçek yanıt örnekleri" ekle (analyst/architect gerçek yanıtı kaydedip raporda verir; yoksa kullanıcıdan alınacağını `### Açık noktalar`'a yazar). Taslakta örnek yoksa bunu uyarı olarak göster ve kullanıcıdan iste. Kabul ve unit testler kaydedilmiş gerçek fixture'a karşı yazılır; uydurma yanıt şekline değil.
 
-**Model dağıtımı:** her görev, `model` verilmezse rolünün modelinde çalışır (görevin modeli ?? rolün modeli ?? varsayılan). Taslağın faz tablosuna **Model** sütunu koy (rol modeli ya da seçtiğin sapma) ve kuralları uygula:
-- **Varsayılan:** rolün modeli; sütuna rolün modelini yaz, `--model` geçirme.
-- **Haiku:** mekanik/basit fazlarda (belge, eşitleme, arama, özet) seçebilirsin; **kod yazan fazda (developer `sözleşme`/`uygulama`, düzeltme) seçme**.
-- **Opus:** yalnızca en kritik işlerde (ör. güvenlik etkili tasarım, geri alınamaz veri işlemi). Gerekçesini taslakta yaz ve kullanıcının **açık onayını** al; gerekçesiz `--model opus` CLI'da reddedilir (`--model-reason` zorunlu). Onay yoksa Opus seçme.
-- Pipeline'da faz başına model sapması `--phase-model <faz>=<haiku|sonnet|opus>[:<gerekçe>]` ile verilir (opus için gerekçe zorunlu; modeli rolünkiyle aynı olan faza yazma).
-- Seçilen model rolün modelinden farklıysa `vlad task new` komutuna `--model <haiku|sonnet|opus> [--model-reason "<gerekçe>"]` ekle; aynıysa ekleme.
+**Model dağıtımı:** varsayılan rolün modeli (Model sütununa onu yaz, `--model` geçirme); Haiku yalnız mekanik fazda (kod yazan fazda değil); Opus yalnız gerekçeyle ve kullanıcının açık onayıyla (`--model-reason` zorunlu). Faz başına sapma `--phase-model`; kurallar ve komut biçimi: `reference/model-dagitimi.md`.
 
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
 - İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.
@@ -173,28 +161,17 @@ Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bas
 ```
 vlad task launch <id> --json
 ```
-- **Çok makine** (`vlad.config.json`'da `machines` varken): kartın `machines` listesi (`vlad project set <slug> machines …`; sıra = tercih) görevin nereye yerleşebileceğini belirler. `launch` makineyi kartın sırası, kapasite (`maxParallel`) ve ulaşılabilirliğe göre kendisi seçer; belirli bir makine için `vlad task launch <id> --machine <ad> --json` (ad kartın listesinde olmalı). Pipeline'da çatı ilk fazın makinesine sabitlenir (pin); sonraki fazlar aynı makinede açılır. Uzak launch'ta beyin önce kb'yi commit+push eder, işçi senkronlar, sonra çalışan işçide açılır. Taslakta kartta `machines` varsa yerleşimi (otomatik ya da `--machine`) bir satırla göster. Makine ulaşılamazsa komut çıkış kodu **75** verir: görev `queued` kalır, `vlad machine ping <ad>` ile bak ve tekrar dene; belirsiz rezervasyon için `vlad task release <id>` (`/status`). `--external` uzak makinede desteklenmez.
+- **Çok makine** (`machines` tanımlıyken): `launch` makineyi kartın `machines` sırasına, kapasiteye ve ulaşılabilirliğe göre seçer (`--machine <ad>`); çıkış kodu **75** = geçici hata, görev `queued` kalır. Ayrıntı: `reference/launch-ayrintilari.md` §Çok makine.
 - Başarılı: görev `running`; yeni terminal sekmesi/penceresinde çalışan açılır. Kullanıcıya branch (`vlad/<id>`) ve worktree yolunu göster.
 - Pipeline fazı (`parent` dolu): ilk fazda entegrasyon branch'i `vlad/<çatı-id>` ve worktree'si (`<worktreeDir>/<çatı-id>`) açılır, çatı `running` olur; fazın branch'i entegrasyon branch'inden açılır. Kullanıcıya ikisini de göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.
-- `--external` (vlad-desktop gibi gömülü istemciler): worktree + branch + güven kaydı + `running` aynen yapılır, terminal AÇILMAZ; JSON'da `script` (Windows: `%TEMP%\vlad\<id>.ps1`; POSIX: `$TMPDIR/vlad/<id>.sh`), `command` ve `cwd` döner, pencereyi istemci açar. Bulut modunda reddedilir.
-- `--dry-run` önizleme değildir: worktree + branch oluşturur ve görevi terminal açmadan `running` yapar (yalnızca test içindir). Bu yüzden "önce dry-run ile göster" diye kullanma.
+- `--external` (gömülü istemci: terminal açılmaz, `script`/`command`/`cwd` döner) ve `--dry-run` (**önizleme değildir**: worktree + branch oluşturur, görevi `running` yapar; "önce dry-run ile göster" deme): `reference/launch-ayrintilari.md` §--external ve --dry-run.
 
 **İzin kalıpları:** çalışanın push ve `gh run`/`gh workflow run` komutları tek başına koşar ve `settings.json` kalıplarıyla eşleşir (kalıp listesi `vlad-worker` skill'inde tek kaynaktır). Reddedilirse çalışan `ask` ile sorar; kullanıcı onayıyla push/dispatch'i `git -C <worktree> …` / `gh` ile sen yaparsın. Kalıbı sen yazmazsın, çalışan da kendi izin ayarını değiştirmez.
 
 ### 5a-cloud. Bulut modu (VLAD bulutta çalışıyorsa)
 
-`vlad task launch` komutu `launcher: cloud` ise veya `auto` + `CLAUDE_CODE_REMOTE=true` ise bulut modundadır. Yerel worktree/terminal açılmaz; komut `create_session` argümanlarını JSON olarak döner ve görevi `running` yapar. Akış:
-
-1. `vlad task launch <id> --json` çalıştır. Hata (kartta `repo` yok, `local_only`, dev değil) → görev `queued` kalır, `error` doludur; hatayı göster, ne yapılacağını sor.
-2. `integration.needs_remote_create` doğruysa entegrasyon branch'ini `integration.branch` adıyla remote'ta oluştur (GitHub MCP `create_branch`, `integration.from` branch'inden; kullanıcı onayı pipeline taslak onayında alınmıştır). Alan her launch'ta remote'taki gerçek duruma göre (`git ls-remote`) hesaplanır; çatı görevin `branch` alanına bakılmaz. Remote'a erişilemezse `true` döner ve çıktıda `warnings` dolar: `create_branch` "zaten var" derse sorun değil, devam et.
-   **`create_branch` başarısız olursa** (ve branch gerçekten yoksa): `create_session` çağırma; fazı `vlad task set <id> failed` yap (`running`'den `queued`'a dönemez), hatayı göster, yeni faz öner. Çatı görevin `branch` alanı launch tarafından yazılmaz, düzeltilecek bir şey kalmaz; sonraki faz yine remote'a bakar.
-3. **`create_session`'dan önce `vlad kb commit "<özet>" --push` çalıştır** (çalışan kb'yi salt okuma klonlar; görev dosyası ve bağımlı raporlar remote'ta güncel olmalı). Sonra `create_session` çağır: `source_url`, `source_revision`, `outcome_branch`, `model`, `title`, `tags`, `permission_mode`, `prompt` alanlarını çıktıdan aynen ver; çıktıda `extra_allowed_tools` varsa onu da **aynen** geçir (çalışanın `add_repo` ile kb'yi klonlayabilmesi için; çocuk ebeveynin izinlerini aşamaz, bu yüzden listeyi değiştirme).
-   **Çalışan `[VLAD:LOG] kb erişimi yok` derse** (iki denemede kb klonlanamadı): `vlad task log` düş, `vlad task set <id> failed`, sonra `vlad task set <id> queued`; `vlad.config.json`'da `cloudKb: "inline"` yap (görev metni prompt'a satır içi girer, bugünkü kip) ve 5a-cloud'u baştan çalıştır. Kullanıcıya nedenini söyle; ayarı iş bitince geri almayı öner.
-4. Dönen session ID'sini yaz: `vlad task session <id> <session_id>`. `create_session` başarısızsa `vlad task set <id> failed` (görev `running`'den `queued`'a dönemez); hatayı göster, yeni görev öner.
-5. Prompt VLAD'ın session ID'sini (`CLAUDE_CODE_REMOTE_SESSION_ID`) taşır; çalışan REPORT/ASK/FAIL yazınca VLAD'a 1 dk sonrasına tek seferlik zamanlanmış görev kurar ("VLAD görev <id>: <durum> — ingest et"). Bu hızlı yoldur; gelmezse `/status` hatırlatması yedektir (`get_session`/`list_events` → `vlad task ingest`). Kullanıcıya session'ı, branch'i (`vlad/<id>`) ve base'i göster.
-
-Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). Tasarım: `docs/superpowers/specs/2026-10-20-vlad-cloud-design.md`.
+`vlad task launch` `launcher: cloud` ya da `auto` + `CLAUDE_CODE_REMOTE=true` ile bulut modundaysa **önce `reference/bulut.md`'yi oku** ve uygula (`create_session`, entegrasyon dalı, `kb commit --push`, `[VLAD:LOG] kb erişimi yok` yolu). Yerelde atla.
 
 ## 5b. research → arka plan agent'ı
 
@@ -210,24 +187,11 @@ Görev ID'leri bulutta günlük `51`'den başlar (yerel VLAD ile çakışmaz). T
 
 ## 6. Plan fazı: yaz–eleştir
 
-`plan` fazı (architect, research) tek görev içinde sırayla yürür; "birlikte oturma" budur (spec §7):
-1. `vlad task set <id> running --json`
-2. **Taslak:** architect rolüyle arka plan agent'ı (5b'deki rol, skill ve `depends_on` cümleleriyle; girdi spec fazının raporu). Rolün `## Çıktı` başlıklarıyla taslak plan döndürür. Taslağı geçici dosyada tut; `vlad task log <id> "Plan taslağı hazır"`.
-   Bu adımdaki tüm arka plan agent'larını (taslak, eleştiri, son plan) kullandıkları rolün modeliyle başlat, plan görevinin kendi `model`'i varsa (`effective_model`) onunla (Agent aracının `model` parametresi); ikisi de boşsa varsayılan.
-3. **Eleştiri:** iki arka plan agent'ı paralel — biri `roles/developer.md`, biri `roles/tester.md` rol dosyasıyla. Prompt: spec raporu + taslak plan; "Rol dosyasından yalnızca rolün bakış açısını al; Yetki, iş akışı ve commit kuralları bu görevde geçerli değil. Kendi rolünün gözüyle eleştir: uygulanabilirlik/test edilebilirlik, eksik arayüz, belirsiz görev, risk; madde madde. Kod yazma, dosya değiştirme, skill yükleme." Her biri için `vlad task log <id> "<Developer|Tester> eleştirisi: <kısa özet>"`.
-   **Codex eleştirisi (3. göz):** iki agent'la paralel, `second-opinion` skill'ini **Skill aracıyla yükle**, mod `plan` ile uygula (komutu elle kopyalama; komut, model, yedek ve loglama orada; Codex yoksa/limit/hata → `integrate` K4 reviewer yedeği). Skill yüklenemezse eleştiri adımı durur ve kullanıcıya söylenir.
-4. **Son plan:** architect agent'ına taslak + eleştirileri (developer, tester, varsa Codex) ver; son planı ve `### Eleştiriler ve nasıl ele alındı` bölümünü yazdır.
-5. Rapora yalnızca son plan girer (ara ürünler log'da kalır): `vlad task report <id> --file <plan.md> --json`, sonra 5b adım 5.
-
-**Safeguard kesintisi:** architect/Sonnet agent'ı güvenlik filtresiyle kesilirse aynı taslağı kısa, temiz bir bağlamla yeniden iste (yalnız girdi raporu + görev dosyası). İkinci kesintide taslağı Codex tek başına yazsın (`second-opinion` skill'i) ve `vlad task log <id> "Safeguard kesintisi: <ne>"` düş.
+`plan` fazı (architect, research) tek görevde taslak → developer/tester/Codex eleştirisi → son plan olarak yürür: **önce `reference/plan-danisman.md` §6'yı oku** ve uygula; sonunda 5b adım 5.
 
 ## 7. Danışman yan görevleri
 
-Danışman (`advisor`: finans, pazarlama, growth odakları) herhangi bir fazdan (taslakta ya da fazlar sürerken) danışılabilir. Kullanıcıya yan görevi kısa bir taslakla göster, onay al:
-```
-vlad task new --project <slug> --title "<başlık> — danışma: <konu>" --kind research --role <finans|pazarlama|growth> --parent <çatı-id> --phase danışma --body-file <danışma.md> --json
-```
-`--role` değeri `advisor`'ın odağıdır (eski slug alias; rol dosyası `advisor.md`). Bağımlılık verilmez; hemen 5b ile yürüt. Sonucu ilgili fazın bağlamına ekle: faz henüz oluşturulmadıysa özetini o fazın `## Bağlam`'ına yaz; oluşturulduysa `vlad task log <faz-id> "Danışma <yan-id>: <özet> — raporuna bak"`. Çalışanlar kardeş görevleri de okur.
+Danışman (`advisor`) herhangi bir fazdan yan görev olarak danışılabilir (`--phase danışma`, taslak + onay, 5b ile yürüt): komut ve sonuç aktarımı `reference/plan-danisman.md` §7.
 
 ## 8. Hafızayı commit'le
 

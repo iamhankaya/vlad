@@ -15,10 +15,16 @@ export type BlockCtx = {
   gateEnv?: Record<string, string>;
 };
 
+/**
+ * Double-quoted shell value: escape `"`, backtick, backslash and every `$` that is not a supported `$VAR`/`${VAR}`
+ * (F-vlad-352), so `$(...)`, `$1`, `${VAR:-x}` stay literal like in `gateEnvOf`; `$VAR`/`${VAR}` expand in both.
+ */
+const escapeGateValue = (v: string): string => v.replace(/(["`\\])/g, "\\$1").replace(/\$(?!\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_])/g, "\\$");
+
 /** Gate environment block: workers must not trip over a missing DB URL / PATH entry and report a fake red (T20261117-04). */
 const gateEnvBlock = (env: Record<string, string>): string =>
   "Gate ortamı (bu makinede kapı komutu ve testler bu ortamla koşar; değerleri aynen ver, `$PATH` kabukta açılır; sudo ya da elle kurulum isteyen betiğe takılma, bu ortam yeter):\n" +
-  Object.entries(env).map(([k, v]) => `export ${k}="${v.replace(/(["`\\])/g, "\\$1")}"`).join("\n");
+  Object.entries(env).map(([k, v]) => `export ${k}="${escapeGateValue(v)}"`).join("\n");
 
 /** Prompt cap of the related-findings list and of a title in it (a big project must not bloat the prompt). */
 export const RELATED_FINDINGS_MAX = 15;

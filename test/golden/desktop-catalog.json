@@ -838,6 +838,17 @@
   },
   {
    "path": [
+    "worktree",
+    "prune"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "silme; konsoldan açılmadı, ayrı karar (--yes onayı VLAD/kullanıcıdadır)"
+   }
+  },
+  {
+   "path": [
     "agent",
     "start"
    ],
