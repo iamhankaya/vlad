@@ -40,7 +40,7 @@ describe("approver-kabul: KK12 hız sınırı ve kilit", () => {
     await cycle(NIGHT, "Onayla", 5000);
     const cid = writeRequest(w, { argv: OFF });
     expect((await waitAck(w, cid)).status).toBe("rate_limited");
-    expect(w.ntfy.published).toHaveLength(1);
+    expect(w.ntfy.requests).toHaveLength(1); // yalnız ilk istek bildirimi; reddedilen ikinci için yok
     w.clock.advance(LIMITS.cooldownMs);
     expect((await submit(w, OFF)).ack.status).toBe("pending");
   });
@@ -54,14 +54,16 @@ describe("approver-kabul: KK12 hız sınırı ve kilit", () => {
     expect((await submit(w, OFF)).ack.status).toBe("pending");
   }, 45_000);
 
-  it("3 art arda ret ⇒ locked (1 saat); kilit süre dolsa da yalnız `approver unlock` açar", async () => {
+  it("3 art arda ret ⇒ locked (1 saat); süre dolmadan kilitli kalır, 1 saat dolunca kendiliğinden açılır (erken açmak için `approver unlock`)", async () => {
     await boot();
-    for (let i = 0; i < LIMITS.lockAfterDenied; i++) await cycle(OFF, "Reddet");
+    for (let i = 0; i < LIMITS.lockAfterDenied; i++) await cycle(OFF, "Reddet"); // her tur sonunda saat soğuma+1 sn ilerler
     const cid = writeRequest(w, { argv: OFF });
     expect((await waitAck(w, cid)).status).toBe("locked");
-    w.clock.advance(LIMITS.lockMs * 2); // "yalnız unlock ile açılır" (plan): süre geçse de kilit sürer
-    const cid2 = writeRequest(w, { argv: OFF });
-    expect((await waitAck(w, cid2)).status).toBe("locked");
+    w.clock.advance(LIMITS.lockMs - 3 * LIMITS.cooldownMs); // kilit bitişinden önce
+    const early = writeRequest(w, { argv: OFF });
+    expect((await waitAck(w, early)).status, "süre dolmadan").toBe("locked");
+    w.clock.advance(3 * LIMITS.cooldownMs); // toplam > lockMs
+    expect((await submit(w, OFF)).ack.status, "1 saat dolunca").toBe("pending");
   }, 45_000);
 
   it("unlock: TTY'siz / mod yetkisiz / çalışan reddedilir; TTY + geçerli token + çalışan değil ile kilidi açar", async () => {
@@ -123,13 +125,13 @@ describe("approver-kabul: KK11 kanal kesintisi", () => {
   it("yanıt akışı `ready` olmadan bildirim yayınlanmaz; hazır olunca yayınlanır", async () => {
     w.ntfy.holdOpen = true;
     startService(w);
-    await waitFor(() => w.ntfy.connections.length > 0, "akış isteği");
-    const cid = writeRequest(w, { argv: NIGHT });
+    const cid = writeRequest(w, { argv: NIGHT }); // akış yalnız istek başına açılır (plan)
     await waitFor(() => w.store.readPending(), "pending.json yazıldı");
+    await waitFor(() => w.ntfy.connections.length > 0, "akış isteği");
     await sleep(400);
     expect(w.ntfy.published, "ready yok").toHaveLength(0);
     w.ntfy.releaseOpen();
-    await waitFor(() => w.ntfy.published.length === 1, "ready sonrası yayın");
+    await waitFor(() => w.ntfy.requests.length === 1, "ready sonrası yayın");
     expect((await waitAck(w, cid)).status).toBe("pending");
   });
 
@@ -149,6 +151,7 @@ describe("approver-kabul: KK11 kanal kesintisi", () => {
   it("akış 429 Retry-After: bir sonraki bağlantı beklemeye uyar (≥ ~2 sn) ve servis çökmez", async () => {
     w.ntfy.failStream.push({ status: 429, retryAfter: 2 });
     const svc = startService(w);
+    writeRequest(w, { argv: NIGHT }); // ilk istek akışı 429 alır
     await waitFor(() => w.ntfy.connections.length >= 2, "ikinci bağlantı", 12_000);
     expect(w.ntfy.connections[1]!.at - w.ntfy.connections[0]!.at).toBeGreaterThanOrEqual(1800);
     expect(svc.settled()).toBe(false);
@@ -156,8 +159,9 @@ describe("approver-kabul: KK11 kanal kesintisi", () => {
 
   it("akış kopunca son olay kimliğiyle (since=<id>) yeniden bağlanır; ilk bağlantı since sayısal (unix)", async () => {
     await boot();
-    expect(w.ntfy.connections[0]!.since).toMatch(/^\d+$/);
     const { pending: p } = await submit(w, NIGHT);
+    await waitFor(() => w.ntfy.connections.length > 0, "ilk akış");
+    expect(w.ntfy.connections[0]!.since).toMatch(/^\d+$/);
     w.ntfy.emit(p!.respTopic, "çöp"); // bir `message` olayı = imleç ilerler
     await sleep(100);
     const last = w.ntfy.lastEventId();

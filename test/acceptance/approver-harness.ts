@@ -95,6 +95,8 @@ export class FakeExecutor implements Executor {
 export interface PublishedMsg { topic: string; title: string; message: string; actions: Array<{ action: string; label: string; url: string; method: string; body: string; clear?: boolean }>; raw: Record<string, unknown> }
 export class FakeNtfyServer {
   published: PublishedMsg[] = [];
+  /** Yalnız İSTEK bildirimleri (düğmeli); sonuç bildirimleri (düğmesiz) de aynı konuya yayınlanır (plan). */
+  get requests(): PublishedMsg[] { return this.published.filter((m) => m.actions.length > 0); }
   /** Telefondan gelen düğme POST'ları (konu → gövde). */
   posts: Array<{ topic: string; body: string }> = [];
   connections: Array<{ topic: string; since: string | null; at: number }> = [];
@@ -268,11 +270,11 @@ export async function waitAck(w: World, cid: string, ms = 8000): Promise<AckReco
 }
 /** İstek yazar, ack'i bekler; `pending` ise bildirimin yayınlanmasını da bekler. */
 export async function submit(w: World, argv: string[], o: { requester?: string; extra?: Record<string, unknown> } = {}): Promise<{ cid: string; ack: AckRecord; pending: PendingRecord | null; msg: PublishedMsg | null }> {
-  const before = w.ntfy.published.length;
+  const before = w.ntfy.requests.length;
   const cid = writeRequest(w, { argv, ...o });
   const ack = await waitAck(w, cid);
   if (ack.status !== "pending") return { cid, ack, pending: null, msg: null };
-  const msg = await waitFor(() => w.ntfy.published.length > before && w.ntfy.published[before], "istek bildirimi yayınlandı");
+  const msg = await waitFor(() => w.ntfy.requests.length > before && w.ntfy.requests[before], "istek bildirimi yayınlandı");
   const pending = w.store.readPending();
   return { cid, ack, pending, msg };
 }
