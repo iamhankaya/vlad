@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readdirSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
-import { runGit, samePath, worktreePath } from "../git/git.js";
+import { runGitRaw, samePath, worktreePath } from "../git/git.js";
 import type { VladConfig } from "../kb/index.js";
 import { listProjects } from "../projects/store.js";
 import { getTask } from "./store.js";
@@ -8,7 +8,7 @@ import { projectPath, removeTaskWorktree } from "./launch.js";
 
 /**
  * `vlad worktree prune`: leftover folders under `<repo>-wt/` that git no longer lists. A folder qualifies only when
- * (a) no worktree of the project repo is registered there, (b) its name is a task ID, (c) that task is done/cancelled.
+ * (a) no worktree of the project repo is registered there, (b) its name is a task ID, (c) that task is done/cancelled, (d) it holds nothing but `.remember`.
  * Running/queued/unknown tasks, registered worktrees, symlinks and roots whose `git worktree list` cannot be read are never touched.
  */
 export type PruneItem = {
@@ -54,10 +54,11 @@ export function pruneOrphanWorktrees(
   for (const [root, repos] of roots) {
     if (!existsSync(root)) continue;
     // registered anywhere = not an orphan; an unreadable list makes the whole root unsafe (everything would look unregistered)
-    const listed = repos.map((r) => runGit(r.repo, ["worktree", "list", "--porcelain"]));
+    // `-z`: NUL-separated fields, paths literal (no quoting/escaping of non-ASCII or newline), compared as they are
+    const listed = repos.map((r) => runGitRaw(r.repo, ["worktree", "list", "--porcelain", "-z"]));
     const unreadable = listed.some((l) => l === null) || (shared && unresolved);
     const registered = (dir: string): boolean =>
-      listed.some((l) => (l ?? "").split("\n").some((ln) => ln.startsWith("worktree ") && samePath(ln.slice(9), dir)));
+      listed.some((l) => (l ?? "").split("\0").some((f) => f.startsWith("worktree ") && samePath(f.slice(9), dir)));
     for (const name of readdirSync(root).sort()) {
       if (!TASK_DIR.test(name)) continue;
       const dir = join(root, name);
@@ -71,6 +72,10 @@ export function pruneOrphanWorktrees(
       let state: string;
       try { state = getTask(name).data.state; } catch { items.push({ ...base, action: "skip", reason: "görev bulunamadı" }); continue; }
       if (state !== "done" && state !== "cancelled") { items.push({ ...base, state, action: "skip", reason: `görev ${state}` }); continue; }
+      // (d) conservative: only a stub holding nothing but `.remember` is deleted; anything else may be someone's work
+      let names: string[];
+      try { names = readdirSync(dir); } catch { items.push({ ...base, state, action: "skip", reason: "klasör okunamadı" }); continue; }
+      if (names.some((n) => n !== ".remember")) { items.push({ ...base, state, action: "skip", reason: "içerik var, atlandı" }); continue; }
       if (!isInside(root, dir)) { items.push({ ...base, state, action: "skip", reason: "klasör kökün dışına çözülüyor" }); continue; }
       const item: PruneItem = { ...base, state, action: "delete" };
       repoOf.set(item, repos[0]!.repo);

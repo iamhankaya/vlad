@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -81,6 +81,31 @@ describe("pruneOrphanWorktrees (F-vlad: artık worktree klasörleri)", () => {
     const r = pruneOrphanWorktrees(cfg, { yes: true });
     expect(r.removed).toBe(0);
     expect(existsSync(d)).toBe(true);
+  });
+
+  it("ASCII dışı (git'in tırnakladığı) yoldaki kayıtlı worktree silinmez (katman 1: -z ile literal karşılaştırma)", () => {
+    // newline + ü: git (non -z) quotes such paths ("w\n\303\274") and then samePath cannot match them
+    const uRoot = join(base, "w\nü-ç");
+    cfg.worktreeDir = uRoot;
+    const id = task("done");
+    const wt = join(uRoot, id);
+    git(repo, "worktree", "add", "-b", `vlad/${id}`, wt);
+    // git hâlâ listeler ama içerik yalnız .remember: ölçüt (d) tek başına korumasın, katman 1 kanıtlansın
+    for (const n of readdirSync(wt)) if (n !== ".remember") rmSync(join(wt, n), { recursive: true, force: true });
+    mkdirSync(join(wt, ".remember"), { recursive: true });
+    const r = pruneOrphanWorktrees(cfg, { yes: true });
+    expect(r.removed).toBe(0);
+    expect(existsSync(wt)).toBe(true);
+    expect(r.items.find((i) => i.dir === wt)!.reason).toMatch(/kayıtlı/);
+  });
+
+  it("ölçüt (d): .remember dışında içerik varsa dokunulmaz ve 'içerik var' diye listelenir", () => {
+    const d = leftover(task("done"), [".remember/logs/x.log", "src/a.ts"]);
+    const clean = leftover(task("done"));
+    const r = pruneOrphanWorktrees(cfg, { yes: true });
+    expect(existsSync(d)).toBe(true);
+    expect(existsSync(clean)).toBe(false);
+    expect(r.items.find((i) => i.dir === d)).toMatchObject({ action: "skip", reason: expect.stringMatching(/içerik var/) });
   });
 
   it("paylaşımlı kökte (worktreeDir'de {repo} yok) repo yolu çözülemeyen proje varsa kök güvenli sayılmaz, hiçbir şey silinmez", () => {
