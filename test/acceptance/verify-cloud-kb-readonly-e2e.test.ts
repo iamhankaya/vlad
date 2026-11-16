@@ -1,3 +1,4 @@
+import { readText } from "../skill-text.js";
 // Doğrulama fazı (T20261026-23): bulut çalışana kb salt okuma — faz 1 (cloud.ts readonly), faz 2 (kb check, skill, izin)
 // ve uygulama 3 (güvenlik sertleştirmesi) birleşik uçtan uca. Yalnızca CLI / dışa açık arayüz; geçici kb ve geçici
 // git depoları. Gerçek launcher, gerçek bulut session'ı ve ağ yok (pipeline fazında remoteBranch saplanır).
@@ -145,8 +146,8 @@ describe("sözleşme: launch çıktısı ↔ settings.json ↔ skill'ler", () =>
     cfg({ cloudKb: "readonly" });
     const { prompt } = JSON.parse(launchCli(mk()).out);
     expect(prompt).toMatch(/\[VLAD:LOG #n\] kb erişimi yok/);
-    const status = readFileSync(join(root, ".claude", "skills", "status", "SKILL.md"), "utf8");
-    const delegate = readFileSync(join(root, ".claude", "skills", "delegate", "SKILL.md"), "utf8");
+    const status = readText(join(root, ".claude", "skills", "status", "SKILL.md"));
+    const delegate = readText(join(root, ".claude", "skills", "delegate", "SKILL.md"));
     expect(status).toMatch(/\[VLAD:LOG\] kb erişimi yok/);
     expect(delegate).toMatch(/kb erişimi yok/);
     expect(delegate).toMatch(/cloudKb: .inline./);
