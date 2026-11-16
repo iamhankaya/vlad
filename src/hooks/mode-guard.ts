@@ -15,8 +15,16 @@ export interface GuardCtx { vladHome?: string | null; cwd?: string }
 // Platform ayrımı: yol karşılaştırması küçük harfe çevrilip `\` → `/` yapılır (macOS/Windows büyük-küçük harf duyarsız).
 const norm = (p: string): string => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 /** Tam realpath; yok/dangling ise ata dizini çözer, son bileşen symlink ise hedefini izler (yazma araçları symlink üzerinden de gizli dizine inemez). */
+let memo: Map<string, string> | null = null; // yalnız tek checkWorkerMode çağrısı boyunca (dosya sistemi o sürede değişmiş sayılmaz)
 function real(p: string, depth = 0): string {
   const abs = resolve(p);
+  const hit = depth === 0 ? memo?.get(abs) : undefined;
+  if (hit !== undefined) return hit;
+  const out = realUncached(abs, depth);
+  if (depth === 0) memo?.set(abs, out);
+  return out;
+}
+function realUncached(abs: string, depth: number): string {
   try { return realpathSync.native(abs); } catch { /* yok ya da dangling */ }
   const parent = dirname(abs);
   const base = parent === abs ? abs : join(real(parent, depth), basename(abs));
@@ -34,7 +42,9 @@ function globHits(base: string, name: string): boolean {
 /** F-vlad-287: imzalı mod belirtecinin anahtarı (gizli dizin); hook en iyi çaba katmanı, gerçek sınır CLI'daki belirteç doğrulaması. */
 const SECRET = /\.vlad-secret/i; // `mode.key` tek başına aranmaz (grep/commit mesajı yanlış pozitifi); parçalı yol/joker kaçışı en iyi çaba sınırı
 
-const secretHit = (t: string): boolean => { const n = norm(expand(t.replace(/["'\\]/g, ""))); return SECRET.test(n) || n === norm(secretDir()) || n.startsWith(norm(secretDir()) + "/"); };
+/** secretDir() (passwd sorgusu pahalı) çağrı başına bir kez. */
+const sdir = (): string => { if (!memo) return secretDir(); let v = memo.get("\0sd"); if (v === undefined) { v = secretDir(); memo.set("\0sd", v); } return v; };
+const secretHit = (t: string): boolean => { const n = norm(expand(t.replace(/["'\\]/g, ""))); return SECRET.test(n) || n === norm(sdir()) || n.startsWith(norm(sdir()) + "/"); };
 const SETTINGS = ["settings.json", "settings.local.json"];
 const expand = (t: string): string => t.replace(/^~(?=\/|\\|$)|\$\{?HOME\}?/g, homedir().replace(/\\/g, "/"));
 
@@ -101,7 +111,7 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
   return null;
 }
 
-const secretReal = (): string => norm(real(secretDir()));
+const secretReal = (): string => norm(real(sdir()));
 const insideSecret = (x: string): boolean => { const n = norm(x), sd = secretReal(); return n === sd || n.startsWith(sd + "/"); };
 const ancestorOfSecret = (x: string): boolean => { const n = norm(x); return n === "" || secretReal().startsWith(n + "/"); };
 
@@ -149,7 +159,7 @@ function segMatches(globSeg: string, name: string): boolean {
 }
 function globReachesSecret(tok: string): boolean {
   if (!/[*?[{]/.test(tok) || !/^(~|\$\{?HOME\}?|\/)/.test(tok)) return false;
-  const forms = [secretDir(), real(secretDir())].map((d) => d.replace(/\\/g, "/").split("/").filter(Boolean));
+  const forms = [sdir(), real(sdir())].map((d) => d.replace(/\\/g, "/").split("/").filter(Boolean));
   for (const alt of braceExpand(expand(tok.replace(/\\/g, "/")))) {
     const gs = alt.split("/").filter(Boolean);
     if (forms.some((sd) => gs.every((g, i) => i >= sd.length || segMatches(g, sd[i]!)))) return true;
@@ -159,6 +169,10 @@ function globReachesSecret(tok: string): boolean {
 
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
 export function checkWorkerMode(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx = {}): string | null {
+  memo = new Map();
+  try { return check(tool, input, kbDir, ctx); } finally { memo = null; }
+}
+function check(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx): string | null {
   if (tool === "Bash") return checkBash(typeof input?.command === "string" ? input.command : "", kbDir, ctx, 0);
   if (!MODE_GUARD_TOOLS.includes(tool)) return null;
   if (READ_TOOLS.includes(tool)) return checkReadTool(tool, input, ctx);
