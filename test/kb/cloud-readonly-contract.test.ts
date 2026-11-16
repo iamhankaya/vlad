@@ -1,10 +1,11 @@
+import { readText } from "../skill-text.js";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
-const read = (p: string) => readFileSync(join(root, p), "utf8");
+const read = (p: string) => readText(join(root, p));
 
 describe("kb salt okuma: metin sözleşmesi (T20261026-20)", () => {
   it("delegate 5a-cloud: create_session öncesi kb push, extra_allowed_tools aynen, inline yedek", () => {

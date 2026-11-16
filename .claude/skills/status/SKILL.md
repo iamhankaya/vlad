@@ -30,34 +30,17 @@ T20261016-03  watchparty  Oda sohbeti  [pipeline: running]
 ```
 Satırlar: faz (`phase`), rol başlığı, durum, bağımlılık (`depends_on`); bekleyen kapıyı işaretle.
 
-### 1b. Bulut görevleri (`CLAUDE_CODE_REMOTE=true`)
+### 1b. Bulut görevleri ve 2-cloud. Bulut merge kapıları (`CLAUDE_CODE_REMOTE=true`)
 
-**Yabancı commit kontrolü:** bulut çalışanı kb'yi salt okuma klonlar ama platform push'unu engellemez (protokol: push yasak). Aktif bulut görevi varsa `/status` başında `vlad kb check --json --strict` çalıştır (`checked`, `foreign: [{sha,author,subject}]`, `suspicious: [{sha,author,subject,files}]`; `--strict` yabancı/şüpheli commit ya da yapılamayan kontrolde 1 ile çıkar, çıktıyı yine okursun). `checked: false` ise ("KONTROL YAPILAMADI": ağ yok, upstream yok) bunu kullanıcıya göster ve aktif bulut görevinin merge kapısını beklet: kontrol yapılamadan "yabancı commit yok" denemez. `foreign` ve `suspicious` boşsa sessiz geç. `suspicious` = önekten bağımsız kök `CLAUDE.md`, `.claude/`, `.github/` dosyalarına dokunan commit (oturuma yüklenen/CI'da çalışan dosyalar): `foreign` gibi göster ve kullanıcı görmeden kabul etme. Doluysa commit'leri kullanıcıya göster ve seçenek sun: (a) o commit'i yazan bulut görevini durdur (`vlad task set <id> failed` + `vlad task log`; hangi görev olduğu commit zamanı/içeriğinden çıkar, emin değilsen sor), (b) incele ve kabul et. Kullanıcı gördükten sonra `vlad kb check --ack <head>` ile işaretle (`head` = `check --json` çıktısındaki alan; arada gelen commit görülmeden işaretlenmez); yoksa aynı commit her seferinde yeniden listelenir. Yabancı commit'i kendin geri alma/force push yapma. Sınır: yalnız kb'nin upstream dalı ve `kb:` öneki bakılır (iyi niyetli koruma; başka dala push ya da sahte önek görünmez). İlk kurulumda geçmişte öneksiz eski commit listelenirse onaylayıp `--ack <head>` ile başlangıç noktası koy.
-
-Bulutta çalışan bildirimi yoktur; her `/status` çağrısında `session_id`'si dolu, `running`/`blocked` bulut görevleri için durumu **sen** çek (`vlad status --json`'dan önce, tablo güncel olsun):
-1. `get_session(session_id)`: `status_bucket` `failed` → `vlad task log` + `vlad task set <id> failed`; kullanıcıya bildir.
-2. Önce `list_events(session_id, kinds=["result"], limit=3)` dene (küçük sayfa; `result` olayı tur sonu metnini ve `total_cost_usd`/`num_turns`/`duration_ms` ölçümünü taşır). Çıktıyı geçici dosyaya yaz ve `vlad task ingest <id> --file <events.json> --json` çalıştır; `processed` ve `skipped` ikisi de boşsa (işaret bulunamadı) `list_events(session_id, kinds=["assistant", "result"], limit=100)` ile tekrar dene. Ingest log satırlarına olayın `created_at`'ini yazar ve tur ölçümünü `## İlerleme`'ye `[ölçüm …]` satırı olarak ekler. Olay çekme + dosyaya yazma işi bir `haiku` arka plan agent'ına verilebilir: agent yalnızca `list_events` ham çıktısını dosyaya yazar ve yolunu döndürür; `vlad task ingest` VLAD'da kalır. Birden çok sayfa gerekirse (`has_more: true`) sayfaların ham çıktılarını art arda aynı dosyaya yaz; CLI ardışık `{ccr:{data,has_more}}` sayfalarını birleştirir. `result` olayı, assistant olayı yoksa işaret kaynağıdır (ikisi birlikte gelirse çift işleme olmaz). Çalışan bitişte tüm işaretlerini son tur mesajında tekrar eder; işleme idempotenttir. `warnings` boş değilse göster (ör. `head=` remote uçla eşleşmiyor → rapor onaya sunulmadı; GitHub'dan `vlad/<id>` ucunu doğrulayıp gerekirse `--remote-head <sha>` ile tekrar dene).
-3. İşaretsiz biten session (`review_ready`/`completed` ama görev `awaiting_approval`/`failed` değil) → kullanıcıya sor.
-4. `blocked` görev: cevabı `vlad task answer` ile yazdıktan sonra `send_message(session_id, "[VLAD:ANSWER #n] <cevap>")` ile çalışana ilet (`n` = görev dosyasındaki `[cloud #n]`).
-5. **Hızlı yol — çalışan bildirimi:** çalışan REPORT/ASK/FAIL yazınca VLAD session'ına tek seferlik zamanlanmış görev kurar; mesaj "VLAD görev <id>: <durum> — ingest et" biçimindedir. Gelince görev için `get_session`/`list_events` → `vlad task ingest` çalıştır ve **o görevin bekleyen hatırlatmasını iptal et** (`delete_trigger`).
-6a. **`[VLAD:LOG] kb erişimi yok`** (ingest log satırı): çalışan kb'yi klonlayamadı. Aynı görevi `cloudKb: "inline"` ile yeniden başlat: delegate 5a-cloud'daki yol (`failed` → `queued`, config'te `cloudKb: "inline"`, yeniden launch); kullanıcıya bildir.
-6. **Yedek — hatırlatma:** karar günlüğündeki "Bulut çalışanları için tek seferlik hatırlatmalar" gereği her bulut çalışanını başlattıktan sonra `send_later` ile ~15 dk sonrasına tek seferlik hatırlatma kurulur; çalışan bitmemişse yeniden kurulur (çalışan başına en fazla 4 deneme). Bildirim kurulamazsa ya da kaybolursa görev bu hatırlatmayla yakalanır. Sürekli yoklama yoktur.
-
-### 2-cloud. Bulutta merge kapıları (GitHub PR)
-
-Bulut VLAD yalnızca kendi session branch'ine push edebilir; kapılar yerel `git merge` yerine **GitHub PR** ile geçer (karar 2026-10-20). Diff özeti: `git fetch origin vlad/<id>` sonra `git log --oneline origin/<hedef>..origin/vlad/<id>` ve `git diff --stat origin/<hedef>...origin/vlad/<id>` (veya GitHub MCP `pull_request_read`). Aşağıdaki 2. adımdaki seçenekler aynıdır; yalnızca eylem farklıdır:
-1. **Merge et:** PR aç (`create_pull_request`, head `vlad/<id>`, base: pipeline fazında `vlad/<çatı-id>`, değilse repo'nun ana branch'i). PR açmak dış etkilidir: önce açık onay iste; PR linkini ve base'i göster; kullanıcı **açık onay** verince `merge_pull_request`. Sonra `vlad task set <id> done`. Merge hatasında görevi `done` yapma, hatayı göster.
-2. **Değişiklik iste:** `send_message(session_id, …)` ile çalışana ilet; `vlad task log` düş.
-3. **Olduğu gibi kabul et:** aynı kurallar.
-Son kapı (`vlad/<çatı-id>` → ana branch) ayrı bir PR ve ayrı açık onaydır. Bulut görevinde `vlad task cleanup` worktree olmadığı için zararsızdır. Bulut VLAD'ın `kb:` commit'leri session branch'ine gider (`vlad kb commit --push`); `master`'a alınması ayrıca onaylı merge/PR'dır.
+Aktif bulut görevi (`session_id`'li `running`/`blocked`) varsa ya da bulut görevinin merge kapısı geldiyse **önce `reference/bulut.md`'yi oku** ve uygula: yabancı commit kontrolü (`vlad kb check`), `get_session`/`list_events` → `vlad task ingest`, GitHub PR kapıları. Yerelde atla.
 
 ### Kapı doğrulaması (`gate`)
 
 Kapı yordamı (gate koşusu, ön kontrol, ingest-preview, kayıt dosyası yeniden üretimi, merge adımları) `integrate` skill'inde tek kaynaktır: kapı eyleminden önce `integrate` skill'ini **Skill aracıyla yükle** (komutları ezberden/kopyadan koşma) ve uygula. Skill yüklenemezse kapı eylemi **durur** ve kullanıcıya söylenir; sessiz yedek yok. Kırmızı gate'te merge önerme. **Merge, push ve PR yine açık onay ister.**
 
-### Uzak makinedeki görev (`vlad machine list`, görev bir işçiye yerleşmişse)
+### Uzak makinedeki görev (`vlad machine list`)
 
-Görev beyin dışında bir makinede koşuyorsa (`vlad task list --json` → görevin makinesi; config'te `machines` varken) kapı komutları yerel `git -C` yerine uzak op'larla yapılır (ayrıntı `integrate` skill'inde): `vlad task gate <id> [--target integration|task]`, `vlad task merge-preview <id> [--into <dal>]`, `vlad task merge <id> [--into <dal>] [--message …]`. Görev yerelse bu komutlar reddedilir (`/integrate` yerel akışı). Uzak `merge` push etmez (çakışmada geri alır); push/PR yine yalnız açık onayla. Makine kapalı/ulaşılamazsa komutlar çıkış kodu **75** (geçici hata) verir: sonra tekrar dene, yerelde elle merge etme. Ölü bir makinedeki belirsiz launch rezervasyonu ve pipeline pin'i `vlad task release <id>` ile bırakılır; işçi ulaşılamıyorsa `--force` (işçide yetim pencere kalabilir; kullanıcıya söyle).
+Görev beyin dışında bir işçide koşuyorsa kapı komutları uzak op'larla yapılır (`vlad task gate|merge-preview|merge`; çıkış kodu **75** = geçici hata, yerelde elle merge etme). Ayrıntı: `reference/kapi-ayrintilari.md` §Uzak makinedeki görev.
 
 ## 2. `awaiting_approval` görevler
 
@@ -69,26 +52,17 @@ Görev beyin dışında bir makinede koşuyorsa (`vlad task list --json` → gö
   git -C <worktree> diff --stat main...HEAD
   ```
   Diff ya da test çıktısı uzunsa özeti bir `sonnet` agent'ına yaptırabilirsin (isteğe bağlı; agent yalnız okur, sonucu VLAD kontrol eder).
-**`role: tester` ise:** Tester hatayı kanıtlamak için kasıtlı başarısız testler commit'leyebilir. Raporun `### Kırmızı bırakılan testler` bölümünü seçeneklerden önce göster. Liste boş değilse merge ana branch'in test suite'ini kırmızıya çevirir; varsayılan öneri merge değil, `### Önerilen düzeltmeler`'den bir Developer görevi açmaktır (`/delegate`, `--role developer`, kabul kriteri: o testlerin yeşile dönmesi). Merge yine seçenek olarak kalır ama bu riski açıkça söyle.
-Pipeline'da kural entegrasyon branch'ine uyarlanır: `kabul`/`karakterizasyon` fazının kırmızı testleri beklenendir (developer'ın hedefi), entegrasyon branch'ine merge varsayılan öneridir. `doğrulama` fazında kırmızı test varsa varsayılan öneri, aynı çatı altında yeni bir `uygulama` fazı (developer, kabul kriteri: o testlerin yeşile dönmesi) ve ona bağlı yeni bir `doğrulama` fazı açmaktır (`/delegate` adım 4). Ana branch'e merge, doğrulama fazı yeşil bitmeden önerilmez.
+**`role: tester` ya da `kabul`/`karakterizasyon`/`doğrulama` fazı:** kırmızı test kuralı `reference/kapi-ayrintilari.md` §Tester ve kırmızı testler (`### Kırmızı bırakılan testler`'i seçeneklerden önce göster).
 **Güvenlik incelemesi:** kural `integrate` K1'dedir (tetikleyici, kademe, tur sınırı, `exposure` istisnası); merge'den önce uygula.
-**Bulgu turu kuralı (D-genel-008):** düzeltme fazında çıkan yeni bulgu yalnız kritik/yüksekse değişiklik turu açar; orta/düşük bulgu fazın merge'ünü durdurmaz, tur açmaz, son kapı listesine girer. **Bulgu çözen görev** (amacı bir `F-…`'yi kapatmak) raporundaki yeni açık noktalar yalnız `[regresyon]`, kritik/yüksek ya da `[kalan F-…]` (çözülen bulgunun kalanı) ise bulgu olur; `[kalan F-…]`'de yeni bulgu açılmaz, mevcut bulgu açık kalır ve kalan kısım not edilir; diğerleri raporda kalır (günlükte tek satır). Toplu kapanış `vlad finding set <id...> <durum> --reason …` ile yapılır; eski düşük/bilgi yığını için `/bulgu-tarama`.
+**Bulgu turu kuralı (D-genel-008):** tek kaynak `digest` §4b (düzeltme fazında yalnız kritik/yüksek yeni bulgu tur açar; bulgu çözen görevin açık noktaları). Toplu kapanış `vlad finding set … --reason …`; eski düşük/bilgi yığını için `/bulgu-tarama`.
 
 **Ara Codex kapısı:** tetikleyici, tur sınırı ve loglama `integrate` K2'dedir; faz merge'ünden önce uygula.
 
-**Test itirazı hızlı yolu listesi:** raporda `### Test itirazı (hızlı yol)` varsa kapıda her maddeyi gözden geçir: yalnız **mekanik** düzeltmeler (regex, sabit, bayrak, metin/dize, yeni geçerli değer) kabul edilir ve diff yalnız ilgili assert satırlarına dokunmalıdır (`git diff <taban>...HEAD -- <test dosyası>`). Testin **niyetini** değiştiren (bekleneni gevşeten, assert silen, senaryoyu atlayan) bir değişiklik hızlı yol sayılmaz: merge önerme, kullanıcıya göster ve "Test itirazı" akışına (adım 4) çevir ya da değişiklik iste. Liste kullanıcıya özetlenir; tester görevi açıksa ona `vlad task log <tester-id>` ile bilgi düş.
+**Test itirazı hızlı yolu:** raporda `### Test itirazı (hızlı yol)` varsa `reference/kapi-ayrintilari.md` §Test itirazı hızlı yolu'nu uygula (yalnız mekanik düzeltme kabul; niyet değişikliği hızlı yol değildir).
 
 **Entegrasyon öncesi kontrol (yalnız pipeline dev fazı, `parent` dolu):** raporun `### Test sonuçları`'nda entegrasyon branch'i merge + lint + gate sonucu yoksa veya kırmızıysa (çakışma, kırmızı) merge önerme; çalışana düzeltme iste (seçenek 3). Tek görevde (`parent` boş) entegrasyon branch'i yoktur, bu kanıt istenmez. Raporda yeşilse kapıdaki doğrulamayı yine de yap.
 
-**Ara denetim (`denetim` fazı pipeline ortasındaysa):** kritik/yüksek bulgular sonraki `uygulama` fazının girdisidir; kalan fazların Tanım'ına ekle (`/delegate` adım 4), orta/düşük bulguları son kapı listesine ekle.
-
-**`role: devops` ise:** `### Prova matrisi`ni ve `### Prova edilemeyenler`'i göster; kırmızı senaryo varsa merge/canlıya alma önerme. Devops gerçek sunucuya dağıtım yapmaz; canlıya alma ayrıca onaylanır.
-
-**`role: developer` ve UI'ya dokunan faz/görevde:** raporun `### Test sonuçları`/`### Açık noktalar`'ında UI öz-kontrolü (ekran görüntüsü) yoksa ya da "öz-kontrol yapılamadı" somut hata çıktısı (denenen komut + hata metni) olmadan yazılmışsa değişiklik isteğiyle geri çevir (gerekçesiz "yapılamadı" kabul edilmez); raporda `impeccable audit:` özet satırı yoksa ya da bulgular ne düzeltilmiş ne `### Açık noktalar`'da ise aynı şekilde sor.
-
-**Tasarım kapısında ek seçim:** kullanıcı `tasarım` kapısında tasarımda çizilmemiş bir ek/varyant seçerse sözleşme fazını başlatmadan önce `delegate` skill'indeki "Tasarımdan sonra gelen kullanıcı seçimi" kuralını uygula (designer ek turu, DESIGN.md'ye ekleme; gece modunda da).
-
-**`role: designer` ise:** `tasarım` fazında `docs/design/` dosyalarını ve `### Token'lar` tablosunu göster; entegrasyon branch'ine merge varsayılan öneridir. **Görsel onay kapısı:** `tasarım` kapısında ekran görüntülerini (`### Görsel yönler` ve `### Görsel turlar`) kullanıcıya göstermeden ve açık görsel onay almadan sonraki uygulama fazlarını başlatma; gece modunda da bu kapı kullanıcıya sorulur, otonom geçilmez. `denetim` fazı kod değiştirmez; `### Bulgular` tablosunu göster. Kritik veya yüksek önemde bulgu varsa varsayılan öneri, doğrulamadaki kırmızı test kuralıyla aynıdır: yeni bir `uygulama` fazı (kabul kriteri: o bulguların giderilmesi) ve ona bağlı yeni `doğrulama` + `denetim` fazları. Yalnızca orta/düşük bulgular varsa bunları son kapıdaki açık noktalar listesine ekle.
+**Role/faza özel kapı kontrolleri:** rapor şunlardan biriyse `reference/kapi-ayrintilari.md`'deki bölümü uygula: `denetim` fazı pipeline ortasında (ara denetim); `role: devops` (prova matrisi, canlıya alma önerme); `role: developer` + UI (ekran görüntülü öz-kontrol ve `impeccable audit:` satırı zorunlu, yoksa değişiklik isteğiyle geri çevir); `tasarım` kapısında ek seçim; `role: designer` (görsel onay kapısı, `denetim` bulguları).
 
 Sonra seçenekleri sun:
 1. **Merge et:** önce `vlad task close <id> --json` (onaysız: ön kontrol + gate + çakışma, sonra `confirm`'de durur, `summary` hedef/diff'i verir); hedefi kullanıcıya göster, **açık onay** al, sonra `vlad task close <id> --yes --json` (merge, done, cleanup, Kapatılan bulgular, `kb commit --push` tek komutta; ayrıntı `integrate` skill'i). Projeler arası ve bulut PR için `integrate` 5. adım elle. Merge başarısızsa `done` yapma.
@@ -124,14 +98,13 @@ vlad task ready --parent <çatı-id> --json
 `{"tasks":[...],"held_by_limit":[...],"running":N,"maxParallel":M|null}` — `tasks` `maxParallel` sınırına uyan başlatılabilir fazlardır; `held_by_limit` sınır yüzünden bekleyenlerdir (başlatma; bir çalışan bitince `task ready`'yi tekrar çalıştır, kullanıcıya "N faz maxParallel nedeniyle bekliyor" de). **Entegrasyon dalı kırmızıyken** (son CI/gate koşusu kırmızı; `gh run list --branch vlad/<çatı-id> --limit 1`) yeni faz başlatma ve faz merge etme: önce kırmızıyı düzeltme fazıyla gider. `tasks` içindeki her fazı **sormadan** başlat — kullanıcı pipeline'ı taslakta onayladı: dev → `vlad task launch <id> --json` (**PowerShell aracıyla**, `/delegate` 5a), research → `/delegate` 5b, plan fazı → `/delegate` 6. Kullanıcıya hangi fazların başladığını söyle. Merge kapıları ise her zaman sorulur.
 
 **Tüm fazlar `done`** (`vlad task list --parent <çatı-id> --json`; `cancelled` fazlar yerine yenisi açılmışsa onlar sayılmaz) → `vlad task set <çatı-id> awaiting_approval --json` ve son kapı:
-- **`prova` fazı varsa** (devops; `### Prova matrisi`, `### Bulunan hatalar`, `### Prova edilemeyenler` bölümlerini göster): kırmızı senaryo veya çözülmemiş bulunan hata varsa canlıya alma/dağıtım önerme; önce düzeltme fazı öner. `Prova edilemeyenler` doluysa kalan riski kullanıcıya açıkça söyle.
-- **Dispatch iş akışı kontrolü:** pipeline `workflow_dispatch` iş akışı eklediyse dosyanın ana dalda olduğunu doğrula (`git -C <proje-yolu> cat-file -e <ana-dal>:<iş-akışı-yolu>`); yalnız entegrasyon dalında varsa merge/PR önermeden önce kullanıcıya "yalnız dispatch iş akışı ana dalda yok" de.
+- **`prova` fazı / dispatch iş akışı kontrolü (son kapı):** `reference/kapi-ayrintilari.md` §Son kapı: prova ve dispatch (kırmızı prova canlıya almayı engeller; yalnız entegrasyon dalındaki dispatch iş akışı için uyar).
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
 - **Codex review (3. göz), tur sınırı ve yedek:** `integrate` K3–K4 (komutlar `second-opinion`'da). Orta/düşük/bilgi bulgular kapıda listelenir.
 - **Çok makineli gate:** `integrate` K6; yeşil satırı eksik makine varken merge/PR önerme.
 - **Codex tur ölçümü:** son kapıda karar sunulmadan önce `integrate` K5 satırını yaz.
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.
-- Çatı birden çok projede faz çalıştırdıysa (`vlad task list --json --full` → `integration_worktrees` birden fazla satır) kapı doğrulamasını, diff özetini ve merge/PR'ı **her projenin** entegrasyon worktree'sinde ayrı ayrı yap ve sun; son kapı onayı projeler arası ortak tek karardır.
+- **Çok projeli çatı** (`integration_worktrees` >1): kapı doğrulaması, diff ve merge/PR her projede ayrı, onay ortak; ayrıntı `reference/kapi-ayrintilari.md` §Son kapı: çok projeli çatı.
 - Diff özeti: `git -C <çatı worktree> log --oneline main..HEAD` ve `git -C <çatı worktree> diff --stat main...HEAD`.
 
 Seçenekler (açık onay):
@@ -146,9 +119,7 @@ Seçenekler (açık onay):
 
 ### Görevi digest et (otomatik, D-vlad-061)
 
-Kapanan (`done`) tek görev için `.claude/skills/digest/SKILL.md` akışını **otomatik mod**da yalnız o görev için uygula: `vlad task list --undigested --json` yerine doğrudan `/digest <görev-id>`. Sırayla: günlük, bulgular (`vlad finding add`), kartın Son aktivite/Açık konular, durum özeti (`vlad project summary`), `vlad task digested <id>`, `vlad kb commit "digest <id>" --push`. Çok görevli toplu digest bu adımın işi değildir (kullanıcı `/digest` der).
-
-Kullanıcı sorusu yok: emin olunmayan karar ve "kullanıcı kararı bekliyor" maddesi yazılmaz, `vlad digest pending add --text "<madde>" --task <id> --project <slug>` ile onay bekleyen listeye eklenir. Sonunda kullanıcıya tek satır: "digest edildi: <id>; N madde onayını bekliyor" (N = `vlad digest pending list --json`). Digest hata verirse görevi `digested` işaretleme, kullanıcıya söyle; `done` durumu geri alınmaz.
+Görev `done` olunca `/digest <görev-id>`'yi **otomatik modda yalnız o görev için** uygula (soru yok; emin olunmayanı `vlad digest pending add`'e ekle; hata olursa `digested` işaretleme). Adım sırası ve kullanıcıya tek satır bildirim: `reference/kapi-ayrintilari.md` §Görevi digest et.
 
 ### Gece / yetki modu ve bekçi
 
@@ -158,21 +129,7 @@ Gece/yetki modu kuralları (faz ve son kapı merge'ü, push yetkisi, durdurma ko
 
 ### Retro (son kapıdan sonra)
 
-Retro ve "nerede kalmıştık" soruları için kart/günlük dosyalarını baştan okuma: önce `vlad project status <slug> --json`, gerekirse `vlad kb search "<sorgu>" --project <slug> --json`.
-
-Retrodan önce `integrate` K8'deki bayat özet kontrolünü uygula (çatının projesinin özeti `bayat` ise `/digest` öner; güncellenmezse sonraki "nerede kalmıştık" yanıtı eskiyi gösterir).
-
-Çatı `done` olunca kısa bir retro yap (2–5 dakikalık özet; uzun rapor yazma). Kaynak: çatı ve faz görev dosyaları (`## İlerleme`, `## Sorular`, `## Kapanış raporu`), `failed`/`cancelled` fazlar, geri alınan merge'ler, kırmızı gate koşuları.
-1. Kullanıcıya üç başlıkta göster: **Ne iyi gitti**, **Ne sürtündü** (tekrar eden hata, ortam sorunu, çakışma, limit kesintisi, geç yakalanan bulgu), **Ders** (somut, bir cümle, eyleme dönük).
-2. Proje düzeyindeki dersleri kullanıcı onayıyla karta yaz (her ders ayrı komut; kart gövdesi elle düzenlenmez):
-   ```
-   vlad project note <slug> "<ders>" --json
-   ```
-   Notlar kartın `## Çalışma notları` bölümüne tarihli madde olarak eklenir; çalışanlar ve roller işe başlarken bunu okur. Aynı ders zaten notlardaysa ekleme.
-3. **Rol düzeyindeki** dersler (bir rolün sorumluluk/yetki/çıktı kuralı değişmeli) kartı değil `roles/<slug>.md`'yi ilgilendirir: bunları kullanıcıya **öneri** olarak sun (hangi rol, hangi satır, neden). Onaylanırsa `roles/` değişikliği ayrı bir görev olarak `/delegate` ile açılır; VLAD rol dosyasını kendisi düzenlemez.
-4. Skill kullanımı: `vlad audit skills --since <çatı-tarihi> --json` çıktısından kısa tablo ver (görev başına beklenen/yüklenen/eksik; VLAD'ın `second-opinion`/`integrate` eksiği dahil). Tekrarlayan eksik rol/skill düzeyindeyse `roles/` önerisi, projeye özgüyse kartın `skills` listesi ya da `vlad project note` olur.
-5. Retroda ortaya çıkan, düzeltilmemiş sorunları bulgu olarak kaydet: `vlad finding add --project <slug> --severity <…> --source <çatı-id> --title "<…>" --json`.
-6. Sonunda `vlad kb commit "retro <çatı-id>" --push --json`.
+Çatı `done` olunca kısa retro yap: **önce `reference/retro.md`'yi oku** ve uygula (Ne iyi gitti / Ne sürtündü / Ders; dersler onayla `vlad project note`; rol dersleri öneri; skill kullanımı; bulgular; `kb commit`). `integrate` K8 bayat özet kontrolü retrodan önce.
 
 **Faz `failed`/`cancelled`:** bağımlı fazlar `queued` kalır. Ağaçta göster ve seçenekleri sun:
 - **Fazı yeniden oluştur:** aynı faz/rol/bağımlılıkla yeni görev (`/delegate` adım 4). Eski faza bağlı `queued` fazları iptal etmeden yeni ID'ye bağla: `vlad task deps <bağımlı-id> --set <yeni-id,…>` (yalnız `queued` fazda; doğrulama ve döngü kontrolü CLI'dadır).
@@ -188,17 +145,12 @@ vlad task answer <id> "<cevap>" --json
 ```
 Çalışanın session'ı açıksa ona `SendMessage` ile "görev dosyasına bak" bildirimi gönder.
 
-**Test itirazı** (soru `Test itirazı:` ile başlıyorsa; developer bir kabul testini yanlış buluyor): soruyu, itiraz edilen testi ve tester'ın görevini (`T…`) kullanıcıya göster, özetle ve şu seçenekleri sun: (a) **tester'a yönlendir** — tester görevi hâlâ açıksa `vlad task log <tester-id> "Test itirazı: …"` düş ve çalışana ilet, kapanmışsa yeni bir kısa `kabul` düzeltme fazı aç (`/delegate` adım 4, rol `tester`); (b) **VLAD karar verir** — spec/sözleşmeye bakıp testin doğru/yanlış olduğunu gerekçesiyle söyle (kullanıcı onayıyla); testi sen düzenlemezsin. Cevabı `vlad task answer` ile developer'a yaz ("test düzeltilecek, şu görev/commit" veya "test doğru, gerekçe"). Karar kullanıcıda değilse bile kayda geçer: `vlad task log`.
+**Test itirazı** (soru `Test itirazı:` ile başlıyorsa): `reference/kapi-ayrintilari.md` §Test itirazı sorusu — tester'a yönlendir ya da VLAD karar verir; testi sen düzenlemezsin; cevap `vlad task answer` + `vlad task log`.
 
 ## 5. `stalled` görevler
 
 Son `## İlerleme` satırını ve `session_id`'yi göster. Seçenekler:
-- **Devam:** önce `vlad task resume <id> --json` (yalnızca `running`/`stalled`). Hata verirse (worktree yok, yanlış branch, session yok) mesajı göster; **yanlış worktree'de devam ettirme**. Başarılıysa (sürdürme ve her `SendMessage` uyandırmasından sonra çalışan için `notify_when_idle: true` aboneliğini yeniden kur, `/delegate` 5a; idle bildirimi gelince görev dosyasını oku, durum değişmemişse çalışanı dürt):
-  - `mode: "local"`: `dirty` doluysa kullanıcıya söyle; `stalled` ise `vlad task set <id> running --json`; kullanıcıya `worktree` yolunda devam etmesini ve `prompt`'u çalışana vermesini öner (`claude --resume <session_id>` ile birlikte; session_id yoksa `vlad task resume` çıktısındaki yönergeyi izle).
-  - Gömülü istemci (vlad-desktop) için `vlad task resume <id> --external --json` devam prompt'lu betik yazar ve `script`/`command`/`cwd` döner (terminal açmaz). Çalışan penceresini kapatmak için `vlad task close-window <id>` (durum ve worktree değişmez). Yan etkisiz durum okuması: `vlad status --json --no-mark`.
-  - `mode: "cloud"`: `stalled` ise `vlad task set <id> running --json`; `args` ile `send_message` çağır (`session_id`, `message`). Bu bir dış eylem değil, mevcut çalışana devam mesajıdır.
-  Kesilen çalışanları (oturum limiti, çökme) bu yolla sürdür; yeni görev açma.
-- **Uzak makine erişilemiyor:** `error: makine erişilemiyor: <ad>` ile `stalled` olan görevde önce `vlad machine ping <ad>`; makine dönünce `vlad task resume <id> --json` işçide `claude --resume` ile sürdürür (çıkış kodu 75 = geçici, tekrar dene). Makine kalıcı ölüyse `vlad task release <id> --force` rezervasyonu bırakır; yetim pencere riskini kullanıcıya söyle.
+Seçenekler: **Devam** (`vlad task resume <id> --json`; hata verirse yanlış worktree'de devam ettirme; local/desktop/cloud kipleri ve `notify_when_idle` aboneliği: `reference/stalled-devam.md`), **uzak makine erişilemiyor** (`vlad machine ping <ad>`, çıkış 75 = tekrar dene; aynı dosya), **İptal** (aşağıda).
 - **İptal:** `vlad task set <id> cancelled --reason "<gerekçe>" --json` + `vlad task cleanup <id> --json`.
 
 ## 6. Hatalı görevler (`failed` listesi)

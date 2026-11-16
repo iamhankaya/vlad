@@ -12,13 +12,7 @@ description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin
 ## Otomatik mod ve tek görev kipi (D-vlad-061)
 
 - **Tek görev kipi:** `/digest <görev-id>` yalnız o görevi işler: adım 1'de inbox ve `task list --undigested` yerine `vlad kb get <id> --json` okunur (inbox'ta `task_id` eşleşen kayıt varsa onu da al); adım 2–7 aynen, yalnız o görev (pipeline fazıysa çatı altına yazılır; çatı `done` ise çatı görevi). `/status` görev `done` olunca bunu çağırır.
-- **Otomatik mod:** kullanıcıya soru soramadığın her bağlamda (`/status`'un otomatik digest adımı, zamanlanmış görev, gece modu) geçerlidir. Kural: **soru sorma, emin olmadığını yazma, listeye ekle.** Şunlar kayda geçmez; bunun yerine `vlad digest pending add --text "<madde, kaynağıyla>" --task <id> --project <slug> --json` çalıştır:
-  - adım 5'te "emin olmadığın karar" ("Bunu karar olarak kaydedeyim mi?" diye sorulacak olan);
-  - adım 4'te kartın Açık konular'ına "kullanıcı kararı bekliyor" türü madde (3b kontrolü onay bulmadıysa bile yazma, listeye ekle);
-  - adım 4b'de önemi belirsiz bulgu (önemi tahmin etme; `bilgi` yazma, listeye ekle).
-  Emin olunan her şey (raporun açıkça söylediği sonuç, günlük, bulgular, kart, özet) normal yazılır.
-- **Onay bekleyen liste:** `vlad digest pending list [--all] --json` / `done <id> --note "<karar>"`. Kullanıcı bir maddeye karar verince ilgili kaydı (karar/bulgu/kart) CLI ile yaz, sonra maddeyi kapat. `vlad status --summary` açık madde sayısını verir; `CLAUDE.md` Açılış maddeleri gösterir.
-- **Güvenlik ağı:** olay tetikli yol (status) kaçırılırsa Mac beyin oturumu için günlük zamanlanmış görev: `docs/otomatik-digest.md`. Bulutta ve Windows'ta güvenlik ağı yoktur.
+- **Otomatik mod** (kullanıcıya soru soramadığın her bağlam: `/status`'un otomatik digest adımı, zamanlanmış görev, gece modu): **soru sorma, emin olmadığını yazma, `vlad digest pending add` ile listeye ekle.** Hangi maddelerin kayda geçmediği, onay bekleyen liste komutları ve güvenlik ağı: `reference/otomatik-mod.md` (otomatik modda önce oku).
 
 ## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
 
@@ -48,7 +42,7 @@ Biten görev için olay tarihi `updated`'dır (görevin `done` yapıldığı an)
 - Aynı `session_id`'ye sahip birden çok kayıt (devam ettirilmiş session) varsa bunları **tek** bir günlük maddesinde birleştir; her kayıt için ayrı madde yazma. Birleştirilen tüm dosyaları adım 6'da yine kapat.
 - Tahmin yürütme; rapordan çıkmayan bir şeyi yazma.
 
-**Çok rapor (taslak agent'ları):** Raporlu görev sayısı büyükse (>10) ana bağlamı şişirmemek için proje (pipeline ise çatı) başına bir arka plan agent'ı (`sonnet`) başlat; her agent kendi grubunun görev dosyalarını okuyup günlük, kart, bulgu ve karar **taslağı** döndürür. Agent talimatına adım 3b (kullanıcı onayı kontrolü) aynen girer: onaylanmış konuyu açık nokta yazmasın, kaynağını belirtsin. Agent'lar kb'ye yazmaz; taslakları VLAD kontrol eder, `vlad` CLI ile yazar ve kartı doğrular (adım 3–6 aynen işler).
+**Çok rapor (>10 görev):** proje/çatı başına bir `sonnet` taslak agent'ı; ayrıntı `reference/toplu-ve-lint.md` §Çok rapor. Agent'lar kb'ye yazmaz.
 
 ## 3. Günlük
 
@@ -137,13 +131,7 @@ Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıt
 
 ### 5c. kb çelişki denetimi (lint)
 
-Kartlar, özetler, kararlar ve hafıza yazıldıktan sonra tüm kb için bir kez `vlad kb lint --json` çalıştır (Mac'te <1 sn; arka plan agent'ı gerekmez; sonucu `kb/logs/kb-lint.json` önbelleğine yazar ve `vlad status --summary` satırındaki "N kb çelişkisi" buradan gelir). Her işareti (`flags[]`: `code`, `file:line`, `id`, `suggestion`) CLI ile düzelt:
-- `closed_finding_listed_open` / `finished_task_listed_active`: kart `## Açık konular`/sürüyor satırı elle yazılmış → `vlad project refresh <slug>`; blok dışı metinde satırı geçmişe çeviren düzeltmeyi `vlad project write` ile yap.
-- `inactive_decision_listed_valid`: özet/kart listesinden kaldır (`vlad project summary`); geçerli liste `vlad decision list`.
-- `expired_decision_valid`: süre gerçekten dolduysa `vlad decision set <id> geçersiz`; sürüyorsa kararı yeni `--until` ile yenile (`decision add --supersedes <id>`).
-- `summary_stale`: adım 5b.
-- `memory_stale_task` (hafıza dosyası, kb dışı): VLAD'a "hafızayı güncelle/sil" adımıdır, CLI yok; ilgili hafıza notunu düzeltir ya da silersin ve kullanıcıya söylersin.
-Emin olmadığın işareti düzeltme: `vlad digest pending add --text "<kb lint: kod id dosya:satır — ne yapılmalı>" --project <slug>` ile onay bekleyen listeye ekle. Düzeltmelerden sonra `vlad kb lint` yeniden çalıştırıp işaret sayısının düştüğünü doğrula.
+Kartlar, özetler, kararlar ve hafıza yazıldıktan sonra tüm kb için bir kez `vlad kb lint --json` çalıştır; her işareti CLI ile düzelt, emin olmadığını `vlad digest pending add` ile onaya taşı, sonra lint'i yeniden koşup sayının düştüğünü doğrula. İşaret koduna göre düzeltme listesi: `reference/toplu-ve-lint.md` §5c.
 
 ## 6. Raporları kapat
 

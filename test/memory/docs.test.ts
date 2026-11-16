@@ -1,9 +1,10 @@
+import { readText } from "../skill-text.js";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..", "..");
-const read = (f: string) => readFileSync(join(root, f), "utf8");
+const read = (f: string) => readText(join(root, f));
 const memorySection = (t: string) => t.slice(t.indexOf("**Proje hafızası:**"), t.indexOf("**İş devri:**"));
 
 describe("docs teach the new memory reading order", () => {
