@@ -26,6 +26,13 @@ export function parseDenyLine(line: string): Denial | null {
   return { tool: m[1].trim(), pattern: oneLine(m[2].replaceAll(ESCAPED_SEP, SEP)), ...(m[3] ? { reason: m[3].trim() } : {}) };
 }
 
+const DENY_WORDS = /[İiIı]zin reddi|reddetti|denied/i;
+/** Stderr hint for `task log` text that reads like a permission denial but was not recorded with `task deny` (audit setup only counts `[İZİN]` lines); null otherwise. */
+export function denyLogHint(msg: string): string | null {
+  if (msg.startsWith("[İZİN]") || !DENY_WORDS.test(msg)) return null;
+  return "uyarı: izin reddini `vlad task deny` ile kaydet (<id> --tool <araç> --pattern \"<komut>\"; audit setup yalnız [İZİN] satırlarını sayar)";
+}
+
 /**
  * Records a structured permission denial: an `[İZİN]` İlerleme line (what the setup audit counts per task) plus one record
  * in kb/logs/denials.jsonl (flat history across tasks). Validation and the task lookup come before any write.
