@@ -38,6 +38,7 @@ export function buildProgram(ctx: CliCtx): Command {
     .name("vlad")
     .description("VLAD: Claude Code orkestratörü")
     .exitOverride()
+    .enablePositionalOptions()
     .configureOutput({ writeErr: (str) => { pendingHelp += str; } });
 
   registerProject(program, kit);

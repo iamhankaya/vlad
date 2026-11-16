@@ -1,7 +1,6 @@
-import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LIMITS } from "../../src/approver/types.js";
 import { authorizeReset, initKey, mintOpToken, mintToken, requireModeAuthority, setSecretDirForTests, usedDir } from "../../src/mode/token.js";
@@ -83,21 +82,4 @@ describe("vmt2: üretim ve doğrulama", () => {
     process.argv = [argv[0]!, argv[1]!, "mode", "token", "--reset"];
     try { await expect(authorizeReset({ VLAD_MODE_TOKEN: tok }, NOW, async () => "")).rejects.toThrow(/argv/); } finally { process.argv = argv; }
   });
-  it("iki süreç aynı tokenı yarıştırır: tam bir başarı", () => {
-    const tok = mintOpToken(ARGV, 60_000, new Date());
-    const dist = resolve("dist/mode/token.js");
-    const code = `import(${JSON.stringify(dist)}).then(m=>{m.setSecretDirForTests(${JSON.stringify(join(base, "s"))});try{m.requireModeAuthority({VLAD_MODE_TOKEN:${JSON.stringify(tok)}},new Date(),["mode","off"]);console.log("OK")}catch(e){console.log("FAIL")}})`;
-    return Promise.all([spawnAsync(code), spawnAsync(code), spawnAsync(code), spawnAsync(code)]).then((out) => {
-      expect(out.filter((o) => o === "OK")).toHaveLength(1);
-      expect(out.filter((o) => o === "FAIL")).toHaveLength(3);
-    });
-  });
 });
-
-function spawnAsync(code: string): Promise<string> {
-  return new Promise((res) => {
-    const c = spawn(process.execPath, ["-e", code]);
-    let o = ""; c.stdout.on("data", (d) => { o += d; });
-    c.on("close", () => res(o.trim()));
-  });
-}

@@ -3,6 +3,7 @@ import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "..
 import { assertNotWorker as assertNotWorkerBase } from "../../mode/guard.js";
 import { createInterface } from "node:readline/promises";
 import { authorizeReset, disableKey, initKey, mintToken, requireModeAuthority } from "../../mode/token.js";
+import { requestApproval } from "./approver.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -39,10 +40,12 @@ export function registerMode(program: Command, k: Kit): void {
     setOff();
     out(o, modeStatus(new Date()), "mod kapalı");
   });
-  // Uzaktan onay (T20261116-04, sözleşme iskeleti; gövde U4'te). Yalnız VLAD (çalışan reddi); VLAD_MODE_TOKEN istemez, anahtar okumaz; istek approver servisine inbox/ ile gider.
+  // Uzaktan onay (T20261116-04; istemci gövdesi approver.ts `requestApproval`). Yalnız VLAD (çalışan reddi); VLAD_MODE_TOKEN istemez, anahtar okumaz; istek approver servisine inbox/ ile gider.
   // Hata öncelik sırası: (1) çalışan, (2) geçersiz işlem/argüman, (3) approver kurulu değil, (4) servis ack'i (invalid/locked/busy/rate_limited), (5) approver yanıt vermiyor.
-  def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", (_op: string, _args: string[], _o: Opts) => {
-    throw new Error("not implemented");
+  def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", async (op: string, args: string[], o: Opts) => {
+    const r = await requestApproval(op, args, o);
+    out(o, r.data, r.text);
+    if (r.exit) process.exitCode = r.exit;
   }).passThroughOptions()
     .option("--wait", "sonuç gelene kadar bekle (varsayılan 310 sn; süre dolarsa çıkış 1, istek iptal edilmez)")
     .option("--wait-seconds <n>", "--wait süresi (saniye); isteğe bağlı değerli --wait işlem adını yuttuğu için ayrı bayrak");
