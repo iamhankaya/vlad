@@ -24,8 +24,7 @@ describe("approver sözleşmesi: token.ts", () => {
     expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: tok }, new Date(), ["bambaşka", "argv"])).not.toThrow();
     expect(() => requireModeAuthority({ VLAD_MODE_TOKEN: tok }, new Date(Date.now() + 120_000), ["x"])).toThrow(/süresi doldu/);
   });
-  // VMT2 üretim biçimi: U1 uygulayınca bu `it.fails` işareti KALDIRILIR (U1 kabul kriteri; atlanan/it.fails sıfır olmadan U1 kapanmaz).
-  it.fails("mintOpToken VMT2 biçimini üretir", () => {
+  it("mintOpToken VMT2 biçimini üretir", () => {
     initKey();
     expect(mintOpToken(["mode", "off"], 60_000)).toMatch(/^VMT2\.\d+\.[0-9a-f]{32}\.[0-9a-f]{64}\.[0-9a-f]{64}$/);
   });
