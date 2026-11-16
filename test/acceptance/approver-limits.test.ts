@@ -54,14 +54,16 @@ describe("approver-kabul: KK12 hız sınırı ve kilit", () => {
     expect((await submit(w, OFF)).ack.status).toBe("pending");
   }, 45_000);
 
-  it("3 art arda ret ⇒ locked (1 saat); kilit süre dolsa da yalnız `approver unlock` açar", async () => {
+  it("3 art arda ret ⇒ locked (1 saat); süre dolmadan kilitli kalır, 1 saat dolunca kendiliğinden açılır (erken açmak için `approver unlock`)", async () => {
     await boot();
-    for (let i = 0; i < LIMITS.lockAfterDenied; i++) await cycle(OFF, "Reddet");
+    for (let i = 0; i < LIMITS.lockAfterDenied; i++) await cycle(OFF, "Reddet"); // her tur sonunda saat soğuma+1 sn ilerler
     const cid = writeRequest(w, { argv: OFF });
     expect((await waitAck(w, cid)).status).toBe("locked");
-    w.clock.advance(LIMITS.lockMs * 2); // "yalnız unlock ile açılır" (plan): süre geçse de kilit sürer
-    const cid2 = writeRequest(w, { argv: OFF });
-    expect((await waitAck(w, cid2)).status).toBe("locked");
+    w.clock.advance(LIMITS.lockMs - 3 * LIMITS.cooldownMs); // kilit bitişinden önce
+    const early = writeRequest(w, { argv: OFF });
+    expect((await waitAck(w, early)).status, "süre dolmadan").toBe("locked");
+    w.clock.advance(3 * LIMITS.cooldownMs); // toplam > lockMs
+    expect((await submit(w, OFF)).ack.status, "1 saat dolunca").toBe("pending");
   }, 45_000);
 
   it("unlock: TTY'siz / mod yetkisiz / çalışan reddedilir; TTY + geçerli token + çalışan değil ile kilidi açar", async () => {
