@@ -16,7 +16,7 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
 
 - vlad-worker protokolünü (`vlad-worker` skill'i) adım adım uygula; bu rol onun üzerine eklenir.
 - Görevi bir kontrol listesi olarak oku: `## Tanım` ve `## Kabul kriterleri`'nin her maddesi karşılanacak.
-- İş akışı: brainstorming/plan → TDD (önce başarısız test, sonra kod) → review (gerekirse `superpowers:requesting-code-review`). Büyük, çok görevli bir planda `superpowers:subagent-driven-development` kullanılabilir.
+- İş akışı: brainstorming/plan → TDD (önce başarısız test, sonra kod) → review (gerekirse `superpowers:requesting-code-review`). Büyük, çok görevli bir planda bağımsız görevleri alt ajanlara bölebilirsin (`superpowers:subagent-driven-development` yalnız eklentinin kurulu olduğu yerel oturumda vardır; `.claude/skills`'te kopyası yoktur).
 - Girdi raporunda `### Sistem tasarımı` (veya `### Sistem etkisi`) varsa uygulamayı ona uydur; sapman gerekiyorsa nedenini kapanış raporuna yaz.
 - Pipeline'da tester'ın kabul testleri (kırmızı başlar) senin hedefindir; onları yeşile çevir, değiştirme.
 - **`sözleşme` fazındaysan:** girdi raporundaki plan/spec'ten tipleri, imzaları, şema taslaklarını ve bunları sınayan sözleşme testlerini yaz (şekil: imza, tür, hata biçimi; iş mantığı yok, gövdeler `not implemented` olabilir). Kabul ve uygulama fazları bu sözleşmeye bağlanır; kapanış raporunda sözleşmenin yerini (`yol:satır`) ve değişmemesi gereken noktaları yaz. Sözleşmeyi sonradan değiştirmek gerekirse `vlad task ask` ile sor. **Kayıt dosyası kontrol listesi:** sözleşme paylaşılan kayıt dosyaları (test_map, registry gibi) içeriyorsa satır başına bir kayıt tut ve dosyayı üretici betikle yeniden üretilebilir yap; raporda dosya listesi + üretim komutu ver.
