@@ -40,10 +40,14 @@ export function pruneOrphanWorktrees(
   const items: PruneItem[] = [];
   // a worktreeDir without {repo} is shared by every project: group repos by the root they use
   const roots = new Map<string, { slug: string; repo: string }[]>();
+  const shared = !cfg.worktreeDir.includes("{repo}");
+  // a project whose repo cannot be resolved may still own registered worktrees in a shared root: that root is unsafe
+  let unresolved = false;
+  const repoOf = new Map<PruneItem, string>();
   for (const p of listProjects()) {
     let repo: string;
-    try { repo = projectPath(p.slug, cfg); } catch { continue; }
-    if (!existsSync(repo)) continue;
+    try { repo = projectPath(p.slug, cfg); } catch { unresolved = true; continue; }
+    if (!existsSync(repo)) { unresolved = true; continue; }
     const root = dirname(worktreePath(cfg, repo, "T00000000-0", process.platform as "win32" | "darwin" | "linux"));
     roots.set(root, [...(roots.get(root) ?? []), { slug: p.slug, repo }]);
   }
@@ -51,7 +55,7 @@ export function pruneOrphanWorktrees(
     if (!existsSync(root)) continue;
     // registered anywhere = not an orphan; an unreadable list makes the whole root unsafe (everything would look unregistered)
     const listed = repos.map((r) => runGit(r.repo, ["worktree", "list", "--porcelain"]));
-    const unreadable = listed.some((l) => l === null);
+    const unreadable = listed.some((l) => l === null) || (shared && unresolved);
     const registered = (dir: string): boolean =>
       listed.some((l) => (l ?? "").split("\n").some((ln) => ln.startsWith("worktree ") && samePath(ln.slice(9), dir)));
     for (const name of readdirSync(root).sort()) {
@@ -62,19 +66,21 @@ export function pruneOrphanWorktrees(
       try { st = lstatSync(dir); } catch { continue; }
       if (st.isSymbolicLink()) { items.push({ ...base, action: "skip", reason: "sembolik bağlantı" }); continue; }
       if (!st.isDirectory()) continue;
-      if (unreadable) { items.push({ ...base, action: "skip", reason: "git worktree list okunamadı" }); continue; }
+      if (unreadable) { items.push({ ...base, action: "skip", reason: "git worktree list okunamadı ya da bir projenin repo yolu çözülemedi" }); continue; }
       if (registered(dir)) { items.push({ ...base, action: "skip", reason: "kayıtlı worktree" }); continue; }
       let state: string;
       try { state = getTask(name).data.state; } catch { items.push({ ...base, action: "skip", reason: "görev bulunamadı" }); continue; }
       if (state !== "done" && state !== "cancelled") { items.push({ ...base, state, action: "skip", reason: `görev ${state}` }); continue; }
       if (!isInside(root, dir)) { items.push({ ...base, state, action: "skip", reason: "klasör kökün dışına çözülüyor" }); continue; }
-      items.push({ ...base, state, action: "delete" });
+      const item: PruneItem = { ...base, state, action: "delete" };
+      repoOf.set(item, repos[0]!.repo);
+      items.push(item);
     }
   }
   let removed = 0, errors = 0;
   if (o.yes) {
     for (const it of items.filter((i) => i.action === "delete")) {
-      const repo = roots.get(dirname(it.dir))?.[0]?.repo ?? "";
+      const repo = repoOf.get(it)!;
       try {
         remove(repo, it.dir, it.id);
         if (existsSync(it.dir)) throw new Error("klasör hâlâ duruyor");

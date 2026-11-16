@@ -82,6 +82,22 @@ describe("pruneOrphanWorktrees (F-vlad: artık worktree klasörleri)", () => {
     expect(existsSync(d)).toBe(true);
   });
 
+  it("paylaşımlı kökte (worktreeDir'de {repo} yok) repo yolu çözülemeyen proje varsa kök güvenli sayılmaz, hiçbir şey silinmez", () => {
+    const d = leftover(task("done"));
+    writeProject("ghost", `---\nslug: ghost\nname: Ghost\npath: ${JSON.stringify(join(base, "yok"))}\nstack: [ts]\nstatus: active\nautonomy: commit\nlast_activity: null\nlast_scanned: null\n---\n\n## Özet\nx\n`);
+    const r = pruneOrphanWorktrees(cfg, { yes: true });
+    expect(r.removed).toBe(0);
+    expect(existsSync(d)).toBe(true);
+  });
+
+  it("silme çağrısına klasörün kendi repo'su verilir (kök anahtarından geri aranmaz)", () => {
+    const d = leftover(task("done"));
+    const seen: string[] = [];
+    pruneOrphanWorktrees(cfg, { yes: true }, { remove: (repoArg, dir) => { seen.push(repoArg); removeTaskWorktree(repoArg, dir, "x"); } });
+    expect(seen).toEqual([repo]);
+    expect(existsSync(d)).toBe(false);
+  });
+
   it("silme hatası diğer klasörleri durdurmaz ve error alanına yazılır", () => {
     const a = leftover(task("done")), b = leftover(task("done"));
     const r = pruneOrphanWorktrees(cfg, { yes: true }, { remove: (_repo, dir) => { if (dir === a) throw new Error("kilitli"); removeTaskWorktree(_repo, dir, "x"); } });
