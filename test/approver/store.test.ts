@@ -332,6 +332,32 @@ describe("approver: service.lock", () => {
     expect(r.filter((x) => x === "busy").length).toBe(7);
     expect(readdirSync(dir).filter((f) => f.includes(".stale."))).toEqual([]);
   }, 20_000);
+  it("devralma serileştirilir: taze lock.reclaim varken busy, canlı/bayat kilit dokunulmaz", () => {
+    const dead = spawnGuarded(process.execPath, ["-e", ""]).pid!;
+    const stale = JSON.stringify({ pid: dead, startedAt: "2026-11-15T00:00:00Z" });
+    put("service.lock", stale); put("service.lock.reclaim", "{}");
+    expect(st.acquireLock(process.pid, now)).toBe("busy");
+    expect(readFileSync(lock(), "utf8")).toBe(stale);
+  });
+  it("çökmüş devralıcının eski lock.reclaim'i temizlenir; sonraki deneme alır", () => {
+    const dead = spawnGuarded(process.execPath, ["-e", ""]).pid!;
+    put("service.lock", JSON.stringify({ pid: dead, startedAt: "2026-11-15T00:00:00Z" })); put("service.lock.reclaim", "{}");
+    const old = new Date(Date.now() - 60_000); utimesSync(join(dir, "service.lock.reclaim"), old, old);
+    st.acquireLock(process.pid, now);
+    expect(st.acquireLock(process.pid, now)).toBe("acquired");
+    expect(existsSync(join(dir, "service.lock.reclaim"))).toBe(false);
+  });
+  it("devir sırasında canlı kilit asla silinmez: 3 süreç x 5 tur, her turda en çok biri alır", async () => {
+    for (let round = 0; round < 5; round++) {
+      const dead = spawnGuarded(process.execPath, ["-e", ""]).pid!;
+      await new Promise((r) => setTimeout(r, 150));
+      rmSync(lock(), { force: true }); rmSync(join(dir, "service.lock.reclaim"), { force: true });
+      put("service.lock", JSON.stringify({ pid: dead, startedAt: "2026-11-15T00:00:00Z" }));
+      const r = await runChildren(3, `const r = s.acquireLock(process.pid, new Date()); while (Date.now() < Number(at) + 500) { /* sahip canlı kalsın */ } console.log(r);`, [ID]);
+      expect(r.filter((x) => x === "acquired").length).toBeLessThanOrEqual(1);
+      expect(readdirSync(dir).filter((f) => f.includes(".stale."))).toEqual([]);
+    }
+  }, 60_000);
   it("bayat kilit tek süreçte: devralınca stale artığı bırakılmaz", () => {
     const dead = spawnGuarded(process.execPath, ["-e", ""]).pid!;
     put("service.lock", JSON.stringify({ pid: dead, startedAt: "2026-11-15T00:00:00Z" }));

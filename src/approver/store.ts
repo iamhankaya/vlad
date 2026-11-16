@@ -1,4 +1,4 @@
-import { closeSync, constants, linkSync, lstatSync, openSync, readdirSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, constants, lstatSync, openSync, statSync, readdirSync, renameSync, unlinkSync, writeSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { NAME_RE, assertSecureDir, readSecureFile, writeAtomic } from "../mode/secure-fs.js";
@@ -158,16 +158,20 @@ export function createStore(dir: string, o: { now?: () => Date } = {}): Store {
         try { raw = readSecureFile(path, 1024).toString("utf8"); rec = JSON.parse(raw); } catch (e) { if (errno(e, "ENOENT")) continue; throw e; }
         if (!obj(rec) || !Number.isInteger(rec.pid) || (rec.pid as number) < 1 || !str(rec.startedAt)) bad("service.lock");
         if (alive((rec as { pid: number }).pid)) return "busy";
-        // bayat kilit: atomik rename ile kenara al (tek kazanan; kaybeden ENOENT alır ve yeniden dener); pid+startedAt (raw) aynı kayıtsa sil
-        const side = `${path}.stale.${randomBytes(6).toString("hex")}`;
-        try { renameSync(path, side); } catch (e) { if (errno(e, "ENOENT")) continue; throw e; }
-        let same = false;
-        try { same = readSecureFile(side, 1024).toString("utf8") === raw; } catch { /* okunamadı: canlı kabul edilir */ }
-        if (same) { try { unlinkSync(side); } catch { /* en iyi çaba */ } continue; }
-        // araya giren taze bir kilidi kapmışız: geri koy (link yoksa-oluştur atomiktir); başaramazsak yine busy
-        try { linkSync(side, path); } catch { /* başkası aldı */ }
-        try { unlinkSync(side); } catch { /* en iyi çaba */ }
-        return "busy";
+        // bayat kilit devri serileştirilir: tek `service.lock.reclaim` (O_EXCL) altında oku-karşılaştır-sil-yaz; canlı kilit hiçbir an kaldırılmaz
+        const rpath = `${path}.reclaim`;
+        try { writeAtomic(rpath, String(pid), { overwrite: false }); } catch (e) {
+          if (!errno(e, "EEXIST")) throw e;
+          try { if (Date.now() - statSync(rpath).mtimeMs > 10_000) unlinkSync(rpath); } catch { /* en iyi çaba: çökmüş devralıcının artığı */ }
+          return "busy";
+        }
+        try {
+          let cur: string;
+          try { cur = readSecureFile(path, 1024).toString("utf8"); } catch (e) { if (errno(e, "ENOENT")) continue; throw e; }
+          if (cur !== raw) continue; // araya biri girdi: yeniden değerlendir (canlıysa busy)
+          unlinkSync(path);
+          try { writeAtomic(path, mine, { overwrite: false }); held = pid; return "acquired"; } catch (e) { if (errno(e, "EEXIST")) return "busy"; throw e; }
+        } finally { try { unlinkSync(rpath); } catch { /* en iyi çaba */ } }
       }
       return "busy";
     },

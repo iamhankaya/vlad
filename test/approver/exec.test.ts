@@ -22,6 +22,20 @@ describe("approver: defaultExecEnv", () => {
   });
 });
 
+describe("approver: ctx.kb çocuğa aktarılır", () => {
+  it("defaultExecEnv kb verilince VLAD_KB_DIR ekler (yalnız bu değer)", () => {
+    const e = defaultExecEnv({ path: "/p", home: "/h", vladHome: "/v", token: "t", kb: "/kb" });
+    expect(e.VLAD_KB_DIR).toBe("/kb"); expect(Object.keys(e)).toHaveLength(6);
+  });
+  it("çocuk, servisin bildirdiği kb'yi görür (ana ortamdaki VLAD_KB_DIR değil)", async () => {
+    const saved = process.env.VLAD_KB_DIR; process.env.VLAD_KB_DIR = "/baska/kb";
+    try {
+      const r = await createExecutor().run(["env"], "t", ctx);
+      expect((JSON.parse(r.stdout) as { env: Record<string, string> }).env.VLAD_KB_DIR).toBe(ctx.kb);
+    } finally { if (saved === undefined) delete process.env.VLAD_KB_DIR; else process.env.VLAD_KB_DIR = saved; }
+  });
+});
+
 describe("approver: createExecutor", () => {
   it("argv, token ve temiz env ile çalışır; ortam sızmaz", async () => {
     const saved = { t: process.env.VLAD_TASK_ID, u: process.env.USERPROFILE, n: process.env.NODE_OPTIONS, s: process.env.SECRET_X };
@@ -31,8 +45,8 @@ describe("approver: createExecutor", () => {
       expect(r.exitCode).toBe(0); expect(r.timedOut).toBe(false);
       const o = JSON.parse(r.stdout) as { argv: string[]; env: Record<string, string>; cwd: string };
       expect(o.argv).toEqual(["--a", "b"]);
-      expect(Object.keys(o.env).filter((k) => k !== "__CF_USER_TEXT_ENCODING").sort()).toEqual(["HOME", "LANG", "PATH", "VLAD_HOME", "VLAD_MODE_TOKEN"]);
-      expect(o.env).toMatchObject({ HOME: userInfo().homedir, VLAD_HOME: home, VLAD_MODE_TOKEN: "VMT2.tok" });
+      expect(Object.keys(o.env).filter((k) => k !== "__CF_USER_TEXT_ENCODING").sort()).toEqual(["HOME", "LANG", "PATH", "VLAD_HOME", "VLAD_KB_DIR", "VLAD_MODE_TOKEN"]);
+      expect(o.env).toMatchObject({ HOME: userInfo().homedir, VLAD_HOME: home, VLAD_KB_DIR: ctx.kb, VLAD_MODE_TOKEN: "VMT2.tok" });
       expect(o.cwd).toBe(home);
     } finally {
       for (const [k, v] of [["VLAD_TASK_ID", saved.t], ["USERPROFILE", saved.u], ["NODE_OPTIONS", saved.n], ["SECRET_X", saved.s]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }

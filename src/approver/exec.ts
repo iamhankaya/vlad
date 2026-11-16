@@ -12,9 +12,9 @@ export interface Executor {
   run(argv: string[], token: string, ctx: Ctx, deps?: { envExtra?: Record<string, string>; signal?: AbortSignal }): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean; aborted?: boolean }>;
 }
 
-/** Üretim env'i: PATH, HOME (passwd'dan), VLAD_HOME, LANG, VLAD_MODE_TOKEN; VLAD_TASK_ID/USERPROFILE/NODE_OPTIONS yok. */
-export function defaultExecEnv(p: { path: string; home: string; vladHome: string; token: string }): NodeJS.ProcessEnv {
-  return { PATH: p.path, HOME: p.home, VLAD_HOME: p.vladHome, LANG: "en_US.UTF-8", VLAD_MODE_TOKEN: p.token };
+/** Üretim env'i: PATH, HOME (passwd'dan), VLAD_HOME, LANG, VLAD_MODE_TOKEN ve doğrulanmış ctx.kb'den VLAD_KB_DIR (onaylanan komut bildirilen kb'yi değiştirir); VLAD_TASK_ID/USERPROFILE/NODE_OPTIONS yok. */
+export function defaultExecEnv(p: { path: string; home: string; vladHome: string; token: string; kb?: string }): NodeJS.ProcessEnv {
+  return { PATH: p.path, HOME: p.home, VLAD_HOME: p.vladHome, LANG: "en_US.UTF-8", VLAD_MODE_TOKEN: p.token, ...(p.kb ? { VLAD_KB_DIR: p.kb } : {}) };
 }
 
 /** Test için kısa değerler; üretim yolu varsayılanları kullanır. */
@@ -25,7 +25,7 @@ export function createExecutor(opts: ExecOpts = {}): Executor {
   const timeoutMs = opts.timeoutMs ?? LIMITS.execTimeoutMs, graceMs = opts.killGraceMs ?? 5000, cap = opts.maxOutputBytes ?? LIMITS.maxOutputBytes;
   return {
     run(argv, token, ctx, deps) {
-      const env = { ...defaultExecEnv({ path: process.env.PATH ?? "/usr/bin:/bin", home: userInfo().homedir, vladHome: ctx.home, token }), ...deps?.envExtra };
+      const env = { ...defaultExecEnv({ path: process.env.PATH ?? "/usr/bin:/bin", home: userInfo().homedir, vladHome: ctx.home, token, kb: ctx.kb }), ...deps?.envExtra };
       return new Promise((resolve) => {
         const out: Buffer[] = [], err: Buffer[] = [];
         const sizes = { out: 0, err: 0 };
