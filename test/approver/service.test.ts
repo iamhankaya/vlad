@@ -381,6 +381,34 @@ describe("approver: service yürütme sonucu", () => {
     expect((await resultOf(p.id)).status).toBe("expired");
   });
 
+  it("F-vlad-343: geçici yayın hatasında sınırlı geri çekilmeyle yeniden dener (tek yayın, uçuştaki ikinci yayın yok)", async () => {
+    let calls = 0;
+    ch.publishRequest = async (p, tags) => { calls++; if (calls < 3) throw new Error("ağ yok"); ch.published.push({ p, tags }); };
+    start({ publishBackoffMs: [5, 5, 5] });
+    request(1);
+    await ackOf(1);
+    await waitFor(() => ch.h);
+    ch.ready(); ch.ready();
+    await waitFor(() => ch.published.length === 1, "yeniden deneme sonrası yayın");
+    await new Promise((r) => setTimeout(r, 100));
+    expect(ch.published).toHaveLength(1);
+    expect(calls).toBe(3);
+  });
+
+  it("F-vlad-343: yayın hiç başarılmazsa süre dolumu art arda ret sayacına/kilide girmez", async () => {
+    ch.failPublish = true;
+    start({ publishBackoffMs: [5, 5] });
+    request(1);
+    await ackOf(1);
+    await waitFor(() => ch.h);
+    ch.ready();
+    const p = pend();
+    await waitFor(() => (logText().match(/istek bildirimi gönderilemedi/g) ?? []).length >= 3, "tüm denemeler");
+    t += LIMITS.approveTtlMs + 1;
+    expect((await resultOf(p.id)).status).toBe("expired");
+    expect(store.readRate().consecutiveDenied).toBe(0);
+  });
+
   it("yanıt akışı hatası: servis ayakta, istek süresi dolar", async () => {
     ch.failWatch = true;
     start();

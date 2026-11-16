@@ -71,8 +71,9 @@ describe("approver: allowlist (mode/install)", () => {
   });
   it("değer biçimleri", () => {
     for (const argv of [["mode", "night", "--until", "25:99x"], ["mode", "night", "--until", "yarın"], ["mode", "night", "--until-task", "T1,x"], ["mode", "night", "--until-task", "T20261116-06,"],
-      ["mode", "night", "--except", "Deploy"], ["mode", "night", "--except", "a,,b"], ["mode", "night", "--projects", "a b"], ["mode", "night", "--projects", "../x/y"]])
-      expect(argvReason(argv), argv.join("|")).toBe("bad_value");
+      ["mode", "night", "--except", "Deploy"], ["mode", "night", "--except", "a,,b"], ["mode", "night", "--projects", "a b"], ["mode", "night", "--projects", "../x/y"],
+      ["mode", "night", "--projects", "."], ["mode", "night", "--projects", ".."], ["mode", "night", "--projects", ".hidden"], ["mode", "night", "--projects", "a,.."], ["mode", "night", "--projects", "a,.git"]])
+      expect(argvReason(argv), argv.join("|")).toBe("bad_value"); // F-vlad-346(a): nokta/noktayla başlayan proje adı yok
   });
   it("kontrol/NUL/bidi karakterleri control_char (not dahil, subcommand dahil)", () => {
     for (const c of ["\u0000", "\n", "\t", "\u001b", "\u007f", "\u202e", "\u2066", "\u200f", "\u2028"])

@@ -16,7 +16,7 @@ import { LIMITS, type AckRecord, type Ctx, type DropReason, type PendingRecord, 
  * Test seam kuralı: Executor/Clock/RandomSource enjeksiyonu yalnız bu `deps`'ten gelir; üretim `approver run` sabit deps kurar, `VLAD_*` env'den seam okumaz.
  */
 export interface Clock { now(): Date }
-export interface ApproverDeps { channel: ApproverChannel; clock: Clock; random: RandomSource; executor: Executor; store: Store; log(l: string): void; signal: AbortSignal }
+export interface ApproverDeps { channel: ApproverChannel; clock: Clock; random: RandomSource; executor: Executor; store: Store; log(l: string): void; signal: AbortSignal; /** ntfy yayını yeniden deneme bekleme süreleri (ms); varsayılan [2000, 5000, 15000] */ publishBackoffMs?: number[] }
 
 const SHUTDOWN_WAIT_MS = 6000, POLL_MS = 200, DROP_LOG_MS = 10_000, TEXT_MAX = 2048, HOUR = 3_600_000, DAY = 86_400_000;
 const clip = (s: string): string => (Buffer.byteLength(s) <= TEXT_MAX ? s : Buffer.from(s).subarray(0, TEXT_MAX).toString("utf8"));
@@ -55,6 +55,8 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
 
   let cur: PendingRecord | null = null, pendingBad = false, watch: AbortController | null = null, running: Promise<void> | null = null;
   const dropSeen = new Map<DropReason, number>();
+  const backoff = deps.publishBackoffMs ?? [2000, 5000, 15_000];
+  let unpublished: string | null = null; // yayını hiç başarılamayan isteğin kimliği: süre dolumu ret sayacına girmez
 
   const ack = (a: AckRecord): void => { try { store.writeAck(a); } catch (e) { L(`ack yazılamadı: ${msg(e)}`); } };
   const drop = (r: DropReason): void => {
@@ -148,8 +150,16 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
       if (published || cur?.id !== p.id || cur.status !== "pending") return;
       const key = keyOk();
       if (!key) return L("anahtar yok: istek yayınlanmadı");
-      published = true;
-      void Promise.resolve().then(() => channel.publishRequest(p, { approve: approveTag(key, p.digest), deny: denyTag(key, p.digest) })).catch((e) => L(`istek bildirimi gönderilemedi: ${msg(e)}`));
+      published = true; // uçuşta ya da tamamlandı: ikinci onReady yeni yayın başlatmaz; hata olursa döngü kendi içinde yeniden dener
+      void (async () => {
+        for (let i = 0; ; i++) {
+          try { await channel.publishRequest(p, { approve: approveTag(key, p.digest), deny: denyTag(key, p.digest) }); if (unpublished === p.id) unpublished = null; return; }
+          catch (e) { L(`istek bildirimi gönderilemedi: ${msg(e)}`); }
+          if (i >= backoff.length) { unpublished = p.id; return; }
+          await sleep(backoff[i]!, ac.signal);
+          if (ac.signal.aborted || cur?.id !== p.id || cur.status !== "pending") return; // karar/süre dolumu/yeni istek: yeniden deneme anlamsız
+        }
+      })();
     };
     void Promise.resolve().then(() => channel.watchResponse(p.respTopic, sinceUnix, { onBody, onReady }, ac.signal)).catch((e) => L(`yanıt akışı hatası: ${msg(e)}`));
   };
@@ -190,7 +200,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     const p = cur;
     if (p?.status === "pending") {
       const key = keyOk();
-      if (!(nowMs() < Date.parse(p.expiresAt))) settle(p, { status: "expired", reason: "süre doldu" }, "expire");
+      if (!(nowMs() < Date.parse(p.expiresAt))) settle(p, { status: "expired", reason: "süre doldu" }, unpublished === p.id ? null : "expire"); // bildirimi hiç gitmeyen istek kullanıcı reddi/ihmali sayılmaz
       else if (!key || keyGen(key) !== p.keyGen) settle(p, { status: "denied", reason: "key_changed" }, null);
     }
     if (pendingBad) { try { if (store.readPending() === null) pendingBad = false; } catch { /* hâlâ bozuk */ } }

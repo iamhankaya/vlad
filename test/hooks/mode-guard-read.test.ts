@@ -39,6 +39,17 @@ describe("okuma araçları gizli dizin koruması", () => {
     expect(run("Glob", { pattern: `${root}/.vlad-{secret,x}/*` })).not.toBeNull();
     expect(run("Glob", { pattern: "s/*/channel.json" })).not.toBeNull();
   });
+  it("F-vlad-347: cwd gizli dizinin atası (HOME) iken Read ilgisiz mutlak dosyayı okur; gizli yol Read ret; Grep/Glob kökü hâlâ ret", () => {
+    const home = { vladHome: "/home/u/vlad", cwd: root }; // root = gizli dizinin üstü ("HOME")
+    writeFileSync(join(root, "notes.txt"), "x");
+    mkdirSync(join(root, "elsewhere")); writeFileSync(join(root, "elsewhere", "a.ts"), "x");
+    expect(checkWorkerMode("Read", { file_path: join(root, "elsewhere", "a.ts") }, null, home)).toBeNull();
+    expect(checkWorkerMode("Read", { file_path: "notes.txt" }, null, home)).toBeNull();
+    expect(checkWorkerMode("Read", { file_path: join(secret, "mode.key") }, null, home)).not.toBeNull();
+    expect(checkWorkerMode("Read", { file_path: ".vlad-secret/mode.key" }, null, home)).not.toBeNull();
+    expect(checkWorkerMode("Grep", { pattern: "x" }, null, home)).not.toBeNull();
+    expect(checkWorkerMode("Glob", { pattern: "**/*.ts" }, null, home)).not.toBeNull();
+  });
   it("başka dosyalar, Grep regex'i ve kendi worktree okuması serbest", () => {
     writeFileSync(join(cwd, "a.ts"), "x");
     expect(run("Read", { file_path: join(cwd, "a.ts") })).toBeNull();

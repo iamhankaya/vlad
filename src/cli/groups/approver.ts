@@ -219,7 +219,7 @@ async function waitStopped(installer: ServiceInstaller, store: Store, cx: Cx): P
     if (!(await installer.status()).running && lockFree) return;
     await sleep(STOP_POLL_MS);
   }
-  throw new Error("servis kapanmadı: rotate iptal edildi (hiçbir dosya değişmedi); sonra yeniden dene");
+  throw new Error("servis kapanmadı: rotate iptal edildi (kanal/pending dosyaları değişmedi) ama servis kaldırıldı; `vlad approver install` ile yeniden kur");
 }
 
 async function rotate(o: Opts, cx: Cx): Promise<void> {
