@@ -18,6 +18,8 @@ export interface ApproverChannel {
 
 const MAX_LINE = 16 * 1024;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const PUBLISH_TIMEOUT_MS = 15_000;
+const CONNECT_TIMEOUT_MS = 15_000;
 const realSleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((res) => {
   if (signal.aborted) return res();
   const t = setTimeout(done, ms);
@@ -36,7 +38,7 @@ export class NtfyChannel implements ApproverChannel {
   }
 
   private async post(payload: unknown): Promise<void> {
-    const res = await this.fetchFn(`${this.base}/`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+    const res = await this.fetchFn(`${this.base}/`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), redirect: "error", signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`ntfy: yayin basarisiz (HTTP ${res.status})`);
   }
 
@@ -57,8 +59,14 @@ export class NtfyChannel implements ApproverChannel {
     while (!signal.aborted) {
       state("connecting");
       let delay: number | undefined;
+      // bağlantı kurulumu (başlıklar) zaman aşımına bağlı; gövde akışı yalnız kullanıcı signal'ine bağlı kalır
+      const connect = new AbortController();
+      const timer = setTimeout(() => connect.abort(), CONNECT_TIMEOUT_MS);
+      const onAbort = () => connect.abort();
+      signal.addEventListener("abort", onAbort);
       try {
-        const res = await this.fetchFn(`${this.base}/${topic}/json?since=${encodeURIComponent(since)}`, { method: "GET", signal });
+        const res = await this.fetchFn(`${this.base}/${topic}/json?since=${encodeURIComponent(since)}`, { method: "GET", redirect: "error", signal: connect.signal });
+        clearTimeout(timer);
         if (res.status === 429) {
           const ra = Number(res.headers.get("retry-after"));
           if (Number.isFinite(ra) && ra > 0) delay = Math.min(ra, 3600);
@@ -100,7 +108,7 @@ export class NtfyChannel implements ApproverChannel {
         }
       } catch {
         if (signal.aborted) break;
-      }
+      } finally { clearTimeout(timer); signal.removeEventListener("abort", onAbort); }
       if (signal.aborted) break;
       failures++;
       state("retry");

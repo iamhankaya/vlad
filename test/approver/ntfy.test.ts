@@ -42,6 +42,25 @@ describe("approver: ntfy kurucu", () => {
   });
 });
 
+describe("approver: ntfy yonlendirme/zaman asimi", () => {
+  it("yayin: redirect error ve zaman asimi signal'i gecer", async () => {
+    const calls: RequestInit[] = [];
+    const f = (async (_u: string, init: RequestInit) => { calls.push(init); return new Response("{}"); }) as unknown as typeof fetch;
+    await new NtfyChannel(cfg, f).publishRequest({ id: "idid", respTopic: TOPIC } as PendingRecord, { approve: "A", deny: "D" });
+    expect(calls[0]!.redirect).toBe("error");
+    expect(calls[0]!.signal).toBeInstanceOf(AbortSignal);
+  });
+  it("izleme: redirect error; kullanici abort'u fetch signal'ine yayilir", async () => {
+    const ac = new AbortController();
+    let init: RequestInit | undefined;
+    const f = (async (_u: string, i: RequestInit) => { init = i; ac.abort(); throw new Error("a"); }) as unknown as typeof fetch;
+    await new NtfyChannel(cfg, f, async () => {}).watchResponse(TOPIC, 1, { onBody: () => {} }, ac.signal);
+    expect(init!.redirect).toBe("error");
+    expect(init!.signal).toBeInstanceOf(AbortSignal);
+    expect(init!.signal!.aborted).toBe(true);
+  });
+});
+
 describe("approver: ntfy yayin", () => {
   it("publishRequest JSON kok URL'ye, Reddet once", async () => {
     const calls: { u: string; init: RequestInit }[] = [];

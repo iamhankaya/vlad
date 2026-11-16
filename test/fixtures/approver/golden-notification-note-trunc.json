@@ -30,6 +30,6 @@
   },
   "expected": {
     "title": "VLAD onay: mode night",
-    "message": "İşlem: vlad mode night --note şşşşşşşşşşşşşşşşşşşşşşşşşşşşşş…\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
+    "message": "İşlem: vlad mode night\n--note \"şşşşşşşşşşşşşşşşşşşşşşşşşşşşşş…\"\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
   }
 }

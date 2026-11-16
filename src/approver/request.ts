@@ -104,6 +104,7 @@ export function validateRequest(raw: unknown): Verdict {
     case "install": bad = parseFlags(args, 1, ARGV_SCHEMA.install); break;
     case "setup": bad = checkSetup(args); break;
   }
+  if (!bad && bytes(actionLines(op, args).join("\n")) > MAX_ACTION_BYTES) return no("too_large", "istek bildirimde eksiksiz gösterilemeyecek kadar uzun");
   return bad ? no(bad.reason, bad.detail) : { ok: true, req: { v: 1, cid, op: op as Op, argv: args, requestedAt, requester } };
 }
 
@@ -148,18 +149,32 @@ const hhmmss = (iso: string): string => {
 const tilde = (p: string): string => { const h = homedir(); return h.length > 1 && (p === h || p.startsWith(h + "/")) ? "~" + p.slice(h.length) : p; };
 const flagValue = (argv: string[], f: string): string | undefined => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
 
-/** Bildirim şablonu golden ile kilitlidir (ayraç `\n`; `~` kısaltma; `--note` ilk 60 bayt + "…"). */
-export function renderNotification(p: PendingRecord): { title: string; message: string } {
-  const a = p.argv;
-  let head: string[];
-  if (p.op === "setup" && a.includes("--uninstall")) head = [`Geri alma: ${flagValue(a, "--uninstall") ?? "?"}`, "Dış etki: yok"];
-  else if (p.op === "setup") {
+/** Bildirimin eylem bölümü (İşlem/bayrak satırları) üst sınırı (UTF-8 bayt); aşan istek validateRequest'te too_large (telefonda eksiksiz gösterilemez). */
+const MAX_ACTION_BYTES = 700;
+const NOTE_CUT = 60;
+
+/** Eylem satırları: `İşlem: vlad <op ve pozisyonel>` + bayrak başına ayrı satır (kırpma yok; yalnız --note değeri alıntılı, ilk 60 bayt + "…"). Setup: yapılandırılmış etki özeti + `--yes` satırı. */
+function actionLines(op: string, a: string[]): string[] {
+  if (op === "setup" && a.includes("--uninstall")) return [`Geri alma: ${flagValue(a, "--uninstall") ?? "?"}`, "Dış etki: yok"];
+  if (op === "setup") {
     const only = flagValue(a, "--only"), confirm = flagValue(a, "--confirm");
-    head = [`Yükseltme: ${only ? only.split(",").join(", ") : "tüm parçalar"}`, ...(only ? [`Kapsam: ${only}`] : []), `Dış etki: ${confirm ? confirm.split(",").join(", ") : "yok"}`];
-  } else head = [`İşlem: vlad ${cut(a.map((t, i) => (a[i - 1] === "--note" ? cut(t, 60) : t)).join(" "), 160)}`];
+    return [`Yükseltme: ${only ? only.split(",").join(", ") : "tüm parçalar"}`, ...(only ? [`Kapsam: ${only}`] : []), `Dış etki: ${confirm ? confirm.split(",").join(", ") : "yok"}`,
+      ...(a.includes("--yes") ? ["Bayrak: --yes"] : [])];
+  }
+  const first = a.findIndex((t) => t.startsWith("--")), cut0 = first < 0 ? a.length : first;
+  const lines = [`İşlem: vlad ${a.slice(0, cut0).join(" ")}`];
+  for (let i = cut0; i < a.length; i++) {
+    const t = a[i]!, v = a[i + 1];
+    if (v !== undefined && !v.startsWith("-") || t === "--note") { lines.push(`${t} ${t === "--note" ? `"${cut(v ?? "", NOTE_CUT)}"` : v}`); i++; } else lines.push(t);
+  }
+  return lines;
+}
+
+/** Bildirim şablonu golden ile kilitlidir (ayraç `\n`; `~` kısaltma; tüm bayraklar tam, `--note` ilk 60 bayt + "…"). */
+export function renderNotification(p: PendingRecord): { title: string; message: string } {
   return {
     title: `VLAD onay: ${p.op}`,
-    message: [...head, `İsteyen: ${p.requester} (beyan, doğrulanmamış)`, `Hedef: ${tilde(p.ctx.home)} | kb: ${tilde(p.ctx.kb)}`,
+    message: [...actionLines(p.op, p.argv), `İsteyen: ${p.requester} (beyan, doğrulanmamış)`, `Hedef: ${tilde(p.ctx.home)} | kb: ${tilde(p.ctx.kb)}`,
       `İstek: ${hhmmss(p.requestedAt)} · Geçerli: ${hhmmss(p.expiresAt)}`, `Kimlik: ${p.shortId}`].join("\n"),
   };
 }

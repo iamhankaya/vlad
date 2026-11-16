@@ -19,6 +19,10 @@ export interface ApproverDeps { channel: ApproverChannel; clock: Clock; random: 
 
 const SHUTDOWN_WAIT_MS = 6000, POLL_MS = 200, DROP_LOG_MS = 10_000, TEXT_MAX = 2048, HOUR = 3_600_000, DAY = 86_400_000;
 const clip = (s: string): string => (Buffer.byteLength(s) <= TEXT_MAX ? s : Buffer.from(s).subarray(0, TEXT_MAX).toString("utf8"));
+const REDACT: Array<[RegExp, string]> = [ // store.ts günlük maskesiyle aynı desenler; sonuç dosyası/bildirimine sır sızmasın
+  [/(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])/gi, "[gizli]"], [/VMT[12]\.\S+/g, "[gizli]"], [/VLAD_MODE_TOKEN=\S*/g, "[gizli]"], [/vlad-[qr]-[a-z2-7]{26}/g, "[gizli]"],
+];
+const redact = (s: string): string => REDACT.reduce((t, [re, to]) => t.replace(re, to), s);
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const sleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((res) => {
   if (signal.aborted) return res();
@@ -85,7 +89,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
 
   // --- sonuçlandırma ---
   const settle = (p: PendingRecord, r: { status: ResultStatus; exitCode?: number | null; stdout?: string; stderr?: string; reason?: string }, kind: "approve" | "deny" | "expire" | null): void => {
-    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(r.stdout ?? ""), stderr: clip(r.stderr ?? ""), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester };
+    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(redact(r.stdout ?? "")), stderr: clip(redact(r.stderr ?? "")), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester };
     try { store.writeResult(rec); } catch (e) { L(`sonuç yazılamadı: ${msg(e)}`); }
     if (kind) { try { recordRate(kind); } catch (e) { L(`hız sınırı yazılamadı: ${msg(e)}`); } }
     try { store.clearPending(); } catch (e) { L(`pending.json silinemedi: ${msg(e)}`); }
@@ -97,6 +101,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
   const execute = async (p: PendingRecord): Promise<void> => {
     try {
       if (!store.markClaim(p.id, "exec")) return settle(p, { status: "interrupted", reason: "yürütme işaretçisi zaten var; çalıştırılmadı" }, "approve");
+      if (computeDigest(p) !== p.digest) return settle(p, { status: "denied", reason: "digest_mismatch" }, "approve");
       const key = keyOk();
       if (!key || keyGen(key) !== p.keyGen) return settle(p, { status: "denied", reason: "key_changed" }, "approve");
       if (!sameCtx(resolveCtx(), p.ctx)) return settle(p, { status: "denied", reason: "ctx_changed" }, "approve");
@@ -179,6 +184,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
   };
 
   const tick = (): void => {
+    if (cur) { try { if (store.readPending() === null) cur = null; } catch { /* bozuk: handle fail-closed kilitler */ } } // pending dışarıdan silindi (elle çalıştırma/temizlik): bellekteki istek düşer
     const p = cur;
     if (p?.status === "pending") {
       const key = keyOk();
@@ -201,6 +207,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     if (p.status === "denied") return settle(p, { status: "denied", reason: "reddedildi" }, "deny");
     if (p.status === "expired" || !(nowMs() < Date.parse(p.expiresAt))) return settle(p, { status: "expired", reason: "süre doldu" }, "expire");
     if (store.hasClaim(p.id, "decision")) return settle(p, { status: "denied", reason: "karar yarıda kaldı; çalıştırılmadı" }, null);
+    if (computeDigest(p) !== p.digest) return settle(p, { status: "denied", reason: "digest_mismatch" }, null);
     cur = p; // süresi dolmamış bekleyen istek: yanıt akışına yeniden abone ol
     startWatch(p, Math.floor((Date.parse(p.expiresAt) - LIMITS.approveTtlMs) / 1000));
   };

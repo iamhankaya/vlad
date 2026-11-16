@@ -30,6 +30,8 @@ export interface ApproverCliDeps {
   installer?: ServiceInstaller;
   random?: RandomSource;
   now?: () => Date;
+  /** rotate: servis kapanışı beklerken uyku (testte sahte). */
+  sleep?: (ms: number) => Promise<void>;
 }
 
 /** `mode request` istemcisi için enjeksiyon: saat/uyku/rastgelelik sahte olabilir. */
@@ -206,21 +208,36 @@ async function uninstall(o: Opts, cx: Cx): Promise<void> {
   cx.k.out(o, { uninstalled: true, steps }, ["approver kaldırıldı:", ...steps.map((s) => `  ${s}`)].join("\n"));
 }
 
+const STOP_POLLS = 30, STOP_POLL_MS = 200;
+/** Servis kapandı mı: launchd `running` değil ve `service.lock` sahibi canlı değil. Sınırlı bekler; kapanmazsa hata (dosyalara dokunulmaz). */
+async function waitStopped(installer: ServiceInstaller, store: Store, cx: Cx): Promise<void> {
+  const sleep = cx.deps.sleep ?? realSleep;
+  for (let i = 0; i < STOP_POLLS; i++) {
+    let lockFree = false;
+    try { lockFree = store.acquireLock(process.pid, nowOf(cx)) === "acquired"; if (lockFree) store.releaseLock(); } catch { /* bozuk kilit: kapanmadı say */ }
+    if (!(await installer.status()).running && lockFree) return;
+    await sleep(STOP_POLL_MS);
+  }
+  throw new Error("servis kapanmadı: rotate iptal edildi (hiçbir dosya değişmedi); sonra yeniden dene");
+}
+
 async function rotate(o: Opts, cx: Cx): Promise<void> {
   guardPrivileged(cx, "rotate");
   const store = openStore(cx);
   const channel: ChannelConfig = { ...channelOrThrow(store), requestTopic: newTopic("vlad-q-", randomOf(cx)) };
+  const installer = await installerOf(cx);
+  const installed = (await installer.status()).installed;
+  if (installed) { await installer.uninstall(); await waitStopped(installer, store, cx); } // önce servis durur: çalışan servis eski konuyu/pending'i ezmesin
   writeChannel(approverDir(), channel);
   let rejected: string | null = null;
   const p = store.readPending();
-  if (p && p.status === "pending") {
+  if (p && p.status === "pending" && !store.readResult(p.id)) { // yalnız gerçekten bekleyen istek; çalışmış/sonuçlanmış olana dokunulmaz
     store.writeResult({ v: 1, id: p.id, status: "denied", exitCode: null, stdout: "", stderr: "", reason: "rotated", finishedAt: nowOf(cx).toISOString() });
     store.clearPending();
     rejected = p.shortId;
   }
-  const installer = await installerOf(cx);
-  if ((await installer.status()).installed) await installer.install(installCtx(cx)); // servis yeni konuyu yalnız yeniden başlayınca okur
-  cx.k.out(o, { rotated: true, rejected }, `yeni istek konusu üretildi${rejected ? `; bekleyen istek reddedildi (${rejected})` : ""}; servis yeniden başlatıldı`);
+  if (installed) await installer.install(installCtx(cx)); // servis yeni konuyu yalnız yeniden başlayınca okur
+  cx.k.out(o, { rotated: true, rejected }, `yeni istek konusu üretildi${rejected ? `; bekleyen istek reddedildi (${rejected})` : ""}${installed ? "; servis yeniden başlatıldı" : ""}`);
   printSecretUrl(cx, o, channel);
 }
 

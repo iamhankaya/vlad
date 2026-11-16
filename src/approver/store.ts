@@ -1,4 +1,5 @@
-import { closeSync, constants, lstatSync, openSync, readdirSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { closeSync, constants, linkSync, lstatSync, openSync, readdirSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { NAME_RE, assertSecureDir, readSecureFile, writeAtomic } from "../mode/secure-fs.js";
 import { LIMITS, type AckRecord, type ChannelConfig, type Op, type PendingRecord, type PendingStatus, type RateState, type ResultRecord, type ResultStatus } from "./types.js";
@@ -151,13 +152,22 @@ export function createStore(dir: string, o: { now?: () => Date } = {}): Store {
     acquireLock(pid, at) {
       const path = file("service.lock");
       const mine = JSON.stringify({ pid, startedAt: at.toISOString() });
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < 3; i++) {
         try { writeAtomic(path, mine, { overwrite: false }); held = pid; return "acquired"; } catch (e) { if (!errno(e, "EEXIST")) throw e; }
         let rec: unknown, raw: string;
         try { raw = readSecureFile(path, 1024).toString("utf8"); rec = JSON.parse(raw); } catch (e) { if (errno(e, "ENOENT")) continue; throw e; }
         if (!obj(rec) || !Number.isInteger(rec.pid) || (rec.pid as number) < 1 || !str(rec.startedAt)) bad("service.lock");
         if (alive((rec as { pid: number }).pid)) return "busy";
-        try { if (readSecureFile(path, 1024).toString("utf8") === raw) unlinkSync(path); } catch (e) { if (!errno(e, "ENOENT")) throw e; } // bayat kilit: yalnız değişmediyse sil
+        // bayat kilit: atomik rename ile kenara al (tek kazanan; kaybeden ENOENT alır ve yeniden dener); pid+startedAt (raw) aynı kayıtsa sil
+        const side = `${path}.stale.${randomBytes(6).toString("hex")}`;
+        try { renameSync(path, side); } catch (e) { if (errno(e, "ENOENT")) continue; throw e; }
+        let same = false;
+        try { same = readSecureFile(side, 1024).toString("utf8") === raw; } catch { /* okunamadı: canlı kabul edilir */ }
+        if (same) { try { unlinkSync(side); } catch { /* en iyi çaba */ } continue; }
+        // araya giren taze bir kilidi kapmışız: geri koy (link yoksa-oluştur atomiktir); başaramazsak yine busy
+        try { linkSync(side, path); } catch { /* başkası aldı */ }
+        try { unlinkSync(side); } catch { /* en iyi çaba */ }
+        return "busy";
       }
       return "busy";
     },

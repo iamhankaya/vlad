@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { approverDir } from "../mode/token.js";
 import { userInfo } from "node:os";
 import { join } from "node:path";
 
@@ -20,9 +21,9 @@ const LABEL = "com.vlad.approver";
 const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** Plist: agent plist'inden farklı olarak AbandonProcessGroup YOK (servis ölürse çocuk işlem grubu da gitmeli); ortamda token/sır yok. */
-export function approverPlist(c: { node: string; cli: string; home: string; path: string }): string {
+export function approverPlist(c: { node: string; cli: string; home: string; path: string }, logPath?: string): string {
   const args = [c.node, c.cli, "approver", "run"].map((a) => `<string>${esc(a)}</string>`).join("");
-  const log = esc(join(c.home, ".vlad-approver.log"));
+  const log = esc(logPath ?? join(c.home, ".vlad-approver.log"));
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -53,7 +54,12 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
     async install(c) {
       const steps: string[] = [];
       mkdirSync(join(plist, ".."), { recursive: true });
-      writeFileSync(plist, approverPlist(c), { mode: 0o600 });
+      // launchd günlük dosyasını 0600 yapmaz: approver dizini (0700) altında önceden 0600 oluştur
+      const dir = approverDir(), logPath = join(dir, "launchd.log");
+      mkdirSync(dir, { recursive: true, mode: 0o700 });
+      writeFileSync(logPath, "", { flag: "a", mode: 0o600 });
+      chmodSync(logPath, 0o600);
+      writeFileSync(plist, approverPlist(c, logPath), { mode: 0o600 });
       chmodSync(plist, 0o600);
       steps.push(`plist yazıldı: ${plist}`);
       await lc(["bootout", `${target}/${LABEL}`]); // yoksa hata normal (yeniden kurulum idempotent)

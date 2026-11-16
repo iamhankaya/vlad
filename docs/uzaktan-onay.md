@@ -6,7 +6,7 @@ Tasarım: `docs/superpowers/specs/2026-11-13-vlad-mode-token-design.md` (VMT2 no
 
 ## Nasıl çalışır
 
-`vlad mode request <işlem>` isteği `approver/inbox/` altına yazar; launchd'deki `vlad approver run` servisi isteği doğrular (allowlist), telefona ntfy bildirimi gönderir (Reddet / Onayla düğmeleri). Onay gelince servis o tam komutu tek kullanımlık, işleme bağlı bir token (VMT2) ile çalıştırır. Gelen port yoktur (yalnız giden `https`). Süre: istek 5 dk, token 60 sn. Tek bekleyen istek, 30 sn soğuma, saatte 6, günde 20; 3 art arda ret/süre dolumu 1 saat kilitler (`vlad approver unlock`).
+`vlad mode request <işlem>` isteği `approver/inbox/` altına yazar; launchd'deki `vlad approver run` servisi isteği doğrular (allowlist), telefona ntfy bildirimi gönderir (Reddet / Onayla düğmeleri). Onay gelince servis o tam komutu tek kullanımlık, işleme bağlı bir token (VMT2) ile çalıştırır. Gelen port yoktur (yalnız giden `https`). Süre: istek 5 dk, token 60 sn. Tek bekleyen istek, 30 sn soğuma, saatte 6, günde 20; 3 art arda ret/süre dolumu 1 saat kilitler; kilit 1 saat sonunda kendiliğinden açılır, istersen `vlad approver unlock` ile erken açarsın.
 
 ## Kurulum (terminalde, VLAD oturumunun dışında)
 
@@ -40,7 +40,7 @@ vlad approver requests --json --limit 5
 | Belirti | Bak |
 |---|---|
 | `approver yanıt vermiyor` | `vlad approver status`; servis kurulu/çalışıyor mu (`launchctl print gui/$UID/com.vlad.approver`) |
-| `kilitli` | 3 ret/süre dolumu: `vlad approver unlock` (terminalde, mod yetkisiyle) |
+| `kilitli` | 3 ret/süre dolumu: 1 saat sonra kendiliğinden açılır; erken açmak için `vlad approver unlock` (terminalde, mod yetkisiyle) |
 | `meşgul` / `hız sınırı` | bekleyeni onaylayın/reddedin ya da süresini bekleyin |
 | `mod belirteci etkin değil` | önce `vlad mode token` |
 | Sonuç `interrupted` | servis çöktü; işlem çalışmış olabilir, terminalde `vlad mode status` ile doğrulayın (otomatik yeniden çalıştırma yoktur) |

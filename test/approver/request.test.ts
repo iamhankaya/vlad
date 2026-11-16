@@ -205,12 +205,32 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
     process.env.TZ = "UTC"; process.env.HOME = g.homedir;
     expect(renderNotification(g.pending).message).toContain("İstek: 11:20:00 · Geçerli: 11:25:00");
   });
-  it("--note 60 bayttan sonrası bildirimde yok; kısa not kırpılmaz", () => {
+  it("--note alıntılı; 60 bayttan sonrası yok ve '…' ile işaretli; kısa not kırpılmaz", () => {
     const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
     const long = "a".repeat(60) + "GIZLI-SON";
     const m = renderNotification({ ...g.pending, argv: ["mode", "night", "--note", long] }).message;
-    expect(m).not.toContain("GIZLI-SON"); expect(m).toContain("a".repeat(60) + "…");
-    expect(renderNotification({ ...g.pending, argv: ["mode", "night", "--note", "a".repeat(60)] }).message).toContain("--note " + "a".repeat(60) + "\n");
+    expect(m).not.toContain("GIZLI-SON"); expect(m).toContain(`--note "${"a".repeat(60)}…"\n`);
+    expect(renderNotification({ ...g.pending, argv: ["mode", "night", "--note", "a".repeat(60)] }).message).toContain(`--note "${"a".repeat(60)}"\n`);
+  });
+  it("her bayrak bildirimde ayrı satır olarak tam görünür (sondaki --push/--except/--until dahil)", () => {
+    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    const argv = ["mode", "night", "--until-task", "T20261116-10", "--projects", "a,b", "--note", "x", "--push", "--except", "foo,bar", "--until", "23:00"];
+    expect(validateRequest({ v: 1, cid: "a".repeat(26), op: "mode night", argv, requestedAt: "2026-11-16T14:20:00+03:00", requester: "r" }).ok).toBe(true);
+    const lines = renderNotification({ ...g.pending, argv }).message.split("\n");
+    expect(lines.slice(0, 7)).toEqual(["İşlem: vlad mode night", "--until-task T20261116-10", "--projects a,b", '--note "x"', "--push", "--except foo,bar", "--until 23:00"]);
+    expect(renderNotification({ ...g.pending, op: "install", argv: ["install", "--remove-menu"] }).message.split("\n").slice(0, 2)).toEqual(["İşlem: vlad install", "--remove-menu"]);
+  });
+  it("setup --yes ayrı satır; --yes yoksa satır yok", () => {
+    const g = json("golden-notification-setup-upgrade.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    expect(renderNotification(g.pending).message.split("\n")).toContain("Bayrak: --yes");
+    expect(renderNotification({ ...g.pending, argv: ["setup", "--upgrade"] }).message).not.toContain("--yes");
+  });
+  it("bildirime sığmayan istek too_large (kırpma yok)", () => {
+    const mk = (argv: string[]) => validateRequest({ v: 1, cid: "a".repeat(26), op: "mode night", argv, requestedAt: "2026-11-16T14:20:00+03:00", requester: "r" });
+    const t = Array.from({ length: 16 }, (_, i) => `T20261116-${10 + i}`).join(",");
+    const slugs = Array.from({ length: 4 }, () => "a".repeat(40)).join(",");
+    expect(mk(["mode", "night", "--until-task", t, "--projects", "p".repeat(190), "--except", slugs, "--note", "n".repeat(100), "--push"])).toMatchObject({ ok: false, reason: "too_large" });
+    expect(mk(["mode", "night", "--projects", "p".repeat(190)]).ok).toBe(true);
   });
   it("setup uninstall ve çıplak upgrade biçimleri; confirm yoksa 'yok'", () => {
     const g = json("golden-notification-setup-upgrade.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;

@@ -173,6 +173,39 @@ describe("approver: rotate", () => {
     expect(st.readResult(ID)).toMatchObject({ status: "denied", reason: "rotated" });
     expect(calls.map((c) => c[0])).toContain("bootstrap");
   });
+  it("önce servis durur (kapanması beklenir), sonra dosyalar yazılır, sonra yeniden kurulur", async () => {
+    enableKey();
+    await cli(["install"]);
+    const old = channel().requestTopic;
+    const st = createStore(approverDir()); st.writePending(pending());
+    const ev: string[] = [];
+    let polls = 0;
+    const base = createLaunchdInstaller({ launchctl, plistDir });
+    const installer = {
+      install: async (c: Parameters<typeof base.install>[0]) => { ev.push(`install:${channel().requestTopic === old ? "old" : "new"}:${st.readPending() ? "pend" : "clear"}`); return base.install(c); },
+      uninstall: async () => { ev.push(`uninstall:${channel().requestTopic === old ? "old" : "new"}`); return base.uninstall(); },
+      status: async () => { const s = await base.status(); if (ev.includes("uninstall:old") && !ev.includes("stopped")) { polls++; if (polls < 3) return { ...s, running: true }; ev.push("stopped"); } return s; },
+    };
+    const sleeps: number[] = [];
+    const r = await cli(["rotate"], { installer, sleep: async (ms) => { sleeps.push(ms); } });
+    expect(r.code).toBe(0);
+    expect(ev).toEqual(["uninstall:old", "stopped", "install:new:clear"]);
+    expect(sleeps.length).toBeGreaterThan(0);
+  });
+  it("çalışmış (executing / sonucu olan) isteği rotated diye ezmez", async () => {
+    enableKey();
+    await cli(["install"]);
+    const st = createStore(approverDir());
+    st.writePending(pending({ status: "executing" }));
+    const r1 = await cli(["rotate"], { sleep: async () => undefined });
+    expect(r1.code).toBe(0);
+    expect(st.readResult(ID)).toBeNull();
+    expect(st.readPending()?.status).toBe("executing");
+    st.writePending(pending());
+    st.writeResult({ v: 1, id: ID, status: "done", exitCode: 0, stdout: "ok", stderr: "", finishedAt: "2030-01-01T00:01:00.000Z" });
+    await cli(["rotate"], { sleep: async () => undefined });
+    expect(st.readResult(ID)).toMatchObject({ status: "done" });
+  });
   it("kurulu değilken hata; TTY yoksa reddeder", async () => {
     enableKey();
     expect((await cli(["rotate"])).err).toContain("approver kurulu değil");

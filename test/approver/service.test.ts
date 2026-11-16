@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApproverChannel, WatchHandlers } from "../../src/approver/ntfy.js";
-import { approveTag, denyTag, keyGen, type RandomSource } from "../../src/approver/request.js";
+import { approveTag, computeDigest, denyTag, keyGen, type RandomSource } from "../../src/approver/request.js";
 import { runApprover, type ApproverDeps } from "../../src/approver/service.js";
 import { createStore, type Store } from "../../src/approver/store.js";
 import { LIMITS, type AckRecord, type PendingRecord, type RateState, type ResultRecord } from "../../src/approver/types.js";
@@ -398,6 +398,7 @@ describe("approver: service tekillik ve kurtarma", () => {
       v: 1, id: "m".repeat(26), shortId: "mmmmmmmm", cid: cid(9), op: "mode off", argv: ["mode", "off"], requestedAt: new Date(START).toISOString(), expiresAt: new Date(START + LIMITS.approveTtlMs).toISOString(),
       nonce: "0".repeat(32), respTopic: "vlad-r-" + "m".repeat(26), digest: "1".repeat(64), ctx: { home, kb: join(home, "kb"), cli: "/c" }, keyGen: "0".repeat(16), status: "pending", requester: "vlad-07", ...over,
     };
+    if (!over.digest) p.digest = computeDigest(p);
     store.writePending(p);
     return p;
   };
@@ -474,5 +475,41 @@ describe("approver: service tekillik ve kurtarma", () => {
     await resultOf(p.id);
     expect(secretHits(logText())).toEqual([]);
     expect(logs.join("\n")).not.toContain(readKey()!);
+  });
+});
+
+describe("approver: service sertleştirme (Codex P1/P2)", () => {
+  it("pending dışarıdan silinirse bellekteki istek düşer: yeni istek busy olmaz", async () => {
+    start();
+    request(1);
+    expect((await ackOf(1)).status).toBe("pending");
+    store.clearPending();
+    t += LIMITS.cooldownMs; // soğuma yok zaten; yalnız aynı durumu açık tut
+    request(2);
+    expect((await ackOf(2)).status).toBe("pending");
+  });
+
+  it("kurtarmada digest uyuşmazsa bekleyen istek yeniden yayınlanmaz: denied digest_mismatch", async () => {
+    const p: PendingRecord = {
+      v: 1, id: "n".repeat(26), shortId: "nnnnnnnn", cid: cid(9), op: "mode off", argv: ["mode", "off"], requestedAt: new Date(START).toISOString(), expiresAt: new Date(START + LIMITS.approveTtlMs).toISOString(),
+      nonce: "0".repeat(32), respTopic: "vlad-r-" + "n".repeat(26), digest: "1".repeat(64), ctx: { home, kb: join(home, "kb"), cli: "/c" }, keyGen: keyGen(readKey()!), status: "pending", requester: "vlad-07",
+    };
+    store.writePending(p);
+    start();
+    expect(await resultOf(p.id)).toMatchObject({ status: "denied", reason: "digest_mismatch" });
+    expect(execRun).not.toHaveBeenCalled();
+  });
+
+  it("sonuç dosyasındaki stdout/stderr sırlardan arındırılır", async () => {
+    const hex = "ab".repeat(32);
+    execRun.mockImplementation(async () => ({ exitCode: 0, stdout: `x ${hex} VMT2.1.2.3.4 VLAD_MODE_TOKEN=abc vlad-q-${"a".repeat(26)}`, stderr: `vlad-r-${"b".repeat(26)} ${hex}`, timedOut: false }));
+    start();
+    const p = await open(1);
+    ch.h!.onBody(body("a1", p));
+    const r = await resultOf(p.id);
+    const raw = JSON.stringify(r);
+    expect(raw).not.toContain(hex);
+    expect(raw).not.toMatch(/VMT2\.|VLAD_MODE_TOKEN=abc|vlad-[qr]-/);
+    expect(r.stdout).toContain("[gizli]");
   });
 });

@@ -1,7 +1,7 @@
 {
   "tz": "Europe/Istanbul",
   "homedir": "/Users/test",
-  "_doc": "renderNotification(pending) bu girdiyle process.env.TZ=tz ve HOME=homedir altında expected'a eşit olmalı. Ayraç \\n; `~` = $HOME önekinin kısaltması; --note ilk 60 bayt + … Ek golden (T20261116-06 U2): kırpma kuralı.",
+  "_doc": "renderNotification(pending) bu girdiyle process.env.TZ=tz ve HOME=homedir altında expected'a eşit olmalı. Ayraç \\n; tüm bayraklar tam ve satır başına (kırpma yok; uzun istek validateRequest'te too_large ile reddedilir); yalnız --note değeri alıntılı, ilk 60 bayt + …",
   "pending": {
     "v": 1,
     "id": "mfrggzdfmztwq2lknnwg23tpoa",
@@ -13,6 +13,7 @@
       "night",
       "--until-task",
       "T20261116-10,T20261116-11,T20261116-12,T20261116-13,T20261116-14,T20261116-15,T20261116-16,T20261116-17,T20261116-18,T20261116-19,T20261116-20,T20261116-21",
+      "--push",
       "--until",
       "23:00"
     ],
@@ -32,6 +33,6 @@
   },
   "expected": {
     "title": "VLAD onay: mode night",
-    "message": "İşlem: vlad mode night --until-task T20261116-10,T20261116-11,T20261116-12,T20261116-13,T20261116-14,T20261116-15,T20261116-16,T20261116-17,T20261116-18,T20261116-19,T20261…\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
+    "message": "İşlem: vlad mode night\n--until-task T20261116-10,T20261116-11,T20261116-12,T20261116-13,T20261116-14,T20261116-15,T20261116-16,T20261116-17,T20261116-18,T20261116-19,T20261116-20,T20261116-21\n--push\n--until 23:00\nİsteyen: vlad-07 (beyan, doğrulanmamış)\nHedef: ~/dev/vlad | kb: ~/dev/vlad-kb\nİstek: 14:20:00 · Geçerli: 14:25:00\nKimlik: mfrggzdf"
   }
 }

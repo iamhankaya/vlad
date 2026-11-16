@@ -323,4 +323,19 @@ describe("approver: service.lock", () => {
     expect(r.filter((x) => x === "acquired").length).toBe(1);
     expect(r.filter((x) => x === "busy").length).toBe(5);
   }, 20_000);
+  it("bayat kilit yarışı: 8 süreç ölü pid kilidini devralmak ister, en çok biri alır; stale artığı kalmaz", async () => {
+    const dead = spawnGuarded(process.execPath, ["-e", ""]).pid!;
+    await new Promise((r) => setTimeout(r, 200));
+    put("service.lock", JSON.stringify({ pid: dead, startedAt: "2026-11-15T00:00:00Z" }));
+    const r = await runChildren(8, `const r = s.acquireLock(process.pid, new Date()); while (Date.now() < Number(at) + 700) { /* sahip canlı kalsın */ } console.log(r);`, [ID]);
+    expect(r.filter((x) => x === "acquired").length).toBe(1);
+    expect(r.filter((x) => x === "busy").length).toBe(7);
+    expect(readdirSync(dir).filter((f) => f.includes(".stale."))).toEqual([]);
+  }, 20_000);
+  it("bayat kilit tek süreçte: devralınca stale artığı bırakılmaz", () => {
+    const dead = spawnGuarded(process.execPath, ["-e", ""]).pid!;
+    put("service.lock", JSON.stringify({ pid: dead, startedAt: "2026-11-15T00:00:00Z" }));
+    expect(st.acquireLock(process.pid, now)).toBe("acquired");
+    expect(readdirSync(dir).filter((f) => f.includes(".stale."))).toEqual([]);
+  });
 });
