@@ -121,13 +121,20 @@ describe("approver-kabul: VMT2 token kuralları (süreç içi)", () => {
     expect(() => requireModeAuthority(env(tok), new Date(), OFF), "reset sonrası eski token").toThrow();
   });
 
-  it("süresi dolmuş kayıtlar tembelce budanır ama budama tekrar oynatmaya yol açmaz", () => {
+  it("süresi dolmuş kayıt tembelce budanır; eski token gerçek saatle yine reddedilir (saat geri alma kapsam dışı)", () => {
     const t0 = new Date(Date.now() - 3_600_000);
     const old = mintOpToken(OFF, 60_000, t0);
-    expect(() => requireModeAuthority(env(old), new Date(t0.getTime() + 1000), OFF)).not.toThrow();
-    // bir saat sonra yeni bir token tüketilir (budama tetiklenir); eski token yine geçmez (süresi doldu)
-    requireModeAuthority(env(mintOpToken(OFF, 60_000)), new Date(), OFF);
-    expect(() => requireModeAuthority(env(old), new Date(t0.getTime() + 1000), OFF)).toThrow();
-    expect(() => requireModeAuthority(env(old), new Date(), OFF)).toThrow();
+    expect(() => requireModeAuthority(env(old), new Date(t0.getTime() + 1000), OFF)).not.toThrow(); // o günün saatiyle tüketildi
+    requireModeAuthority(env(mintOpToken(OFF, 60_000)), new Date(), OFF); // yeni tüketim budamayı tetikler
+    expect(() => requireModeAuthority(env(old), new Date(), OFF), "süresi doldu").toThrow();
   });
+
+  it("budama süresi dolmamış kaydı silmez: yeni tüketilen token, başka bir tüketimden sonra da tekrar oynatılamaz", () => {
+    const first = mintOpToken(OFF, 60_000);
+    expect(() => requireModeAuthority(env(first), new Date(), OFF)).not.toThrow();
+    requireModeAuthority(env(mintOpToken(NIGHT, 60_000)), new Date(), NIGHT); // budama tetiklenir
+    expect(() => requireModeAuthority(env(first), new Date(), OFF), "tekrar oynatma").toThrow();
+    expect(dirFiles(usedDir()).length).toBeGreaterThanOrEqual(2);
+  });
+
 });

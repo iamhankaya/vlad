@@ -50,7 +50,9 @@ describe("approver-kabul: KK8 gelen port yok, gerçek secretDir'e erişim yok", 
     expect(started.secretDir).toBe(w.secret);
     expect(started.secretDir).not.toBe(join(userInfo().homedir, ".vlad-secret"));
     expect(started.secretDir.startsWith(w.root)).toBe(true);
-    await waitFor(() => w.ntfy.connections.length > 0, "ilk /json bağlantısı (hazır sinyali)", 10_000);
+    const rid = writeRequest(w, { argv: ["mode", "off"] });
+    await waitAck(w, rid, 10_000);
+    await waitFor(() => w.ntfy.connections.length > 0, "yanıt akışı bağlantısı (istek sonrası)", 10_000);
     const r = spawnSync("lsof", ["-nP", "-a", "-p", String(e.pid), "-iTCP", "-sTCP:LISTEN"], { encoding: "utf8", timeout: 10_000 });
     if (r.error) throw new Error(`lsof çalıştırılamadı (atlanmaz, HATA): ${r.error.message}`);
     expect(r.stdout.trim(), "dinleyen soket olmamalı").toBe("");
@@ -64,7 +66,7 @@ describe("approver-kabul: servis tekliği ve yürütme env'i", () => {
   it("aynı dizinde iki servis: toplam çalıştırma 1; ikinci süreç çıkarsa 75", async () => {
     const rec = join(w.root, "rec.jsonl");
     const a = startEntry("fake", rec);
-    await waitFor(() => w.ntfy.streamCount() > 0, "birinci servis akışta", 10_000);
+    await waitFor(() => procs.every((q) => q.out().includes('"started"')), "servis başladı", 10_000);
     const b = startEntry("fake", rec);
     await Promise.race([b.exited, sleep(2500)]);
     if (b.code() !== undefined) expect(b.code(), b.err()).toBe(75);
@@ -80,7 +82,7 @@ describe("approver-kabul: servis tekliği ve yürütme env'i", () => {
   it("yürütme alt sürecinin env'i izin listesiyle sınırlı: PATH, HOME(passwd), VLAD_HOME, LANG, VLAD_MODE_TOKEN(VMT2); USERPROFILE/NODE_OPTIONS/VLAD_TASK_ID/canary yok", async () => {
     const rec = join(w.root, "rec.jsonl");
     startEntry("fake", rec);
-    await waitFor(() => w.ntfy.streamCount() > 0, "servis akışta", 10_000);
+    await waitFor(() => procs.every((q) => q.out().includes('"started"')), "servis başladı", 10_000);
     const argv = ["mode", "night", "--until", "23:00", "--note", "çocuk"];
     const { pending, msg } = await submit(w, argv);
     await w.ntfy.press(msg!, "Onayla");
@@ -101,7 +103,7 @@ describe("approver-kabul: servis tekliği ve yürütme env'i", () => {
 describe("approver-kabul: gerçek servis + gerçek `dist/cli.js` + gerçek VMT2 (uçtan uca)", () => {
   it("onay → `mode night` gerçekten uygulanır (VLAD_HOME test dizininde); torun gizli dizin olarak test dizinini görür; sonuçta token yok", async () => {
     startEntry("real");
-    await waitFor(() => w.ntfy.streamCount() > 0, "servis akışta", 10_000);
+    await waitFor(() => procs.every((q) => q.out().includes('"started"')), "servis başladı", 10_000);
     const { pending, msg } = await submit(w, ["mode", "night", "--until", "23:59"]);
     await w.ntfy.press(msg!, "Onayla");
     const res = await resultOf(w, pending!.id, 20_000);
@@ -118,7 +120,7 @@ describe("approver-kabul: gerçek servis + gerçek `dist/cli.js` + gerçek VMT2 
 
   it("onay verilmezse (Reddet) mod değişmez", async () => {
     startEntry("real");
-    await waitFor(() => w.ntfy.streamCount() > 0, "servis akışta", 10_000);
+    await waitFor(() => procs.every((q) => q.out().includes('"started"')), "servis başladı", 10_000);
     const { pending, msg } = await submit(w, ["mode", "night", "--until", "23:59"]);
     await w.ntfy.press(msg!, "Reddet");
     expect((await resultOf(w, pending!.id)).status).toBe("denied");
@@ -129,7 +131,7 @@ describe("approver-kabul: gerçek servis + gerçek `dist/cli.js` + gerçek VMT2 
 
   it("servis ölürken (SIGTERM) çocuk süreç grubu kalmaz ve ack verilmemiş istek işlenmez; yeniden başlatma yeni istek alır", async () => {
     const e = startEntry("fake", join(w.root, "rec.jsonl"));
-    await waitFor(() => w.ntfy.streamCount() > 0, "servis akışta", 10_000);
+    await waitFor(() => procs.every((q) => q.out().includes('"started"')), "servis başladı", 10_000);
     await e.kill();
     expect(e.code()).toBeDefined();
     const cid = writeRequest(w, { argv: ["mode", "off"] });
