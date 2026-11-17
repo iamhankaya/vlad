@@ -1,7 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { CONFIRM_ACTIONS } from "../setup/types.js";
-import { LIMITS, type ApprovalRequestFile, type Ctx, type DropReason, type Op, type PendingRecord, type RejectReason } from "./types.js";
+import { LIMITS, NOTE_MAX_BYTES, type ApprovalRequestFile, type Ctx, type DropReason, type Op, type PendingRecord, type RejectReason } from "./types.js";
 
 /**
  * Saf doğrulama/özet/tag/bildirim fonksiyonları; rastgelelik `RandomSource` ile ayrı.
@@ -14,7 +14,6 @@ type Bad = { reason: RejectReason; detail: string };
 const no = (reason: RejectReason, detail: string): Verdict => ({ ok: false, reason, detail });
 const bytes = (s: string): number => Buffer.byteLength(s, "utf8");
 
-const NOTE_CUT = 60;
 const OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
 const KEYS = ["v", "cid", "op", "argv", "requestedAt", "requester"];
 /** İstemcinin yazabileceği ama servisin ASLA kullanmadığı alanlar (bildirim/nonce/id/konu/tag servisin kendi verisinden): yok sayılır. */
@@ -93,6 +92,8 @@ export function validateRequest(raw: unknown): Verdict {
     return no("bad_value", "alan türleri geçersiz");
   const args = argv as string[];
   if (bytes(JSON.stringify(args)) > LIMITS.maxArgvBytes || args.some((a) => bytes(a) > LIMITS.maxValueBytes)) return no("too_large", "argv ya da bir değer boyut sınırını aşıyor");
+  const ni = args.indexOf("--note");
+  if (ni >= 0 && ni + 1 < args.length && bytes(args[ni + 1]!) > NOTE_MAX_BYTES) return no("too_large", `--note ${NOTE_MAX_BYTES} baytı aşıyor`);
   if ([cid, op, requestedAt, requester, ...args].some((s) => CONTROL.test(s))) return no("control_char", "kontrol/bidi karakteri");
   if (!CID_RE.test(cid) || !REQUESTER_RE.test(requester) || requestedAt.length > 64 || Number.isNaN(Date.parse(requestedAt))) return no("bad_value", "cid/requester/requestedAt geçersiz");
   if (!OPS.includes(op as Op)) return no("not_allowlisted", "op izinli değil");
@@ -136,13 +137,6 @@ export function parseDecision(body: string, p: PendingRecord, modeKey: string, n
   return { decision: m[1] === "a1" ? "approve" : "deny" };
 }
 
-/** En çok n UTF-8 bayt (kod noktası sınırında) + "…"; sığıyorsa aynen. */
-function cut(s: string, n: number): string {
-  if (bytes(s) <= n) return s;
-  let out = "", used = 0;
-  for (const ch of s) { const b = bytes(ch); if (used + b > n) break; out += ch; used += b; }
-  return out + "…";
-}
 const hhmmss = (iso: string): string => {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "??:??:??";
@@ -154,7 +148,7 @@ const flagValue = (argv: string[], f: string): string | undefined => { const i =
 /** Bildirimin eylem bölümü (İşlem/bayrak satırları) üst sınırı (UTF-8 bayt); aşan istek validateRequest'te too_large (telefonda eksiksiz gösterilemez). */
 const MAX_ACTION_BYTES = 700;
 
-/** Eylem satırları: `İşlem: vlad <op ve pozisyonel>` + bayrak başına ayrı satır (kırpma yok; yalnız --note değeri alıntılı, ilk 60 bayt + "…"). Setup: yapılandırılmış etki özeti + `--yes` satırı. */
+/** Eylem satırları: `İşlem: vlad <op ve pozisyonel>` + bayrak başına ayrı satır (kırpma yok; yalnız --note değeri alıntılı; değer ≤ NOTE_MAX_BYTES olduğundan kesilmez). Setup: yapılandırılmış etki özeti + `--yes` satırı. */
 function actionLines(op: string, a: string[]): string[] {
   if (op === "setup" && a.includes("--uninstall")) return [`Geri alma: ${flagValue(a, "--uninstall") ?? "?"}`, "Dış etki: yok"];
   if (op === "setup") {
@@ -166,12 +160,12 @@ function actionLines(op: string, a: string[]): string[] {
   const lines = [`İşlem: vlad ${a.slice(0, cut0).join(" ")}`];
   for (let i = cut0; i < a.length; i++) {
     const t = a[i]!, v = a[i + 1];
-    if (v !== undefined && !v.startsWith("-") || t === "--note") { lines.push(`${t} ${t === "--note" ? `"${cut(v ?? "", NOTE_CUT)}"` : v}`); i++; } else lines.push(t);
+    if (v !== undefined && !v.startsWith("-") || t === "--note") { lines.push(`${t} ${t === "--note" ? `"${v ?? ""}"` : v}`); i++; } else lines.push(t);
   }
   return lines;
 }
 
-/** Bildirim şablonu golden ile kilitlidir (ayraç `\n`; `~` kısaltma; tüm bayraklar tam, `--note` ilk 60 bayt + "…"). */
+/** Bildirim şablonu golden ile kilitlidir (ayraç `\n`; `~` kısaltma; tüm bayraklar tam, `--note` ≤ 60 bayt ve kesilmez). */
 export function renderNotification(p: PendingRecord): { title: string; message: string } {
   return {
     title: `VLAD onay: ${p.op}`,

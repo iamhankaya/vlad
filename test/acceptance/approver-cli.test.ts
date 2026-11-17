@@ -127,7 +127,7 @@ describe("approver-kabul: `mode request` servis ile", () => {
 describe("approver-kabul: approver status | requests | show (salt okuma, sızıntısız)", () => {
   it("status/requests/show çıktıları konu, nonce, tag, anahtar, token içermez; show NAME_RE ile traversal'ı reddeder", async () => {
     startService(w); await untilWatching(w);
-    const { pending: p, msg } = await submit(w, ["mode", "night", "--until", "23:00", "--note", "gizli-not ".repeat(10)]);
+    const { pending: p, msg } = await submit(w, ["mode", "night", "--until", "23:00", "--note", "gizli-not ".repeat(6).trim()]);
     await w.ntfy.press(msg!, "Onayla");
     await resultOf(w, p!.id);
     const tag = msg!.actions[1]!.body.split(".")[2]!;

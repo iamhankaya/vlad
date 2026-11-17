@@ -73,19 +73,27 @@ describe("approver-kabul: KK1 bildirim servis tarafında", () => {
     expect(p!.keyGen).toMatch(/^[0-9a-f]{16}$/);
   });
 
-  it("bildirimde ve loglarda anahtar/token/not'un 60 baytından sonrası/mutlak yol yok (konu yalnız action URL'sinde)", async () => {
+  it("bildirimde ve loglarda anahtar/token/mutlak yol yok; not 60 baytı aşarsa reddedilir, kabul edilen not bildirimde birebir kaydedilen metindir (D-vlad-084)", async () => {
     await boot();
-    const note = Array.from({ length: 14 }, (_, i) => `ş${((i + 3) * 7919 % 9973).toString(36)}q${i}`).join("-"); // ~120 bayt (≤ 200) // > 60 bayt, çok baytlı, APERİYODİK (kuyruk başka yerde eşleşmez)
-    const { msg: m } = await submit(w, [...NIGHT, "--note", note]);
+    const note = "ş".repeat(30); // tam 60 bayt, çok baytlı
+    const { pending: p, msg: m } = await submit(w, [...NIGHT, "--note", note]);
     const shown = `${m!.title}\n${m!.message}`;
     expect(secretHits(shown), "bildirim metni").toEqual([]);
     expect(shown).not.toContain(w.key);
     expect(shown).not.toContain(w.cfg.requestTopic);
-    const tail = Buffer.from(note, "utf8").subarray(80).toString("utf8").trim();
-    expect(shown).not.toContain(tail);
-    expect(shown).toContain("…");
+    expect(shown).toContain(`--note "${note}"`);
+    expect(shown).not.toContain("…");
+    expect(p!.argv[p!.argv.indexOf("--note") + 1]).toBe(note); // kaydedilen = gösterilen
     expect(logText(w)).not.toContain(w.key);
     expect(secretHits(logText(w))).toEqual([]);
+  });
+
+  it("61 baytlık --note kesilmeden reddedilir: too_large, bildirim yok (D-vlad-084)", async () => {
+    await boot();
+    const r = await submit(w, [...NIGHT, "--note", "ş".repeat(30) + "a"]);
+    expect(r.ack.status).toBe("invalid");
+    expect(r.ack.reason).toBe("too_large");
+    expect(r.msg).toBeNull();
   });
 });
 
@@ -293,11 +301,11 @@ describe("approver-kabul: istemci–servis protokolü ve allowlist", () => {
     expect(w.store.readPending()).toBeNull();
   });
 
-  it("izinli kenarlar geçer: boş --note, tam 200 bayt (çok baytlı) değer, setup --upgrade/--uninstall biçimleri, install --remove-menu, watch on|off", async () => {
+  it("izinli kenarlar geçer: boş --note, tam 60 bayt (çok baytlı) değer, setup --upgrade/--uninstall biçimleri, install --remove-menu, watch on|off", async () => {
     await boot();
     const ok: string[][] = [
       ["mode", "night", "--until", "23:00", "--note", ""],
-      ["mode", "night", "--note", "ş".repeat(100)],
+      ["mode", "night", "--note", "ş".repeat(30)],
       ["setup", "--upgrade", "--yes"],
       ["setup", "--uninstall", "hooks"],
       ["install", "--remove-menu"],
