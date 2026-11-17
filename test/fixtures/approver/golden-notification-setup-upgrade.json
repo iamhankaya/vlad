@@ -1,7 +1,7 @@
 {
   "tz": "Europe/Istanbul",
   "homedir": "/Users/test",
-  "_doc": "renderNotification(pending) bu girdiyle process.env.TZ=tz ve HOME=homedir altında expected'a eşit olmalı. Ayraç \\n; `~` = $HOME önekinin kısaltması; --note ilk 60 bayt + …",
+  "_doc": "renderNotification(pending) bu girdiyle process.env.TZ=tz ve HOME=homedir altında expected'a eşit olmalı. Ayraç \\n; `~` = $HOME önekinin kısaltması; --note ≤ 60 bayt, kesilmez",
   "pending": {
     "v": 1,
     "id": "mfrggzdfmztwq2lknnwg23tpoa",

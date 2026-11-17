@@ -80,11 +80,12 @@ describe("approver: allowlist (mode/install)", () => {
       expect(argvReason(["mode", "night", "--note", `a${c}b`]), JSON.stringify(c)).toBe("control_char");
     expect(argvReason(["mode\u0000", "off"])).toBe("control_char");
   });
-  it("UTF-8 bayt ölçüsü: tek değer 200 geçer, 201 ret (ş = 2 bayt)", () => {
-    expect(argvReason(["mode", "night", "--note", "a".repeat(200)])).toBe("ok");
-    expect(argvReason(["mode", "night", "--note", "a".repeat(201)])).toBe("too_large");
-    expect(argvReason(["mode", "night", "--note", "ş".repeat(100)])).toBe("ok"); // 200 bayt
-    expect(argvReason(["mode", "night", "--note", "ş".repeat(101)])).toBe("too_large"); // 202 bayt, 101 karakter
+  it("UTF-8 bayt ölçüsü: tek değer 60 geçer, 61 ret (ş = 2 bayt; D-vlad-084)", () => {
+    expect(argvReason(["mode", "night", "--note", "a".repeat(60)])).toBe("ok");
+    expect(argvReason(["mode", "night", "--note", "a".repeat(61)])).toBe("too_large");
+    expect(argvReason(["mode", "night", "--note", "ş".repeat(30)])).toBe("ok"); // 60 bayt
+    expect(argvReason(["mode", "night", "--note", "ş".repeat(30) + "a"])).toBe("too_large"); // 61 bayt
+    expect(argvReason(["mode", "night", "--note", "a".repeat(59) + "ş"])).toBe("too_large"); // 61 bayt, çok baytlı sınırda
   });
   it("toplam JSON.stringify(argv) baytı: 8192 sınırı geçer (başka nedenle reddedilir), 8193 too_large", () => {
     const sized = (n: number): string[] => { // JSON baytı tam n olan argv: ["mode", "night", ...dolgu]
@@ -207,11 +208,12 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
     process.env.TZ = "UTC"; process.env.HOME = g.homedir;
     expect(renderNotification(g.pending).message).toContain("İstek: 11:20:00 · Geçerli: 11:25:00");
   });
-  it("--note alıntılı; 60 bayttan sonrası yok ve '…' ile işaretli; kısa not kırpılmaz", () => {
+  it("--note alıntılı ve kesilmeden tam görünür (bildirimdeki not = kaydedilen not; D-vlad-084)", () => {
     const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
-    const long = "a".repeat(60) + "GIZLI-SON";
-    const m = renderNotification({ ...g.pending, argv: ["mode", "night", "--note", long] }).message;
-    expect(m).not.toContain("GIZLI-SON"); expect(m).toContain(`--note "${"a".repeat(60)}…"\n`);
+    const note = "ş".repeat(30), argv = ["mode", "night", "--note", note];
+    expect(validateRequest({ v: 1, cid: "a".repeat(26), op: "mode night", argv, requestedAt: "2026-11-16T14:20:00+03:00", requester: "r" }).ok).toBe(true);
+    const m = renderNotification({ ...g.pending, argv }).message;
+    expect(m).toContain(`--note "${note}"\n`); expect(m).not.toContain("…");
     expect(renderNotification({ ...g.pending, argv: ["mode", "night", "--note", "a".repeat(60)] }).message).toContain(`--note "${"a".repeat(60)}"\n`);
   });
   it("her bayrak bildirimde ayrı satır olarak tam görünür (sondaki --push/--except/--until dahil)", () => {

@@ -27,6 +27,9 @@ export interface ChannelConfig { v: 1; server: string; requestTopic: string; cre
 /** Hız sınırı durumu (`rate.json`): bozuk/okunamaz ise fail-closed (`locked: rate_state_corrupt`), sayaç sıfırlanmaz. */
 export interface RateState { v: 1; decisions: string[] /* ISO zamanları: soğuma/saatlik/günlük */; consecutiveDenied: number; lockedUntil: string | null }
 
+/** `--note` en çok bu kadar UTF-8 bayt (D-vlad-084, F-vlad-345): aşan istek `too_large` ile reddedilir, bildirimde kesilmez; bildirimdeki metin yürütülen/kaydedilen metindir. */
+export const NOTE_MAX_BYTES = 60;
+
 export const LIMITS = {
   approveTtlMs: 300_000, tokenTtlMs: 60_000, maxTokenTtlMs: 120_000, maxArgvBytes: 8192, maxValueBytes: 200,
   cooldownMs: 30_000, perHour: 6, perDay: 20, lockAfterDenied: 3, lockMs: 3_600_000, execTimeoutMs: 300_000,
