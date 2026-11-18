@@ -103,7 +103,7 @@ function badField(a: unknown, i: number): string | null {
 }
 
 /**
- * Ajan gövdesini sıkı doğrular. `server`: yapılandırmadaki sunucu kimliği (yalnız hata iletisi için).
+ * Ajan gövdesini sıkı doğrular. `server`: yapılandırmadaki sunucu kimliği; yanıttaki `server` ile eşleşmezse (yanlış `agent_url`) SpcSchemaMismatchError.
  * `schema` yoksa 1 sayılır; 1 dışındaki sayı ya da bozuk şekil → SpcSchemaMismatchError. Ek alanlar yok sayılır.
  */
 export function parseAlertsResponse(body: unknown, server: string): AlertsResponse {
@@ -114,6 +114,7 @@ export function parseAlertsResponse(body: unknown, server: string): AlertsRespon
     if (body.schema !== SPC_CONTRACT_SCHEMA) throw new SpcSchemaMismatchError(server, SPC_CONTRACT_SCHEMA, body.schema);
   }
   for (const k of ["server", "epoch", "next_cursor"]) if (typeof body[k] !== "string") throw shape(k);
+  if (body.server !== server) throw shape("server kimliği yapılandırmadakiyle uyuşmuyor");
   if (typeof body.has_more !== "boolean") throw shape("has_more");
   if (!Array.isArray(body.items)) throw shape("items");
   for (let i = 0; i < body.items.length; i++) {

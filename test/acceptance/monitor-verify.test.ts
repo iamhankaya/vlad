@@ -24,8 +24,8 @@ describe("monitor-doğrulama: eşzamanlı çekiş (launchd çakışması / elle 
 });
 
 describe("monitor-doğrulama: sunucu kimliği", () => {
-  // Bilinen açık nokta (T20261119-22 raporu): yanıttaki `server` yapılandırmadaki id ile karşılaştırılmıyor.
-  it.fails("yanıttaki server alanı yapılandırma id'sinden farklıysa hata verir ve görev açmaz", async () => {
+  // T20261119-51: yanıttaki `server` ≠ yapılandırma id → schema_mismatch, görev açılmaz, imleç ilerlemez.
+  it("yanıttaki server alanı yapılandırma id'sinden farklıysa hata verir ve görev açmaz", async () => {
     agent.mutate = (b) => ({ ...b, server: "baska-sunucu" });
     agent.upsert(alertItem());
     const r = await pullAlerts(w.deps(medialog()));

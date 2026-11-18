@@ -50,6 +50,8 @@ export interface AgentRequest { path: string; query: URLSearchParams; auth: stri
 
 /** spc FakeAgentServer'ın davranış alt kümesi: seq'li alarm deposu, opak imleç, epoch, 401/410. İmleç = base64url({e,k:"alerts",s}). */
 export class FakeAgent {
+  // Yanıttaki `server` alanı; yapılandırmadaki sunucu id'siyle eşleşmeli (T20261119-51).
+  serverId = "medialog";
   readonly requests: AgentRequest[] = [];
   epoch = "epoch-aaaaaaaa";
   /** Sunucunun tanıdığı belirteç. */
@@ -124,7 +126,7 @@ export class FakeAgent {
     const items = all.slice(0, limit);
     const hasMore = all.length > items.length;
     const last = items.length ? items[items.length - 1]!.seq : Math.max(after, hasMore ? after : this.seq);
-    let body: Record<string, unknown> = { server: "medialog", epoch: this.epoch, items, next_cursor: this.cursorFor(hasMore ? last : Math.max(last, this.seq)), has_more: hasMore };
+    let body: Record<string, unknown> = { server: this.serverId, epoch: this.epoch, items, next_cursor: this.cursorFor(hasMore ? last : Math.max(last, this.seq)), has_more: hasMore };
     if (this.mutate) body = this.mutate(body);
     send(200, body);
   }
