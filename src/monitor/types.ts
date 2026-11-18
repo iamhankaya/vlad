@@ -95,6 +95,8 @@ export interface PullDeps {
   /** Durum dosyası dizini (varsayılan `~/.vlad-monitor`; testte geçici dizin). */
   stateDir?: string;
   platform?: NodeJS.Platform;
+  /** İstek zaman aşımı (ms); varsayılan MONITOR_LIMITS.requestTimeoutMs (testte kısaltılır). */
+  requestTimeoutMs?: number;
   log?: (line: string) => void;
 }
 

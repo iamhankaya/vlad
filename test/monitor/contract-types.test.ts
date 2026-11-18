@@ -82,8 +82,4 @@ describe("monitor sözleşmesi: dışa aktarılan imzalar (ad + arite)", () => {
     fn(launchd, "monitorPlist", 2); fn(launchd, "createMonitorInstaller", 1);
     expect(MONITOR_LABEL).toBe("com.vlad.monitor");
   });
-  it("gövdeler henüz yok: not implemented (uygulama fazı kaldırır; kabul testleri kırmızı başlar)", async () => {
-    await expect(pull.pullAlerts({} as never)).rejects.toThrow("not implemented");
-    expect(() => config.loadMonitorConfig("/x")).toThrow("not implemented");
-  });
 });
