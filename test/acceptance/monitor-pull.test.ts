@@ -276,7 +276,7 @@ describe("monitor-kabul: görev sel sınırı", () => {
 describe("monitor-kabul 11: --server ve çoklu sunucu", () => {
   it("iki sunucu: her biri kendi projesine görev açar; --server yalnız ona gider", async () => {
     const w2 = makeWorld(["vlad", "medialog"], ["medialog", "srv-b"]);
-    const b = await new FakeAgent().start();
+    const b = await new FakeAgent().start(); b.serverId = "srv-b";
     try {
       agent.upsert(alertItem({ rule_id: "a-rule" }));
       b.upsert(alertItem({ rule_id: "b-rule" }));
@@ -304,7 +304,7 @@ describe("monitor-kabul 11: --server ve çoklu sunucu", () => {
 
   it("bir sunucu 401 verirken diğeri işlenir; çıkış 1; durum dosyası ikisini de ayrı tutar", async () => {
     const w2 = makeWorld(["vlad"], ["medialog", "srv-b"]);
-    const b = await new FakeAgent().start();
+    const b = await new FakeAgent().start(); b.serverId = "srv-b";
     try {
       agent.token = "baska-bir-belirtec";
       b.upsert(alertItem({ rule_id: "b-rule" }));

@@ -22,6 +22,9 @@ async function fake(handler: Fake["handler"]): Promise<Fake> {
     reqs.push({ url: req.url!, auth: req.headers.authorization });
     const r = f.handler(new URL(req.url!, "http://x"));
     if (r === "hang") return;
+    // fixture'lar server:"medialog" taşır; sunucu kimliği doğrulaması için yapılandırma id'sini yansıt (yalnız bu varsayılan değer)
+    const own = serverIdByUrl.get(f.url);
+    if (own && r.body && typeof r.body === "object" && (r.body as { server?: unknown }).server === "medialog") r.body = { ...(r.body as object), server: own };
     res.writeHead(r.status, { "content-type": "application/json", ...(r.location ? { location: r.location } : {}) });
     res.end(JSON.stringify(r.body));
   });
@@ -30,12 +33,13 @@ async function fake(handler: Fake["handler"]): Promise<Fake> {
   return f;
 }
 
+const serverIdByUrl = new Map<string, string>();
 let stateDir: string, fakes: Fake[], logs: string[];
 beforeEach(() => { const home = makeHome(); cpSync(join(__dirname, "..", "..", "roles"), join(home, "roles"), { recursive: true }); stateDir = mkdtempSync(join(tmpdir(), "vlad-mon-")); fakes = []; logs = []; });
 afterEach(async () => { for (const f of fakes) await f.close(); rmSync(stateDir, { recursive: true, force: true }); });
 
 async function mk(handler: Fake["handler"]): Promise<Fake> { const f = await fake(handler); fakes.push(f); return f; }
-const deps = (urls: Record<string, string>, over: Partial<PullDeps> = {}): PullDeps => ({
+const deps = (urls: Record<string, string>, over: Partial<PullDeps> = {}): PullDeps => (Object.entries(urls).forEach(([id, u]) => serverIdByUrl.set(u, id)), {
   home: process.env.VLAD_HOME!,
   config: { servers: Object.entries(urls).map(([id, agent_url]) => ({ id, agent_url, project: "p" })) },
   secrets: { read: async () => TOKEN },
@@ -148,6 +152,17 @@ describe("pullAlerts: resolved, warning", () => {
 });
 
 describe("pullAlerts: hatalar", () => {
+  it("yanıttaki server ≠ yapılandırma id → schema_mismatch, görev yok, imleç ilerlemez, diğer sunucu sürer", async () => {
+    const wrong = await mk(() => ok({ ...fx("alerts-critical-firing.json"), server: "baska" }));
+    const good = await mk(() => ok(fx("alerts-critical-firing.json")));
+    const r = await pullAlerts(deps({ wrong: wrong.url, good: good.url }));
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]).toMatchObject({ server: "wrong", code: "schema_mismatch" });
+    expect(r.errors[0]!.message).not.toContain("baska");
+    expect(listTasks()).toHaveLength(1);
+    expect(state().servers.wrong.cursor).toBeNull();
+    expect(Object.keys(state().servers.wrong.tasks)).toHaveLength(0);
+  });
   it("schema:2 → schema_mismatch, görev yok, imleç ilerlemez, diğer sunucu sürer", async () => {
     const bad = await mk(() => ok({ ...fx("alerts-critical-firing.json"), schema: 2 }));
     const good = await mk(() => ok(fx("alerts-critical-firing.json")));
