@@ -140,6 +140,16 @@ describe("launchd", () => {
     expect(calls.filter((a) => a[0] === "bootstrap")).toEqual([["bootstrap", `gui/${uid}`, plist], ["bootstrap", `gui/${uid}`, plist]]);
     expect(calls[0]).toEqual(["bootout", `gui/${uid}/${MONITOR_LABEL}`]);
   });
+  it("test kancası nesne biçimi: { launchctl, homeDir } gerçek ~/Library ve ~/.vlad-monitor'a dokunmadan kurar", async () => {
+    const { calls, lc } = fakeLc();
+    const inst = createMonitorInstaller({ launchctl: lc, homeDir: tmp });
+    await inst.install(c);
+    expect(existsSync(join(tmp, "Library", "LaunchAgents", `${MONITOR_LABEL}.plist`))).toBe(true);
+    expect(statSync(join(tmp, ".vlad-monitor", "launchd.log")).mode & 0o777).toBe(0o600);
+    expect(readFileSync(join(tmp, "Library", "LaunchAgents", `${MONITOR_LABEL}.plist`), "utf8")).toContain(join(tmp, ".vlad-monitor", "launchd.log"));
+    expect(calls.some((a) => a[0] === "bootstrap")).toBe(true);
+    expect(await inst.status()).toMatchObject({ installed: true });
+  });
   it("bootstrap başarısızsa plist geri alınır ve hata verilir", async () => {
     const { lc } = fakeLc("bootstrap");
     const inst = createMonitorInstaller(lc, { plistDir: join(tmp, "LA"), stateDir: join(tmp, "st") });

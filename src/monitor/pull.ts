@@ -124,9 +124,13 @@ async function pullServer(
     if (found) st.tasks[alertId] = { task: found, firing_noted: true, resolved_noted: false };
     return found;
   };
+  const startCursor = st.cursor, startEpoch = st.epoch;
   let cursor = st.cursor, pages = 0, restarted = false;
   for (;;) {
-    if (pages >= MONITOR_LIMITS.maxPages) throw new ServerError("page_limit", `sayfa tavanı aşıldı (${MONITOR_LIMITS.maxPages}); imleç ilerlemedi`);
+    if (pages >= MONITOR_LIMITS.maxPages) {
+      st.cursor = startCursor; st.epoch = startEpoch; // sözleşme: tavan aşılınca imleç ilerlemez (eşleme kalır, sonraki çekiş idempotent)
+      throw new ServerError("page_limit", `sayfa tavanı aşıldı (${MONITOR_LIMITS.maxPages}); imleç ilerlemedi`);
+    }
     const { status, body } = await fetchPage(srv, token, cursor, deps);
     if (status === 410 && !restarted) {
       restarted = true; cursor = null; st.cursor = null; st.epoch = null;

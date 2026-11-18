@@ -45,10 +45,20 @@ const realLaunchctl: Launchctl = (args) => new Promise((resolve) => {
 const notLoaded = (r: { code: number; stderr: string }): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
 
 /** `opts`: test enjeksiyonu (plist dizini, durum/günlük dizini); üretimde varsayılanlar. */
-export function createMonitorInstaller(lcIn?: Launchctl, opts: { plistDir?: string; stateDir?: string } = {}): ServiceInstaller {
-  const lc = lcIn ?? realLaunchctl; // arite 1: sözleşme testi
-  const plist = join(opts.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents"), `${MONITOR_LABEL}.plist`);
-  const stateDir = opts.stateDir ?? monitorStateDir();
+export interface MonitorInstallerDeps {
+  launchctl?: Launchctl;
+  plistDir?: string;
+  stateDir?: string;
+  /** Ana dizin: plist `<homeDir>/Library/LaunchAgents`, günlük/durum `<homeDir>/.vlad-monitor` (testte geçici dizin). */
+  homeDir?: string;
+}
+
+/** İlk argüman `launchctl` işlevi ya da (test kancası, approver'daki seam gibi) `{ launchctl, plistDir, homeDir }`. */
+export function createMonitorInstaller(first?: Launchctl | MonitorInstallerDeps, second: { plistDir?: string; stateDir?: string } = {}): ServiceInstaller {
+  const opts: MonitorInstallerDeps = typeof first === "function" ? { launchctl: first, ...second } : { ...(first ?? {}), ...second };
+  const lc = opts.launchctl ?? realLaunchctl; // arite 1: sözleşme testi
+  const plist = join(opts.plistDir ?? join(opts.homeDir ?? userInfo().homedir, "Library", "LaunchAgents"), `${MONITOR_LABEL}.plist`);
+  const stateDir = opts.stateDir ?? (opts.homeDir ? monitorStateDir(opts.homeDir) : monitorStateDir());
   const target = `gui/${process.getuid?.() ?? 501}`;
   return {
     async install(c) {
