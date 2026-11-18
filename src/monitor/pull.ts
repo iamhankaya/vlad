@@ -129,7 +129,10 @@ async function pullServer(
   };
   const startCursor = st.cursor, startEpoch = st.epoch;
   let cursor = st.cursor, pages = 0, restarted = false;
-  let wantAll = false; // 410 yeniden başlangıcında açık eşlemesi olan sunucu için state=all (çözülenler görünür, notları düşer)
+  // Başlangıç imleci yoksa ve çözülmemiş eşleme varsa state=all (çözülenler görünür, notları düşer). Kurtarma kipi eşlemelerden türetilir:
+  // 410 sonrası yeniden başlama isteği başarısız olup null imleç kaydedilse de sonraki çekiş aynı kipte başlar (not kalıcı kaybolmaz).
+  const openMappings = (): boolean => Object.values(st.tasks).some((e) => !e.resolved_noted);
+  let wantAll = cursor === null && openMappings();
   for (;;) {
     if (pages >= MONITOR_LIMITS.maxPages) {
       st.cursor = startCursor; st.epoch = startEpoch; // sözleşme: tavan aşılınca imleç ilerlemez (eşleme kalır, sonraki çekiş idempotent)
@@ -138,7 +141,7 @@ async function pullServer(
     const { status, body } = await fetchPage(srv, token, cursor, deps, wantAll);
     if (status === 410 && !restarted) {
       restarted = true; cursor = null; st.cursor = null; st.epoch = null;
-      wantAll = Object.values(st.tasks).some((e) => !e.resolved_noted);
+      wantAll = openMappings();
       log(`spc ${srv.id}: imleç geçersiz (epoch değişti), baştan başlanıyor`);
       continue;
     }
