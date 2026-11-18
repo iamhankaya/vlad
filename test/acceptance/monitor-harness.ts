@@ -2,7 +2,7 @@
 // tasarım raporundan (T20261119-19) yazıldı; uygulama gövdelerine bakılmadı.
 // Gerçek kaynak koruması: ajan = loopback'te test içi sahte HTTP sunucusu; Keychain = sahte SecretReader; kb/VLAD_HOME ve durum dizini geçici;
 // gerçek `security`, launchctl, ~/.vlad-monitor ve ağ HİÇ kullanılmaz. `http.createServer` yalnız test kodunda (üretim kodunda dinleyen soket yok).
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -160,6 +160,7 @@ export interface World {
 /** Geçici VLAD_HOME + kb (proje kartlarıyla) + geçici durum dizini. */
 export function makeWorld(projects: string[] = ["vlad"], secretIds: string[] = ["medialog"]): World {
   const home = makeHome();
+  cpSync(join(import.meta.dirname, "..", "..", "roles"), join(home, "roles"), { recursive: true }); // createTask role: analyst için roller gerekir
   for (const p of projects) writeFileSync(join(home, "kb", "projects", `${p}.md`), `---\nslug: ${p}\n---\n`);
   const stateDir = join(makeFixtureRoot(), "vlad-monitor");
   const secrets = fakeSecrets(Object.fromEntries(secretIds.map((id) => [`spc_token_${id.replace(/-/g, "_")}`, TOKEN])));
