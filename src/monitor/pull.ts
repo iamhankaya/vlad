@@ -24,7 +24,7 @@ const CLOSED = new Set(["done", "cancelled"]);
 function markerIndex(server: string): Map<string, string> {
   const m = new Map<string, string>();
   for (const t of listTasks()) {
-    if (!t.body.includes(MARKER_PREFIX)) continue;
+    if (!t.data.title.startsWith("[spc] ") || !t.body.includes(MARKER_PREFIX)) continue; // başka görevlerin alıntısı eşleşmesin
     for (const line of t.body.split("\n")) {
       const p = parseAlertMarker(line.trim());
       if (p && p.server === server && !m.has(p.alertId)) m.set(p.alertId, t.data.id);
@@ -75,14 +75,18 @@ export async function pullAlerts(deps: PullDeps, opts: PullOptions = {}): Promis
       work.fail_streak = 0;
       work.last_ok = (deps.now ?? Date.now)();
     } catch (e) {
-      const code: MonitorErrorCode = e instanceof ServerError ? e.code : e instanceof SpcSchemaMismatchError ? "schema_mismatch" : "unreachable";
+      const code: MonitorErrorCode = e instanceof ServerError ? e.code : e instanceof SpcSchemaMismatchError ? "schema_mismatch" : "config"; // kb/disk/durum yazma hataları sunucu erişilemezliği değildir
       let message = e instanceof Error ? e.message : String(e);
       if (token) message = message.split(token).join("[belirteç]");
       if (code === "unauthorized") message += " — Keychain kaydını kontrol edin";
       result.errors.push({ server: srv.id, code, message } satisfies MonitorError);
       if (STREAK_CODES.includes(code)) work.fail_streak += 1;
     }
-    if (!dry) store.save(state);
+    if (!dry) {
+      try { store.save(state); } catch (e) {
+        result.errors.push({ server: srv.id, code: "config", message: `durum dosyası yazılamadı: ${(e as Error).message}` });
+      }
+    }
   }
   return result;
 }
@@ -153,12 +157,14 @@ async function pullServer(
       const e = st.tasks[a.alert_id];
       if (!id || !e) { logAlert(a); return; } // eşleme yok: görev açılmamış
       if (e.resolved_noted) { res.skipped++; return; }
-      e.resolved_noted = true;
-      if (dry && id === DRY_TASK) return;
+      if (dry && id === DRY_TASK) { e.resolved_noted = true; return; }
       let open = false;
-      try { open = !CLOSED.has(getTask(id).data.state); } catch { open = false; }
-      if (!open) { log(`spc ${srv.id}: ${a.alert_id} çözüldü, görev ${id} kapalı/yok: not yazılmadı`); return; }
+      try { open = !CLOSED.has(getTask(id).data.state); } catch (err) {
+        if (!/bulunamadı/.test((err as Error).message)) throw err; // okunamayan görev ≠ kapalı: bayrak set edilmez, sonraki çekişte yeniden denenir
+      }
+      if (!open) { e.resolved_noted = true; log(`spc ${srv.id}: ${a.alert_id} çözüldü, görev ${id} kapalı/yok: not yazılmadı`); return; }
       if (!dry) logTask(id, buildResolvedNote(a));
+      e.resolved_noted = true; // yalnız yazma başarılı olduktan sonra
       res.noted.push({ alert_id: a.alert_id, task: id });
       return;
     }

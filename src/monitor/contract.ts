@@ -84,6 +84,7 @@ function badField(a: unknown, i: number): string | null {
   for (const k of ["alert_id", "rule_id", "title"]) if (typeof a[k] !== "string") return `${p}.${k}`;
   // spc alert-id.ts: karakter kümesi [a-z0-9.-]; işaret satırı/gövde enjeksiyonunu kapatır (idempotans işaretiyle aynı küme)
   if (!ALERT_ID_RE.test(a.alert_id as string)) return `${p}.alert_id`;
+  if (!/^[a-z0-9-]{1,100}$/.test(a.rule_id as string)) return `${p}.rule_id`; // spc rules.ts: [a-z0-9-]+; gövdeye ham girer
   for (const k of ["seq", "fired_at", "value", "threshold", "for_ms"]) if (!isNum(a[k])) return `${p}.${k}`;
   if (!oneOf(SEVERITIES, a.severity)) return `${p}.severity`;
   if (!oneOf(ALERT_STATES, a.state)) return `${p}.state`;

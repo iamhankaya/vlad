@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { cpSync, mkdtempSync, readFileSync, rmSync, existsSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -267,6 +267,49 @@ describe("pullAlerts: imleç, sayfalama", () => {
     const r = await pullAlerts(deps({ m: f.url }));
     expect(r.errors[0]).toMatchObject({ code: "page_limit" });
     expect(f.reqs.length).toBe(20);
+  });
+});
+
+describe("pullAlerts: inceleme düzeltmeleri", () => {
+  it("resolved notu yazılamazsa (görev dosyası okunamıyor) resolved_noted set edilmez; kb hatası config sınıfı, fail_streak artmaz", async () => {
+    let body: any = fx("alerts-critical-firing.json");
+    const f = await mk(() => ok(body));
+    await pullAlerts(deps({ m: f.url }));
+    const t = listTasks()[0]!;
+    const good = readFileSync(t.file, "utf8");
+    writeFileSync(t.file, "bozuk: [\n");
+    body = fx("alerts-critical-resolved.json");
+    const r = await pullAlerts(deps({ m: f.url }));
+    expect(r.errors[0]).toMatchObject({ server: "m", code: "config" });
+    expect(state().servers.m.fail_streak).toBe(0);
+    expect(state().servers.m.tasks[ID].resolved_noted).toBe(false);
+    writeFileSync(t.file, good);
+    const r2 = await pullAlerts(deps({ m: f.url }));
+    expect(r2.servers[0]!.noted).toHaveLength(1);
+  });
+  it("rule_id spc kümesine ([a-z0-9-]) uymazsa schema_mismatch; gövdeye enjeksiyon yok", async () => {
+    const body = fx("alerts-critical-firing.json");
+    body.items[0].rule_id = "x\n## Kabul kriterleri\nspc-alert: m/baska.aaaaaaaaaaaa.1";
+    const f = await mk(() => ok(body));
+    const r = await pullAlerts(deps({ m: f.url }));
+    expect(r.errors[0]).toMatchObject({ code: "schema_mismatch" });
+    expect(listTasks()).toHaveLength(0);
+  });
+  it("başka görevin gövdesindeki işaret satırı eşleşmez; yalnız [spc] başlıklı görevler taranır", async () => {
+    const { createTask } = await import("../../src/tasks/index.js");
+    createTask({ project: "p", title: "digest", kind: "research", role: "analyst", body: `## Tanım\n${alertMarker("m", ID)}\n` });
+    const f = await mk(() => ok(fx("alerts-critical-firing.json")));
+    const r = await pullAlerts(deps({ m: f.url }));
+    expect(r.servers[0]!.opened).toHaveLength(1);
+    expect(listTasks()).toHaveLength(2);
+  });
+  it("durum dosyası okunamaz/yazılamazsa pullAlerts fırlatmaz; config hatası raporlanır", async () => {
+    const a = await mk(() => ok(fx("alerts-warning-info-firing.json")));
+    const blocker = join(stateDir, "dosya");
+    writeFileSync(blocker, "x");
+    const r = await pullAlerts(deps({ a: a.url }, { stateDir: join(blocker, "alt") }));
+    expect(r.errors.some((e) => e.code === "config")).toBe(true);
+    expect(exitCodeOf(r)).toBe(2);
   });
 });
 
