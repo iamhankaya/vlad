@@ -3,15 +3,16 @@ import { expireMode, modeLine, modeStatus, setNight, setOff, setWatch } from "..
 import { assertNotWorker as assertNotWorkerBase } from "../../mode/guard.js";
 import { createInterface } from "node:readline/promises";
 import { authorizeReset, disableKey, initKey, mintToken, requireModeAuthority } from "../../mode/token.js";
+import { requestApproval } from "./approver.js";
 import type { Kit } from "../kit.js";
-import type { Opts } from "../ctx.js";
+import { SilentExit, type Opts } from "../ctx.js";
 
 /** Çalışan değil + (anahtar etkinse) geçerli VLAD_MODE_TOKEN: doğrulama CLI tarafındadır, hook'tan bağımsız (F-vlad-287). */
 function assertNotWorker(): void { assertNotWorkerBase(); requireModeAuthority(); }
 
 export function registerMode(program: Command, k: Kit): void {
   const { out, def } = k;
-  const mode = program.command("mode").description("Gece / bekçi modu (yetki penceresi kb/mode.json)");
+  const mode = program.command("mode").description("Gece / bekçi modu (yetki penceresi kb/mode.json)").enablePositionalOptions(); // `mode request` bayrakları işlemden önce (passThroughOptions)
   const modeText = (now: Date) => modeLine(now) ?? "mod kapalı";
   def(mode, "night", "Gece (yetki) modunu açar: pencere boyunca faz ve son kapı merge'ü sormadan", (o: Opts) => {
     assertNotWorker();
@@ -39,6 +40,15 @@ export function registerMode(program: Command, k: Kit): void {
     setOff();
     out(o, modeStatus(new Date()), "mod kapalı");
   });
+  // Uzaktan onay (T20261116-04; istemci gövdesi approver.ts `requestApproval`). Yalnız VLAD (çalışan reddi); VLAD_MODE_TOKEN istemez, anahtar okumaz; istek approver servisine inbox/ ile gider.
+  // Hata öncelik sırası: (1) çalışan, (2) geçersiz işlem/argüman, (3) approver kurulu değil, (4) servis ack'i (invalid/locked/busy/rate_limited), (5) approver yanıt vermiyor.
+  def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", async (op: string, args: string[], o: Opts) => {
+    const r = await requestApproval(op, args, o);
+    out(o, r.data, r.text);
+    if (r.exit) throw new SilentExit(r.exit); // def sarmalayıcısı failWith ile mesajsız çıkar (ctx.exit)
+  }).passThroughOptions()
+    .option("--wait", "sonuç gelene kadar bekle (varsayılan 310 sn; süre dolarsa çıkış 1, istek iptal edilmez)")
+    .option("--wait-seconds <n>", "--wait süresi (saniye); isteğe bağlı değerli --wait işlem adını yuttuğu için ayrı bayrak");
   def(mode, "status", "Mod durumu (biten pencere bir kez bildirilir, sonra temizlenir)", (o: Opts) => {
     const now = new Date();
     const s = modeStatus(now);

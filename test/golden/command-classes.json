@@ -109,6 +109,27 @@
   "CONSOLE_CATALOG": [
     {
       "path": [
+        "approver",
+        "requests"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "approver",
+        "show"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "approver",
+        "status"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
         "audit",
         "skills"
       ],

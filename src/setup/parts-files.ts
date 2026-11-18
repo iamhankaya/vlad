@@ -174,7 +174,7 @@ export const WORKER_DENY = [
 /** F-vlad-324: PreToolUse(Bash) push-guard hook'u (çalışan `git push` argv doğrulaması). */
 const pushGuardCommand = (home: string): string => `node "${join(home, "dist", "hooks", "push-guard-hook.js").replace(/\\/g, "/")}"`;
 /** F-vlad-287: aynı hook mod korumasını da yürütür (Bash komutu + kb mode.json'a Edit/Write); matcher bu araçların hepsini kapsamalı. */
-const GUARD_MATCHER = "Bash|Edit|Write|MultiEdit|NotebookEdit";
+const GUARD_MATCHER = "Bash|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob";
 const hasPushGuard = (d: any, cmd: string): boolean => (d?.hooks?.PreToolUse ?? []).some((e: any) => e?.matcher === GUARD_MATCHER && Array.isArray(e?.hooks) && e.hooks.some((h: any) => h?.command === cmd));
 function mergePushGuard(d: any, cmd: string): any {
   if (hasPushGuard(d, cmd)) return d;

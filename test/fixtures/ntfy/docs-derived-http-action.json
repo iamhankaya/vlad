@@ -1,0 +1,4 @@
+{
+  "_doc": "ntfy 'http' eylem düğmesi. Belge: https://docs.ntfy.sh/publish/#send-http-request . Düğme POST gövdesinin yanıt akışında 'message' olarak göründüğü VARSAYIMDIR (R5); gerçek yakalama Faz 3.",
+  "action": { "action": "http", "label": "Onayla", "url": "https://ntfy.sh/vlad-r-aaaaaaaaaaaaaaaaaaaaaaaaaa", "method": "POST", "body": "a1.mfrggzdfmztwq2lknnwg23tpoa.aaaa", "clear": true }
+}

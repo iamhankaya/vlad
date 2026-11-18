@@ -1,0 +1,5 @@
+{
+  "_doc": "Bir NDJSON satırı iki ağ parçasına bölünmüş + çok baytlı UTF-8 karakter (ş = 0xC5 0x9F) parça sınırında kesilmiş. Birleştirilince iki message olayı.",
+  "chunksBase64": ["eyJpZCI6ImExIiwidGltZSI6MSwiZXZlbnQiOiJtZXNzYWdlIiwidG9waWMiOiJ2bGFkLXItYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJtZXNzYWdlIjoiZDEubWZyZ2d6ZGZtenR3cTJsa25ud2cyM3Rwb2EuYmJiYiJ9CnsiaWQiOiJhMiIsInRpbWUiOjIsImV2ZW50IjoibWVzc2FnZSIsInRvcGljIjoidmxhZC1yLWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhIiwibWVzc2FnZSI6Im1lc2FqIMU=", "n3UifQo="],
+  "expectedMessages": ["d1.mfrggzdfmztwq2lknnwg23tpoa.bbbb", "mesaj şu"]
+}

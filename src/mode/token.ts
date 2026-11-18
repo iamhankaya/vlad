@@ -1,7 +1,8 @@
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { assertSecureDir, writeAtomic } from "./secure-fs.js";
 
 /**
  * F-vlad-287: imzalı mod belirteci. Anahtar kb/repo/worktree dışında bir gizli dizindedir; korunan CLI işlemleri
@@ -16,6 +17,9 @@ let testDir: string | null = null;
 /** Yalnız süreç içi testler için (çalışan başka sürece bu yolla dokunamaz). */
 export const setSecretDirForTests = (d: string | null): void => { testDir = d; };
 export const secretDir = (): string => testDir ?? join(userInfo().homedir, ".vlad-secret");
+/** Uzaktan onay (T20261116-04): servisin spool'u ve tek kullanımlık token tüketim kayıtları. `used/` approver/ DIŞINDADIR: yaşam döngüsü işlemleri (rotate/uninstall) kayıt silmez. */
+export const approverDir = (): string => join(secretDir(), "approver");
+export const usedDir = (): string => join(secretDir(), "used");
 const keyFile = (): string => join(secretDir(), "mode.key");
 /** F-vlad-336: etkinleştirme işareti anahtar dizininin DIŞINDA (kardeş dosya `<gizli-dizin>.active`). Dizin silinse bile işaret kalır = düşürme tespit edilir. */
 const markerFile = (): string => `${secretDir()}.active`;
@@ -102,12 +106,58 @@ function parse(token: string): { exp: number; ok: boolean } | null {
 }
 export const verifyToken = (token: string, now: Date): boolean => { try { const p = parse(token); return !!p && p.ok && p.exp > now.getTime(); } catch { return false; } };
 
-/** Korunan işlem kapısı. Mekanizma etkin değilse (gizli dizin yok) geçer; etkinse geçerli VLAD_MODE_TOKEN şart. */
-export function requireModeAuthority(env: Record<string, string | undefined> = process.env, now: Date = new Date()): void {
-  if (readKey() === null) return;
+const PREFIX2 = "VLAD-MODE2|";
+const MAX_TTL2 = 120_000; // LIMITS.maxTokenTtlMs ile eşit (test sınar; approver/types.ts token.ts'e bağımlı olmasın diye sabit)
+const argvSha = (argv: string[]): string => createHash("sha256").update(JSON.stringify(argv), "utf8").digest("hex");
+const USED_RE = /^(\d{1,15})\.[0-9a-f]{32}$/;
+
+/** exp + 60 sn geçmiş tüketim kayıtlarını siler (token zaten süresi dolmuş sayılır: tekrar oynatma yolu açılmaz). En iyi çaba. */
+function pruneUsed(now: Date): void {
+  try {
+    for (const f of readdirSync(usedDir())) {
+      const m = USED_RE.exec(f);
+      if (m && Number(m[1]) + 60_000 < now.getTime()) { try { unlinkSync(join(usedDir(), f)); } catch { /* en iyi çaba */ } }
+    }
+  } catch { /* dizin yok/okunamaz: budanacak bir şey yok */ }
+}
+
+/**
+ * VMT2: işlem bağlı, tek kullanımlık token. Biçim `VMT2.<exp>.<nonce32hex>.<argvSha256>.<hmac>`;
+ * hmac = HMAC(modeKey, "VLAD-MODE2|"+exp+"|"+nonce+"|"+argvSha); argvSha = sha256(JSON.stringify(argv)). ttlMs ≤ 0 ya da > LIMITS.maxTokenTtlMs: "ttl geçersiz".
+ */
+export function mintOpToken(argv: string[], ttlMs: number, now: Date = new Date()): string {
+  if (!(ttlMs > 0 && ttlMs <= MAX_TTL2)) throw new Error("ttl geçersiz");
+  const key = readKey();
+  if (!key) throw new Error("gizli dizin yok; önce anahtarı üret (initKey)");
+  pruneUsed(now);
+  const exp = String(now.getTime() + ttlMs), nonce = randomBytes(16).toString("hex"), sha = argvSha(argv);
+  return `VMT2.${exp}.${nonce}.${sha}.${mac(key, `${PREFIX2}${exp}|${nonce}|${sha}`)}`;
+}
+
+/** VMT2 doğrulama + tek kullanım. Fırlatır; başarıda kaydı yazar. */
+function consumeOpToken(key: string, t: string, now: Date, argv: string[], how: string): void {
+  const m = /^VMT2\.(\d{1,15})\.([0-9a-f]{32})\.([0-9a-f]{64})\.([0-9a-f]{64})$/.exec(t);
+  if (!m || !same(m[4]!, mac(key, `${PREFIX2}${m[1]}|${m[2]}|${m[3]}`))) throw new Error(`VLAD_MODE_TOKEN geçersiz: ${how}`);
+  if (Number(m[1]) <= now.getTime()) throw new Error(`VLAD_MODE_TOKEN süresi doldu: ${how}`);
+  if (m[3] !== argvSha(argv)) throw new Error("VLAD_MODE_TOKEN bu işlem için üretilmedi (argv uyuşmuyor)");
+  try {
+    assertSecureDir(usedDir());
+    pruneUsed(now);
+    writeAtomic(join(usedDir(), `${m[1]}.${m[2]}`), "1", { overwrite: false });
+  } catch (e) {
+    throw new Error((e as NodeJS.ErrnoException).code === "EEXIST" ? "VLAD_MODE_TOKEN zaten kullanıldı" : `token tüketim kaydı yazılamadı (fail-closed): ${(e as Error).message}`);
+  }
+  delete process.env.VLAD_MODE_TOKEN; // torun süreçlere miras kalmasın
+}
+
+/** Korunan işlem kapısı. Mekanizma etkin değilse (gizli dizin yok) geçer; etkinse geçerli VLAD_MODE_TOKEN şart. `argv` yalnız VMT2 için; VMT1 yolu bugünkü gibidir. */
+export function requireModeAuthority(env: Record<string, string | undefined> = process.env, now: Date = new Date(), argv: string[] = process.argv.slice(2)): void {
+  const key = readKey();
+  if (key === null) return;
   const t = env.VLAD_MODE_TOKEN?.trim();
   const how = "korunan işlem için geçerli VLAD_MODE_TOKEN gerekli (VLAD oturumunu `export VLAD_MODE_TOKEN=$(vlad mode token)` ile terminalde başlat; çalışan oturumu bunu alamaz)";
   if (!t) throw new Error(how);
+  if (t.startsWith("VMT2.")) { consumeOpToken(key, t, now, argv, how); return; }
   const p = parse(t);
   if (!p || !p.ok) throw new Error(`VLAD_MODE_TOKEN geçersiz: ${how}`);
   if (p.exp <= now.getTime()) throw new Error(`VLAD_MODE_TOKEN süresi doldu: ${how}`);

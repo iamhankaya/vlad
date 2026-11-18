@@ -30,6 +30,15 @@
     "idea list": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
     "idea set": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
     "idea promote": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
-    "idea from-finding": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında"
+    "idea from-finding": "yeni komut (T20261110-08): taban ikilide yok; davranış test/ideas/ altında",
+    "mode request": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver install": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver uninstall": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver rotate": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver unlock": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver run": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver status": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver requests": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "approver show": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*"
   }
 }

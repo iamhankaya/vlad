@@ -493,7 +493,103 @@
   {
    "path": [
     "mode",
+    "request"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "telefondan onay isteği yalnız VLAD oturumundan (yerel); uzaktan konsola açılmadı (uzaktan onay, T20261116-03)"
+   }
+  },
+  {
+   "path": [
+    "mode",
     "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "install"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu/yönetimi yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "uninstall"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu/yönetimi yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "rotate"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu/yönetimi yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "unlock"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu/yönetimi yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "run"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "launchd servis girişi; elle/konsoldan çalıştırılmaz"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "requests"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "approver",
+    "show"
    ],
    "json": true,
    "console": {

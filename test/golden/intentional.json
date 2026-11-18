@@ -116,6 +116,25 @@
       ]
     },
     {
+      "id": "T20261116-04",
+      "keys": [
+        "(root) --help",
+        "mode --help",
+        "mode (bare)",
+        "mode request --help",
+        "approver --help",
+        "approver (bare)",
+        "approver install --help",
+        "approver uninstall --help",
+        "approver rotate --help",
+        "approver unlock --help",
+        "approver status --help",
+        "approver requests --help",
+        "approver show --help",
+        "approver run --help"
+      ]
+    },
+    {
       "id": "T20261117-06",
       "keys": [
         "(root) --help",

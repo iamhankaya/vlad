@@ -79,7 +79,8 @@
         "src/mode/**",
         "src/roles/**",
         "src/scan/**",
-        "src/stdout.ts"
+        "src/stdout.ts",
+        "src/approver/**"
       ],
       "buckets": [
         "process"

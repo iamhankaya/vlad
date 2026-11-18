@@ -20,6 +20,7 @@ import { registerMachine } from "./groups/machine.js";
 import { registerTransfer } from "./groups/transfer.js";
 import { registerInstall } from "./groups/install.js";
 import { registerSetup } from "./groups/setup.js";
+import { registerApprover } from "./groups/approver.js";
 import { registerWorktree } from "./groups/worktree.js";
 
 export { failWith, handleParseError, pendingHelpOf } from "./ctx.js";
@@ -38,6 +39,7 @@ export function buildProgram(ctx: CliCtx): Command {
     .name("vlad")
     .description("VLAD: Claude Code orkestratörü")
     .exitOverride()
+    .enablePositionalOptions()
     .configureOutput({ writeErr: (str) => { pendingHelp += str; } });
 
   registerProject(program, kit);
@@ -58,6 +60,7 @@ export function buildProgram(ctx: CliCtx): Command {
   registerTransfer(program, kit);
   registerInstall(program, kit);
   registerSetup(program, kit);
+  registerApprover(program, kit);
   registerWorktree(program, kit);
   return program;
 }
