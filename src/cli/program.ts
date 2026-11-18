@@ -21,6 +21,7 @@ import { registerTransfer } from "./groups/transfer.js";
 import { registerInstall } from "./groups/install.js";
 import { registerSetup } from "./groups/setup.js";
 import { registerApprover } from "./groups/approver.js";
+import { registerMonitor } from "./groups/monitor.js";
 import { registerWorktree } from "./groups/worktree.js";
 
 export { failWith, handleParseError, pendingHelpOf } from "./ctx.js";
@@ -61,6 +62,7 @@ export function buildProgram(ctx: CliCtx): Command {
   registerInstall(program, kit);
   registerSetup(program, kit);
   registerApprover(program, kit);
+  registerMonitor(program, kit);
   registerWorktree(program, kit);
   return program;
 }

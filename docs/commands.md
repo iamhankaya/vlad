@@ -87,6 +87,13 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad approver requests` — `approver requests [--json] [--limit N]`: son istekler ve sonuçları. Salt okuma; sır içermez. _(işçide reddedilir; konsol: okuma; --json)_
 - `vlad approver show` — `approver show <id>`: tek isteğin ayrıntısı (işlem, argümanlar, isteyen, durum). Salt okuma. _(işçide reddedilir; konsol: okuma; --json)_
 
+## monitor
+
+- `vlad monitor pull` — `monitor pull [--server <ad>] [--dry-run] [--json]`: yapılandırmadaki spc ajanlarından `/spc/v1/alerts`'i imleçle çeker (belirteç macOS Keychain'den). Yalnız `severity: critical` + `firing` alarm için eşlenen projede bir `research` görevi açar (queued; sunucu başına çekişte en çok 5); `warning`/`info` yalnız log. İdempotans anahtarı `(server, alert_id)` (durum dosyası `~/.vlad-monitor/` + görev gövdesindeki `spc-alert:` işareti). `resolved` gelince açık görevin `## İlerleme`'sine not düşer, görevi kapatmaz. Şema sürümü uyuşmazsa açık hata. Çıkış: 0 tamam, 1 sunucu/şema hatası, 2 yapılandırma/altyapı. kb'ye commit etmez. Yalnız macOS beyin makinede. _(işçide reddedilir; konsol: yazma; --json)_
+- `vlad monitor status` — `monitor status [--json]`: sunucu başına imleç, son başarı, ardışık hata (3 ve üstü 'erişilemez ×N'), açık alarm→görev eşlemeleri ve launchd durumu. Salt okuma. _(yerel; konsol: okuma; --json)_
+- `vlad monitor install` — `monitor install`: 5 dakikada bir `vlad monitor pull` çalıştıran launchd servisini (`com.vlad.monitor`) kurar; ortamda sır yok, belirteç Keychain'den okunur. Terminalde, mod yetkisiyle; çalışan reddedilir; yalnız macOS. `vlad install` monitor yapılandırması varsa bunu da kurar. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad monitor uninstall` — `monitor uninstall`: monitor launchd servisini durdurur ve plist'ini siler (`~/.vlad-monitor/` durum dosyasına dokunmaz). Terminalde, mod yetkisiyle. _(işçide reddedilir; konsolda yok; --json)_
+
 ## audit
 
 - `vlad audit skills` — `audit skills [--since] [--project]`: beklenen/yüklenen/eksik skill denetimi. _(yerel; konsol: okuma; --json)_

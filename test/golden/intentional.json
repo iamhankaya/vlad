@@ -135,6 +135,18 @@
       ]
     },
     {
+      "id": "T20261119-20",
+      "keys": [
+        "(root) --help",
+        "monitor --help",
+        "monitor (bare)",
+        "monitor pull --help",
+        "monitor status --help",
+        "monitor install --help",
+        "monitor uninstall --help"
+      ]
+    },
+    {
       "id": "T20261117-06",
       "keys": [
         "(root) --help",

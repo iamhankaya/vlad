@@ -81,6 +81,7 @@ const BRAIN_ONLY = new Set([
   "task new", "task launch", "task release", "task repin", "task ingest", "task answer", "task set", "task deps", "task resume", "task cleanup", "task close", "task gate", "task merge-preview", "task merge", "task digested",
   "mode night", "mode watch", "mode off", "mode status", "mode token", "mode request",
   "approver install", "approver uninstall", "approver rotate", "approver unlock", "approver status", "approver requests", "approver show", "approver run",
+  "monitor pull", "monitor install", "monitor uninstall",
   "audit setup",
   "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append",
   "kb commit", "kb maintain", "kb lint", "session register", "machine scripts", "machine run", "worktree prune",

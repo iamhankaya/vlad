@@ -1,0 +1,77 @@
+{
+  "server": "medialog",
+  "epoch": "epoch-bbbbbbbb",
+  "items": [
+    {
+      "alert_id": "medialog-disk-warn.44136fa355b3.1760000000000",
+      "rule_id": "medialog-disk-warn",
+      "title": "medialog-disk-warn title",
+      "severity": "warning",
+      "labels": {},
+      "state": "firing",
+      "fired_at": 1760000000000,
+      "resolved_at": null,
+      "resolve_reason": null,
+      "value": 97.5,
+      "op": ">",
+      "threshold": 90,
+      "for_ms": 300000,
+      "suppressed": false,
+      "notified": {
+        "firing": true,
+        "resolved": false
+      },
+      "vlad": "task",
+      "ref": "servers/medialog/rules.yml#medialog-disk-warn",
+      "seq": 1
+    },
+    {
+      "alert_id": "medialog-info-note.44136fa355b3.1760000000000",
+      "rule_id": "medialog-info-note",
+      "title": "medialog-info-note title",
+      "severity": "info",
+      "labels": {},
+      "state": "firing",
+      "fired_at": 1760000000000,
+      "resolved_at": null,
+      "resolve_reason": null,
+      "value": 97.5,
+      "op": ">",
+      "threshold": 90,
+      "for_ms": 300000,
+      "suppressed": false,
+      "notified": {
+        "firing": true,
+        "resolved": false
+      },
+      "vlad": "task",
+      "ref": "servers/medialog/rules.yml#medialog-info-note",
+      "seq": 2
+    },
+    {
+      "alert_id": "medialog-db-down.44136fa355b3.1760000000000",
+      "rule_id": "medialog-db-down",
+      "title": "medialog-db-down title",
+      "severity": "critical",
+      "labels": {},
+      "state": "firing",
+      "fired_at": 1760000000000,
+      "resolved_at": null,
+      "resolve_reason": null,
+      "value": 97.5,
+      "op": ">",
+      "threshold": 90,
+      "for_ms": 300000,
+      "suppressed": true,
+      "notified": {
+        "firing": false,
+        "resolved": false
+      },
+      "vlad": "task",
+      "ref": "servers/medialog/rules.yml#medialog-db-down",
+      "seq": 3
+    }
+  ],
+  "next_cursor": "eyJlIjoiZXBvY2gtYmJiYmJiYmIiLCJrIjoiYWxlcnRzIiwicyI6M30",
+  "has_more": false
+}

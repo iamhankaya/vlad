@@ -1,0 +1,31 @@
+{
+  "server": "medialog",
+  "epoch": "epoch-aaaaaaaa",
+  "items": [
+    {
+      "alert_id": "medialog-app-down.44136fa355b3.1760000000000",
+      "rule_id": "medialog-app-down",
+      "title": "medialog-app-down title",
+      "severity": "critical",
+      "labels": {},
+      "state": "resolved",
+      "fired_at": 1760000000000,
+      "resolved_at": 1760000600000,
+      "resolve_reason": "condition_cleared",
+      "value": 97.5,
+      "op": ">",
+      "threshold": 90,
+      "for_ms": 300000,
+      "suppressed": false,
+      "notified": {
+        "firing": true,
+        "resolved": true
+      },
+      "vlad": "task",
+      "ref": "servers/medialog/rules.yml#medialog-app-down",
+      "seq": 2
+    }
+  ],
+  "next_cursor": "eyJlIjoiZXBvY2gtYWFhYWFhYWEiLCJrIjoiYWxlcnRzIiwicyI6Mn0",
+  "has_more": false
+}

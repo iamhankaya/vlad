@@ -80,7 +80,8 @@
         "src/roles/**",
         "src/scan/**",
         "src/stdout.ts",
-        "src/approver/**"
+        "src/approver/**",
+        "src/monitor/**"
       ],
       "buckets": [
         "process"
