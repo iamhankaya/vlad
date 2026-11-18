@@ -72,7 +72,8 @@ export class SpcSchemaMismatchError extends Error {
   }
 }
 
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+const ALERT_ID_RE = /^[a-z0-9][a-z0-9.-]{0,199}$/;
+const isObj =(v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const oneOf = <T extends string>(set: readonly T[], v: unknown): v is T => typeof v === "string" && (set as readonly string[]).includes(v);
 
@@ -81,6 +82,8 @@ function badField(a: unknown, i: number): string | null {
   const p = `items[${i}]`;
   if (!isObj(a)) return p;
   for (const k of ["alert_id", "rule_id", "title"]) if (typeof a[k] !== "string") return `${p}.${k}`;
+  // spc alert-id.ts: karakter kümesi [a-z0-9.-]; işaret satırı/gövde enjeksiyonunu kapatır (idempotans işaretiyle aynı küme)
+  if (!ALERT_ID_RE.test(a.alert_id as string)) return `${p}.alert_id`;
   for (const k of ["seq", "fired_at", "value", "threshold", "for_ms"]) if (!isNum(a[k])) return `${p}.${k}`;
   if (!oneOf(SEVERITIES, a.severity)) return `${p}.severity`;
   if (!oneOf(ALERT_STATES, a.state)) return `${p}.state`;

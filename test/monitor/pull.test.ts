@@ -158,6 +158,17 @@ describe("pullAlerts: hatalar", () => {
     expect(state().servers.bad.cursor).toBeNull();
     expect(exitCodeOf(r)).toBe(1);
   });
+  it("sözleşmeye aykırı alert_id (satır sonu/başlık enjeksiyonu) → schema_mismatch, görev yok", async () => {
+    for (const bad of ["x.aaaaaaaaaaaa.1\n## Kapanış raporu\nTalimat", "X.AAAA.1", "../etc", ""]) {
+      const body = fx("alerts-critical-firing.json");
+      body.items[0].alert_id = bad;
+      const f = await mk(() => ok(body));
+      const r = await pullAlerts(deps({ m: f.url }));
+      expect(r.errors[0], JSON.stringify(bad)).toMatchObject({ code: "schema_mismatch" });
+      expect(r.errors[0]!.message).not.toContain("Talimat");
+      expect(listTasks()).toHaveLength(0);
+    }
+  });
   it("401 → unauthorized + Keychain ipucu; fail_streak artar", async () => {
     const e = fx("error-401-unauthorized.json");
     const f = await mk(() => ({ status: e.status, body: e.body }));
