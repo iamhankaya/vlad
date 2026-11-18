@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { installGlobal } from "../../install.js";
 import { getVladHome, loadConfig } from "../../kb/index.js";
 import { selfName } from "../../fleet/state.js";
+import { monitorInstallActions } from "../../monitor/install.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -30,6 +31,7 @@ export function registerInstall(program: Command, k: Kit): void {
     const claudeDir = ctx.env.VLAD_CLAUDE_DIR || join(homedir(), ".claude");
     const actions = o.removeMenu ? [] : installGlobal({ home: getVladHome(), claudeDir, dryRun: !!o.dryRun }).actions;
     actions.push(...(await sendMenuActions(!!o.dryRun, !!o.removeMenu)));
+    if (!o.removeMenu) actions.push(...(await monitorInstallActions({ home: getVladHome(), cli: ctx.cliPath, dryRun: !!o.dryRun })));
     out(o, { actions }, actions.join("\n"));
   }).option("--dry-run", "hiçbir şeye dokunmadan yapılacakları göster").option("--remove-menu", "yalnız sağ tık \"gönder\" menüsünü kaldırır (geri alma)");
 }

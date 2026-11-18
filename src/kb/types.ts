@@ -184,6 +184,8 @@ export interface VladConfig {
   machines?: MachineDef[];
   brain?: string;
   consoles?: ConsoleDef[];
+  /** spc köprüsü (`vlad monitor`, çatı T20261119-18): ajan listesi; sır yok (belirteç Keychain'de). */
+  monitor?: { servers: { id: string; agent_url: string; project: string }[] };
   /** Deneyler (varsayılan kapalı; VLAD açar). `ponytail: "ab"`: developer/game-developer görevlerinde ID'nin son hanesi tekse ponytail yüklenmez. */
   experiments?: { ponytail?: "ab" };
 }

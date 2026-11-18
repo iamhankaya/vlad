@@ -1,0 +1,10 @@
+{
+  "status": 401,
+  "body": {
+    "error": {
+      "code": "unauthorized",
+      "message": "belirteç geçersiz",
+      "details": {}
+    }
+  }
+}

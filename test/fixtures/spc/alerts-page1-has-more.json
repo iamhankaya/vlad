@@ -1,0 +1,54 @@
+{
+  "server": "medialog",
+  "epoch": "epoch-cccccccc",
+  "items": [
+    {
+      "alert_id": "medialog-rule-1.44136fa355b3.1760000000000",
+      "rule_id": "medialog-rule-1",
+      "title": "medialog-rule-1 title",
+      "severity": "critical",
+      "labels": {},
+      "state": "firing",
+      "fired_at": 1760000000000,
+      "resolved_at": null,
+      "resolve_reason": null,
+      "value": 97.5,
+      "op": ">",
+      "threshold": 90,
+      "for_ms": 300000,
+      "suppressed": false,
+      "notified": {
+        "firing": true,
+        "resolved": false
+      },
+      "vlad": "task",
+      "ref": "servers/medialog/rules.yml#medialog-rule-1",
+      "seq": 1
+    },
+    {
+      "alert_id": "medialog-rule-2.44136fa355b3.1760000000000",
+      "rule_id": "medialog-rule-2",
+      "title": "medialog-rule-2 title",
+      "severity": "critical",
+      "labels": {},
+      "state": "firing",
+      "fired_at": 1760000000000,
+      "resolved_at": null,
+      "resolve_reason": null,
+      "value": 97.5,
+      "op": ">",
+      "threshold": 90,
+      "for_ms": 300000,
+      "suppressed": false,
+      "notified": {
+        "firing": true,
+        "resolved": false
+      },
+      "vlad": "task",
+      "ref": "servers/medialog/rules.yml#medialog-rule-2",
+      "seq": 2
+    }
+  ],
+  "next_cursor": "eyJlIjoiZXBvY2gtY2NjY2NjY2MiLCJrIjoiYWxlcnRzIiwicyI6Mn0",
+  "has_more": true
+}

@@ -76,7 +76,8 @@ export function createKit(ctx: CliCtx) {
     }
   }
 
-  function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>): Command {
+  /** `onLockBusy`: komuta özel kb kilidi zaman aşımı çevirisi (varsayılan: genel hata yolu, çıkış 75). Karşılıklı dışlama değişmez: kilit alınamadıysa handler çalışmaz. */
+  function def(parent: Command, spec: string, desc: string, fn: (...a: any[]) => void | Promise<void>, onLockBusy?: (e: KbLockTimeout, opts: Opts) => void): Command {
     const c = parent.command(spec).description(desc).option("--json", "makine okunur çıktı");
     const key = `${parent.name()} ${spec.split(" ")[0]}`;
     c.action(async (...args: any[]) => {
@@ -94,6 +95,10 @@ export function createKit(ctx: CliCtx) {
         } else if (await before(key, args)) return;
         else await (lockPolicy(key) === "outer" ? withKbLock(() => runAndRefresh(key, args, fn)) : fn(...args));
       } catch (e) {
+        if (onLockBusy && e instanceof KbLockTimeout) {
+          try { onLockBusy(e, args[args.length - 2] as Opts); } catch (x) { fail(x); }
+          return;
+        }
         if (key === "vlad send") await (await import("../transfer/cli.js")).notifySendFailure(e, { notify: !!(args[args.length - 2] as Opts).notify }).catch(() => {}); // F-vlad-237: forward/yol doğrulama hataları da bildirilsin
         fail(e);
       }

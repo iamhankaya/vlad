@@ -39,6 +39,10 @@
     "approver run": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
     "approver status": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
     "approver requests": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
-    "approver show": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*"
+    "approver show": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
+    "monitor pull": "yeni komut (T20261119-20, spc köprüsü): tabanda yok; davranış test/monitor/ ve test/acceptance/monitor-*",
+    "monitor status": "yeni komut (T20261119-20, spc köprüsü): tabanda yok; davranış test/monitor/ ve test/acceptance/monitor-*",
+    "monitor install": "yeni komut (T20261119-20, spc köprüsü): tabanda yok; davranış test/monitor/ ve test/acceptance/monitor-*",
+    "monitor uninstall": "yeni komut (T20261119-20, spc köprüsü): tabanda yok; davranış test/monitor/ ve test/acceptance/monitor-*"
   }
 }

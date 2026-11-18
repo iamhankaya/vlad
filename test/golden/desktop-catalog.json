@@ -598,6 +598,48 @@
   },
   {
    "path": [
+    "monitor",
+    "pull"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "install"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "uninstall"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
     "audit",
     "skills"
    ],
