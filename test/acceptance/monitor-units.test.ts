@@ -4,7 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { parseAlertMarker } from "../../src/monitor/marker.js";
 import { MONITOR_LABEL, monitorPlist } from "../../src/monitor/launchd.js";
 import { createKeychainReader } from "../../src/monitor/secret.js";
@@ -113,7 +113,8 @@ describe("monitor-kabul: Keychain okuyucu (createKeychainReader, sahte exec)", (
 
 describe("monitor-kabul 17: launchd plist'i (monitorPlist, saf üretim)", () => {
   const c = { node: "/opt/homebrew/bin/node", cli: "/Users/x/vlad/dist/cli.js", home: "/Users/x/vlad", path: "/usr/bin:/bin" };
-  const p = monitorPlist(c, "/Users/x/.vlad-monitor/launchd.log");
+  let p = "";
+  beforeAll(() => { p = monitorPlist(c, "/Users/x/.vlad-monitor/launchd.log"); });
   it("etiket, 5 dk aralık, RunAtLoad; KeepAlive ve AbandonProcessGroup yok", () => {
     expect(MONITOR_LABEL).toBe("com.vlad.monitor");
     expect(p).toMatch(/<key>Label<\/key>\s*<string>com\.vlad\.monitor<\/string>/);
