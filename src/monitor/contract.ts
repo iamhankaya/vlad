@@ -75,6 +75,8 @@ export class SpcSchemaMismatchError extends Error {
 const ALERT_ID_RE = /^[a-z0-9][a-z0-9.-]{0,199}$/;
 const isObj =(v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+/** Date aralığı (±8.64e15 ms): dışı `new Date(x).toISOString()` çağrısında RangeError verir. */
+const isTime = (v: unknown): v is number => isNum(v) && Math.abs(v) <= 8.64e15;
 const oneOf = <T extends string>(set: readonly T[], v: unknown): v is T => typeof v === "string" && (set as readonly string[]).includes(v);
 
 /** İlk bozuk alanın yolunu verir (değer vermez); geçerliyse null. */
@@ -86,12 +88,13 @@ function badField(a: unknown, i: number): string | null {
   if (!ALERT_ID_RE.test(a.alert_id as string)) return `${p}.alert_id`;
   if (!/^[a-z0-9-]{1,100}$/.test(a.rule_id as string)) return `${p}.rule_id`; // spc rules.ts: [a-z0-9-]+; gövdeye ham girer
   for (const k of ["seq", "fired_at", "value", "threshold", "for_ms"]) if (!isNum(a[k])) return `${p}.${k}`;
+  if (!isTime(a.fired_at)) return `${p}.fired_at`;
   if (!oneOf(SEVERITIES, a.severity)) return `${p}.severity`;
   if (!oneOf(ALERT_STATES, a.state)) return `${p}.state`;
   if (!oneOf(OPS, a.op)) return `${p}.op`;
   if (!oneOf(VLAD_ACTIONS, a.vlad)) return `${p}.vlad`;
   if (!isObj(a.labels) || !Object.values(a.labels).every((x) => typeof x === "string")) return `${p}.labels`;
-  if (a.resolved_at !== null && !isNum(a.resolved_at)) return `${p}.resolved_at`;
+  if (a.resolved_at !== null && !isTime(a.resolved_at)) return `${p}.resolved_at`;
   if (a.resolve_reason !== null && !oneOf(RESOLVE_REASONS, a.resolve_reason)) return `${p}.resolve_reason`;
   if (a.ref !== null && typeof a.ref !== "string") return `${p}.ref`;
   if (typeof a.suppressed !== "boolean") return `${p}.suppressed`;

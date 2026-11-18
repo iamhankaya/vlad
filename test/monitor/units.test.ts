@@ -49,7 +49,12 @@ describe("Keychain okuyucu", () => {
     expect(calls[0]!.args).toEqual(["find-generic-password", "-a", process.env.USER || require("node:os").userInfo().username, "-s", "spc_token_medialog", "-w"]);
     expect(calls[0]!.args.join(" ")).not.toContain("tok123");
   });
-  it("kayıt yok (çıkış ≠ 0) ya da boş değer → null", async () => {
+  it("yalnız çıkış 44 (kayıt yok) null; diğer kodlar 'Keychain okunamadı (kod N)' hatası", async () => {
+    for (const code of [1, 36, 51, 128]) {
+      await expect(createKeychainReader(async () => ({ code, stdout: "sir-degil" })).read("x")).rejects.toThrow(new RegExp("Keychain okunamadı \\(kod " + code + "\\)"));
+    }
+  });
+  it("kayıt yok (çıkış 44) ya da boş değer → null", async () => {
     expect(await createKeychainReader(async () => ({ code: 44, stdout: "" })).read("x")).toBeNull();
     expect(await createKeychainReader(async () => ({ code: 0, stdout: "\n" })).read("x")).toBeNull();
   });
@@ -71,6 +76,11 @@ describe("görev metni", () => {
     expect(d.split("\n")).toContain(`spc-alert: medialog/${a.alert_id}`);
     expect(d).toContain("## Kabul kriterleri");
     expect(d).toContain(`- Başlık: ${JSON.stringify(a.title)}`);
+  });
+  it("geçersiz tarih alanı fırlatmaz (iso korumalı)", () => {
+    const a = { ...critical(), fired_at: 9e15 };
+    expect(() => buildAlertTask("medialog", a)).not.toThrow();
+    expect(() => buildResolvedNote({ ...critical(), state: "resolved" as const, resolved_at: 9e15, resolve_reason: "condition_cleared" as const })).not.toThrow();
   });
   it("resolved notu tek satır: alert_id, neden, ISO, süre", () => {
     const a = { ...critical(), state: "resolved" as const, resolved_at: critical().fired_at + 5 * 60_000, resolve_reason: "condition_cleared" as const };
@@ -102,6 +112,31 @@ describe("loadMonitorConfig", () => {
     const s = { id: "m", agent_url: "https://x.example", project: "p" };
     const home = withCfg({ servers: [s, s] }, ["p"]);
     expect(() => loadMonitorConfig(home)).toThrow(/yinelenen/);
+  });
+  describe("agent_url doğrulaması", () => {
+    const load = (agent_url: string) => loadMonitorConfig(withCfg({ servers: [{ id: "m", agent_url, project: "p" }] }, ["p"]));
+    it("https ve özel/loopback http kabul; kök yol ya da boş yol", () => {
+      for (const u of ["https://spc.example.com", "https://spc.example.com/", "http://127.0.0.1:8787", "http://localhost:8787", "http://[::1]:8787", "http://10.1.2.3", "http://172.16.0.9", "http://192.168.1.5:80", "http://100.64.1.2:8787", "http://box.local", "http://box.tailnet.ts.net"]) {
+        expect(() => load(u), u).not.toThrow();
+      }
+    });
+    it("kimlik bilgisi, sorgu, parça, ek yol → config hatası", () => {
+      for (const u of ["https://user:pw@spc.example.com", "https://user@spc.example.com", "https://spc.example.com/?x=1", "https://spc.example.com/#f", "https://spc.example.com/api", "https://spc.example.com/spc/v1"]) {
+        expect(() => load(u), u).toThrow(/agent_url/);
+      }
+    });
+    it("genel adrese düz http → config hatası (belirteç açık metin gitmez)", () => {
+      for (const u of ["http://spc.example.com", "http://8.8.8.8", "http://172.32.0.1", "http://100.128.0.1", "http://192.169.0.1"]) {
+        expect(() => load(u), u).toThrow(/http/);
+      }
+    });
+    it("ayrıştırılamayan adres → config hatası; ileti kimlik bilgisi içermez", () => {
+      expect(() => load("http://")).toThrow(/agent_url/);
+      let msg = "";
+      try { load("https://user:gizli-parola@spc.example.com"); } catch (e) { msg = (e as Error).message; }
+      expect(msg).toMatch(/agent_url/);
+      expect(msg).not.toContain("gizli-parola");
+    });
   });
   it("şemaya aykırı (sır alanı) → config hatası", () => {
     const home = withCfg({ servers: [{ id: "m", agent_url: "https://x.example", project: "p", token: "s" }] }, ["p"]);

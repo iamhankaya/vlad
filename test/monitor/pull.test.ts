@@ -7,6 +7,7 @@ import { makeHome } from "../helpers.js";
 import { getTask, listTasks, setState } from "../../src/tasks/index.js";
 import { exitCodeOf, pullAlerts } from "../../src/monitor/pull.js";
 import { alertMarker } from "../../src/monitor/marker.js";
+import { KeychainError } from "../../src/monitor/secret.js";
 import type { PullDeps } from "../../src/monitor/types.js";
 
 const fx = (n: string): any => JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "spc", n), "utf8"));
@@ -169,6 +170,35 @@ describe("pullAlerts: hatalar", () => {
       expect(listTasks()).toHaveLength(0);
     }
   });
+  it("fired_at/resolved_at takvim aralığı dışında (Date geçersiz) → schema_mismatch, imleç ilerlemez, görev yok", async () => {
+    for (const patch of [{ fired_at: 9e15 }, { fired_at: -9e15 }, { state: "resolved", resolved_at: 8.64e15 + 1, resolve_reason: "condition_cleared" }]) {
+      const body = fx("alerts-critical-firing.json");
+      Object.assign(body.items[0], patch);
+      const f = await mk(() => ok(body));
+      const r = await pullAlerts(deps({ m: f.url }));
+      expect(r.errors[0], JSON.stringify(patch)).toMatchObject({ server: "m", code: "schema_mismatch" });
+      expect(listTasks()).toHaveLength(0);
+      expect(state().servers.m.cursor).toBeNull();
+    }
+  });
+  it("agent_url kuralı pullAlerts'te de uygulanır: kimlik bilgisi/genel http/ek yol → config (çıkış 2), Keychain'e gidilmez", async () => {
+    let reads = 0;
+    const secrets = { read: async () => { reads++; return TOKEN; } };
+    for (const u of ["http://spc.example.com", "https://u:p@spc.example.com", "https://spc.example.com/x"]) {
+      const r = await pullAlerts(deps({ m: u }, { secrets }));
+      expect(r.errors[0], u).toMatchObject({ server: "m", code: "config" });
+      expect(r.errors[0]!.message).not.toContain(":p@");
+      expect(exitCodeOf(r)).toBe(2);
+    }
+    expect(reads).toBe(0);
+  });
+  it("Keychain okuyucu 'kod N' hatası verirse keychain (çıkış 2) ve ileti kodu taşır", async () => {
+    const f = await mk(() => ok(fx("alerts-critical-firing.json")));
+    const r = await pullAlerts(deps({ m: f.url }, { secrets: { read: async () => { throw new KeychainError(51); } } }));
+    expect(r.errors[0]).toMatchObject({ server: "m", code: "keychain" });
+    expect(r.errors[0]!.message).toContain("kod 51");
+    expect(f.reqs).toHaveLength(0);
+  });
   it("401 → unauthorized + Keychain ipucu; fail_streak artar", async () => {
     const e = fx("error-401-unauthorized.json");
     const f = await mk(() => ({ status: e.status, body: e.body }));
@@ -252,6 +282,25 @@ describe("pullAlerts: imleç, sayfalama", () => {
     expect(calls).toBe(2);
     expect(f.reqs.at(-2)!.url).toContain("cursor=");
     expect(f.reqs.at(-1)!.url).not.toContain("cursor=");
+  });
+  it("410 sonrası yeniden başlangıçta açık eşlemesi varsa state=all (resolved notu düşer); ilk çekişte state=firing", async () => {
+    const e = fx("error-410-cursor-invalid.json");
+    const firing = fx("alerts-critical-firing.json");
+    let phase = 0;
+    const f = await mk((u) => {
+      if (phase === 0) return ok(firing);
+      if (u.searchParams.has("cursor")) return { status: e.status, body: e.body };
+      return ok({ ...firing, items: [{ ...firing.items[0], state: "resolved", resolved_at: NOW - 60_000, resolve_reason: "condition_cleared", seq: firing.items[0].seq + 1 }] });
+    });
+    await pullAlerts(deps({ m: f.url }));
+    phase = 1;
+    const r = await pullAlerts(deps({ m: f.url }));
+    expect(r.errors).toEqual([]);
+    const restart = f.reqs.at(-1)!.url;
+    expect(restart).not.toContain("cursor=");
+    expect(restart).toContain("state=all");
+    expect(r.servers[0]!.noted).toHaveLength(1);
+    expect(f.reqs[0]!.url).toContain("state=firing");
   });
   it("sayfalama: has_more sayfaları sırayla çekilir, imleç sonuncuya gider", async () => {
     const p1 = fx("alerts-page1-has-more.json"), p2 = fx("alerts-page2-last.json");

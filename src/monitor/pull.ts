@@ -1,7 +1,8 @@
 import { createTask, getTask, listTasks, logTask } from "../tasks/index.js";
 import { parseAlertsResponse, SpcSchemaMismatchError, type AlertItem, type AlertsResponse } from "./contract.js";
 import { parseAlertMarker, MARKER_PREFIX } from "./marker.js";
-import { keychainService } from "./secret.js";
+import { checkAgentUrl } from "./config.js";
+import { KeychainError, keychainService } from "./secret.js";
 import { createStateStore, monitorStateDir } from "./state.js";
 import { buildAlertTask, buildResolvedNote } from "./task-text.js";
 import {
@@ -68,7 +69,9 @@ export async function pullAlerts(deps: PullDeps, opts: PullOptions = {}): Promis
     result.servers.push(res);
     let token: string | null = null;
     try {
-      try { token = await deps.secrets.read(keychainService(srv.id)); } catch (e) { throw new ServerError("keychain", `Keychain okunamadı: ${(e as Error).name}`); }
+      const badUrl = checkAgentUrl(srv.agent_url); // belirteç okunmadan ve ağa çıkmadan önce
+      if (badUrl) throw new ServerError("config", `monitor: sunucu ${srv.id}: agent_url ${badUrl}`);
+      try { token = await deps.secrets.read(keychainService(srv.id)); } catch (e) { throw new ServerError("keychain", e instanceof KeychainError ? e.message : `Keychain okunamadı: ${(e as Error).name}`); }
       if (token === null) throw new ServerError("keychain", `Keychain kaydı yok: ${keychainService(srv.id)} (spc_token_<ad>; security add-generic-password ile ekleyin)`);
       await pullServer(srv, work, token, deps, dry, res, () => { if (!dry) store.save(state); });
       res.ok = true;
@@ -91,8 +94,8 @@ export async function pullAlerts(deps: PullDeps, opts: PullOptions = {}): Promis
   return result;
 }
 
-async function fetchPage(srv: MonitorServerConfig, token: string, cursor: string | null, deps: PullDeps): Promise<{ status: number; body: unknown }> {
-  const q = new URLSearchParams({ limit: String(MONITOR_LIMITS.pageLimit), state: cursor === null ? "firing" : "all" });
+async function fetchPage(srv: MonitorServerConfig, token: string, cursor: string | null, deps: PullDeps, all: boolean): Promise<{ status: number; body: unknown }> {
+  const q = new URLSearchParams({ limit: String(MONITOR_LIMITS.pageLimit), state: cursor === null && !all ? "firing" : "all" });
   if (cursor !== null) q.set("cursor", cursor);
   const url = `${srv.agent_url.replace(/\/+$/, "")}/spc/v1/alerts?${q}`;
   let r: Response;
@@ -126,14 +129,16 @@ async function pullServer(
   };
   const startCursor = st.cursor, startEpoch = st.epoch;
   let cursor = st.cursor, pages = 0, restarted = false;
+  let wantAll = false; // 410 yeniden başlangıcında açık eşlemesi olan sunucu için state=all (çözülenler görünür, notları düşer)
   for (;;) {
     if (pages >= MONITOR_LIMITS.maxPages) {
       st.cursor = startCursor; st.epoch = startEpoch; // sözleşme: tavan aşılınca imleç ilerlemez (eşleme kalır, sonraki çekiş idempotent)
       throw new ServerError("page_limit", `sayfa tavanı aşıldı (${MONITOR_LIMITS.maxPages}); imleç ilerlemedi`);
     }
-    const { status, body } = await fetchPage(srv, token, cursor, deps);
+    const { status, body } = await fetchPage(srv, token, cursor, deps, wantAll);
     if (status === 410 && !restarted) {
       restarted = true; cursor = null; st.cursor = null; st.epoch = null;
+      wantAll = Object.values(st.tasks).some((e) => !e.resolved_noted);
       log(`spc ${srv.id}: imleç geçersiz (epoch değişti), baştan başlanıyor`);
       continue;
     }
