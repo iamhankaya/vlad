@@ -1,0 +1,13 @@
+{
+  "status": 410,
+  "body": {
+    "error": {
+      "code": "cursor_invalid",
+      "message": "cursor başka epoch’a ait",
+      "details": {
+        "epoch": "epoch-dddddddd",
+        "oldest_ts": 0
+      }
+    }
+  }
+}

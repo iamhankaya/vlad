@@ -18,6 +18,7 @@
     "mode off",
     "mode status",
     "mode watch",
+    "monitor pull",
     "pending add",
     "pending done",
     "project note",
@@ -77,6 +78,7 @@
     "machine list",
     "machine ping",
     "machine probe-window",
+    "monitor status",
     "pending list",
     "project list",
     "project status",
@@ -366,6 +368,20 @@
         "watch"
       ],
       "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "pull"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "status"
+      ],
+      "kind": "read"
     },
     {
       "path": [
