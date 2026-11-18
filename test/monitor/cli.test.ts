@@ -91,6 +91,22 @@ describe("monitor pull (CLI)", () => {
     expect(existsSync(join(stateDir, "state.json"))).toBe(false);
     expect((await cli(["pull", "--server", "zzz", "--json"])).code).toBe(2);
   });
+  it("dış kb kilidi zaman aşımı → kb_busy hatası, çıkış 2 (sözleşme), görev açılmaz, durum yazılmaz", async () => {
+    configure();
+    writeFileSync(join(home, "kb", ".vlad.lock"), JSON.stringify({ pid: process.ppid, started: Date.now(), token: "baska-surec" })); // yaşayan başka sahip
+    const savedT = process.env.VLAD_LOCK_TIMEOUT_MS; process.env.VLAD_LOCK_TIMEOUT_MS = "150";
+    try {
+      const r = await cli(["pull", "--json"]);
+      expect(r.code).toBe(2);
+      const j = JSON.parse(r.out);
+      expect(j.servers).toEqual([]);
+      expect(j.errors).toHaveLength(1);
+      expect(j.errors[0]).toMatchObject({ server: null, code: "kb_busy" });
+      expect(r.err).toBe("");
+    } finally { if (savedT === undefined) delete process.env.VLAD_LOCK_TIMEOUT_MS; else process.env.VLAD_LOCK_TIMEOUT_MS = savedT; }
+    expect(listTasks()).toHaveLength(0);
+    expect(existsSync(join(stateDir, "state.json"))).toBe(false);
+  });
   it("çalışan oturumunda reddedilir", async () => {
     configure();
     process.env.VLAD_TASK_ID = "T20261119-99";

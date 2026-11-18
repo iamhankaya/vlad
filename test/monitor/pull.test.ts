@@ -317,6 +317,26 @@ describe("pullAlerts: imleç, sayfalama", () => {
     expect(r.servers[0]!.noted).toHaveLength(1);
     expect(f.reqs[0]!.url).toContain("state=firing");
   });
+  it("410 sonrası yeniden başlama isteği başarısız olursa (null imleç) sonraki çekiş açık eşleme için state=all ile kurtarır, resolved notu kaybolmaz", async () => {
+    const e = fx("error-410-cursor-invalid.json");
+    const firing = fx("alerts-critical-firing.json");
+    let phase = 0;
+    const f = await mk((u) => {
+      if (phase === 0) return ok(firing);
+      if (phase === 1) return u.searchParams.has("cursor") ? { status: e.status, body: e.body } : { status: 503, body: { error: { code: "unavailable", message: "x" } } };
+      return ok({ ...firing, items: [{ ...firing.items[0], state: "resolved", resolved_at: NOW - 60_000, resolve_reason: "condition_cleared", seq: firing.items[0].seq + 1 }] });
+    });
+    await pullAlerts(deps({ m: f.url }));
+    phase = 1;
+    const bad = await pullAlerts(deps({ m: f.url }));
+    expect(bad.errors).toHaveLength(1);
+    expect(state().servers.m.cursor).toBeNull();
+    phase = 2;
+    const r = await pullAlerts(deps({ m: f.url }));
+    expect(r.errors).toEqual([]);
+    expect(f.reqs.at(-1)!.url).toContain("state=all");
+    expect(r.servers[0]!.noted).toHaveLength(1);
+  });
   it("sayfalama: has_more sayfaları sırayla çekilir, imleç sonuncuya gider", async () => {
     const p1 = fx("alerts-page1-has-more.json"), p2 = fx("alerts-page2-last.json");
     const f = await mk((u) => ok(u.searchParams.get("cursor") === p1.next_cursor ? p2 : p1));

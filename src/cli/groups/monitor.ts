@@ -63,6 +63,11 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
     out(o, result, lines.length ? lines.join("\n") : "sunucu yok");
     const code = exitCodeOf(result);
     if (code !== 0) throw new SilentExit(code);
+  }, (e, o) => {
+    // Dış kb kilidi zaman aşımı: monitor sözleşmesi errors[].code "kb_busy" + çıkış 2 ister (genel yol 75 + {error,details} verirdi).
+    const result: PullResult = { servers: [], errors: [{ server: null, code: "kb_busy", message: e.message } satisfies MonitorError] };
+    out(o, result, `hata [kb_busy]: ${e.message}`);
+    throw new SilentExit(exitCodeOf(result));
   }).option("--server <ad>", "yalnız bu sunucu").option("--dry-run", "yazma yok; ne yapacağını döker");
 
   def(monitor, "status", "İmleç, son başarı, ardışık hata, açık eşlemeler ve servis durumu (salt okuma)", async (o: Opts) => {
