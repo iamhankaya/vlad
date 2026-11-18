@@ -60,5 +60,6 @@ VLAD iki gözü karşılaştırır. **Otomatik kapatır yalnız şu durumda:** i
 ## Kurallar
 
 - Emin olmadığın bulgu `kalsın`; kapatmak için kanıt gerekir, kalması için gerekmez.
+- Başlığı `tekrarlayan sınıf` geçen bulgulara (digest'in orta olarak kaydettiği, aynı hata sınıfının yinelemesi) öncelik ver: listede önce incele; ortak yardımcı çıkarıldıysa `kapat-fixed` kanıtı o commit'tir.
 - Orta bulgu yalnız kullanıcı istediğinde taranır ve `wontfix`'i her zaman gridir.
 - Kullanıcıya sonuçta kısa tablo ver: proje, taranan, otomatik kapanan (fixed/wontfix/yinelenen), sorulan, kalan.
