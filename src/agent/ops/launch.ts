@@ -43,7 +43,8 @@ const FETCH_TIMEOUT_MS = 20_000;
  * (no pull/merge/reset). The returned `base` is the ref really used (the launch record and cleanup judge against it).
  */
 async function freshDefaultBase(repo: string, defaultBranch: string): Promise<{ base: string; warning?: string }> {
-  if ((await runGitAsync(repo, ["fetch", "--quiet", "origin", defaultBranch], FETCH_TIMEOUT_MS)) === null) {
+  // explicit refspec: a clone whose remote.origin.fetch does not map this branch would otherwise leave the tracking ref stale
+  if ((await runGitAsync(repo, ["fetch", "--quiet", "origin", `+refs/heads/${defaultBranch}:refs/remotes/origin/${defaultBranch}`], FETCH_TIMEOUT_MS)) === null) {
     return { base: defaultBranch, warning: `origin/${defaultBranch} çekilemedi (origin yok, ağ hatası ya da zaman aşımı); görev yerel ${defaultBranch} ucundan açıldı, taban bayat olabilir` };
   }
   const remote = `refs/remotes/origin/${defaultBranch}`;

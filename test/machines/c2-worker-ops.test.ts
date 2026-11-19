@@ -186,6 +186,14 @@ describe("machines:C2 launch op: taban origin'den tazelenir (F-vlad-318)", () =>
     expect(record().base).toBe("origin/main");
     expect(warningOf(r)).toBeUndefined();
   });
+  it("remote.origin.fetch ana dalı eşlemiyorsa (eşlemesiz klon) bile tracking ref açık refspec ile tazelenir", async () => {
+    const origin = withOrigin(); const tip = advanceOrigin(origin);
+    git(repo, "config", "--unset-all", "remote.origin.fetch");
+    git(repo, "config", "remote.origin.fetch", "+refs/heads/baska:refs/remotes/origin/baska"); // main eşlenmiyor
+    await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(tip);
+    expect(record().base).toBe("origin/main");
+  });
   it("origin yok: launch başarılı, taban yerel main, uyarı, kayıt base'i main", async () => {
     const r = await launchOp(L({ base: B }), ctx("op-1"), { launcher });
     expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(git(repo, "rev-parse", "main"));
