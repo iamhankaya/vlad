@@ -22,6 +22,8 @@ export default defineConfig({
   test: {
     testTimeout: 30_000,
     maxWorkers: half,
+    // red tests of every run are appended to .vitest-red.jsonl (F-vlad-121 measurement; root-level, so all four buckets share it); no retry: it would hide the red
+    reporters: ["default", join(import.meta.dirname, "test", "support", "flaky-reporter.ts")],
     globalSetup: ["test/global-setup.ts"],
     setupFiles: ["test/setup-cleanup.ts"],
     env: { CLAUDE_CODE_REMOTE: "", VLAD_LAUNCHER: "noop", VLAD_NO_NATIVE: "1", VLAD_CLAUDE_JSON: join(tmpdir(), "vlad-test-claude.json"), NODE_OPTIONS: `--import=${pathToFileURL(join(import.meta.dirname, "test", "support", "no-secret-shim.mjs")).href} ${process.env.NODE_OPTIONS ?? ""}`.trim() },
