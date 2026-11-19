@@ -17,7 +17,7 @@ import { agentDir } from "../../fleet/state.js";
 import { argObject, bad, isOwnWorktree, projectArg, repoNameArg, resolveRepo, taskFileOf, taskIdArg, workerCtx, workerLauncher, workerWorktree } from "./worker.js";
 import type { WorkerCtx } from "./worker.js";
 
-export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string } }
+export interface LaunchResultW { branch: string; worktree: string; method: string; integration?: { branch: string; worktree: string }; /** F-vlad-318: taban origin'den tazelenemedi / yerel dal ileride; görev yerel tabandan açıldı */ warning?: string }
 interface RecEntry { repo: string; worktree: string; branch: string }
 interface LaunchRecord extends RecEntry { taskId: string; opId: string | null; /** set once the launch finished; a record without it is a launch that started and may or may not have opened a window */ result?: LaunchResultW; /** a pipeline parent's integration worktrees in further repos */ extra?: RecEntry[];
   /** F-vlad-242: pipeline phase only — the integration worktree ensured before the launch, so an uncertain launch can still report it */ parent?: string; integration?: { branch: string; worktree: string };
@@ -33,6 +33,38 @@ const forbidden = (m: string) => new RemoteError("forbidden", `forbidden: ${m}`)
 
 /** İşçinin pencere kapatıcısı: noop korumasında hiç pencere açılmadığından kapatılacak da yoktur (gerçek süreç öldürülmez). */
 const defaultClose: CloseFn = (id) => (resolveLaunchMode(workerCtx().cfg.launcher) === "noop" ? [] : closeWorkerWindow(id));
+
+const FETCH_TIMEOUT_MS = 20_000;
+
+/**
+ * F-vlad-318: a single task (no pipeline phase) is cut from the freshest default branch the worker can prove safe. Best-effort
+ * `git fetch origin <default>`; when the local branch is an ancestor of `origin/<default>` the task starts at `origin/<default>`,
+ * otherwise (fetch failed, no origin, local ahead/diverged) at the local branch plus a warning. The local branch is never touched
+ * (no pull/merge/reset). The returned `base` is the ref really used (the launch record and cleanup judge against it).
+ */
+async function freshDefaultBase(repo: string, defaultBranch: string): Promise<{ base: string; warning?: string }> {
+  if ((await runGitAsync(repo, ["fetch", "--quiet", "origin", defaultBranch], FETCH_TIMEOUT_MS)) === null) {
+    return { base: defaultBranch, warning: `origin/${defaultBranch} çekilemedi (origin yok, ağ hatası ya da zaman aşımı); görev yerel ${defaultBranch} ucundan açıldı, taban bayat olabilir` };
+  }
+  const remote = `refs/remotes/origin/${defaultBranch}`;
+  const local = await runGitAsync(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${defaultBranch}^{commit}`]);
+  const tip = await runGitAsync(repo, ["rev-parse", "--verify", "--quiet", `${remote}^{commit}`]);
+  if (!local || !tip) return { base: defaultBranch, warning: `origin/${defaultBranch} fetch sonrası okunamadı; görev yerel ${defaultBranch} ucundan açıldı` };
+  if (local === tip) return { base: defaultBranch };
+  if ((await runGitAsync(repo, ["merge-base", "--is-ancestor", `refs/heads/${defaultBranch}`, remote])) !== null) return { base: `origin/${defaultBranch}` };
+  return { base: defaultBranch, warning: `yerel ${defaultBranch}, origin/${defaultBranch} ile ayrışmış ya da ondan ileride; görev yerel uçtan açıldı (origin tabanı kullanılmadı)` };
+}
+
+/** A recorded base: a local branch, or `origin/<branch>` (a remote-tracking ref, F-vlad-318). */
+const refOfBase = (b: string): string => (b.startsWith("origin/") ? `refs/remotes/${b}` : `refs/heads/${b}`);
+const baseExists = async (repo: string, b: string): Promise<boolean> => (await runGitAsync(repo, ["rev-parse", "--verify", "--quiet", `${refOfBase(b)}^{commit}`])) !== null;
+/** unmergedCommitsWith, but a recorded `origin/<branch>` base is read from its remote-tracking ref. */
+async function ownCommits(repo: string, branch: string, base: string): Promise<number | null> {
+  if (!base.startsWith("origin/")) return unmergedCommitsWith(ASYNC_GIT, repo, branch, base);
+  if (!/^[\w./-]+$/.test(base) || base.includes("..")) return null;
+  const out = await runGitAsync(repo, ["rev-list", "--count", `refs/heads/${branch}`, "--not", refOfBase(base), "--"], 30_000);
+  return out !== null && /^\d+$/.test(out) ? Number(out) : null;
+}
 
 const launchesDir = () => join(agentDir(), "launches");
 const recordFile = (id: string) => join(launchesDir(), `${id}.json`);
@@ -122,8 +154,11 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
   if (existing) throw new RemoteError("conflict", `conflict: bu launch (op ${c.opId}) yarım kaldı; pencere açılmış olabilir, kontrol et`);
   // The record goes down BEFORE anything opens: a crash after the window opened still leaves proof the launch started,
   // so reconcile reports it uncertain instead of letting a retry open a second window.
-  const baseRef = parent ? `vlad/${parent}` : defaultBranch;
-  writeRecord({ taskId: id, repo, worktree, branch: `vlad/${id}`, opId: c.opId, ...(baseRef ? { base: baseRef } : {}) });
+  // F-vlad-318: a single task's base is refreshed from origin BEFORE the record (replay/conflict checks above already ran: no second fetch)
+  let defBase: { base: string; warning?: string } | undefined;
+  if (!parent && defaultBranch && (await branchExistsAsync(repo, defaultBranch))) defBase = await freshDefaultBase(repo, defaultBranch);
+  const usedBase = parent ? `vlad/${parent}` : defBase?.base ?? defaultBranch;
+  writeRecord({ taskId: id, repo, worktree, branch: `vlad/${id}`, opId: c.opId, ...(usedBase ? { base: usedBase } : {}) });
   let integration: { branch: string; worktree: string } | undefined;
   let res;
   try {
@@ -134,7 +169,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
     }
     res = await launchCore({
       taskId: id, repo, worktree, branch: `vlad/${id}`, ...(a.retry === true ? { adopt: true } : {}),
-      ...(integration ? { base: integration.branch } : defaultBranch && (await branchExistsAsync(repo, defaultBranch)) ? { base: defaultBranch } : {}),
+      ...(integration ? { base: integration.branch } : defBase ? { base: defBase.base } : {}),
       prompt: fill(template, ctx, id), env: envOf(id, ctx, session), title,
       ...(model ? { model } : {}), ...(autoCompact ? { autoCompact } : {}),
     }, launcher, ASYNC_GIT);
@@ -142,8 +177,8 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
     rmSync(recordFile(id), { force: true }); // launchCore undid its own work: nothing is running, a retry starts clean
     throw failed((e as Error).message);
   }
-  const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}) };
-  writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, ...(baseRef ? { base: baseRef } : {}), result }); // base stays: cleanup judges the branch against it (F-vlad-244)
+  const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}), ...(defBase?.warning ? { warning: defBase.warning } : {}) };
+  writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, ...(usedBase ? { base: usedBase } : {}), result }); // base stays: cleanup judges the branch against it (F-vlad-244)
   if (parent && integration) recordParent(parent, repo, integration);
   return result;
 }
@@ -179,8 +214,8 @@ export async function resolveUncertainLaunch(opId: string): Promise<{ state: "ab
   // F-vlad-243: a branch left without its worktree blocks every relaunch; only a branch with no commits of its own may go.
   // The base falls back to HEAD like launchCore does when the card's default branch is missing.
   if (branchThere) {
-    const base = found.base && (await branchExistsAsync(found.repo, found.base)) ? found.base : "HEAD";
-    const own = await unmergedCommitsWith(ASYNC_GIT, found.repo, found.branch, base);
+    const base = found.base && (await baseExists(found.repo, found.base)) ? found.base : "HEAD";
+    const own = await ownCommits(found.repo, found.branch, base);
     // not "done + result": the brain must not adopt a worktree-less launch; "done" without a result sends it to `task release --force` (record stays for cleanup)
     if (own !== 0) return { state: "done" };
     // -D: `-d` checks against HEAD, not the base (an integration branch ahead of HEAD would refuse); rev-list proved nothing is lost
@@ -216,8 +251,8 @@ async function dropTaskBranch(repo: string, id: string): Promise<string | undefi
   const branch = `vlad/${id}`;
   if (!(await branchExistsAsync(repo, branch))) return undefined;
   const rec = readRecord(id);
-  const base = rec?.base && (await branchExistsAsync(repo, rec.base)) ? rec.base : "HEAD";
-  const own = await unmergedCommitsWith(ASYNC_GIT, repo, branch, base);
+  const base = rec?.base && (await baseExists(repo, rec.base)) ? rec.base : "HEAD";
+  const own = await ownCommits(repo, branch, base);
   if (own !== 0) return `dal korundu: ${branch} dalında ${base} dalına göre ${own ?? "bilinmeyen sayıda"} commit var; elle incele`;
   if ((await runGitAsync(repo, ["branch", "-D", branch])) === null) return `dal silinemedi: ${branch}`;
   return undefined;
