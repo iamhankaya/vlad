@@ -8,7 +8,7 @@ import type { LaunchRequest, Launcher } from "../../src/launcher/index.js";
 import { writeProject } from "../../src/projects/store.js";
 import { addFinding } from "../../src/findings/store.js";
 import { buildPrompt, cleanupTask, closeTaskWindow, integrationWorktrees, launchTask, statusSummary } from "../../src/tasks/launch.js";
-import { createTask, getTask, listTasks, saveTask, setState } from "../../src/tasks/index.js";
+import { createTask, getTask, listTasks, saveTask, setState, type Task } from "../../src/tasks/index.js";
 import { trustKey } from "../../src/tasks/trust.js";
 import { assertInside, makeHome, makeJunction, rmTemp, wtp } from "../helpers.js";
 
@@ -868,5 +868,89 @@ describe("launchTask: failed → queued → yeniden launch (F-vlad-239)", () => 
     const racing: Launcher = { async launch() { setState(id, "cancelled"); return { ok: true, method: "fake" }; } };
     await expect(launchTask(id, { launcher: racing, cfg, closeWorker: () => {} })).rejects.toThrow(/korundu/);
     expect(existsSync(join(wt, "dirty.txt"))).toBe(true);
+  });
+});
+
+describe("launchTask: eşzamanlı iki launch tek launcher'a iner (F-vlad-108)", () => {
+  /** launcher ilk çağrıda bekler; ikinci launch bu sırada başlar. */
+  const gated = () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const inside = new Promise<void>((r) => { entered = r; });
+    const reqs: LaunchRequest[] = [];
+    const launcher: Launcher = { async launch(r) { reqs.push(r); entered(); await gate; return { ok: true, method: "fake" }; } };
+    return { launcher, reqs, release, inside };
+  };
+  const brainCfg = () => ({ ...cfg, brain: "mac", machines: [{ name: "mac", os: "darwin", agent: { port: 7437 }, roots: [dirname(repo)] }] } as VladConfig);
+
+  async function race(c: VladConfig, id: string, extra: { closeWorker?: (x: string) => void } = {}) {
+    const g = gated();
+    // ikisi de launchTask'ın senkron başlangıcında (claim'den önce) launch_op'u okur: gerçek yarış
+    const settle = (p: Promise<Task>) => p.then((t) => ({ t, e: null as Error | null }), (e: Error) => ({ t: null as Task | null, e }));
+    const a = settle(launchTask(id, { launcher: g.launcher, cfg: c, ...extra }));
+    const b = settle(launchTask(id, { launcher: g.launcher, cfg: c, ...extra }));
+    await g.inside;
+    const loserFirst = await Promise.race([a, b]); // launcher beklerken yalnız kaybeden biter
+    g.release();
+    const [ra, rb] = await Promise.all([a, b]);
+    const won = (ra.t ?? rb.t)!;
+    return { g, lost: loserFirst.e, won };
+  }
+
+  it("machines'siz: launcher tam 1 kez, kaybeden 'başka deneme kazandı' alır, sonunda running/launch_op null", async () => {
+    const id = mk().data.id;
+    const { g, lost, won } = await race(cfg, id);
+    expect(g.reqs).toHaveLength(1);
+    expect(lost?.message).toMatch(/başka deneme kazandı/);
+    expect(won.data.state).toBe("running");
+    const t = getTask(id).data;
+    expect(t.state).toBe("running");
+    expect(t.launch_op ?? null).toBeNull();
+    expect(t.error ?? null).toBeNull();
+    expect(existsSync(t.worktree!)).toBe(true);
+  });
+
+  it("machines'li (beyin): launcher tam 1 kez", async () => {
+    const id = mk().data.id;
+    const { g, lost, won } = await race(brainCfg(), id);
+    expect(g.reqs).toHaveLength(1);
+    expect(lost?.message).toMatch(/başka deneme kazandı/);
+    expect(won.data.state).toBe("running");
+    expect(getTask(id).data.launch_op ?? null).toBeNull();
+  });
+
+  it("adopt (failed→queued): launcher 1 kez, closeWorker en çok 1 kez, worktree durur", async () => {
+    const id = mk().data.id;
+    await launchTask(id, { launcher: fakeLauncher(), cfg });
+    const wt = getTask(id).data.worktree!;
+    setState(id, "failed"); setState(id, "queued");
+    let closes = 0;
+    const { g, lost } = await race(cfg, id, { closeWorker: () => { closes++; } });
+    expect(g.reqs).toHaveLength(1);
+    expect(closes).toBeLessThanOrEqual(1);
+    expect(lost?.message).toMatch(/başka deneme kazandı/);
+    expect(existsSync(wt)).toBe(true);
+    expect(getTask(id).data.state).toBe("running");
+  });
+
+  it("çökmüş launch'tan kalan launch_op yeniden launch'ı engellemez", async () => {
+    const id = mk().data.id;
+    const t = getTask(id); t.data.launch_op = "eski-op"; saveTask(t);
+    const l = fakeLauncher();
+    const r = await launchTask(id, { launcher: l, cfg });
+    expect(l.reqs).toHaveLength(1);
+    expect(r.data.state).toBe("running");
+    expect(getTask(id).data.launch_op ?? null).toBeNull();
+  });
+
+  it("launcher hatasında launch_op temizlenir, görev queued kalır, ikinci deneme başarılı", async () => {
+    const id = mk().data.id;
+    await expect(launchTask(id, { launcher: fakeLauncher(false), cfg })).rejects.toThrow(/boom/);
+    const t = getTask(id).data;
+    expect(t.state).toBe("queued");
+    expect(t.launch_op ?? null).toBeNull();
+    const r = await launchTask(id, { launcher: fakeLauncher(), cfg });
+    expect(r.data.state).toBe("running");
   });
 });
