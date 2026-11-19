@@ -160,6 +160,98 @@ describe("machines:C2 launch op (işçi)", () => {
   });
 });
 
+describe("machines:C2 launch op: taban origin'den tazelenir (F-vlad-318)", () => {
+  const B = { kind: "default", defaultBranch: "main" };
+  const CL = (extra: object = {}) => ({ taskId: ID, project: "alpha", repoName: "alpha", terminal: true, dropBranch: true, ...extra });
+  const warningOf = (r: unknown) => (r as { warning?: string }).warning;
+  /** origin = ayrı bare repo; repo'ya origin olarak bağlanır, main gönderilir (yerel main = origin/main) */
+  const withOrigin = (): string => {
+    const origin = join(base, "origin.git");
+    execFileSync("git", ["init", "-q", "--bare", "-b", "main", origin]);
+    git(repo, "remote", "add", "origin", origin); git(repo, "pu" + "sh", "-q", "origin", "main");
+    return origin;
+  };
+  /** origin'e yerelden bağımsız bir commit ekler (ayrı klon üzerinden); yeni uç sha'sını döner */
+  const advanceOrigin = (origin: string): string => {
+    const clone = join(base, `clone-${Math.random().toString(36).slice(2)}`); execFileSync("git", ["clone", "-q", origin, clone]);
+    writeFileSync(join(clone, "o.txt"), `o-${Math.random()}`); git(clone, "add", "-A"); git(clone, "commit", "-q", "-m", "origin ilerledi"); git(clone, "pu" + "sh", "-q", "origin", "main");
+    return git(clone, "rev-parse", "HEAD");
+  };
+
+  it("origin ana dalı 1 commit ileride: görev dalı origin ucundan açılır, yerel main değişmez, kayıt base'i origin/main", async () => {
+    const origin = withOrigin(); const localTip = git(repo, "rev-parse", "main"); const tip = advanceOrigin(origin);
+    const r = await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(tip);
+    expect(git(repo, "rev-parse", "main")).toBe(localTip);
+    expect(record().base).toBe("origin/main");
+    expect(warningOf(r)).toBeUndefined();
+  });
+  it("remote.origin.fetch ana dalı eşlemiyorsa (eşlemesiz klon) bile tracking ref açık refspec ile tazelenir", async () => {
+    const origin = withOrigin(); const tip = advanceOrigin(origin);
+    git(repo, "config", "--unset-all", "remote.origin.fetch");
+    git(repo, "config", "remote.origin.fetch", "+refs/heads/baska:refs/remotes/origin/baska"); // main eşlenmiyor
+    await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(tip);
+    expect(record().base).toBe("origin/main");
+  });
+  it("origin yok: launch başarılı, taban yerel main, uyarı, kayıt base'i main", async () => {
+    const r = await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(git(repo, "rev-parse", "main"));
+    expect(warningOf(r)).toMatch(/origin/);
+    expect(record().base).toBe("main");
+  });
+  it("fetch hata verir (origin yolu bozuk): taban yerel, uyarı", async () => {
+    withOrigin(); git(repo, "remote", "set-url", "origin", join(base, "yok.git"));
+    const r = await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(git(repo, "rev-parse", "main"));
+    expect(warningOf(r)).toMatch(/çekilemedi/);
+  });
+  it("yerel main origin'in önünde: taban yerel, uyarı", async () => {
+    withOrigin(); writeFileSync(join(repo, "l.txt"), "l"); git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "yerel ileri");
+    const r = await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(git(repo, "rev-parse", "main"));
+    expect(warningOf(r)).toMatch(/ileri|ayrış/);
+    expect(record().base).toBe("main");
+  });
+  it("yerel ve origin ayrışmış: taban yerel, uyarı", async () => {
+    const origin = withOrigin(); advanceOrigin(origin);
+    writeFileSync(join(repo, "l.txt"), "l"); git(repo, "add", "-A"); git(repo, "commit", "-q", "-m", "yerel ayrıştı");
+    const r = await launchOp(L({ base: B }), ctx("op-1"), { launcher });
+    expect(git(repo, "rev-parse", `vlad/${ID}`)).toBe(git(repo, "rev-parse", "main"));
+    expect(warningOf(r)).toBeDefined();
+  });
+  it("pipeline fazı: fetch yok, taban vlad/<parent>", async () => {
+    const origin = withOrigin(); const old = git(repo, "rev-parse", "refs/remotes/origin/main"); advanceOrigin(origin);
+    const r = await launchOp(L({ base: { kind: "integration", parent: PARENT, defaultBranch: "main" } }), ctx("op-1"), { launcher });
+    expect(record().base).toBe(`vlad/${PARENT}`);
+    expect(warningOf(r)).toBeUndefined();
+    expect(git(repo, "rev-parse", "refs/remotes/origin/main")).toBe(old); // fetch edilmedi
+  });
+  it("kendi commit'i olmayan iptal görevin origin tabanlı dalı cleanup'ta silinir; commit'li korunur", async () => {
+    const origin = withOrigin(); advanceOrigin(origin);
+    const wt = (await launchOp(L({ base: B }), ctx("op-1"), { launcher })).worktree;
+    expect(await cleanupOp(CL(), { close: () => [] })).toEqual({ removed: true });
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toBe("");
+    expect(existsSync(wt)).toBe(false);
+    rmSync(join(home, ".vlad-agent", "launches", `${ID}.json`), { force: true });
+    const wt2 = (await launchOp(L({ base: B }), ctx("op-2"), { launcher })).worktree;
+    writeFileSync(join(wt2, "k.txt"), "k"); git(wt2, "add", "-A"); git(wt2, "commit", "-q", "-m", "kendi");
+    const r = await cleanupOp(CL(), { close: () => [] });
+    expect(r.warning).toMatch(/commit/);
+    expect(git(repo, "branch", "--list", `vlad/${ID}`)).toContain(ID);
+  });
+  it("aynı opId yeniden oynatma ikinci fetch/pencere açmaz", async () => {
+    const origin = withOrigin(); advanceOrigin(origin);
+    const r1 = await launchOp(L({ base: B }), ctx("op-r"), { launcher });
+    const seen = git(repo, "rev-parse", "refs/remotes/origin/main");
+    advanceOrigin(origin); // origin yine ilerledi; yeniden oynatma bunu çekmemeli
+    const r2 = await launchOp(L({ base: B }), ctx("op-r"), { launcher });
+    expect(r2).toEqual(r1);
+    expect(reqs).toHaveLength(1);
+    expect(git(repo, "rev-parse", "refs/remotes/origin/main")).toBe(seen);
+  });
+});
+
 describe("machines:C2 close op", () => {
   it("taskId doğrulanır ve işçi tarafı pencereyi kapatır", async () => {
     const asked: string[] = [];
