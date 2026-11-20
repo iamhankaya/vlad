@@ -54,6 +54,7 @@ describe("monitor sözleşmesi: yapılandırma şeması", () => {
     const item = schema.properties.monitor.properties.servers.items;
     expect(item.required).toEqual(["id", "agent_url", "project"]);
     expect(item.additionalProperties).toBe(false);
-    expect(Object.keys(item.properties)).toEqual(["id", "agent_url", "project"]);
+    expect(Object.keys(item.properties)).toEqual(["id", "agent_url", "project", "capacity_file"]); // capacity_file: isteğe bağlı (T20261120-32, haftalık kapasite işi)
+    expect(item.required).not.toContain("capacity_file");
   });
 });

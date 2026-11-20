@@ -609,11 +609,54 @@
   {
    "path": [
     "monitor",
+    "capacity"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "monitor",
     "status"
    ],
    "json": true,
    "console": {
     "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "notices",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "notices",
+    "count"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "notices",
+    "done"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
    }
   },
   {

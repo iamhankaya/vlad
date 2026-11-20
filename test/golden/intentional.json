@@ -147,6 +147,19 @@
       ]
     },
     {
+      "id": "T20261120-32",
+      "keys": [
+        "monitor --help",
+        "monitor (bare)",
+        "monitor capacity --help",
+        "monitor notices --help",
+        "monitor notices (bare)",
+        "monitor notices list --help",
+        "monitor notices count --help",
+        "monitor notices done --help"
+      ]
+    },
+    {
       "id": "T20261117-06",
       "keys": [
         "(root) --help",

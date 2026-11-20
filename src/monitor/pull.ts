@@ -4,6 +4,7 @@ import { parseAlertMarker, MARKER_PREFIX } from "./marker.js";
 import { checkAgentUrl } from "./config.js";
 import { KeychainError, keychainService } from "./secret.js";
 import { createStateStore, monitorStateDir } from "./state.js";
+import type { Notifier } from "./notify.js";
 import { buildAlertTask, buildResolvedNote } from "./task-text.js";
 import {
   EXIT_BY_CODE, MONITOR_LIMITS,
@@ -40,7 +41,7 @@ function markerIndex(server: string): Map<string, string> {
  * `## İlerleme`'sine tek not (görev kapanmaz; kapalı/yok → yazma yok). İdempotans: durum dosyası + gövde işareti (arşiv dahil).
  * Şema/yetki/erişim hatası o sunucuyu atlar (imleç ilerlemez), diğerleri sürer.
  */
-export async function pullAlerts(deps: PullDeps, opts: PullOptions = {}): Promise<PullResult> {
+export async function pullAlerts(deps: PullDeps & { notifier?: Notifier }, opts: PullOptions = {}): Promise<PullResult> {
   const result: PullResult = { servers: [], errors: [] };
   const platform = deps.platform ?? process.platform;
   if (platform !== "darwin") {
@@ -85,13 +86,23 @@ export async function pullAlerts(deps: PullDeps, opts: PullOptions = {}): Promis
       result.errors.push({ server: srv.id, code, message } satisfies MonitorError);
       if (STREAK_CODES.includes(code)) work.fail_streak += 1;
     }
+    if (!dry && deps.notifier) await notifyOpened(deps.notifier, srv.id, res, deps); // hata olsa da: görev zaten açıldı
     if (!dry) {
       try { store.save(state); } catch (e) {
         result.errors.push({ server: srv.id, code: "config", message: `durum dosyası yazılamadı: ${(e as Error).message}` });
       }
     }
   }
+  try { await deps.notifier?.flush?.(); } catch { /* en iyi çaba */ }
   return result;
+}
+
+/** Açılan her görev için en iyi çaba bildirim (kuyruk + ntfy); hata `pull` sonucunu/çıkış kodunu değiştirmez, yalnız log'lanır. */
+async function notifyOpened(notifier: Notifier, server: string, res: ServerPullResult, deps: PullDeps): Promise<void> {
+  const ts = (deps.now ?? Date.now)();
+  for (const o of res.opened) {
+    try { await notifier.notice({ ts, kind: "alert", server, task: o.task }); } catch (e) { deps.log?.(`spc ${server}: bildirim gönderilemedi: ${(e as Error).name}`); }
+  }
 }
 
 async function fetchPage(srv: MonitorServerConfig, token: string, cursor: string | null, deps: PullDeps, all: boolean): Promise<{ status: number; body: unknown }> {

@@ -9,6 +9,7 @@ import { registerMonitor, type MonitorCliDeps } from "../../src/cli/groups/monit
 import { createKit } from "../../src/cli/kit.js";
 import type { CliCtx } from "../../src/cli/ctx.js";
 import { listTasks } from "../../src/tasks/index.js";
+import { enqueueNotice, countNotices } from "../../src/monitor/notify.js";
 import { monitorInstallActions } from "../../src/monitor/install.js";
 import { initKey, mintToken, setSecretDirForTests } from "../../src/mode/token.js";
 import type { ServiceInstaller } from "../../src/approver/launchd.js";
@@ -63,7 +64,7 @@ describe("monitor pull (CLI)", () => {
   it("--json: görev açar, PullResult şekli, çıkış 0, belirteç çıktıda yok", async () => {
     configure();
     const r = await cli(["pull", "--json"]);
-    expect(r.code).toBe(0);
+    expect(r.code, r.out + r.err).toBe(0);
     const j = JSON.parse(r.out);
     expect(j.servers[0]).toMatchObject({ id: "medialog", ok: true, fetched: 1 });
     expect(j.servers[0].opened).toHaveLength(1);
@@ -161,5 +162,84 @@ describe("vlad install → monitor servisi", () => {
     expect((await monitorInstallActions({ ...base, dryRun: false }))[0]).toMatch(/kuruldu/);
     expect(calls).toEqual(["install"]);
     expect((await monitorInstallActions({ ...base, dryRun: false, platform: "win32" }))[0]).toMatch(/atlandı/);
+  });
+});
+
+describe("monitor notices (CLI)", () => {
+  let nd: string;
+  beforeEach(() => { nd = join(stateDir, "notify"); });
+  const add = (task: string, ts = 1000, extra: object = {}) => enqueueNotice(nd, { ts, kind: "alert", server: "medialog", task, ...extra });
+  it("list --json: kimlik/metaveri; count yalnız sayı; kuyruk yoksa 0", async () => {
+    expect((await cli(["notices", "count"], { notifyDir: nd })).out.trim()).toBe("0");
+    add("T20261120-01", 1000); add("T20261120-02", 2000, { kind: "capacity", trigger: "ws-concurrent" });
+    const r = await cli(["notices", "list", "--json"], { notifyDir: nd });
+    expect(r.code, r.out + r.err).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.map((x: any) => x.task)).toEqual(["T20261120-01", "T20261120-02"]);
+    expect(j[1]).toMatchObject({ kind: "capacity", trigger: "ws-concurrent", id: "medialog__capacity__T20261120-02__ws-concurrent" });
+    expect((await cli(["notices", "count"], { notifyDir: nd })).out.trim()).toBe("2");
+    const txt = await cli(["notices", "list"], { notifyDir: nd });
+    expect(txt.out).toContain("T20261120-01");
+  });
+  it("done <id> ve done --all; çıkış 0; olmayan id çıkış 1", async () => {
+    add("T1-1"); add("T1-2"); add("T1-3");
+    expect((await cli(["notices", "done", "medialog__alert__T1-1"], { notifyDir: nd })).code).toBe(0);
+    expect(countNotices(nd)).toBe(2);
+    expect((await cli(["notices", "done", "medialog__alert__yok"], { notifyDir: nd })).code).toBe(1);
+    expect((await cli(["notices", "done", "--all"], { notifyDir: nd })).code).toBe(0);
+    expect(countNotices(nd)).toBe(0);
+    expect((await cli(["notices", "done"], { notifyDir: nd })).code).not.toBe(0);
+  });
+  it("pull görev açınca kuyruğa yazar (kanal yok: ntfy atlanır, pull çıkışı 0)", async () => {
+    configure();
+    const r = await cli(["pull", "--json"], { notifyDir: nd, channel: () => null });
+    expect(r.code, r.out + r.err).toBe(0);
+    expect(countNotices(nd)).toBe(1);
+    expect(JSON.parse(r.out).servers[0].opened).toHaveLength(1);
+  });
+});
+
+describe("monitor capacity (CLI, uçtan uca sahte ajan)", () => {
+  const DAY = 86_400_000;
+  const NOW = Date.UTC(2026, 10, 23, 9, 0, 0);
+  const since = () => {
+    const items: unknown[] = [];
+    const weeks = [150, 180, 210, 240];
+    for (let d = 27; d >= 0; d--) items.push({ seq: 30 - d, ts: Math.floor(NOW / DAY) * DAY - d * DAY + 3_600_000, metric: "app.ws_connections", labels: {}, n: 10, min: 0, max: weeks[3 - Math.floor(d / 7)]!, avg: 1, last: 1 });
+    return { server: "medialog", epoch: "e", resolution: "1m", schema: 1, items, next_cursor: "c", has_more: false, gap: null, oldest_ts: NOW - 29 * DAY };
+  };
+  const configureCap = () => {
+    const f = join(stateDir, "capacity.yaml");
+    cpSync(join(__dirname, "..", "fixtures", "spc", "capacity-medialog.yaml"), f);
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ monitor: { servers: [{ id: "medialog", agent_url: url, project: "p", capacity_file: f }] } }));
+    body = since();
+  };
+  it("--json: rapor + architect görevi, bildirim kuyruğa; aynı hafta ikinci koşu atlar; çıkış 0; belirteç yok", async () => {
+    configureCap();
+    const notifyDir = join(stateDir, "n");
+    const r = await cli(["capacity", "--json"], { now: () => NOW, notifyDir, channel: () => null });
+    expect(r.code, r.out + r.err).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.servers[0]).toMatchObject({ id: "medialog", ok: true, week: "2026-W48" });
+    expect(j.servers[0].opened).toHaveLength(1);
+    expect(listTasks().map((t) => t.data.role).sort()).toEqual(["analyst", "architect"]);
+    expect(countNotices(notifyDir)).toBe(1);
+    expect(r.out + r.err).not.toContain(TOKEN);
+    const r2 = await cli(["capacity", "--json"], { now: () => NOW, notifyDir, channel: () => null });
+    expect(JSON.parse(r2.out).servers[0].skipped).toBe("already_done");
+    expect(listTasks()).toHaveLength(2);
+  });
+  it("--dry-run yazmaz; capacity_file yok + --server → çıkış 2; yapılandırma yok → 2; çalışan reddedilir", async () => {
+    configureCap();
+    expect((await cli(["capacity", "--dry-run"], { now: () => NOW, notifyDir: join(stateDir, "n"), channel: () => null })).code).toBe(0);
+    expect(listTasks()).toHaveLength(0);
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ monitor: { servers: [{ id: "medialog", agent_url: url, project: "p" }] } }));
+    expect((await cli(["capacity", "--server", "medialog", "--json"])).code).toBe(2);
+    rmSync(join(home, "vlad.config.json"));
+    expect((await cli(["capacity", "--json"])).code).toBe(2);
+    process.env.VLAD_TASK_ID = "T20261120-99";
+    const w = await cli(["capacity"]);
+    expect(w.code).not.toBe(0);
+    expect(listTasks()).toHaveLength(0);
   });
 });

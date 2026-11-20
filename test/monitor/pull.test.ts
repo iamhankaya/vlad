@@ -418,3 +418,44 @@ describe("pullAlerts: dry-run ve sızıntı", () => {
     for (const c of calls) expect(c).not.toContain(TOKEN);
   });
 });
+
+describe("pullAlerts: bildirim (notifier)", () => {
+  const rec = () => { const calls: any[] = []; return { calls, notifier: { notice: async (n: any) => { calls.push(n); } } }; };
+  it("görev açılınca açılan görev başına bir bildirim (kimlik/metaveri; alarm kimliği yok)", async () => {
+    const f = await mk(() => ok(fx("alerts-critical-firing.json")));
+    const { calls, notifier } = rec();
+    const r = await pullAlerts(deps({ medialog: f.url }, { notifier } as any));
+    expect(calls).toEqual([{ ts: NOW, kind: "alert", server: "medialog", task: r.servers[0]!.opened[0]!.task }]);
+    expect(JSON.stringify(calls)).not.toContain(ID);
+  });
+  it("tekrar çekiş, resolved, log-only ve dry-run bildirmez", async () => {
+    const f = await mk(() => ok(fx("alerts-critical-firing.json")));
+    const { calls, notifier } = rec();
+    await pullAlerts(deps({ medialog: f.url }, { notifier } as any), { dryRun: true });
+    expect(calls).toEqual([]);
+    await pullAlerts(deps({ medialog: f.url }, { notifier } as any));
+    calls.length = 0;
+    await pullAlerts(deps({ medialog: f.url }, { notifier } as any));
+    expect(calls).toEqual([]);
+    const w = await mk(() => ok(fx("alerts-warning-info-firing.json")));
+    await pullAlerts(deps({ other: w.url }, { notifier } as any));
+    expect(calls).toEqual([]);
+  });
+  it("notifier hatası pull sonucunu ve çıkış kodunu etkilemez", async () => {
+    const f = await mk(() => ok(fx("alerts-critical-firing.json")));
+    const notifier = { notice: async () => { throw new Error("patladı"); } };
+    const r = await pullAlerts(deps({ medialog: f.url }, { notifier } as any));
+    expect(r.errors).toEqual([]);
+    expect(exitCodeOf(r)).toBe(0);
+    expect(r.servers[0]!.opened).toHaveLength(1);
+    expect(logs.join("\n")).toMatch(/bildirim/);
+  });
+  it("görev açıldıktan sonra sayfa hatası olsa da açılan görev bildirilir", async () => {
+    let n = 0;
+    const f = await mk(() => (n++ === 0 ? ok({ ...fx("alerts-page1-has-more.json") }) : { status: 500, body: {} }));
+    const { calls, notifier } = rec();
+    const r = await pullAlerts(deps({ medialog: f.url }, { notifier } as any));
+    expect(r.errors.length).toBe(1);
+    expect(calls.length).toBe(r.servers[0]!.opened.length);
+  });
+});
