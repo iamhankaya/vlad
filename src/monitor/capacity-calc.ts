@@ -3,7 +3,7 @@ import { isTrend, lowerIsWorse, type CapacityOp, type CapacityTrigger, type Thre
 /**
  * Kapasite hesabı (saf işlev; plan Karar 3). Girdi: tetikleyiciye uyan seri başına günlük (UTC) kovalar.
  * Ölçüler: `peak` = kova `max`'ının en büyüğü; `daily_avg_peak` = günlük n-ağırlıklı ortalamaların en büyüğü. Çok seri: seri başına hesapla, en büyüğü al.
- * Haftalık değerler: kesintisiz pencereler; 0 = son 7 tam gün + bugün (8 kova: önceki koşudan bu yana zirve kaçmasın), sonrakiler 7'şer gün ve bitişik;
+ * Haftalık değerler: tam 7 günlük, bitişik pencereler; 0 = bugün dahil son 7 gün (today-6..today), sonrakiler 7'şer gün geriye;
  * veri olan en çok 4 pencere. Eğim: gözlenen haftaların ÖZGÜN konumunda (boş hafta sıkıştırılmaz) en küçük kareler (birim/hafta).
  */
 export const DAY_MS = 86_400_000;
@@ -27,6 +27,10 @@ export interface TriggerReport {
 const MIN_WEEKS = 3;
 const MAX_WEEKS = 4;
 const SLOPE_EPS = 1e-9;
+// `<` yönünde uyarı: eğim kötüleşiyorsa tahmini eşiğe varış bu kadar haftadan yakın olmalı…
+const LOW_WARN_WEEKS = 12;
+// …ya da değer eşiğin bu oranı kadar üstüne (%2) inmiş olmalı (eğim hesaplanamasa da).
+const LOW_WARN_MARGIN = 1.02;
 
 /** Eşik yönüne göre eşiğe yaklaşma yüzdesi: `>`/`>=` değer/eşik; `<`/`<=` eşik/değer (değer eşiğe indikçe 100'e yaklaşır; değer ≤ 0 → null). */
 export function directionPct(op: CapacityOp, value: number, threshold: number): number | null {
@@ -63,12 +67,12 @@ export function calcTrigger(t: CapacityTrigger, bySeries: Record<string, DayBuck
   const series = Object.values(bySeries);
   const today = Math.floor(o.now / DAY_MS);
   const low = lowerIsWorse(t);
-  const value7d = value(t.measure, series, today - 7, today, low);
+  const value7d = value(t.measure, series, today - 6, today, low);
   const value30d = value(t.measure, series, today - 29, today, low);
   const weekly: number[] = [];
   const pts: { x: number; y: number }[] = [];
   for (let w = MAX_WEEKS - 1; w >= 0; w--) {
-    const v = value(t.measure, series, today - 7 - 7 * w, w === 0 ? today : today - 8 - 7 * (w - 1), low);
+    const v = value(t.measure, series, today - 6 - 7 * w, today - 7 * w, low);
     if (v !== null) { weekly.push(v); pts.push({ x: MAX_WEEKS - 1 - w, y: v }); }
   }
   const sl = pts.length >= MIN_WEEKS ? slope(pts) : null;
@@ -85,9 +89,11 @@ function thresholdReport(t: ThresholdTrigger, v: { value7d: number | null; value
   const low = lowerIsWorse(t);
   const pct = value7d === null ? null : directionPct(t.op, value7d, t.threshold);
   const over = value7d !== null && (t.op === ">=" ? value7d >= t.threshold : t.op === "<=" ? value7d <= t.threshold : t.op === "<" ? value7d < t.threshold : value7d > t.threshold);
-  // `<` yönünde eğim kötüleşmiyorsa (sabit/yükselen; ör. önbellek isabeti 99,5'te düz) yaklaşma yüzdesi tek başına uyarı değildir: oran hep yüksektir
-  const worsening = sl === null || (low ? sl < -SLOPE_EPS : sl > SLOPE_EPS);
-  const status: TriggerStatus = value7d === null ? "insufficient" : over ? "over" : pct !== null && pct >= warnPct && (!low || worsening) ? "warn" : "ok";
+  // `<` yönünde (ör. önbellek isabeti) oran hep yüksek olduğundan yaklaşma yüzdesi tek başına uyarı değildir: yalnız eğim kötüleşiyor VE
+  // tahmini varış ≤ 12 hafta ya da değer eşiğe %2 marjla yakın; eğim yoksa (<3 hafta) yalnız marj.
+  const nearMargin = value7d !== null && value7d <= t.threshold * LOW_WARN_MARGIN;
+  const soon = sl !== null && sl < -SLOPE_EPS && value7d !== null && (value7d - t.threshold) / -sl <= LOW_WARN_WEEKS;
+  const status: TriggerStatus = value7d === null ? "insufficient" : over ? "over" : pct !== null && pct >= warnPct && (!low || nearMargin || soon) ? "warn" : "ok";
   let remaining: Remaining;
   if (over) remaining = { kind: "exceeded" };
   else if (sl === null || value7d === null) remaining = { kind: "insufficient" };
