@@ -25,6 +25,10 @@ describe("inputBoxHolds", () => {
     expect(inputBoxHolds(BOX("lütfen testleri çalıştır"), "lütfen testleri çalıştır")).toBe(true);
     expect(inputBoxHolds(BOX(""), "lütfen testleri çalıştır")).toBe(false);
   });
+  it("sözcük içinde sarılmış metin (çalı⏎ştır) kutuda sayılır (T20261121-32)", () => {
+    const pane = "● önceki\n╭──────────╮\n│ > lütfen testleri çalı\n│ ştır\n╰──────────╯";
+    expect(inputBoxHolds(pane, "lütfen testleri çalıştır")).toBe(true);
+  });
   it("yalnız son satırlara bakar: eski çıktıda geçen metin kutu sayılmaz", () => {
     const pane = `> lütfen testleri çalıştır\n${"x\n".repeat(30)}${BOX("")}`;
     expect(inputBoxHolds(pane, "lütfen testleri çalıştır")).toBe(false);
@@ -32,6 +36,11 @@ describe("inputBoxHolds", () => {
 });
 
 describe("nudgeWorker (F-vlad-361)", () => {
+  it("capture-pane -J ile sarılmış satırları birleştirir (T20261121-32)", async () => {
+    const { deps, calls } = fake([BOX("x"), BOX("")]);
+    await nudgeWorker("T1", "x", deps);
+    expect(calls.find((c) => c[0] === "capture-pane")).toContain("-J");
+  });
   it("metni -l ile yazar, Enter yollar, kutu boşalınca teslim sayar", async () => {
     const { deps, calls } = fake([BOX("merhaba dünya"), BOX("")]);
     const r = await nudgeWorker("T1", "merhaba dünya", deps);

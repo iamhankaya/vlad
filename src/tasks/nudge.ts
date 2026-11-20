@@ -11,7 +11,8 @@ export interface NudgeResult { delivered: boolean; enters: number }
 
 const TAIL = 40;
 const BOX_LINES = 8; // istem kutusu pane'in sonundadır; eski çıktıda geçen metin kutu sayılmaz
-const norm = (s: string): string => s.replace(/\s+/g, " ").trim();
+// Boşluksuz karşılaştırma: terminal sözcük içinde sarabilir (`çalı⏎ştır`); satır birleşimi boşluk eklese de eşleşir.
+const norm = (s: string): string => s.replace(/\s+/g, "");
 
 const PROMPT_LINE = /^[\s│|]*>/;
 
@@ -48,7 +49,7 @@ export async function nudgeWorker(taskId: string, text: string, deps: NudgeDeps 
   for (let enters = 1; enters <= max; enters++) {
     deps.tmux(["send-keys", "-t", target, "Enter"]);
     await deps.sleep(o.settleMs ?? 1500);
-    if (!inputBoxHolds(deps.tmux(["capture-pane", "-p", "-t", target]), text)) return { delivered: true, enters };
+    if (!inputBoxHolds(deps.tmux(["capture-pane", "-p", "-J", "-t", target]), text)) return { delivered: true, enters };
   }
   return { delivered: false, enters: max };
 }
