@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcTrigger, isoWeekKey, type DayBucket } from "../../src/monitor/capacity-calc.js";
+import { calcTrigger, directionPct, isoWeekKey, type DayBucket } from "../../src/monitor/capacity-calc.js";
 import type { CapacityTrigger } from "../../src/monitor/capacity-config.js";
 
 const DAY = 86_400_000;
@@ -94,6 +94,89 @@ describe("calcTrigger", () => {
     const r = calc(trig(), { a: series((d) => ({ max: d === 20 ? 90 : 10 }), 30) });
     expect(r.value7d).toBe(10);
     expect(r.value30d).toBe(90);
+  });
+});
+
+describe("calcTrigger: op '<' (küçük olan kötü)", () => {
+  const lt = (o: Partial<CapacityTrigger> = {}): CapacityTrigger => trig({ op: "<", threshold: 95, measure: "daily_avg_peak", ...o });
+  const declining = () => series((d) => ({ max: 100, avg: [97, 98, 99, 99.5][Math.floor(d / 7)] ?? 99.5 }), 28); // eskiden yeniye 99.5, 99, 98, 97
+
+  it("directionPct: '<' yönünde eşik/değer, değer ≤ 0 → null; '>' yönü değişmez", () => {
+    expect(directionPct("<", 97, 95)).toBeCloseTo(97.94, 1);
+    expect(directionPct("<=", 95, 95)).toBeCloseTo(100);
+    expect(directionPct("<", 0, 95)).toBeNull();
+    expect(directionPct("<", -3, 95)).toBeNull();
+    expect(directionPct(">", 70, 100)).toBeCloseTo(70);
+  });
+  it("kötü değer günlük ortalamaların EN KÜÇÜĞÜdür; eşiğe %70+ yaklaşan düşen seri warn", () => {
+    const r = calc(lt(), { a: declining() });
+    expect(r.value7d).toBe(97);
+    expect(r.pct).toBeCloseTo(97.94, 1);
+    expect(r.slopePerWeek).toBeCloseTo(-0.85, 3);
+    expect(r.remaining.kind).toBe("weeks");
+    if (r.remaining.kind === "weeks") expect(r.remaining.weeks).toBeCloseTo((97 - 95) / 0.85, 1);
+    expect(r.status).toBe("warn");
+  });
+  it("değer eşiğin altına inince over/exceeded; '<' operatöründe eşit değer over değil, '<=' operatöründe over", () => {
+    const r = calc(lt(), { a: series(() => ({ max: 100, avg: 90 }), 28) });
+    expect(r.status).toBe("over");
+    expect(r.remaining).toEqual({ kind: "exceeded" });
+    expect(calc(lt(), { a: series(() => ({ max: 100, avg: 95 }), 28) }).status).not.toBe("over");
+    expect(calc(lt({ op: "<=" }), { a: series(() => ({ max: 100, avg: 95 }), 28) }).status).toBe("over");
+  });
+  it("sabit yüksek değerde (99,5; eğim 0) remaining flat ve warn yok", () => {
+    const r = calc(lt(), { a: series(() => ({ max: 100, avg: 99.5 }), 28) });
+    expect(r.remaining).toEqual({ kind: "flat" });
+    expect(r.status).toBe("ok");
+  });
+  it("yükselen (iyileşen) seri flat sayılır, warn yok", () => {
+    const r = calc(lt(), { a: series((d) => ({ max: 100, avg: [99.5, 98, 97, 96.5][Math.floor(d / 7)] ?? 96.5 }), 28) });
+    expect(r.remaining).toEqual({ kind: "flat" });
+    expect(r.status).toBe("ok");
+  });
+  it("peak ölçüsü '<' yönünde kova min'ini kullanır (min yoksa ortalamaya düşer)", () => {
+    const withMin: DayBucket[] = Array.from({ length: 28 }, (_, i) => ({ day: today - 27 + i, n: 10, max: 100, sum: 990, min: i === 25 ? 80 : 98 }));
+    expect(calc(lt({ measure: "peak" }), { a: withMin }).value7d).toBe(80);
+    const noMin: DayBucket[] = Array.from({ length: 28 }, (_, i) => ({ day: today - 27 + i, n: 10, max: 100, sum: 990 }));
+    expect(calc(lt({ measure: "peak" }), { a: noMin }).value7d).toBeCloseTo(99);
+  });
+  it("çok seri: en kötü (en küçük) seri alınır", () => {
+    const r = calc(lt(), { a: series(() => ({ max: 100, avg: 99 }), 28), b: series(() => ({ max: 100, avg: 96 }), 28) });
+    expect(r.value7d).toBe(96);
+  });
+  it("veri yok: insufficient, pct null", () => {
+    const r = calc(lt(), {});
+    expect(r.status).toBe("insufficient");
+    expect(r.pct).toBeNull();
+  });
+});
+
+describe("calcTrigger: kind 'trend' (eşiksiz eğilim)", () => {
+  const trend = (): CapacityTrigger => ({ id: "product-active", title: "Aktif kullanıcı", metric: "m", measure: "daily_avg_peak", kind: "trend", unit: "kişi", source_item: 1 });
+  it("hiçbir zaman warn/over olmaz; pct null; haftalık değer + eğim verilir", () => {
+    const r = calc(trend(), { a: series((d) => ({ max: 0, avg: [31, 29, 26, 23][Math.floor(d / 7)] ?? 23 }), 28) });
+    expect(r.weekly).toEqual([23, 26, 29, 31]);
+    expect(r.value7d).toBe(31);
+    expect(r.slopePerWeek).toBeCloseTo(2.7, 1);
+    expect(r.pct).toBeNull();
+    expect(r.remaining).toEqual({ kind: "flat" });
+    expect(r.status).toBe("ok");
+  });
+  it("çok büyük/ani artış da warn/over üretmez", () => {
+    const r = calc(trend(), { a: series((d) => ({ max: 0, avg: [10000, 100, 10, 1][Math.floor(d / 7)] ?? 1 }), 28) });
+    expect(r.status).toBe("ok");
+  });
+  it("tek hafta veri: insufficient (satır yine yazılabilsin diye değer korunur)", () => {
+    const r = calc(trend(), { a: series(() => ({ max: 0, avg: 25 }), 6) });
+    expect(r.status).toBe("insufficient");
+    expect(r.remaining).toEqual({ kind: "insufficient" });
+    expect(r.value7d).toBe(25);
+    expect(r.slopePerWeek).toBeNull();
+  });
+  it("hiç veri: insufficient, değerler null", () => {
+    const r = calc(trend(), {});
+    expect(r.status).toBe("insufficient");
+    expect(r.value7d).toBeNull();
   });
 });
 

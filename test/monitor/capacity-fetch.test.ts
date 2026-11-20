@@ -34,7 +34,7 @@ describe("fetchCapacitySeries", () => {
     const d0 = NOW - 2 * DAY; // iki ayrı UTC günü
     const { f, calls } = mkFetch(() => ({ status: 200, body: page([
       item(1, d0, "app.ws_connections", {}, { n: 2, max: 120, avg: 100 }),
-      item(2, d0 + 1000, "app.ws_connections", {}, { n: 3, max: 150, avg: 110 }),
+      item(2, d0 + 1000, "app.ws_connections", {}, { n: 3, min: 3, max: 150, avg: 110 }),
       item(3, d0 + DAY, "app.ws_connections", {}, { n: 1, max: 90, avg: 90 }),
       item(4, d0, "docker.container.cpu_pct", { name: "app-1" }, { n: 4, max: 70, avg: 50 }),
       item(5, d0, "docker.container.cpu_pct", { name: "baska" }, { max: 99 }),
@@ -45,10 +45,10 @@ describe("fetchCapacitySeries", () => {
     expect(ws).toHaveLength(1);
     const day0 = Math.floor(d0 / DAY);
     expect(ws[0]).toEqual([
-      { day: day0, n: 5, max: 150, sum: 2 * 100 + 3 * 110 },
-      { day: day0 + 1, n: 1, max: 90, sum: 90 },
+      { day: day0, n: 5, max: 150, sum: 2 * 100 + 3 * 110, min: 3 }, // günlük min = dakikalık min'lerin en küçüğü (`<` yönlü tetikleyiciler için)
+      { day: day0 + 1, n: 1, max: 90, sum: 90, min: 5 },
     ]);
-    expect(Object.values(r.series.cpu!)).toEqual([[{ day: day0, n: 4, max: 70, sum: 200 }]]);
+    expect(Object.values(r.series.cpu!)).toEqual([[{ day: day0, n: 4, max: 70, sum: 200, min: 5 }]]);
     expect(r.items).toBe(6);
     expect(r.oldestTs).toBe(NOW - 40 * DAY);
     expect(calls[0]!.url.pathname).toBe("/spc/v1/since");

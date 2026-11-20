@@ -1,14 +1,56 @@
 {
-  "_comment": "spc /spc/v1/alerts yanıt fixture'ları. Hepsi TÜRETİLMİŞ: spc testkit FakeAgentServer (gerçek HTTP, ephemeral port) çıktısı; canlı ajan yakalaması YOK (gerçek yanıt örneği yok; medialog deploy'undan sonra ayrı küçük görev). Üretim: server-pulse-counter @ a4c5fd0, packages/testkit dist, 2026-11-19; üretici betik repoya girmez (yeniden üretim: FakeAgentServer.upsertAlert + GET /spc/v1/alerts). Not: spc AlertsResponse'ta `schema` alanı yoktur (T20261119-24'te eklenecek); fixture'larda da yok.",
+  "_comment": "spc /spc/v1/alerts yanıt fixture'ları. Hepsi TÜRETİLMİŞ: spc testkit FakeAgentServer (gerçek HTTP, ephemeral port) çıktısı; canlı ajan yakalaması YOK (gerçek yanıt örneği yok; medialog deploy'undan sonra ayrı küçük görev). Üretim: server-pulse-counter @ a4c5fd0, packages/testkit dist, 2026-11-19; üretici betik repoya girmez (yeniden üretim: FakeAgentServer.upsertAlert + GET /spc/v1/alerts). Not: spc AlertsResponse'ta `schema` alanı yoktur (T20261119-24'te eklenecek); fixture'larda da yok. capacity/since 1.1 fixture'ları 2026-11-20'de eklendi (T20261120-75).",
+  "capacitySource": { "repo": "~/dev/server-pulse-counter", "commit": "6682c2a", "schema": "servers/capacity.schema.json", "yaml": "servers/medialog/capacity.yaml" },
   "files": {
-    "alerts-critical-firing.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: critical firing alarm, GET ?state=all", "replacedBy": "spc canlı ajan yakalaması" },
-    "alerts-critical-resolved.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: aynı alarm resolved (condition_cleared), seq 2", "replacedBy": "spc canlı ajan yakalaması" },
-    "alerts-critical-suppressed.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: warning+info+suppressed critical firing, GET ?state=firing", "replacedBy": "spc canlı ajan yakalaması" },
-    "alerts-warning-info-firing.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: warning ve info firing, GET ?state=all", "replacedBy": "spc canlı ajan yakalaması" },
-    "alerts-page1-has-more.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: 3 critical firing, limit=2 → has_more true", "replacedBy": "spc canlı ajan yakalaması" },
-    "alerts-page2-last.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: sayfa 2 (cursor ile), has_more false", "replacedBy": "spc canlı ajan yakalaması" },
-    "error-401-unauthorized.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: yanlış belirteç → {status, body}", "replacedBy": "spc canlı ajan yakalaması" },
-    "capacity-medialog.yaml": { "kind": "TÜRETİLMİŞ", "source": "KOPYA: spc servers/medialog/capacity.yaml @ 329afe1 (T20261120-25 worktree'si), baytı baytına; schemas/capacity.schema.json = spc servers/capacity.schema.json kopyası", "replacedBy": "spc ana dalındaki servers/medialog/capacity.yaml (spc entegrasyonundan sonra commit'i yeniden eşle)" },
-    "error-410-cursor-invalid.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: resetEpoch sonrası eski cursor → {status, body}", "replacedBy": "spc canlı ajan yakalaması" }
+    "alerts-critical-firing.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: critical firing alarm, GET ?state=all",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "alerts-critical-resolved.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: aynı alarm resolved (condition_cleared), seq 2",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "alerts-critical-suppressed.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: warning+info+suppressed critical firing, GET ?state=firing",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "alerts-warning-info-firing.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: warning ve info firing, GET ?state=all",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "alerts-page1-has-more.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: 3 critical firing, limit=2 → has_more true",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "alerts-page2-last.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: sayfa 2 (cursor ile), has_more false",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "error-401-unauthorized.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: yanlış belirteç → {status, body}",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "capacity-medialog.yaml": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "KOPYA: spc servers/medialog/capacity.yaml @ 6682c2a (vlad/T20261120-57 dalı; 1.1.0 tetikleyicileri d940770), baytı baytına; schemas/capacity.schema.json = spc servers/capacity.schema.json @ 6682c2a kopyası (op '<'/'<=', kind trend)",
+      "replacedBy": "spc ana dalındaki servers/medialog/capacity.yaml (A entegrasyonundan sonra commit'i yeniden eşle)"
+    },
+    "error-410-cursor-invalid.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc a4c5fd0: resetEpoch sonrası eski cursor → {status, body}",
+      "replacedBy": "spc canlı ajan yakalaması"
+    },
+    "since-medialog-1.1.json": {
+      "kind": "TÜRETİLMİŞ",
+      "source": "FakeAgentServer @ spc 6682c2a (packages/testkit dist): GET /spc/v1/since?resolution=1m&limit=5000; 4 metrik (system.load5, http.err5xx_pct, pg.cache_hit_pct, app.product_active_7d) × 30 günlük günde bir 1m özeti (n=10), now=2026-11-23T09:00Z; canlı ajan yakalaması YOK",
+      "replacedBy": "spc canlı ajan yakalaması (A+B dağıtımından sonra; F-vlad-362 kapanışı)"
+    }
   }
 }

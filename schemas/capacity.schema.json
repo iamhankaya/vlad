@@ -17,18 +17,26 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "title", "metric", "measure", "op", "threshold", "unit", "source_item"],
+        "required": ["id", "title", "metric", "measure", "unit", "source_item"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
           "title": { "type": "string", "minLength": 1 },
           "metric": { "type": "string", "pattern": "^[a-z0-9_.]{1,64}$" },
           "labels": { "type": "object", "additionalProperties": { "type": "string" } },
           "measure": { "enum": ["peak", "daily_avg_peak"] },
-          "op": { "enum": [">", ">="] },
+          "kind": { "enum": ["threshold", "trend"], "default": "threshold" },
+          "op": { "enum": [">", ">=", "<", "<="] },
           "threshold": { "type": "number", "exclusiveMinimum": 0 },
           "unit": { "type": "string", "minLength": 1 },
           "source_item": { "type": "integer", "minimum": 1 }
-        }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "trend" } }, "required": ["kind"] },
+            "then": { "not": { "anyOf": [{ "required": ["threshold"] }, { "required": ["op"] }] } },
+            "else": { "required": ["op", "threshold"] }
+          }
+        ]
       }
     },
     "manual": {
