@@ -1,4 +1,5 @@
 import { realpathSync } from "node:fs";
+import { join } from "node:path";
 import type { Command } from "commander";
 import type { Kit } from "../kit.js";
 import { SilentExit, type Opts } from "../ctx.js";
@@ -6,6 +7,10 @@ import { getVladHome } from "../../kb/index.js";
 import { assertNotWorker } from "../../mode/guard.js";
 import { requireTtyOrApprovedOp } from "../../mode/token.js";
 import { loadMonitorConfig, MonitorConfigError } from "../../monitor/config.js";
+import { countNotices, createNotifier, defaultNotifyDir, listNotices, markDone } from "../../monitor/notify.js";
+import { createStore } from "../../approver/store.js";
+import { approverDir } from "../../mode/token.js";
+import type { ChannelConfig } from "../../approver/types.js";
 import { exitCodeOf, monitorStatus, pullAlerts } from "../../monitor/pull.js";
 import { createKeychainReader } from "../../monitor/secret.js";
 import { fmtDuration } from "../../monitor/task-text.js";
@@ -25,6 +30,9 @@ export interface MonitorCliDeps {
   now?: () => number;
   installer?: ServiceInstaller;
   isTTY?: () => boolean;
+  /** Bildirim kuyruğu dizini (varsayılan: monitor durum dizini altında notify) ve ntfy kanal okuyucusu (varsayılan approver channel.json). */
+  notifyDir?: string;
+  channel?: () => ChannelConfig | null;
 }
 
 const ago = (ms: number | null, now: number): string => (ms === null ? "hiç" : `${fmtDuration(now - ms)} önce`);
@@ -34,6 +42,7 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
   const monitor = program.command("monitor").description("spc köprüsü: sunucu alarmlarını görev olarak çeker (yalnız macOS)");
   const platform = (): NodeJS.Platform => deps.platform ?? process.platform;
 
+  const noticeDir = (): string => deps.notifyDir ?? (deps.stateDir ? join(deps.stateDir, "notify") : defaultNotifyDir());
   const installer = async (): Promise<ServiceInstaller> => deps.installer ?? (await import("../../monitor/launchd.js")).createMonitorInstaller();
   const guardPrivileged = (what: string): void => {
     assertNotWorker();
@@ -54,7 +63,11 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
         home: getVladHome(), config, secrets: deps.secrets ?? createKeychainReader(), fetch: deps.fetch,
         stateDir: deps.stateDir, platform: platform(), now: deps.now, log: (l) => ctx.stderr.write(`${l}\n`),
       };
-      result = await pullAlerts(pd, { server: typeof o.server === "string" ? o.server : undefined, dryRun: o.dryRun === true });
+      const notifier = createNotifier({
+        dir: noticeDir(), fetch: deps.fetch, log: (l) => ctx.stderr.write(`${l}\n`),
+        channel: deps.channel ?? (() => createStore(approverDir()).readChannel()), // kurulu değilse/okunamazsa ntfy atlanır
+      });
+      result = await pullAlerts({ ...pd, notifier }, { server: typeof o.server === "string" ? o.server : undefined, dryRun: o.dryRun === true });
     } catch (e) {
       if (!(e instanceof MonitorConfigError)) throw e;
       result = { servers: [], errors: [{ server: null, code: "config", message: e.message } satisfies MonitorError] };
@@ -82,6 +95,22 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
     lines.push(`servis: ${st.service ? (st.service.installed ? st.service.detail : "kurulu değil") : "bilinmiyor"}`);
     out(o, st, lines.join("\n"));
   });
+
+  const notices = monitor.command("notices").description("pull'un açtığı görevlerin bildirim kuyruğu (kb dışı; oturum okuyucusu)");
+  def(notices, "list", "Okunmamış bildirimler (görev kimliği, tür, sunucu)", (o: Opts) => {
+    const items = listNotices(noticeDir(), { limit: 100 });
+    out(o, items, items.length ? items.map((x) => `${x.id}: ${x.kind} ${x.server} → ${x.task}${x.trigger ? ` (${x.trigger})` : ""}`).join("\n") : "bildirim yok");
+  });
+  def(notices, "count", "Okunmamış bildirim sayısı (salt sayı)", (o: Opts) => {
+    const n = countNotices(noticeDir());
+    out(o, { count: n }, String(n));
+  });
+  def(notices, "done [id]", "Bildirimi okundu yapar (done/ altına taşır); --all hepsini", (id: string | undefined, o: Opts) => {
+    if (id === undefined && o.all !== true) throw new Error("bildirim kimliği ya da --all gerekli");
+    const moved = markDone(noticeDir(), o.all === true ? "all" : id!);
+    if (moved === 0 && o.all !== true) throw new Error(`bildirim bulunamadı: ${id}`);
+    out(o, { done: moved }, `${moved} bildirim okundu`);
+  }).option("--all", "tüm bildirimler");
 
   def(monitor, "install", "5 dk'lık launchd servisini kurar (terminalde, mod yetkisiyle)", async (o: Opts) => {
     guardPrivileged("install");

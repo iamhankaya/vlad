@@ -9,6 +9,7 @@ import { registerMonitor, type MonitorCliDeps } from "../../src/cli/groups/monit
 import { createKit } from "../../src/cli/kit.js";
 import type { CliCtx } from "../../src/cli/ctx.js";
 import { listTasks } from "../../src/tasks/index.js";
+import { enqueueNotice, countNotices } from "../../src/monitor/notify.js";
 import { monitorInstallActions } from "../../src/monitor/install.js";
 import { initKey, mintToken, setSecretDirForTests } from "../../src/mode/token.js";
 import type { ServiceInstaller } from "../../src/approver/launchd.js";
@@ -161,5 +162,39 @@ describe("vlad install → monitor servisi", () => {
     expect((await monitorInstallActions({ ...base, dryRun: false }))[0]).toMatch(/kuruldu/);
     expect(calls).toEqual(["install"]);
     expect((await monitorInstallActions({ ...base, dryRun: false, platform: "win32" }))[0]).toMatch(/atlandı/);
+  });
+});
+
+describe("monitor notices (CLI)", () => {
+  let nd: string;
+  beforeEach(() => { nd = join(stateDir, "notify"); });
+  const add = (task: string, ts = 1000, extra: object = {}) => enqueueNotice(nd, { ts, kind: "alert", server: "medialog", task, ...extra });
+  it("list --json: kimlik/metaveri; count yalnız sayı; kuyruk yoksa 0", async () => {
+    expect((await cli(["notices", "count"], { notifyDir: nd })).out.trim()).toBe("0");
+    add("T20261120-01", 1000); add("T20261120-02", 2000, { kind: "capacity", trigger: "ws-concurrent" });
+    const r = await cli(["notices", "list", "--json"], { notifyDir: nd });
+    expect(r.code).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.map((x: any) => x.task)).toEqual(["T20261120-01", "T20261120-02"]);
+    expect(j[1]).toMatchObject({ kind: "capacity", trigger: "ws-concurrent", id: "medialog__capacity__T20261120-02__ws-concurrent" });
+    expect((await cli(["notices", "count"], { notifyDir: nd })).out.trim()).toBe("2");
+    const txt = await cli(["notices", "list"], { notifyDir: nd });
+    expect(txt.out).toContain("T20261120-01");
+  });
+  it("done <id> ve done --all; çıkış 0; olmayan id çıkış 1", async () => {
+    add("T1-1"); add("T1-2"); add("T1-3");
+    expect((await cli(["notices", "done", "medialog__alert__T1-1"], { notifyDir: nd })).code).toBe(0);
+    expect(countNotices(nd)).toBe(2);
+    expect((await cli(["notices", "done", "medialog__alert__yok"], { notifyDir: nd })).code).toBe(1);
+    expect((await cli(["notices", "done", "--all"], { notifyDir: nd })).code).toBe(0);
+    expect(countNotices(nd)).toBe(0);
+    expect((await cli(["notices", "done"], { notifyDir: nd })).code).not.toBe(0);
+  });
+  it("pull görev açınca kuyruğa yazar (kanal yok: ntfy atlanır, pull çıkışı 0)", async () => {
+    configure();
+    const r = await cli(["pull", "--json"], { notifyDir: nd, channel: () => null });
+    expect(r.code).toBe(0);
+    expect(countNotices(nd)).toBe(1);
+    expect(JSON.parse(r.out).servers[0].opened).toHaveLength(1);
   });
 });

@@ -619,6 +619,39 @@
   {
    "path": [
     "monitor",
+    "notices",
+    "list"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "notices",
+    "count"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "monitor",
+    "notices",
+    "done"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "monitor",
     "install"
    ],
    "json": true,
