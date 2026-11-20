@@ -42,7 +42,7 @@ export function registerMode(program: Command, k: Kit): void {
   });
   // Uzaktan onay (T20261116-04; istemci gövdesi approver.ts `requestApproval`). Yalnız VLAD (çalışan reddi); VLAD_MODE_TOKEN istemez, anahtar okumaz; istek approver servisine inbox/ ile gider.
   // Hata öncelik sırası: (1) çalışan, (2) geçersiz işlem/argüman, (3) approver kurulu değil, (4) servis ack'i (invalid/locked/busy/rate_limited), (5) approver yanıt vermiyor.
-  def(mode, "request <op> [args...]", "Korunan işlem için telefondan onay ister (night|watch|off|install|setup): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis işlemi çalıştırır", async (op: string, args: string[], o: Opts) => {
+  def(mode, "request <komut> [args...]", "Herhangi bir vlad komutu için telefondan onay ister (ör. `monitor install`, `task set …`; eski kısa adlar night|watch|off): istek approver servisine yazılır, kullanıcı telefondan onaylayınca servis komutu çalıştırır", async (op: string, args: string[], o: Opts) => {
     const r = await requestApproval(op, args, o);
     out(o, r.data, r.text);
     if (r.exit) throw new SilentExit(r.exit); // def sarmalayıcısı failWith ile mesajsız çıkar (ctx.exit)

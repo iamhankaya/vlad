@@ -37,7 +37,6 @@ export interface Store {
   releaseLock(): void;
 }
 
-const OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
 const PENDING_STATUS: readonly PendingStatus[] = ["pending", "approved", "denied", "expired", "executing"];
 const RESULT_STATUS: readonly ResultStatus[] = ["done", "failed", "interrupted", "denied", "expired"];
 const LOG_MAX = 262_144, LOG_LINE_MAX = 1000, RESULT_TTL_MS = 7 * 86_400_000, REQUEST_MAX = 8192;
@@ -45,18 +44,21 @@ const LOG_MAX = 262_144, LOG_LINE_MAX = 1000, RESULT_TTL_MS = 7 * 86_400_000, RE
 const obj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
 const str = (x: unknown): x is string => typeof x === "string";
 const strs = (x: unknown): x is string[] => Array.isArray(x) && x.every(str);
+/** Komut yolu biçimi; manifest doğrulaması istek girişinde (validateRequest), kayıt okumada yalnız şekil. */
+const isOp = (x: unknown): x is Op => str(x) && x.length <= 64 && /^[a-z][a-z-]*( [a-z][a-z-]*)*$/.test(x);
+const optStr = (x: unknown): boolean => x === undefined || str(x);
 const bad = (what: string): never => { throw new Error(`${what} geçersiz (bozuk/şekilsiz): fail-closed`); };
 const errno = (e: unknown, code: string): boolean => (e as NodeJS.ErrnoException).code === code;
 
 function validChannel(x: unknown): ChannelConfig { if (!obj(x) || x.v !== 1 || !str(x.server) || !str(x.requestTopic) || !str(x.createdAt)) bad("channel.json"); return x as unknown as ChannelConfig; }
 function validPending(x: unknown): PendingRecord {
-  if (!obj(x) || x.v !== 1 || !str(x.id) || !NAME_RE.id.test(x.id) || !str(x.cid) || !NAME_RE.cid.test(x.cid) || !OPS.includes(x.op as Op) || !strs(x.argv) || !PENDING_STATUS.includes(x.status as PendingStatus)
+  if (!obj(x) || x.v !== 1 || !str(x.id) || !NAME_RE.id.test(x.id) || !str(x.cid) || !NAME_RE.cid.test(x.cid) || !isOp(x.op) || !optStr(x.approvedAt) || !strs(x.argv) || !PENDING_STATUS.includes(x.status as PendingStatus)
     || !["shortId", "requestedAt", "expiresAt", "nonce", "respTopic", "digest", "keyGen", "requester"].every((k) => str(x[k])) || !obj(x.ctx) || !["home", "kb", "cli"].every((k) => str((x.ctx as Record<string, unknown>)[k]))) bad("pending.json");
   return x as unknown as PendingRecord;
 }
 function validResult(x: unknown): ResultRecord {
   if (!obj(x) || x.v !== 1 || !str(x.id) || !NAME_RE.id.test(x.id) || !RESULT_STATUS.includes(x.status as ResultStatus) || !str(x.stdout) || !str(x.stderr) || !str(x.finishedAt) || !(x.exitCode === null || typeof x.exitCode === "number")
-    || (x.op !== undefined && !OPS.includes(x.op as Op)) || (x.argv !== undefined && !strs(x.argv)) || (x.requester !== undefined && !str(x.requester))) bad("sonuç kaydı");
+    || (x.op !== undefined && !isOp(x.op)) || !optStr(x.approvedAt) || (x.argv !== undefined && !strs(x.argv)) || (x.requester !== undefined && !str(x.requester))) bad("sonuç kaydı");
   return x as unknown as ResultRecord;
 }
 function validRate(x: unknown): RateState {

@@ -22,6 +22,13 @@ describe("approver: defaultExecEnv", () => {
   });
 });
 
+describe("approver: defaultExecEnv belirteç yalnız verilirse", () => {
+  it("boş token: VLAD_MODE_TOKEN env'e girmez (korunmayan komut belirteç görmez)", () => {
+    const e = defaultExecEnv({ path: "/p", home: "/h", vladHome: "/v", token: "" });
+    expect(Object.keys(e).sort()).toEqual(["HOME", "LANG", "PATH", "VLAD_HOME"]);
+  });
+});
+
 describe("approver: ctx.kb çocuğa aktarılır", () => {
   it("defaultExecEnv kb verilince VLAD_KB_DIR ekler (yalnız bu değer)", () => {
     const e = defaultExecEnv({ path: "/p", home: "/h", vladHome: "/v", token: "t", kb: "/kb" });
