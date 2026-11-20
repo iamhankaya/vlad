@@ -87,6 +87,15 @@ describe("approver: ntfy yayin", () => {
     expect(body).not.toContain("GIZLI");
     expect(body).toContain("done");
   });
+  it("publishResult yalnız durum + çıkış kodu + kısa kimlik taşır (genel komut stdout'u/argv'si ntfy'ye gitmez)", async () => {
+    let body = "";
+    const f = (async (_u: string, init: RequestInit) => { body = String(init.body); return new Response("{}"); }) as unknown as typeof fetch;
+    const r: ResultRecord = { v: 1, id: "mfrggzdfmztwq2lknnwg23tpoa", status: "failed", exitCode: 3, stdout: "TOKEN-CIKTI", stderr: "HATA-CIKTI", finishedAt: "x", op: "task set", argv: ["task", "set", "GIZLI-ARGV"], requester: "vlad" };
+    await new NtfyChannel(cfg, f).publishResult(r);
+    const m = JSON.parse(body).message as string;
+    expect(m).toBe("Durum: failed, cikis kodu: 3, kimlik: mfrggzdf");
+    expect(body).not.toMatch(/CIKTI|GIZLI/);
+  });
 });
 
 describe("approver: ntfy akis", () => {

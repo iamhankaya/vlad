@@ -119,6 +119,7 @@ export class NtfyChannel implements ApproverChannel {
 
   async publishResult(r: ResultRecord): Promise<void> {
     const code = r.exitCode === null ? "-" : String(r.exitCode);
-    await this.post({ topic: this.cfg.requestTopic, title: `VLAD sonuc: ${r.status}`, message: `Durum: ${r.status}, cikis kodu: ${code}`, tags: ["information_source"] });
+    // yalnız durum + çıkış kodu + kısa kimlik: stdout/stderr/argv yerel sonuç dosyasında kalır
+    await this.post({ topic: this.cfg.requestTopic, title: `VLAD sonuc: ${r.status}`, message: `Durum: ${r.status}, cikis kodu: ${code}, kimlik: ${r.id.slice(0, 8)}`, tags: ["information_source"] });
   }
 }

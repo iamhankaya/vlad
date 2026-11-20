@@ -18,7 +18,7 @@ const bytes = (s: string): number => Buffer.byteLength(s, "utf8");
 /** Eski beş işlem: sıkı argüman şeması (aşağıda) korunur; diğer her manifest komutu genel yoldan (serbest argüman, boyut/kontrol sınırı) geçer. */
 const LEGACY_OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
 /** Kendini isteyen/servisi yöneten komutlar (onay döngüsü; yürütülürken servisi öldüren işlem) ve kimlik bilgisi basan `mode token` (çıktısı sonuç kaydına/bildirime sızardı); her zaman reddedilir. */
-const BLOCKED_OPS: readonly Op[] = ["mode request", "mode token","approver run", "approver uninstall", "approver rotate", "approver unlock"];
+const BLOCKED_OPS: readonly Op[] = ["mode request", "mode token", "approver run", "approver install", "approver uninstall", "approver rotate", "approver unlock"];
 const COMMAND_PATHS: readonly (readonly string[])[] = COMMANDS.map((c) => c.path);
 /** İstemci için: argv'nin işlemi (manifestteki en uzun komut yolu, boşlukla birleşik) ya da null. */
 export const opOfArgv = (argv: string[]): string | null => commandPathOf(argv)?.join(" ") ?? null;

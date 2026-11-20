@@ -163,6 +163,21 @@ export function requireModeAuthority(env: Record<string, string | undefined> = p
   if (p.exp <= now.getTime()) throw new Error(`VLAD_MODE_TOKEN süresi doldu: ${how}`);
 }
 
+/**
+ * TTY isteyen korunan komutlar için ortak kapı. TTY varsa `requireModeAuthority` (eski davranış). TTY yoksa YALNIZ approver servisinin
+ * yürüttüğü bağlam geçer: mekanizma etkin (anahtar var) + `VMT2.` belirteci; belirtecin imzası, süresi, bu argv'ye bağlılığı ve tek kullanımlığı
+ * `requireModeAuthority` içinde doğrulanır. Anahtar yoksa ya da belirteç VMT2 değilse TTY hatası (sahte env TTY'yi atlatamaz).
+ * Çalışan reddi (`assertNotWorker`) çağıranda kalır.
+ */
+export function requireTtyOrApprovedOp(isTTY: boolean, env: Record<string, string | undefined> = process.env, now: Date = new Date(), argv: string[] = process.argv.slice(2)): void {
+  if (!isTTY) {
+    let enabled = false;
+    try { enabled = readKey() !== null; } catch { enabled = false; }
+    if (!enabled || !env.VLAD_MODE_TOKEN?.trim().startsWith("VMT2.")) throw new Error("yalnız etkileşimli terminalde (TTY) ya da telefon onayıyla çalışır");
+  }
+  requireModeAuthority(env, now, argv);
+}
+
 /** Gece penceresi imzası: alan sırası sabit (kanonik), `sig` hariç. */
 export interface SignableNight { until: string; started: string; projects: string[]; note: string | null; push: boolean; except: string[]; untilTasks: string[] }
 const canon = (n: SignableNight): string => JSON.stringify([n.until, n.started, n.projects, n.note, n.push, n.except, n.untilTasks]);

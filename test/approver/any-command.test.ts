@@ -7,7 +7,7 @@ import type { PendingRecord } from "../../src/approver/types.js";
 const CID = "a".repeat(26);
 const mk = (argv: string[], op: string, over: Record<string, unknown> = {}) => ({ v: 1, cid: CID, op, argv, requestedAt: "2026-11-16T14:20:00+03:00", requester: "vlad-07", ...over });
 const reason = (raw: unknown) => { const r = validateRequest(raw); return r.ok ? "ok" : r.reason; };
-const BLOCKED = new Set(["mode request", "mode token","approver run", "approver uninstall", "approver rotate", "approver unlock"]);
+const BLOCKED = new Set(["mode request", "mode token","approver run", "approver install", "approver uninstall", "approver rotate", "approver unlock"]);
 
 describe("approver: her manifest komut yolu kabul edilir", () => {
   it("manifestteki her yol (engelli döngü komutları hariç) op = yol ile geçerlidir", () => {
@@ -24,7 +24,7 @@ describe("approver: her manifest komut yolu kabul edilir", () => {
   it("genel komut serbest argümanlarla geçer", () => {
     expect(reason(mk(["monitor", "install", "--server", "x y"], "monitor install"))).toBe("ok");
     expect(reason(mk(["task", "set", "T20261120-22", "cancelled", "--reason", "neden"], "task set"))).toBe("ok");
-    expect(reason(mk(["approver", "install"], "approver install"))).toBe("ok");
+    expect(reason(mk(["monitor", "uninstall"], "monitor uninstall"))).toBe("ok");
   });
   it("bilinmeyen komut yolu ve op/argv uyuşmazlığı not_allowlisted", () => {
     expect(reason(mk(["rm", "-rf", "/"], "rm"))).toBe("not_allowlisted");
