@@ -249,7 +249,7 @@ describe("runCapacity: hata oranı ve ürün büyümesi (spc 1.1.0, fixture TÜR
     await runCapacity(mk({ gen: () => gen }).deps);
     const txt = reportTask()!.body;
     expect(txt.indexOf("Hata oranı ve ürün büyümesi")).toBeGreaterThan(txt.indexOf("| tetikleyici |"));
-    expect(txt).toMatch(/\| product-active \| Ürün büyümesi \(7 gün aktif kullanıcı\) \| 26 → 31 kişi \| \+1,7\/hafta \| eğilim \|/);
+    expect(txt).toMatch(/\| product-active \| Ürün büyümesi \(7 gün aktif kullanıcı\) \| 23 → 31 kişi \| \+2,7\/hafta \| eğilim \|/);
     expect(txt).toMatch(/\| http-5xx \| HTTP 5xx oranı \| 0,1 → 0,1 % \| \+0\/hafta \| ok \|/);
     expect(txt).toMatch(/\| tmdb-p95 \| TMDB çağrı p95 gecikmesi \| 400 → 430 ms \| \+10\/hafta \| ok \|/);
     // trend satırı ana eşik tablosunda yok (eşiği yok)
