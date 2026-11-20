@@ -1,5 +1,6 @@
 {
   "unit": [
+    "test/acceptance/nudge-verify.test.ts",
     "test/aktarim/v-prod-wiring.test.ts",
     "test/arch/**/*.test.ts",
     "test/audit/derived.test.ts",
