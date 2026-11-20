@@ -10,10 +10,16 @@ import { clean } from "./task-text.js";
  * Ek doğrulama: tetikleyici/manuel kimlik tekilliği. Hata `CapacityConfigError` (sunucu kapasite işinden atlanır, `config` uyarısı).
  */
 export type CapacityMeasure = "peak" | "daily_avg_peak";
-export interface CapacityTrigger {
-  id: string; title: string; metric: string; labels?: Record<string, string>;
-  measure: CapacityMeasure; op: ">" | ">="; threshold: number; unit: string; source_item: number;
-}
+export type CapacityOp = ">" | ">=" | "<" | "<=";
+interface TriggerBase { id: string; title: string; metric: string; labels?: Record<string, string>; measure: CapacityMeasure; unit: string; source_item: number }
+/** Eşik tetikleyicisi (varsayılan `kind`). `<`/`<=`: küçük olan kötü (ör. önbellek isabet yüzdesi). */
+export interface ThresholdTrigger extends TriggerBase { kind?: "threshold"; op: CapacityOp; threshold: number }
+/** Eşiksiz eğilim tetikleyicisi (ürün büyümesi): `op`/`threshold` yok (şema reddeder); yalnız raporlanır, görev açmaz. */
+export interface TrendTrigger extends TriggerBase { kind: "trend"; op?: undefined; threshold?: undefined }
+export type CapacityTrigger = ThresholdTrigger | TrendTrigger;
+export const isTrend = (t: CapacityTrigger): t is TrendTrigger => t.kind === "trend";
+/** `<`/`<=`: değer eşiğe indikçe kötüleşir. */
+export const lowerIsWorse = (t: CapacityTrigger): boolean => t.op === "<" || t.op === "<=";
 export interface CapacityConfig {
   version: 1; server: string; source: string; warn_pct: number; consecutive_weeks: number;
   triggers: CapacityTrigger[]; manual?: { id: string; title: string; source_item: number }[];
