@@ -574,3 +574,39 @@ describe("approver: service sertleştirme (Codex P1/P2)", () => {
     expect(r.stdout).toContain("[gizli]");
   });
 });
+
+describe("approver: service genel komut (her vlad alt komutu) ve çalıştırma kaydı", () => {
+  it("manifest komutu onaylanınca argv birebir çalışır; kayıt isteyen, argv, onay zamanı ve çıkış kodunu taşır; log'a düşer", async () => {
+    start();
+    const argv = ["monitor", "install"];
+    const p = await open(1, argv, "monitor install");
+    expect(p.op).toBe("monitor install");
+    t += 5000;
+    ch.h!.onBody(body("a1", p));
+    const r = await resultOf(p.id);
+    expect(execRun.mock.calls[0]![0]).toEqual(argv);
+    expect(r).toMatchObject({ status: "done", exitCode: 0, op: "monitor install", argv, requester: "vlad-07", approvedAt: new Date(START + 5000).toISOString() });
+    await waitFor(() => /çalıştırıldı/.test(logText()), "çalıştırma logu");
+    expect(logText()).toMatch(new RegExp(`çalıştırıldı: ${p.shortId} monitor install .*vlad-07.*çıkış 0`));
+  });
+  it("ret kaydında approvedAt yok; çıkış kodu sıfırdan farklıysa kayda ve loga geçer", async () => {
+    start();
+    const p = await open(1, ["task", "list"], "task list");
+    ch.h!.onBody(body("d1", p));
+    expect((await resultOf(p.id)).approvedAt).toBeUndefined();
+    execRun.mockImplementation(async () => ({ exitCode: 3, stdout: "", stderr: "hata", timedOut: false }));
+    t += LIMITS.cooldownMs + 1000;
+    const p2 = await open(2, ["task", "list"], "task list");
+    ch.h!.onBody(body("a1", p2));
+    expect(await resultOf(p2.id)).toMatchObject({ status: "failed", exitCode: 3, approvedAt: expect.any(String) });
+    await waitFor(() => /çıkış 3/.test(logText()), "çıkış kodu logu");
+  });
+  it("bilinmeyen komut ve kendini isteyen komut servis girişinde invalid", async () => {
+    start();
+    request(1, ["rm", "-rf", "/"], "rm");
+    expect(await ackOf(1)).toMatchObject({ status: "invalid", reason: "not_allowlisted" });
+    request(2, ["mode", "request", "night"], "mode request");
+    expect(await ackOf(2)).toMatchObject({ status: "invalid", reason: "not_allowlisted" });
+    expect(store.readPending()).toBeNull();
+  });
+});

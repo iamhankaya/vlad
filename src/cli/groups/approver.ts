@@ -10,7 +10,7 @@ import { NAME_RE, assertSecretParentSecure, assertSecureDir, readSecureFile, wri
 import { approverDir, keyState, requireModeAuthority, secretDir } from "../../mode/token.js";
 import { createExecutor } from "../../approver/exec.js";
 import { NtfyChannel } from "../../approver/ntfy.js";
-import { newId, newTopic, validateRequest, type RandomSource } from "../../approver/request.js";
+import { newId, newTopic, opOfArgv, validateRequest, type RandomSource } from "../../approver/request.js";
 import { runApprover } from "../../approver/service.js";
 import { createStore, type Store } from "../../approver/store.js";
 import { LIMITS, type AckRecord, type ChannelConfig, type ResultRecord } from "../../approver/types.js";
@@ -66,8 +66,10 @@ export interface RequestOutcome { data: Record<string, unknown>; text: string; e
  */
 export async function requestApproval(op: string, args: string[], o: Record<string, unknown>, d: RequestClientDeps = {}): Promise<RequestOutcome> {
   try { assertNotWorker(); } catch { throw new Error("çalışan oturumu uzaktan onay isteği yazamaz"); }
-  const head: Record<string, string[]> = { night: ["mode", "night"], watch: ["mode", "watch"], off: ["mode", "off"], install: ["install"], setup: ["setup"] };
-  if (!Object.hasOwn(head, op)) throw new Error("geçersiz işlem/argüman: op izinli değil (night|watch|off|install|setup)");
+  // Eski kısa adlar (night|watch|off) `mode` altına eşlenir; diğer her şey tam komut yoludur (`monitor install`, `task set …`).
+  const argv = ["night", "watch", "off"].includes(op) ? ["mode", op, ...args] : [op, ...args];
+  const opName = opOfArgv(argv);
+  if (opName === null) throw new Error("geçersiz işlem/argüman: bilinmeyen komut yolu (manifestteki bir vlad komutu ver)");
   const random = d.random ?? realRandom, now = d.now ?? Date.now, sleep = d.sleep ?? realSleep, pollMs = d.pollMs ?? 250;
   let waitMs: number | null = null;
   if (o.wait === true || o.waitSeconds !== undefined) {
@@ -76,7 +78,7 @@ export async function requestApproval(op: string, args: string[], o: Record<stri
     waitMs = s * 1000;
   }
   const cid = newId(random);
-  const req = { v: 1, cid, op: op === "install" || op === "setup" ? op : `mode ${op}`, argv: [...head[op]!, ...args], requestedAt: new Date(now()).toISOString(), requester: "vlad" };
+  const req = { v: 1, cid, op: opName, argv, requestedAt: new Date(now()).toISOString(), requester: "vlad" };
   const verdict = validateRequest(req);
   if (!verdict.ok) throw new Error(`geçersiz işlem/argüman: ${verdict.detail}`);
 

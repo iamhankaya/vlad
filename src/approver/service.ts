@@ -93,8 +93,9 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
 
   // --- sonuçlandırma ---
   const settle = (p: PendingRecord, r: { status: ResultStatus; exitCode?: number | null; stdout?: string; stderr?: string; reason?: string }, kind: "approve" | "deny" | "expire" | null): void => {
-    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(redact(r.stdout ?? "")), stderr: clip(redact(r.stderr ?? "")), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester };
+    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(redact(r.stdout ?? "")), stderr: clip(redact(r.stderr ?? "")), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester, ...(p.approvedAt ? { approvedAt: p.approvedAt } : {}) };
     try { store.writeResult(rec); } catch (e) { L(`sonuç yazılamadı: ${msg(e)}`); }
+    if (p.approvedAt) L(`çalıştırıldı: ${p.shortId} ${p.op} isteyen ${p.requester} onay ${p.approvedAt} çıkış ${rec.exitCode ?? "-"} (${r.status})`); // her çalıştırma kaydı: isteyen, argv (sonuç dosyasında), onay zamanı, çıkış kodu
     if (kind) { try { recordRate(kind); } catch (e) { L(`hız sınırı yazılamadı: ${msg(e)}`); } }
     try { store.clearPending(); } catch (e) { L(`pending.json silinemedi: ${msg(e)}`); }
     if (cur?.id === p.id) cur = null; // yanıt akışı açık kalır (tekrar oynatma `not_pending` olarak loglanır); yeni istek ya da servis durması kapatır
@@ -132,7 +133,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     if ("drop" in d) return drop(d.drop);
     // Karar tüketimi: await yok; ilk geçerli karar kazanır (bellekteki durum aynı gövdeli ikinci çağrıyı not_pending'e düşürür).
     try { if (!store.markClaim(p.id, "decision")) return drop("not_pending"); } catch (e) { L(`karar işaretçisi yazılamadı: ${msg(e)}`); return; }
-    const next: PendingRecord = { ...p, status: d.decision === "approve" ? "approved" : "denied" };
+    const next: PendingRecord = { ...p, status: d.decision === "approve" ? "approved" : "denied", ...(d.decision === "approve" ? { approvedAt: iso(nowMs()) } : {}) };
     cur = next;
     try { store.writePending(next); } catch (e) { L(`pending.json yazılamadı: ${msg(e)}`); return settle(p, { status: "denied", reason: "yazma hatası; çalıştırılmadı" }, null); }
     if (d.decision === "deny") return settle(next, { status: "denied", reason: "reddedildi" }, "deny");

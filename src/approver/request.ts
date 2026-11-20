@@ -1,6 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { homedir } from "node:os";
 import { CONFIRM_ACTIONS } from "../setup/types.js";
+import { COMMANDS } from "../commands/manifest.js";
 import { LIMITS, NOTE_MAX_BYTES, type ApprovalRequestFile, type Ctx, type DropReason, type Op, type PendingRecord, type RejectReason } from "./types.js";
 
 /**
@@ -14,7 +15,19 @@ type Bad = { reason: RejectReason; detail: string };
 const no = (reason: RejectReason, detail: string): Verdict => ({ ok: false, reason, detail });
 const bytes = (s: string): number => Buffer.byteLength(s, "utf8");
 
-const OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
+/** Eski beş işlem: sıkı argüman şeması (aşağıda) korunur; diğer her manifest komutu genel yoldan (serbest argüman, boyut/kontrol sınırı) geçer. */
+const LEGACY_OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
+/** Kendini isteyen/servisi yöneten komutlar (onay döngüsü; yürütülürken servisi öldüren işlem) ve kimlik bilgisi basan `mode token` (çıktısı sonuç kaydına/bildirime sızardı); her zaman reddedilir. */
+const BLOCKED_OPS: readonly Op[] = ["mode request", "mode token","approver run", "approver uninstall", "approver rotate", "approver unlock"];
+const COMMAND_PATHS: readonly (readonly string[])[] = COMMANDS.map((c) => c.path);
+/** İstemci için: argv'nin işlemi (manifestteki en uzun komut yolu, boşlukla birleşik) ya da null. */
+export const opOfArgv = (argv: string[]): string | null => commandPathOf(argv)?.join(" ") ?? null;
+/** argv'nin manifestteki en uzun komut yolu öneki (yoksa null). */
+function commandPathOf(argv: string[]): string[] | null {
+  let best: readonly string[] | null = null;
+  for (const p of COMMAND_PATHS) if (p.length <= argv.length && p.every((t, i) => argv[i] === t) && (!best || p.length > best.length)) best = p;
+  return best ? [...best] : null;
+}
 const KEYS = ["v", "cid", "op", "argv", "requestedAt", "requester"];
 /** İstemcinin yazabileceği ama servisin ASLA kullanmadığı alanlar (bildirim/nonce/id/konu/tag servisin kendi verisinden): yok sayılır. */
 const IGNORED_KEYS = ["title", "message", "nonce", "id", "respTopic", "tag", "topic"];
@@ -92,20 +105,22 @@ export function validateRequest(raw: unknown): Verdict {
     return no("bad_value", "alan türleri geçersiz");
   const args = argv as string[];
   if (bytes(JSON.stringify(args)) > LIMITS.maxArgvBytes || args.some((a) => bytes(a) > LIMITS.maxValueBytes)) return no("too_large", "argv ya da bir değer boyut sınırını aşıyor");
-  const ni = args.indexOf("--note");
+  const ni = op === "mode night" ? args.indexOf("--note") : -1;
   if (ni >= 0 && ni + 1 < args.length && bytes(args[ni + 1]!) > NOTE_MAX_BYTES) return no("too_large", `--note ${NOTE_MAX_BYTES} baytı aşıyor`);
   if ([cid, op, requestedAt, requester, ...args].some((s) => CONTROL.test(s))) return no("control_char", "kontrol/bidi karakteri");
   if (!CID_RE.test(cid) || !REQUESTER_RE.test(requester) || requestedAt.length > 64 || Number.isNaN(Date.parse(requestedAt))) return no("bad_value", "cid/requester/requestedAt geçersiz");
-  if (!OPS.includes(op as Op)) return no("not_allowlisted", "op izinli değil");
-  const head = op === "setup" || op === "install" ? [op] : ["mode", op.slice(5)];
-  if (args.length < head.length || head.some((h, i) => args[i] !== h)) return no("not_allowlisted", "op ile argv uyuşmuyor");
+  const path = commandPathOf(args);
+  if (!path) return no("not_allowlisted", "bilinmeyen komut yolu");
+  if (path.join(" ") !== op) return no("not_allowlisted", "op ile argv uyuşmuyor");
+  if (BLOCKED_OPS.includes(op)) return no("not_allowlisted", "bu komut uzaktan istenemez (onay döngüsü/servis yönetimi)");
   let bad: Bad | null = null;
-  switch (op as Op) {
+  switch (op) {
     case "mode night": bad = parseFlags(args, 2, ARGV_SCHEMA["mode night"]); break;
     case "mode watch": if (args.length !== 3 || !["on", "off"].includes(args[2]!)) bad = { reason: "not_allowlisted", detail: "mode watch on|off" }; break;
     case "mode off": if (args.length !== 2) bad = { reason: "bad_flag", detail: "mode off argüman almaz" }; break;
     case "install": bad = parseFlags(args, 1, ARGV_SCHEMA.install); break;
     case "setup": bad = checkSetup(args); break;
+    default: break; // genel komut: ek şema yok; boyut/kontrol karakteri sınırları yukarıda, bildirim boyutu aşağıda
   }
   if (!bad && bytes(actionLines(op, args).join("\n")) > MAX_ACTION_BYTES) return no("too_large", "istek bildirimde eksiksiz gösterilemeyecek kadar uzun");
   return bad ? no(bad.reason, bad.detail) : { ok: true, req: { v: 1, cid, op: op as Op, argv: args, requestedAt, requester } };
@@ -143,6 +158,8 @@ const hhmmss = (iso: string): string => {
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
 };
 const tilde = (p: string): string => { const h = homedir(); return h.length > 1 && (p === h || p.startsWith(h + "/")) ? "~" + p.slice(h.length) : p; };
+/** Bildirimde bir argüman: güvenli karakterler çıplak, diğerleri (boşluk, boş, tırnak, sembol) JSON tırnaklı. */
+const quoteArg = (t: string): string => (/^[\w@%+=:,./~-]+$/.test(t) ? t : JSON.stringify(t));
 const flagValue = (argv: string[], f: string): string | undefined => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
 
 /** Bildirimin eylem bölümü (İşlem/bayrak satırları) üst sınırı (UTF-8 bayt); aşan istek validateRequest'te too_large (telefonda eksiksiz gösterilemez). */
@@ -156,6 +173,7 @@ function actionLines(op: string, a: string[]): string[] {
     return ["Yükseltme: cli, global-skills, hooks", "Kapsam: cli + global skill'ler + hooks (parça seçilemez)", `Dış etki: ${confirm ? confirm.split(",").join(", ") : "yok"}`,
       ...(a.includes("--yes") ? ["Bayrak: --yes"] : [])];
   }
+  if (!LEGACY_OPS.includes(op)) return [`İşlem: vlad ${a.map(quoteArg).join(" ")}`]; // genel komut: argv birebir, her argüman tek anlamlı
   const first = a.findIndex((t) => t.startsWith("--")), cut0 = first < 0 ? a.length : first;
   const lines = [`İşlem: vlad ${a.slice(0, cut0).join(" ")}`];
   for (let i = cut0; i < a.length; i++) {
