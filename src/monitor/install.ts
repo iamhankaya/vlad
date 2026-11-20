@@ -12,7 +12,7 @@ export async function monitorInstallActions(o: {
   try { configured = (loadConfig(o.home).monitor?.servers.length ?? 0) > 0; } catch { return []; }
   if (!configured) return [];
   if ((o.platform ?? process.platform) !== "darwin") return ["monitor servisi atlandı: yalnız macOS"];
-  if (o.dryRun) return ["monitor servisi kurulur (com.vlad.monitor, 5 dk)"];
+  if (o.dryRun) return ["monitor servisi kurulur (com.vlad.monitor, 5 dk; com.vlad.monitor-capacity, pazartesi 09:00)"];
   const inst = o.installer ?? (await import("./launchd.js")).createMonitorInstaller();
   const steps = await inst.install({ node: o.node ?? process.execPath, cli: o.cli, home: o.home, path: o.path ?? process.env.PATH ?? "" });
   return [`monitor servisi kuruldu (${steps.length} adım)`];

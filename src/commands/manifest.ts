@@ -75,6 +75,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["approver", "requests"], { console: { kind: "read" } }),
   c(["approver", "show"], { console: { kind: "read" } }),
   c(["monitor", "pull"], { lock: "outer", console: { kind: "write" } }),
+  c(["monitor", "capacity"], { lock: "outer", console: { kind: "write" } }),
   c(["monitor", "status"], { worker: LOCAL, console: { kind: "read" } }),
   c(["monitor", "notices", "list"], { worker: LOCAL, console: { kind: "read" } }),
   c(["monitor", "notices", "count"], { worker: LOCAL, console: { kind: "read" } }),

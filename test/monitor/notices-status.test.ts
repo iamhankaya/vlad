@@ -24,7 +24,7 @@ describe("status --summary monitor bildirimi", () => {
   it("kuyruk boşken satır ve JSON alanı sessiz", () => {
     const j = JSON.parse(run(["status", "--summary", "--json", "--no-mark"]).out);
     expect(j.summary).not.toContain("monitor bildirimi");
-    expect(j.monitorNotices).toEqual({ count: 0, items: [] });
+    expect(j).not.toHaveProperty("monitorNotices"); // boşken JSON şekli değişmez (K4 golden)
   });
   it("dolu kuyruk: satır en çok 3 kimlik + …; --hook metninde de; done --all sonrası kaybolur", () => {
     for (let i = 1; i <= 4; i++) n(`T20261120-0${i}`, i);

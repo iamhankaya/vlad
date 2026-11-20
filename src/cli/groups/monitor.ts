@@ -12,6 +12,7 @@ import { createStore } from "../../approver/store.js";
 import { approverDir } from "../../mode/token.js";
 import type { ChannelConfig } from "../../approver/types.js";
 import { exitCodeOf, monitorStatus, pullAlerts } from "../../monitor/pull.js";
+import { capacityExitCode, runCapacity, type CapacityResult } from "../../monitor/capacity.js";
 import { createKeychainReader } from "../../monitor/secret.js";
 import { fmtDuration } from "../../monitor/task-text.js";
 import { MONITOR_LIMITS, type MonitorError, type PullDeps, type PullResult, type SecretReader } from "../../monitor/types.js";
@@ -84,6 +85,38 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
     out(o, result, `hata [kb_busy]: ${e.message}`);
     throw new SilentExit(exitCodeOf(result));
   }).option("--server <ad>", "yalnız bu sunucu").option("--dry-run", "yazma yok; ne yapacağını döker");
+
+  def(monitor, "capacity", "Haftalık kapasite raporu: eşik eğilimi, rapor görevi, %70'te architect görevi (ISO hafta başına bir kez)", async (o: Opts) => {
+    assertNotWorker();
+    let result: CapacityResult;
+    try {
+      const config = loadMonitorConfig(getVladHome());
+      if (config.servers.length === 0) throw new MonitorConfigError("monitor yapılandırması yok (vlad.config.json → monitor.servers)");
+      const notifier = createNotifier({
+        dir: noticeDir(), fetch: deps.fetch, log: (l) => ctx.stderr.write(`${l}\n`),
+        channel: deps.channel ?? (() => createStore(approverDir()).readChannel()),
+      });
+      result = await runCapacity({
+        home: getVladHome(), config, secrets: deps.secrets ?? createKeychainReader(), fetch: deps.fetch,
+        stateDir: deps.stateDir, platform: platform(), now: deps.now, log: (l) => ctx.stderr.write(`${l}\n`), notifier,
+      }, { server: typeof o.server === "string" ? o.server : undefined, dryRun: o.dryRun === true, force: o.force === true });
+    } catch (e) {
+      if (!(e instanceof MonitorConfigError)) throw e;
+      result = { servers: [], errors: [{ server: null, code: "config", message: e.message } satisfies MonitorError] };
+    }
+    const lines = result.servers.map((s) => `${s.id}: ${s.skipped === "already_done" ? `${s.week} zaten işlendi` : s.skipped === "no_capacity_file" ? "capacity_file yok, atlandı" : s.ok ? `tamam (${s.week})` : "hata"}`
+      + (s.reportTask ? `, rapor görevi ${s.reportTask}` : "")
+      + s.triggers.map((t) => `\n  ${t.id}: ${t.status}${t.pct === null ? "" : ` %${Math.round(t.pct)}`}`).join("")
+      + s.opened.map((x) => `\n  architect görevi ${x.task} ← ${x.trigger}`).join(""));
+    for (const e of result.errors) lines.push(`hata [${e.code}]${e.server ? ` ${e.server}` : ""}: ${e.message}`);
+    out(o, result, lines.length ? lines.join("\n") : "sunucu yok");
+    const code = capacityExitCode(result);
+    if (code !== 0) throw new SilentExit(code);
+  }, (e, o) => {
+    const result: CapacityResult = { servers: [], errors: [{ server: null, code: "kb_busy", message: e.message } satisfies MonitorError] };
+    out(o, result, `hata [kb_busy]: ${e.message}`);
+    throw new SilentExit(capacityExitCode(result));
+  }).option("--server <ad>", "yalnız bu sunucu").option("--dry-run", "yazma yok; ne yapacağını döker").option("--force", "bu hafta zaten işlenmiş olsa da yeniden çalıştırır");
 
   def(monitor, "status", "İmleç, son başarı, ardışık hata, açık eşlemeler ve servis durumu (salt okuma)", async (o: Opts) => {
     const config = loadMonitorConfig(getVladHome());

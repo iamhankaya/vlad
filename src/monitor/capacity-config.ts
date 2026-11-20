@@ -11,11 +11,11 @@ import { getVladHome } from "../kb/index.js";
 export type CapacityMeasure = "peak" | "daily_avg_peak";
 export interface CapacityTrigger {
   id: string; title: string; metric: string; labels?: Record<string, string>;
-  measure: CapacityMeasure; op: ">" | ">="; threshold: number; unit: string; source_item: string;
+  measure: CapacityMeasure; op: ">" | ">="; threshold: number; unit: string; source_item: number;
 }
 export interface CapacityConfig {
   version: 1; server: string; source: string; warn_pct: number; consecutive_weeks: number;
-  triggers: CapacityTrigger[]; manual?: { id: string; title: string; source_item: string }[];
+  triggers: CapacityTrigger[]; manual?: { id: string; title: string; source_item: number }[];
 }
 
 export class CapacityConfigError extends Error {

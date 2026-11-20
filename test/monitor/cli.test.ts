@@ -64,7 +64,7 @@ describe("monitor pull (CLI)", () => {
   it("--json: görev açar, PullResult şekli, çıkış 0, belirteç çıktıda yok", async () => {
     configure();
     const r = await cli(["pull", "--json"]);
-    expect(r.code).toBe(0);
+    expect(r.code, r.out + r.err).toBe(0);
     const j = JSON.parse(r.out);
     expect(j.servers[0]).toMatchObject({ id: "medialog", ok: true, fetched: 1 });
     expect(j.servers[0].opened).toHaveLength(1);
@@ -173,7 +173,7 @@ describe("monitor notices (CLI)", () => {
     expect((await cli(["notices", "count"], { notifyDir: nd })).out.trim()).toBe("0");
     add("T20261120-01", 1000); add("T20261120-02", 2000, { kind: "capacity", trigger: "ws-concurrent" });
     const r = await cli(["notices", "list", "--json"], { notifyDir: nd });
-    expect(r.code).toBe(0);
+    expect(r.code, r.out + r.err).toBe(0);
     const j = JSON.parse(r.out);
     expect(j.map((x: any) => x.task)).toEqual(["T20261120-01", "T20261120-02"]);
     expect(j[1]).toMatchObject({ kind: "capacity", trigger: "ws-concurrent", id: "medialog__capacity__T20261120-02__ws-concurrent" });
@@ -193,8 +193,53 @@ describe("monitor notices (CLI)", () => {
   it("pull görev açınca kuyruğa yazar (kanal yok: ntfy atlanır, pull çıkışı 0)", async () => {
     configure();
     const r = await cli(["pull", "--json"], { notifyDir: nd, channel: () => null });
-    expect(r.code).toBe(0);
+    expect(r.code, r.out + r.err).toBe(0);
     expect(countNotices(nd)).toBe(1);
     expect(JSON.parse(r.out).servers[0].opened).toHaveLength(1);
+  });
+});
+
+describe("monitor capacity (CLI, uçtan uca sahte ajan)", () => {
+  const DAY = 86_400_000;
+  const NOW = Date.UTC(2026, 10, 23, 9, 0, 0);
+  const since = () => {
+    const items: unknown[] = [];
+    const weeks = [150, 180, 210, 240];
+    for (let d = 27; d >= 0; d--) items.push({ seq: 30 - d, ts: Math.floor(NOW / DAY) * DAY - d * DAY + 3_600_000, metric: "app.ws_connections", labels: {}, n: 10, min: 0, max: weeks[3 - Math.floor(d / 7)]!, avg: 1, last: 1 });
+    return { server: "medialog", epoch: "e", resolution: "1m", schema: 1, items, next_cursor: "c", has_more: false, gap: null, oldest_ts: NOW - 29 * DAY };
+  };
+  const configureCap = () => {
+    const f = join(stateDir, "capacity.yaml");
+    cpSync(join(__dirname, "..", "fixtures", "spc", "capacity-medialog.yaml"), f);
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ monitor: { servers: [{ id: "medialog", agent_url: url, project: "p", capacity_file: f }] } }));
+    body = since();
+  };
+  it("--json: rapor + architect görevi, bildirim kuyruğa; aynı hafta ikinci koşu atlar; çıkış 0; belirteç yok", async () => {
+    configureCap();
+    const notifyDir = join(stateDir, "n");
+    const r = await cli(["capacity", "--json"], { now: () => NOW, notifyDir, channel: () => null });
+    expect(r.code, r.out + r.err).toBe(0);
+    const j = JSON.parse(r.out);
+    expect(j.servers[0]).toMatchObject({ id: "medialog", ok: true, week: "2026-W48" });
+    expect(j.servers[0].opened).toHaveLength(1);
+    expect(listTasks().map((t) => t.data.role).sort()).toEqual(["analyst", "architect"]);
+    expect(countNotices(notifyDir)).toBe(1);
+    expect(r.out + r.err).not.toContain(TOKEN);
+    const r2 = await cli(["capacity", "--json"], { now: () => NOW, notifyDir, channel: () => null });
+    expect(JSON.parse(r2.out).servers[0].skipped).toBe("already_done");
+    expect(listTasks()).toHaveLength(2);
+  });
+  it("--dry-run yazmaz; capacity_file yok + --server → çıkış 2; yapılandırma yok → 2; çalışan reddedilir", async () => {
+    configureCap();
+    expect((await cli(["capacity", "--dry-run"], { now: () => NOW, notifyDir: join(stateDir, "n"), channel: () => null })).code).toBe(0);
+    expect(listTasks()).toHaveLength(0);
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ monitor: { servers: [{ id: "medialog", agent_url: url, project: "p" }] } }));
+    expect((await cli(["capacity", "--server", "medialog", "--json"])).code).toBe(2);
+    rmSync(join(home, "vlad.config.json"));
+    expect((await cli(["capacity", "--json"])).code).toBe(2);
+    process.env.VLAD_TASK_ID = "T20261120-99";
+    const w = await cli(["capacity"]);
+    expect(w.code).not.toBe(0);
+    expect(listTasks()).toHaveLength(0);
   });
 });

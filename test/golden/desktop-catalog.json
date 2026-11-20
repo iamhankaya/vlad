@@ -609,6 +609,16 @@
   {
    "path": [
     "monitor",
+    "capacity"
+   ],
+   "json": true,
+   "console": {
+    "kind": "write"
+   }
+  },
+  {
+   "path": [
+    "monitor",
     "status"
    ],
    "json": true,

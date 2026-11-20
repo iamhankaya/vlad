@@ -83,7 +83,7 @@ function architectTask(server: string, cfg: CapacityConfig, t: CapacityTrigger, 
   const title = `[spc] kapasite: ${server}/${t.id} — ${clean(t.title)}`.slice(0, 120);
   const body = [
     "## Tanım",
-    `spc kapasite tetikleyicisi eşiğin %${num(cfg.warn_pct)} düzeyini geçti (${r.status}). Sunucu: ${server}. Tetikleyici: ${t.id} — ${clean(t.title)}. Kaynak: ${cfg.source} (${clean(t.source_item)}).`,
+    `spc kapasite tetikleyicisi eşiğin %${num(cfg.warn_pct)} düzeyini geçti (${r.status}). Sunucu: ${server}. Tetikleyici: ${t.id} — ${clean(t.title)}. Kaynak: ${cfg.source} (madde ${t.source_item}).`,
     `Ölçü: ${t.measure === "peak" ? "7 günlük zirve" : "günlük ortalamanın 7 günlük zirvesi"}; eşik ${t.op} ${num(t.threshold)} ${t.unit}. Hafta: ${week}.`,
     "",
     ...TABLE_HEAD,

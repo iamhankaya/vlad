@@ -46,7 +46,7 @@ export function registerStatus(program: Command, k: Kit): void {
         }) + "\n");
         return;
       }
-      out(o, { ...s, monitorNotices: mn, active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
+      out(o, { ...s, ...(mn.count ? { monitorNotices: mn } : {}), active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
       return;
     }
     const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];

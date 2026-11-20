@@ -18,6 +18,7 @@
     "mode off",
     "mode status",
     "mode watch",
+    "monitor capacity",
     "monitor pull",
     "pending add",
     "pending done",
@@ -374,24 +375,9 @@
     {
       "path": [
         "monitor",
-        "pull"
+        "capacity"
       ],
       "kind": "write"
-    },
-    {
-      "path": [
-        "monitor",
-        "status"
-      ],
-      "kind": "read"
-    },
-    {
-      "path": [
-        "monitor",
-        "notices",
-        "list"
-      ],
-      "kind": "read"
     },
     {
       "path": [
@@ -408,6 +394,28 @@
         "done"
       ],
       "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "notices",
+        "list"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "monitor",
+        "pull"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "status"
+      ],
+      "kind": "read"
     },
     {
       "path": [

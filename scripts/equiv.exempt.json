@@ -41,6 +41,7 @@
     "approver requests": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
     "approver show": "yeni komut (T20261116-04, uzaktan onay): tabanda yok; davranış test/approver/ ve test/acceptance/approver-*",
     "monitor pull": "yeni komut (T20261119-20, spc köprüsü): tabanda yok; davranış test/monitor/ ve test/acceptance/monitor-*",
+    "monitor capacity": "yeni komut (T20261120-32, haftalık kapasite raporu): tabanda yok; davranış test/monitor/capacity*.test.ts",
     "monitor status": "yeni komut (T20261119-20, spc köprüsü): tabanda yok; davranış test/monitor/ ve test/acceptance/monitor-*",
     "notices list": "yeni komut (T20261120-32, alarm bildirimi): tabanda yok; davranış test/monitor/",
     "notices count": "yeni komut (T20261120-32, alarm bildirimi): tabanda yok; davranış test/monitor/",

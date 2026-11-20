@@ -24,7 +24,7 @@ describe("capacity.yaml yükleyici", () => {
       ["http-p95", "app.http_p95_ms", "peak", ">", 1000],
     ]);
     expect(c.triggers[1]!.labels).toEqual({ name: "medialog-app-1" });
-    expect(c.manual?.map((m) => m.id)).toEqual(["zero-downtime", "vm-loss-tolerance"]);
+    expect(c.manual?.map((m) => m.id)).toEqual(["item-2", "item-3"]);
   });
   it("eşikler spc rules.yaml ile aynı kalır (fixture ↔ vendored kural değerleri)", () => {
     const y = readFileSync(real, "utf8");
@@ -38,7 +38,7 @@ describe("capacity.yaml yükleyici", () => {
     expect(() => load(put("a: [1, 2"))).toThrow(CapacityConfigError);
   });
   it("ek alan, eksik alan, eşik ≤ 0, bilinmeyen ölçü reddedilir", () => {
-    const base = (t: string) => `version: 1\nserver: x\nsource: s\nwarn_pct: 70\nconsecutive_weeks: 2\ntriggers:\n  - id: a\n    title: t\n    metric: m\n    measure: peak\n    op: ">"\n    threshold: 5\n    unit: u\n    source_item: i\n${t}`;
+    const base = (t: string) => `version: 1\nserver: x\nsource: s\nwarn_pct: 70\nconsecutive_weeks: 2\ntriggers:\n  - id: a\n    title: t\n    metric: m\n    measure: peak\n    op: ">"\n    threshold: 5\n    unit: u\n    source_item: 1\n${t}`;
     expect(() => load(put(base("")))).not.toThrow();
     expect(() => load(put(base("    extra: 1\n")))).toThrow(CapacityConfigError);
     expect(() => load(put(base("").replace("threshold: 5", "threshold: 0")))).toThrow(/threshold/);
@@ -47,7 +47,7 @@ describe("capacity.yaml yükleyici", () => {
     expect(() => load(put(base("").replace("version: 1", "version: 2")))).toThrow(CapacityConfigError);
   });
   it("yinelenen tetikleyici kimliği reddedilir", () => {
-    const t = "  - id: a\n    title: t\n    metric: m\n    measure: peak\n    op: \">\"\n    threshold: 5\n    unit: u\n    source_item: i\n";
+    const t = "  - id: a\n    title: t\n    metric: m\n    measure: peak\n    op: \">\"\n    threshold: 5\n    unit: u\n    source_item: 1\n";
     expect(() => load(put(`version: 1\nserver: x\nsource: s\nwarn_pct: 70\nconsecutive_weeks: 2\ntriggers:\n${t}${t}`))).toThrow(/yinelenen/);
   });
 });

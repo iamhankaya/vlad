@@ -5,7 +5,7 @@ import type { CapacityTrigger } from "../../src/monitor/capacity-config.js";
 const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 10, 23, 9, 0, 0); // Pazartesi 09:00 UTC
 const today = Math.floor(NOW / DAY);
-const trig = (o: Partial<CapacityTrigger> = {}): CapacityTrigger => ({ id: "t", title: "T", metric: "m", measure: "peak", op: ">", threshold: 100, unit: "u", source_item: "i", ...o });
+const trig = (o: Partial<CapacityTrigger> = {}): CapacityTrigger => ({ id: "t", title: "T", metric: "m", measure: "peak", op: ">", threshold: 100, unit: "u", source_item: 1, ...o });
 /** `perDay(d)`: d = bugünden kaç gün önce (0 = bugün) → günlük kova ya da null. */
 const series = (perDay: (d: number) => { max: number; avg?: number } | null, days = 30): DayBucket[] => {
   const out: DayBucket[] = [];

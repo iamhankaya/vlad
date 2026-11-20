@@ -6,8 +6,8 @@ const DAY = 86_400_000;
 const NOW = Date.UTC(2026, 10, 23, 9, 0, 0);
 const TOKEN = "SECRET-CAP-TOKEN";
 const trigs: CapacityTrigger[] = [
-  { id: "ws", title: "ws", metric: "app.ws_connections", measure: "peak", op: ">=", threshold: 300, unit: "u", source_item: "i" },
-  { id: "cpu", title: "cpu", metric: "docker.container.cpu_pct", labels: { name: "app-1" }, measure: "daily_avg_peak", op: ">", threshold: 60, unit: "%", source_item: "i" },
+  { id: "ws", title: "ws", metric: "app.ws_connections", measure: "peak", op: ">=", threshold: 300, unit: "u", source_item: 1 },
+  { id: "cpu", title: "cpu", metric: "docker.container.cpu_pct", labels: { name: "app-1" }, measure: "daily_avg_peak", op: ">", threshold: 60, unit: "%", source_item: 1 },
 ];
 const srv = { id: "medialog", agent_url: "http://127.0.0.1:1", project: "p" };
 const item = (seq: number, ts: number, metric: string, labels: Record<string, string>, o: Partial<{ n: number; min: number; max: number; avg: number; last: number }> = {}) =>

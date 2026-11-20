@@ -16,6 +16,7 @@
   "mode off",
   "mode status",
   "mode watch",
+  "monitor capacity",
   "monitor pull",
   "pending add",
   "pending done",
@@ -621,6 +622,13 @@
    "path": [
     "monitor",
     "pull"
+   ],
+   "kind": "write"
+  },
+  {
+   "path": [
+    "monitor",
+    "capacity"
    ],
    "kind": "write"
   },
