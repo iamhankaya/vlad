@@ -3,7 +3,8 @@ import type { CapacityTrigger } from "./capacity-config.js";
 /**
  * Kapasite hesabı (saf işlev; plan Karar 3). Girdi: tetikleyiciye uyan seri başına günlük (UTC) kovalar.
  * Ölçüler: `peak` = kova `max`'ının en büyüğü; `daily_avg_peak` = günlük n-ağırlıklı ortalamaların en büyüğü. Çok seri: seri başına hesapla, en büyüğü al.
- * Haftalık değerler: son 7'şer günlük pencereler (0 = son 7 gün); veri olan en çok 4 pencere. Eğim: haftalık değerlere en küçük kareler (birim/hafta).
+ * Haftalık değerler: kesintisiz pencereler; 0 = son 7 tam gün + bugün (8 kova: önceki koşudan bu yana zirve kaçmasın), sonrakiler 7'şer gün ve bitişik;
+ * veri olan en çok 4 pencere. Eğim: gözlenen haftaların ÖZGÜN konumunda (boş hafta sıkıştırılmaz) en küçük kareler (birim/hafta).
  */
 export const DAY_MS = 86_400_000;
 export interface DayBucket { day: number; n: number; max: number; sum: number }
@@ -38,27 +39,29 @@ function value(m: CapacityTrigger["measure"], series: DayBucket[][], fromDay: nu
   return best;
 }
 
-function slope(ys: number[]): number {
-  const n = ys.length, mx = (n - 1) / 2, my = ys.reduce((a, b) => a + b, 0) / n;
+/** (x = hafta konumu, y = değer) noktalarına en küçük kareler eğimi. */
+function slope(pts: { x: number; y: number }[]): number {
+  const n = pts.length, mx = pts.reduce((a, p) => a + p.x, 0) / n, my = pts.reduce((a, p) => a + p.y, 0) / n;
   let num = 0, den = 0;
-  ys.forEach((y, i) => { num += (i - mx) * (y - my); den += (i - mx) ** 2; });
+  for (const p of pts) { num += (p.x - mx) * (p.y - my); den += (p.x - mx) ** 2; }
   return den === 0 ? 0 : num / den;
 }
 
 export function calcTrigger(t: CapacityTrigger, bySeries: Record<string, DayBucket[]>, o: { now: number; warnPct: number }): TriggerReport {
   const series = Object.values(bySeries);
   const today = Math.floor(o.now / DAY_MS);
-  const value7d = value(t.measure, series, today - 6, today);
+  const value7d = value(t.measure, series, today - 7, today);
   const value30d = value(t.measure, series, today - 29, today);
   const weekly: number[] = [];
+  const pts: { x: number; y: number }[] = [];
   for (let w = MAX_WEEKS - 1; w >= 0; w--) {
-    const v = value(t.measure, series, today - 6 - 7 * w, today - 7 * w);
-    if (v !== null) weekly.push(v);
+    const v = value(t.measure, series, today - 7 - 7 * w, w === 0 ? today : today - 8 - 7 * (w - 1));
+    if (v !== null) { weekly.push(v); pts.push({ x: MAX_WEEKS - 1 - w, y: v }); }
   }
   const pct = value7d === null ? null : (value7d / t.threshold) * 100;
   const over = value7d !== null && (t.op === ">=" ? value7d >= t.threshold : value7d > t.threshold);
   const status: TriggerStatus = value7d === null ? "insufficient" : over ? "over" : pct! >= o.warnPct ? "warn" : "ok";
-  const sl = weekly.length >= MIN_WEEKS ? slope(weekly) : null;
+  const sl = pts.length >= MIN_WEEKS ? slope(pts) : null;
   let remaining: Remaining;
   if (over) remaining = { kind: "exceeded" };
   else if (sl === null || value7d === null) remaining = { kind: "insufficient" };

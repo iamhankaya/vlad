@@ -61,10 +61,25 @@ describe("calcTrigger", () => {
     expect(r.value7d).toBe(75);
   });
   it("boşluklu veri: eksik günler atlanır, boş hafta eğime girmez", () => {
-    const s = series((d) => (Math.floor(d / 7) === 1 ? null : { max: [50, 0, 70, 90][Math.floor(d / 7)] ?? 50 }), 28);
+    // pencereler: w0 = d0..7, w1 = d8..14 (boş), w2 = d15..21, w3 = d22..27
+    const s = series((d) => (d <= 7 ? { max: 50 } : d <= 14 ? null : d <= 21 ? { max: 70 } : { max: 90 }), 28);
     const r = calc(trig(), { a: s });
-    expect(r.weekly).toEqual([90, 70, 50]); // 3 hafta var (boş hafta çıkarıldı)
+    expect(r.weekly).toEqual([90, 70, 50]); // 3 hafta var (boş hafta listede yok)
     expect(r.value7d).toBe(50);
+  });
+  it("kesintisiz pencere: önceki koşudan (7 gün önce) sonraki zirve value7d'ye girer", () => {
+    // önceki pazartesi (d=7) 10:00 zirvesi: eski 7 günlük pencere (d0..6) bunu kaçırırdı
+    const s = series((d) => ({ max: d === 7 ? 88 : 10 }), 28);
+    const r = calc(trig(), { a: s });
+    expect(r.value7d).toBe(88);
+    expect(r.weekly.at(-1)).toBe(88);
+    expect(r.weekly[r.weekly.length - 2]).toBe(10); // bir önceki pencere d8.. ve zirveyi çift saymaz
+  });
+  it("eğim: boş hafta sıkıştırılmaz, özgün konum korunur ([40,50,boş,70] → 10/hafta)", () => {
+    const s = series((d) => (d <= 7 ? { max: 70 } : d <= 14 ? null : d <= 21 ? { max: 50 } : { max: 40 }), 28);
+    const r = calc(trig({ threshold: 200 }), { a: s });
+    expect(r.weekly).toEqual([40, 50, 70]);
+    expect(r.slopePerWeek).toBeCloseTo(10);
   });
   it("son 7 günde veri yok: durum insufficient, yüzde null", () => {
     const r = calc(trig(), { a: series((d) => (d >= 10 ? { max: 50 } : null), 28) });
