@@ -83,6 +83,7 @@
     "test/machines/branch-push-op.test.ts",
     "test/machines/branch-push-verify.test.ts",
     "test/tasks/gate-compare.test.ts",
+    "test/tasks/nudge-tmux.test.ts",
     "test/acceptance/cloud-ingest-real-shape.test.ts",
     "test/acceptance/cloud-ingest-verify2.test.ts",
     "test/acceptance/cloud-ingest.test.ts",
