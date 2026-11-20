@@ -196,6 +196,7 @@ export async function runCapacity(deps: CapacityDeps, opts: CapacityOptions = {}
     if (st.last_week !== null && !sameWeekRerun && !prevWeekOk) res.notes.push(`hafta atlandı (önceki rapor ${st.last_week}); ardışık hafta sayaçları sıfırlandı`);
     const notices: { task: string; trigger: string }[] = [];
 
+    try {
     // 1) rapor görevi
     let reportId = st.report_task && isOpen(st.report_task) ? st.report_task : null;
     reportId ??= tasksWithMarker((l) => parseCapacityReportMarker(l)?.server === srv.id).find((t) => !CLOSED.has(t.data.state))?.data.id ?? null;
@@ -211,6 +212,7 @@ export async function runCapacity(deps: CapacityDeps, opts: CapacityOptions = {}
     for (const t of cfg.triggers) {
       const r = reports.find((x) => x.id === t.id)!;
       const ts = st.triggers[t.id] ?? (st.triggers[t.id] = { architect_task: null, over_weeks: [] });
+      const wasTriggered = ts.over_weeks.length >= cfg.consecutive_weeks;
       if (!sameWeekRerun) ts.over_weeks = r.status === "over" ? [...(prevWeekOk ? ts.over_weeks : []), week].slice(-cfg.consecutive_weeks) : [];
       const marked = tasksWithMarker((l) => { const m = parseCapacityMarker(l); return m?.server === srv.id && m.trigger === t.id; });
       let open = ts.architect_task && isOpen(ts.architect_task) ? ts.architect_task : (marked.find((x) => !CLOSED.has(x.data.state))?.data.id ?? null);
@@ -230,15 +232,17 @@ export async function runCapacity(deps: CapacityDeps, opts: CapacityOptions = {}
         const msg = `TETİKLEYİCİ: ${t.id} ${cfg.consecutive_weeks} ardışık hafta eşiği aştı (${ts.over_weeks.join(", ")})`;
         res.notes.push(msg);
         if (!dry && target !== DRY) logTask(target, msg);
-        if (target !== DRY && !notices.some((n) => n.task === target && n.trigger === t.id)) notices.push({ task: target, trigger: t.id });
+        // bildirim yalnız eşik ilk aşıldığında (sonraki haftalarda gürültü olmasın); yeni açılan görev zaten bildirildi
+        if (target !== DRY && !wasTriggered && !notices.some((n) => n.task === target && n.trigger === t.id)) notices.push({ task: target, trigger: t.id });
       }
     }
     st.last_week = week;
-
-    // 3) bildirim (en iyi çaba; kb yazmalarından sonra, dry-run'da yok)
-    if (!dry && deps.notifier) {
-      for (const n of notices) {
-        try { await deps.notifier.notice({ ts: now, kind: "capacity", server: srv.id, task: n.task, trigger: n.trigger }); } catch (e) { log(`spc ${srv.id}: bildirim gönderilemedi: ${(e as Error).name}`); }
+    } finally {
+      // bildirim (en iyi çaba; dry-run'da yok): açılan görevler, sonraki bir tetikleyicide kb hatası olsa da haber verilir
+      if (!dry && deps.notifier) {
+        for (const n of notices) {
+          try { await deps.notifier.notice({ ts: now, kind: "capacity", server: srv.id, task: n.task, trigger: n.trigger }); } catch (e) { log(`spc ${srv.id}: bildirim gönderilemedi: ${(e as Error).name}`); }
+        }
       }
     }
   }

@@ -155,11 +155,15 @@ describe("runCapacity: idempotans ve haftalar", () => {
     await runCapacity(deps);
     expect(architects()[0]!.body).toMatch(/TETİKLEYİCİ: ws-concurrent 2 ardışık hafta eşiği aştı \(2026-W48, 2026-W49\)/);
     expect(stateFile().servers.medialog.triggers["ws-concurrent"].over_weeks).toEqual(["2026-W48", "2026-W49"]);
-    // bir hafta atla (W50 yok), W51'de koş
-    now = W0 + 21 * DAY;
+    expect(notices).toHaveLength(2); // açılış + eşiğin ilk aşılışı (iki ardışık)
+    now = W0 + 14 * DAY;
+    await runCapacity(deps); // W50: üçüncü ardışık hafta → yeni bildirim yok
+    expect(notices).toHaveLength(2);
+    // bir hafta atla (W51 yok), W52'de koş
+    now = W0 + 28 * DAY;
     await runCapacity(deps);
-    expect(stateFile().servers.medialog.triggers["ws-concurrent"].over_weeks).toEqual(["2026-W51"]);
-    expect(reportTask()!.body).toMatch(/Not: hafta atlandı \(önceki rapor 2026-W49\)/);
+    expect(stateFile().servers.medialog.triggers["ws-concurrent"].over_weeks).toEqual(["2026-W52"]);
+    expect(reportTask()!.body).toMatch(/Not: hafta atlandı \(önceki rapor 2026-W50\)/);
   });
 });
 
