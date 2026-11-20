@@ -1,0 +1,65 @@
+# Kapasite tetikleyicileri (kaynak: D-medialog-062). Şema: servers/capacity.schema.json.
+# Eşikler kural dosyasındaki (rules.yaml) alarm eşikleriyle aynı ölçümleri kullanır; burada "uyarı" yüzdesi
+# (warn_pct) eşiğin bu oranına yaklaşmayı, consecutive_weeks art arda kaç hafta aşımı gösterir.
+version: 1
+server: medialog
+source: D-medialog-062
+warn_pct: 70
+consecutive_weeks: 2
+
+triggers:
+  - id: ws-concurrent
+    title: Eşzamanlı WebSocket bağlantısı
+    metric: app.ws_connections
+    measure: peak
+    op: '>='
+    threshold: 300
+    unit: bağlantı
+    source_item: 1
+
+  - id: proc-cpu
+    title: Uygulama konteyneri CPU
+    metric: docker.container.cpu_pct
+    labels: { name: medialog-app-1 }
+    measure: daily_avg_peak
+    op: '>'
+    threshold: 60
+    unit: '%'
+    source_item: 4
+
+  - id: proc-mem
+    title: Uygulama konteyneri bellek
+    metric: docker.container.mem_pct
+    labels: { name: medialog-app-1 }
+    measure: daily_avg_peak
+    op: '>'
+    threshold: 60
+    unit: '%'
+    source_item: 4
+
+  - id: db-pool-waiting
+    title: Veritabanı havuzunda bekleyen istek
+    metric: app.db_pool_waiting
+    measure: peak
+    op: '>='
+    threshold: 1
+    unit: istek
+    source_item: 4
+
+  - id: http-p95
+    title: HTTP p95 gecikmesi
+    metric: app.http_p95_ms
+    measure: peak
+    op: '>'
+    threshold: 1000
+    unit: ms
+    source_item: 4
+
+# Otomatik ölçülemeyen kalemler (elle izlenir).
+manual:
+  - id: item-2
+    title: Sıfır kesinti ihtiyacı (elle izlenir)
+    source_item: 2
+  - id: item-3
+    title: VM kaybı toleransı (elle izlenir)
+    source_item: 3

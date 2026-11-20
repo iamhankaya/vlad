@@ -155,3 +155,17 @@ describe("approver: ntfy akis", () => {
     expect(states).toEqual(["closed"]);
   });
 });
+
+describe("approver: ntfy publishNotice", () => {
+  it("eylemsiz, öncelik 3, istek konusuna; redirect error; hata fırlatır", async () => {
+    const calls: { u: string; init: RequestInit }[] = [];
+    const f = (async (u: string, init: RequestInit) => { calls.push({ u, init }); return new Response("{}"); }) as unknown as typeof fetch;
+    await new NtfyChannel(cfg, f).publishNotice({ title: "VLAD", message: "görev açtı: T1" });
+    const b = JSON.parse(String(calls[0]!.init.body));
+    expect(b).toMatchObject({ topic: "vlad-q-aaaa", title: "VLAD", message: "görev açtı: T1", priority: 3 });
+    expect(b.actions).toBeUndefined();
+    expect(calls[0]!.init.redirect).toBe("error");
+    const bad = (async () => new Response("x", { status: 500 })) as unknown as typeof fetch;
+    await expect(new NtfyChannel(cfg, bad).publishNotice({ title: "a", message: "b" })).rejects.toThrow(/HTTP 500/);
+  });
+});

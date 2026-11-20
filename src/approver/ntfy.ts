@@ -52,6 +52,11 @@ export class NtfyChannel implements ApproverChannel {
     });
   }
 
+  /** Eylemsiz kısa bildirim (monitor alarm/kapasite haberi); onay kanalı arayüzüne eklenmez. Hata fırlatır; çağıran en iyi çabayla yutar. */
+  async publishNotice(n: { title: string; message: string }): Promise<void> {
+    await this.post({ topic: this.cfg.requestTopic, title: n.title, message: n.message, priority: 3, tags: ["robot"] });
+  }
+
   async watchResponse(topic: string, sinceUnix: number, h: WatchHandlers, signal: AbortSignal): Promise<void> {
     let since = String(sinceUnix);
     let failures = 0;

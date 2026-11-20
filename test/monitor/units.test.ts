@@ -7,7 +7,7 @@ import { createStateStore } from "../../src/monitor/state.js";
 import { createKeychainReader } from "../../src/monitor/secret.js";
 import { buildAlertTask, buildResolvedNote } from "../../src/monitor/task-text.js";
 import { loadMonitorConfig } from "../../src/monitor/config.js";
-import { MONITOR_LABEL, createMonitorInstaller, monitorPlist } from "../../src/monitor/launchd.js";
+import { MONITOR_LABEL, CAPACITY_LABEL, capacityPlist, createMonitorInstaller, monitorPlist } from "../../src/monitor/launchd.js";
 import { EMPTY_STATE, MONITOR_LIMITS } from "../../src/monitor/types.js";
 import { parseAlertsResponse } from "../../src/monitor/contract.js";
 
@@ -159,6 +159,17 @@ describe("launchd", () => {
     expect([...env.matchAll(/<key>(\w+)<\/key>/g)].map((m) => m[1])).toEqual(["PATH", "VLAD_HOME"]);
     expect(p).toContain("/l/launchd.log");
   });
+  it("kapasite plist'i: com.vlad.monitor-capacity, pazartesi 09:00 takvim aralığı, RunAtLoad/KeepAlive yok, [node, cli, monitor, capacity], günlük capacity.log", () => {
+    const p = capacityPlist(c, "/l/capacity.log");
+    expect(p).toContain(`<key>Label</key><string>${CAPACITY_LABEL}</string>`);
+    expect(CAPACITY_LABEL).toBe("com.vlad.monitor-capacity");
+    expect(p).toContain("<key>StartCalendarInterval</key><dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>");
+    expect(p).not.toMatch(/RunAtLoad|KeepAlive|StartInterval|AbandonProcessGroup/);
+    expect(p).toContain("<string>monitor</string><string>capacity</string>");
+    const env = /<key>EnvironmentVariables<\/key><dict>(.*?)<\/dict>/s.exec(p)![1]!;
+    expect([...env.matchAll(/<key>(\w+)<\/key>/g)].map((m) => m[1])).toEqual(["PATH", "VLAD_HOME"]);
+    expect(p).toContain("/l/capacity.log");
+  });
   const fakeLc = (fail?: string) => {
     const calls: string[][] = [];
     return { calls, lc: async (args: string[]) => { calls.push(args); return fail && args[0] === fail ? { code: 5, stdout: "", stderr: "boom" } : { code: 0, stdout: "", stderr: "" }; } };
@@ -172,7 +183,10 @@ describe("launchd", () => {
     expect(statSync(plist).mode & 0o777).toBe(0o600);
     expect(statSync(join(tmp, "st", "launchd.log")).mode & 0o777).toBe(0o600);
     const uid = process.getuid?.() ?? 501;
-    expect(calls.filter((a) => a[0] === "bootstrap")).toEqual([["bootstrap", `gui/${uid}`, plist], ["bootstrap", `gui/${uid}`, plist]]);
+    const capPlist = join(tmp, "LA", `${CAPACITY_LABEL}.plist`);
+    expect(statSync(capPlist).mode & 0o777).toBe(0o600);
+    expect(statSync(join(tmp, "st", "capacity.log")).mode & 0o777).toBe(0o600);
+    expect(calls.filter((a) => a[0] === "bootstrap")).toEqual([["bootstrap", `gui/${uid}`, plist], ["bootstrap", `gui/${uid}`, capPlist], ["bootstrap", `gui/${uid}`, plist], ["bootstrap", `gui/${uid}`, capPlist]]);
     expect(calls[0]).toEqual(["bootout", `gui/${uid}/${MONITOR_LABEL}`]);
   });
   it("test kancası nesne biçimi: { launchctl, homeDir } gerçek ~/Library ve ~/.vlad-monitor'a dokunmadan kurar", async () => {
@@ -203,6 +217,19 @@ describe("launchd", () => {
     const i3 = createMonitorInstaller(bad.lc, { plistDir: join(tmp, "LA2"), stateDir: join(tmp, "st") });
     await expect(i3.uninstall()).rejects.toThrow(/bootout başarısız/);
     expect(existsSync(join(tmp, "LA2", `${MONITOR_LABEL}.plist`))).toBe(true);
+  });
+  it("uninstall iki işi de boot-out eder ve iki plist'i siler; status kapasite işini de bildirir", async () => {
+    const { calls, lc } = fakeLc();
+    const inst = createMonitorInstaller(lc, { plistDir: join(tmp, "LA3"), stateDir: join(tmp, "st") });
+    await inst.install(c);
+    const st = await inst.status();
+    expect(st.detail).toMatch(/kapasite işi yüklü/);
+    calls.length = 0;
+    await inst.uninstall();
+    const uid = process.getuid?.() ?? 501;
+    expect(calls.map((a) => a[1])).toEqual([`gui/${uid}/${MONITOR_LABEL}`, `gui/${uid}/${CAPACITY_LABEL}`]);
+    expect(existsSync(join(tmp, "LA3", `${MONITOR_LABEL}.plist`))).toBe(false);
+    expect(existsSync(join(tmp, "LA3", `${CAPACITY_LABEL}.plist`))).toBe(false);
   });
   it("status: plist yok → kurulu değil; var + yüklü değil → açıklama", async () => {
     const lc = async () => ({ code: 113, stdout: "", stderr: "Could not find service" });

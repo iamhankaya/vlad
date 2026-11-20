@@ -18,6 +18,7 @@
     "mode off",
     "mode status",
     "mode watch",
+    "monitor capacity",
     "monitor pull",
     "pending add",
     "pending done",
@@ -79,6 +80,8 @@
     "machine ping",
     "machine probe-window",
     "monitor status",
+    "notices count",
+    "notices list",
     "pending list",
     "project list",
     "project status",
@@ -368,6 +371,37 @@
         "watch"
       ],
       "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "capacity"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "notices",
+        "count"
+      ],
+      "kind": "read"
+    },
+    {
+      "path": [
+        "monitor",
+        "notices",
+        "done"
+      ],
+      "kind": "write"
+    },
+    {
+      "path": [
+        "monitor",
+        "notices",
+        "list"
+      ],
+      "kind": "read"
     },
     {
       "path": [

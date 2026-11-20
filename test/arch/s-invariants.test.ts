@@ -16,7 +16,7 @@ const key = (p: string[]) => (p.length === 1 ? `vlad ${p[0]}` : `${p[p.length - 
 const set = (a: string[]) => new Set(a);
 
 // Gerekçeli istisnalar (elle onaylı): kb'ye outer kilitle yazmayan ama konsolda `write` olan komutlar kendi kilidini alır ya da kb'ye yazmaz.
-const CONSOLE_WRITE_NOT_OUTER = ["task launch", "task close-window", "task gate", "task merge", "kb commit"]; // launch/gate/merge/commit: iç kilit; close-window: kb yazmaz
+const CONSOLE_WRITE_NOT_OUTER = ["task launch", "task close-window", "task gate", "task merge", "kb commit", "notices done"]; // launch/gate/merge/commit: iç kilit; close-window, notices done: kb yazmaz (bildirim kuyruğu kb dışı)
 // `mode status` konsolda okuma, ama süresi dolan mod penceresini temizler (yan etki yazması): bilinçli ayrım. `vlad status` KB_WRITES'ta değil (özel dal).
 const CONSOLE_READ_BUT_KB_WRITE = ["mode status"];
 

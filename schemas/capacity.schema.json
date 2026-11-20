@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "spc-capacity.schema.json",
+  "title": "SPC kapasite tetikleyicileri",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "server", "source", "warn_pct", "consecutive_weeks", "triggers"],
+  "properties": {
+    "version": { "const": 1 },
+    "server": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$" },
+    "source": { "type": "string", "minLength": 1 },
+    "warn_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+    "consecutive_weeks": { "type": "integer", "minimum": 1 },
+    "triggers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "metric", "measure", "op", "threshold", "unit", "source_item"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "metric": { "type": "string", "pattern": "^[a-z0-9_.]{1,64}$" },
+          "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+          "measure": { "enum": ["peak", "daily_avg_peak"] },
+          "op": { "enum": [">", ">="] },
+          "threshold": { "type": "number", "exclusiveMinimum": 0 },
+          "unit": { "type": "string", "minLength": 1 },
+          "source_item": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "manual": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "source_item"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "source_item": { "type": "integer", "minimum": 1 }
+        }
+      }
+    }
+  }
+}
