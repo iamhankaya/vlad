@@ -93,6 +93,7 @@ export async function pullAlerts(deps: PullDeps & { notifier?: Notifier }, opts:
       }
     }
   }
+  try { await deps.notifier?.flush?.(); } catch { /* en iyi çaba */ }
   return result;
 }
 

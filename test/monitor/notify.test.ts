@@ -75,6 +75,19 @@ describe("createNotifier", () => {
     expect(calls[0]!.body.actions).toBeUndefined();
     expect(readFileSync(join(dir, readdirSync(dir).find((x) => x.endsWith(".json"))!), "utf8")).not.toMatch(/down|alarm/i);
   });
+  it("defer: notice ağa çıkmaz (kuyruk yazılır), flush bekleyenleri eşzamanlı gönderir", async () => {
+    let inflight = 0, peak = 0, sent = 0;
+    const f = (async () => { inflight++; peak = Math.max(peak, inflight); await new Promise((r) => setTimeout(r, 20)); inflight--; sent++; return new Response("{}"); }) as unknown as typeof fetch;
+    const nt = createNotifier({ dir, channel: () => cfg, fetch: f, defer: true });
+    await nt.notice(n("T1-1")); await nt.notice(n("T1-2")); await nt.notice(n("T1-3"));
+    expect(countNotices(dir)).toBe(3);
+    expect(sent).toBe(0);
+    await nt.flush!();
+    expect(sent).toBe(3);
+    expect(peak).toBe(3);
+    await nt.flush!(); // ikinci flush yeniden göndermez
+    expect(sent).toBe(3);
+  });
   it("kanal yoksa kuyruk yine yazılır", async () => {
     const nt = createNotifier({ dir, channel: () => null, fetch: (async () => { throw new Error("çağrılmamalı"); }) as unknown as typeof fetch });
     await nt.notice(n("T1-1"));

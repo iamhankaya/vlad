@@ -65,7 +65,7 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
         stateDir: deps.stateDir, platform: platform(), now: deps.now, log: (l) => ctx.stderr.write(`${l}\n`),
       };
       const notifier = createNotifier({
-        dir: noticeDir(), fetch: deps.fetch, log: (l) => ctx.stderr.write(`${l}\n`),
+        dir: noticeDir(), fetch: deps.fetch, defer: true, log: (l) => ctx.stderr.write(`${l}\n`),
         channel: deps.channel ?? (() => createStore(approverDir()).readChannel()), // kurulu değilse/okunamazsa ntfy atlanır
       });
       result = await pullAlerts({ ...pd, notifier }, { server: typeof o.server === "string" ? o.server : undefined, dryRun: o.dryRun === true });
@@ -93,7 +93,7 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
       const config = loadMonitorConfig(getVladHome());
       if (config.servers.length === 0) throw new MonitorConfigError("monitor yapılandırması yok (vlad.config.json → monitor.servers)");
       const notifier = createNotifier({
-        dir: noticeDir(), fetch: deps.fetch, log: (l) => ctx.stderr.write(`${l}\n`),
+        dir: noticeDir(), fetch: deps.fetch, defer: true, log: (l) => ctx.stderr.write(`${l}\n`),
         channel: deps.channel ?? (() => createStore(approverDir()).readChannel()),
       });
       result = await runCapacity({

@@ -86,6 +86,7 @@ export function createMonitorInstaller(first?: Launchctl | MonitorInstallerDeps,
       // launchd günlük dosyasını 0600 yapmaz: dizin (0700) altında önceden 0600 oluştur
       mkdirSync(stateDir, { recursive: true, mode: 0o700 });
       chmodSync(stateDir, 0o700);
+      const loaded: typeof jobs = [];
       for (const j of jobs) {
         const logPath = join(stateDir, j.logName);
         writeFileSync(logPath, "", { flag: "a", mode: 0o600 });
@@ -95,7 +96,13 @@ export function createMonitorInstaller(first?: Launchctl | MonitorInstallerDeps,
         steps.push(`plist yazıldı: ${j.plist}`);
         await lc(["bootout", `${target}/${j.label}`]); // yoksa hata normal (yeniden kurulum idempotent)
         const r = await lc(["bootstrap", target, j.plist]);
-        if (r.code !== 0) { rmSync(j.plist, { force: true }); throw new Error(`launchctl bootstrap başarısız (${r.code}, ${j.label}): ${r.stderr.trim() || r.stdout.trim()}; plist geri alındı`); }
+        if (r.code !== 0) {
+          rmSync(j.plist, { force: true });
+          // yarım kurulum kalmasın: bu çalıştırmada önceden yüklenen işler de geri alınır (en iyi çaba)
+          for (const p of loaded.reverse()) { await lc(["bootout", `${target}/${p.label}`]); rmSync(p.plist, { force: true }); }
+          throw new Error(`launchctl bootstrap başarısız (${r.code}, ${j.label}): ${r.stderr.trim() || r.stdout.trim()}; plist geri alındı${loaded.length ? "; önceki işler de geri alındı" : ""}`);
+        }
+        loaded.push(j);
         steps.push(`launchctl bootstrap ${j.label}`);
       }
       return steps;

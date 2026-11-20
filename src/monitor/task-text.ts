@@ -3,7 +3,7 @@ import { alertMarker } from "./marker.js";
 import { MONITOR_LIMITS, type AlertTaskText } from "./types.js";
 
 /** Kontrol karakterleri (satır sonu dahil) boşluk olur; art arda boşluklar tek boşluk. */
-const clean = (s: string): string => s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
+export const clean = (s: string): string => s.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s{2,}/g, " ").trim();
 const quote = (s: string): string => JSON.stringify(clean(s));
 /** Sözleşme tarih aralığını zaten doğrular; bu yalnız savunma (geçersiz Date fırlatmaz). */
 const iso = (ms: number): string => { const d = new Date(ms); return Number.isNaN(d.getTime()) ? "?" : d.toISOString(); };
