@@ -167,6 +167,14 @@
         "worktree --help",
         "worktree prune --help"
       ]
+    },
+    {
+      "id": "T20261121-18",
+      "keys": [
+        "task --help",
+        "task (bare)",
+        "task nudge --help"
+      ]
     }
   ]
 }
