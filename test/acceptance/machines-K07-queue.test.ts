@@ -152,6 +152,7 @@ describe("machines:K — K7 kuyruk", () => {
     expect((await runVlad(w.worker, ["queue", "drop", String(first.seq)])).code).toBe(0);
     px.up();
     await runVlad(w.worker, ["queue", "flush"]);
+    await until(() => logs(w, id).length >= 1); // F-vlad-131: yükte flush sonrası okuma yarışa açıktı
     expect(logs(w, id)).toEqual(["L2"]);
   }, 90_000);
 });
