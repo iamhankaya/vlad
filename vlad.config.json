@@ -56,5 +56,15 @@
     "ashen-bastion": {
       "autonomy": "pr"
     }
+  },
+  "monitor": {
+    "servers": [
+      {
+        "id": "medialog",
+        "agent_url": "https://medialogforfriends.duckdns.org",
+        "project": "medialog",
+        "capacity_file": "/Users/metehankaya/dev/server-pulse-counter/servers/medialog/capacity.yaml"
+      }
+    ]
   }
 }

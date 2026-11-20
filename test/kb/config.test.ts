@@ -39,7 +39,7 @@ describe("config", () => {
     });
     expect(cfg.roots.length).toBeGreaterThan(0);
     expect(Object.keys(cfg).filter((k) => !["roots", "brain", "machines"].includes(k)).sort())
-      .toEqual(["defaultAutonomy", "ignore", "kbDir", "launcher", "projects", "staleAfterHours", "workerAutoCompact", "worktreeDir"]);
+      .toEqual(["defaultAutonomy", "ignore", "kbDir", "launcher", "monitor", "projects", "staleAfterHours", "workerAutoCompact", "worktreeDir"]);
   });
   it("uses schemas of the given home, not VLAD_HOME", () => {
     process.env.VLAD_HOME = mkdtempSync(join(tmpdir(), "vlad-empty-"));
