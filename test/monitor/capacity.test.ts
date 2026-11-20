@@ -267,6 +267,7 @@ describe("runCapacity: hata oranı ve ürün büyümesi (spc 1.1.0, fixture TÜR
   it("tek hafta trend verisi: insufficient ama satır yine yazılır", async () => {
     const r = await runCapacity(mk({ gen: () => ({ "app.product_active_7d": (d: number) => (d < 5 ? 25 : null) }) }).deps);
     expect(r.servers[0]!.triggers.find((x) => x.id === "product-active")!.status).toBe("insufficient");
+    // tam 7 günlük pencereler (T20261120-81): fixture'ın 8. gün kovası artık haftalığa girmez; eski 23 → 31 / +2,7 değeri 8 kovalı pencerenin ürünüydü
     expect(reportTask()!.body).toMatch(/\| product-active \| [^|]+ \| 25 kişi \| - \| yetersiz veri \|/);
   });
   it("eski 1.0 ajanı (yalnız eski metrikler): yeni tetikleyiciler 'veri yok (ajan 1.1 gerekli)', görev açılmaz; 1.0 metriği eksikliği bunu söylemez", async () => {
@@ -304,7 +305,7 @@ describe("runCapacity: hata oranı ve ürün büyümesi (spc 1.1.0, fixture TÜR
       "[spc] kapasite: medialog/http-5xx — HTTP 5xx oranı",
       "[spc] kapasite: medialog/pg-cache — Postgres önbellek isabeti (düşükse kötü)",
     ]);
-    expect(reportTask()!.body).toMatch(/\| product-active \| [^|]+ \| 23 → 31 kişi \| \+2,7\/hafta \| eğilim \|/);
+    expect(reportTask()!.body).toMatch(/\| product-active \| [^|]+ \| 26 → 31 kişi \| \+1,7\/hafta \| eğilim \|/);
   });
 });
 

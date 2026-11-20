@@ -61,22 +61,21 @@ describe("calcTrigger", () => {
     expect(r.value7d).toBe(75);
   });
   it("boşluklu veri: eksik günler atlanır, boş hafta eğime girmez", () => {
-    // pencereler: w0 = d0..7, w1 = d8..14 (boş), w2 = d15..21, w3 = d22..27
-    const s = series((d) => (d <= 7 ? { max: 50 } : d <= 14 ? null : d <= 21 ? { max: 70 } : { max: 90 }), 28);
+    // pencereler (tam 7 gün): w0 = d0..6, w1 = d7..13 (boş), w2 = d14..20, w3 = d21..27
+    const s = series((d) => (d <= 6 ? { max: 50 } : d <= 13 ? null : d <= 20 ? { max: 70 } : { max: 90 }), 28);
     const r = calc(trig(), { a: s });
     expect(r.weekly).toEqual([90, 70, 50]); // 3 hafta var (boş hafta listede yok)
     expect(r.value7d).toBe(50);
   });
-  it("kesintisiz pencere: önceki koşudan (7 gün önce) sonraki zirve value7d'ye girer", () => {
-    // önceki pazartesi (d=7) 10:00 zirvesi: eski 7 günlük pencere (d0..6) bunu kaçırırdı
-    const s = series((d) => ({ max: d === 7 ? 88 : 10 }), 28);
+  it("tam 7 günlük bitişik pencere: d6 bu haftaya, d7 bir öncekine girer; çift sayılmaz", () => {
+    const s = series((d) => ({ max: d === 7 ? 88 : d === 6 ? 40 : 10 }), 28);
     const r = calc(trig(), { a: s });
-    expect(r.value7d).toBe(88);
-    expect(r.weekly.at(-1)).toBe(88);
-    expect(r.weekly[r.weekly.length - 2]).toBe(10); // bir önceki pencere d8.. ve zirveyi çift saymaz
+    expect(r.value7d).toBe(40);
+    expect(r.weekly.at(-1)).toBe(40);
+    expect(r.weekly[r.weekly.length - 2]).toBe(88);
   });
   it("eğim: boş hafta sıkıştırılmaz, özgün konum korunur ([40,50,boş,70] → 10/hafta)", () => {
-    const s = series((d) => (d <= 7 ? { max: 70 } : d <= 14 ? null : d <= 21 ? { max: 50 } : { max: 40 }), 28);
+    const s = series((d) => (d <= 6 ? { max: 70 } : d <= 13 ? null : d <= 20 ? { max: 50 } : { max: 40 }), 28);
     const r = calc(trig({ threshold: 200 }), { a: s });
     expect(r.weekly).toEqual([40, 50, 70]);
     expect(r.slopePerWeek).toBeCloseTo(10);

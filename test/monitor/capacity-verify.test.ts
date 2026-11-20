@@ -75,9 +75,34 @@ describe("`<` yönü: sınırlar", () => {
   });
   // BİLİNEN HATA (rapor: ### Bulunan hatalar #1): `<` yönünde pct = eşik/değer, yüzde türü metriklerde (≤100) hep ≥ %95 > warn_pct olduğundan
   // uyarıyı yalnız "eğim < -1e-9" belirler; 99,90→99,87 (haftada -0,01 puan, eşiğe 487 hafta) gürültüsü warn → architect görevi açar.
-  // `it.fails`: bug giderilince bu test yeşile döner ve vitest "beklenen hata yok" diye kırmızılaşır → `it.fails`'i `it` yap.
-  it.fails("`<` yönünde yalnız anlamsız düzeyde (haftada -0,01 puan) düşen, eşikten çok uzak seri warn olmamalı", () => {
+  it("`<` yönünde yalnız anlamsız düzeyde (haftada -0,01 puan) düşen, eşikten çok uzak seri warn olmamalı", () => {
     expect(calc(trig(), { a: weeks([99.9, 99.89, 99.88, 99.87]) }).status).toBe("ok");
+  });
+  it("`<` yönünde warn: eğim kötüleşiyor ve tahmini varış ≤ 12 hafta", () => {
+    // 98 → 97 → 96 → 95,5 civarı: haftada ~-0,9; eşik 95; varış < 12 hafta
+    const r = calc(trig(), { a: weeks([99, 98, 97, 96]) });
+    expect(r.status).toBe("warn");
+    expect(r.remaining.kind).toBe("weeks");
+  });
+  it("`<` yönünde varış > 12 hafta (eşikten uzak, yavaş düşüş): warn yok", () => {
+    const r = calc(trig(), { a: weeks([99.9, 99.5, 99.1, 98.7]) }); // -0,4/hafta; (98,7-95)/0,4 ≈ 9 hafta → warn
+    expect(r.status).toBe("warn");
+    const far = calc(trig(), { a: weeks([99.9, 99.8, 99.7, 99.6]) }); // -0,1/hafta; 46 hafta
+    expect(far.status).toBe("ok");
+  });
+  it("`<` yönünde değer eşiğe %2 marjla yakınsa eğimden bağımsız warn (düz seri dahil)", () => {
+    expect(calc(trig(), { a: weeks([96.5, 96.5, 96.5, 96.5]) }).status).toBe("warn"); // 95*1,02 = 96,9
+    expect(calc(trig(), { a: weeks([97, 97, 97, 97]) }).status).toBe("ok");
+  });
+  it("`<` yönünde eğim hesaplanamıyor (<3 hafta): değer marj içinde değilse warn yok, içindeyse warn", () => {
+    expect(calc(trig(), { a: weeks([99, 98]) }).status).toBe("ok");
+    expect(calc(trig(), { a: weeks([96.5, 96.5]) }).status).toBe("warn");
+  });
+  it("haftalık pencere tam 7 günlük ve bitişik: today-7'deki kova bu haftaya girmez, bir öncekine girer", () => {
+    const b = (day: number, v: number): DayBucket => ({ day, n: 10, max: v, sum: v * 10 });
+    const r = calc(trig({ op: ">", threshold: 1000, measure: "peak" }), { a: [b(today - 7, 500), b(today - 6, 10), b(today, 20), b(today - 13, 5)] });
+    expect(r.value7d).toBe(20);
+    expect(r.weekly).toEqual([500, 20]);
   });
   it("yükselen `<` serisi (iyileşiyor): warn yok, flat", () => {
     const r = calc(trig(), { a: weeks([96, 97, 98, 99]) });
