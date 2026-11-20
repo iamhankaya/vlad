@@ -19,6 +19,8 @@ export interface ApproverChannel {
 const MAX_LINE = 16 * 1024;
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const PUBLISH_TIMEOUT_MS = 15_000;
+/** Eylemsiz haber (monitor): takılan ntfy kb kilidini uzun tutmasın. */
+const NOTICE_TIMEOUT_MS = 3_000;
 const CONNECT_TIMEOUT_MS = 15_000;
 const realSleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((res) => {
   if (signal.aborted) return res();
@@ -37,8 +39,8 @@ export class NtfyChannel implements ApproverChannel {
     this.base = u.origin;
   }
 
-  private async post(payload: unknown): Promise<void> {
-    const res = await this.fetchFn(`${this.base}/`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), redirect: "error", signal: AbortSignal.timeout(PUBLISH_TIMEOUT_MS) });
+  private async post(payload: unknown, timeoutMs: number = PUBLISH_TIMEOUT_MS): Promise<void> {
+    const res = await this.fetchFn(`${this.base}/`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) throw new Error(`ntfy: yayin basarisiz (HTTP ${res.status})`);
   }
 
@@ -54,7 +56,7 @@ export class NtfyChannel implements ApproverChannel {
 
   /** Eylemsiz kısa bildirim (monitor alarm/kapasite haberi); onay kanalı arayüzüne eklenmez. Hata fırlatır; çağıran en iyi çabayla yutar. */
   async publishNotice(n: { title: string; message: string }): Promise<void> {
-    await this.post({ topic: this.cfg.requestTopic, title: n.title, message: n.message, priority: 3, tags: ["robot"] });
+    await this.post({ topic: this.cfg.requestTopic, title: n.title, message: n.message, priority: 3, tags: ["robot"] }, NOTICE_TIMEOUT_MS);
   }
 
   async watchResponse(topic: string, sinceUnix: number, h: WatchHandlers, signal: AbortSignal): Promise<void> {

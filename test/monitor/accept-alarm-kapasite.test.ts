@@ -23,8 +23,8 @@ afterEach(() => { vi.restoreAllMocks(); rmSync(work, { recursive: true, force: t
 
 describe("ntfy bildirimi: ağ takılırsa pull/capacity uzun süre bekletilmez", () => {
   const cfg: ChannelConfig = { v: 1, server: "https://ntfy.example", requestTopic: "vlad-q-secret", createdAt: "x" };
-  // BİLİNEN HATA (it.fails): ntfy yayın zaman aşımı 15 sn (rapor 3 sn diyordu); düzelince `it.fails` → `it` yapılır.
-  it.fails("yayın zaman aşımı kısa (≤ 5 sn): pull kb kilidi altında bildirim yapar, takılan ntfy N görev × süre bekletmemeli", async () => {
+  // DÜZELTİLDİ (T20261120-40): ntfy yayın zaman aşımı 15 sn (rapor 3 sn diyordu).
+  it("yayın zaman aşımı kısa (≤ 5 sn): pull kb kilidi altında bildirim yapar, takılan ntfy N görev × süre bekletmemeli", async () => {
     // AbortSignal.timeout'a verilen süreyi yakalıyoruz (duvar saatine bağlı iddia yok).
     const seen: number[] = [];
     const real = AbortSignal.timeout.bind(AbortSignal);
@@ -66,8 +66,8 @@ describe("calcTrigger: sınır değerleri", () => {
 });
 
 describe("runCapacity: yapılandırma metni görev gövdesini bozamaz", () => {
-  // BİLİNEN HATA (it.fails): `source`/`unit` temizlenmeden gövdeye giriyor.
-  it.fails("capacity.yaml `source` alanındaki satır sonu sahte işaret/bölüm üretmez", async () => {
+  // DÜZELTİLDİ (T20261120-40): `source`/`unit` temizlenmeden gövdeye giriyor.
+  it("capacity.yaml `source` alanındaki satır sonu sahte işaret/bölüm üretmez", async () => {
     const home = makeHome();
     cpSync(join(__dirname, "..", "..", "roles"), join(home, "roles"), { recursive: true });
     writeFileSync(join(home, "kb", "projects", "p.md"), "---\nslug: p\n---\n");
@@ -91,13 +91,13 @@ describe("runCapacity: yapılandırma metni görev gövdesini bozamaz", () => {
     expect(arch).toHaveLength(1);
     const lines = arch[0]!.body.split("\n");
     expect(lines.filter((l) => l.startsWith("spc-capacity: "))).toEqual(["spc-capacity: medialog/ws-concurrent"]);
-    expect(lines.filter((l) => /^## /.test(l))).toEqual(["## Tanım", "## Kabul kriterleri"]);
+    expect(lines.filter((l) => /^## /.test(l))).toEqual(["## Tanım", "## Kabul kriterleri", "## Bağlam", "## İlerleme", "## Sorular", "## Kapanış raporu"]); // createTask şablon bölümleri, her biri bir kez (sahte ikinci "## Kapanış raporu" yok)
   });
 });
 
 describe("launchd: kısmi kurulum", () => {
-  // BİLİNEN SINIRLAMA (it.fails): geliştirici raporunda açık nokta; düzelince `it` yapılır.
-  it.fails("capacity bootstrap başarısızsa önceden kurulan pull işi de geri alınır (yarım kurulum kalmaz)", async () => {
+  // DÜZELTİLDİ (T20261120-40): pull işi de geri alınır.
+  it("capacity bootstrap başarısızsa önceden kurulan pull işi de geri alınır (yarım kurulum kalmaz)", async () => {
     const plistDir = join(work, "LaunchAgents");
     const homeDir = join(work, "home");
     const calls: string[][] = [];

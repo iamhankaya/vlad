@@ -185,6 +185,7 @@ export async function runCapacity(deps: CapacityDeps, opts: CapacityOptions = {}
       result.errors.push({ server: srv.id, code, message } satisfies MonitorError);
     }
   }
+  try { await deps.notifier?.flush?.(); } catch { /* en iyi çaba */ }
   return result;
 
   async function apply(srv: CapacityServerConfig, cfg: CapacityConfig, series: Record<string, Record<string, import("./capacity-calc.js").DayBucket[]>>,

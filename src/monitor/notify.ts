@@ -73,19 +73,31 @@ export function markDone(dir: string, id: string): number {
 }
 
 /** `pull`/`capacity` bildirimcisi: kuyruk dosyası asıl kayıt, ntfy en iyi çaba (kanal yok/ağ hatası fırlatmaz). */
-export interface Notifier { notice(n: Notice): Promise<void> }
-export function createNotifier(o: { dir?: string; channel: () => ChannelConfig | null; fetch?: typeof fetch; log?: (l: string) => void }): Notifier {
+export interface Notifier {
+  notice(n: Notice): Promise<void>;
+  /** `defer` kipinde biriken ntfy gönderimlerini eşzamanlı yapar (toplam süre tek zaman aşımı kadar); boşsa hemen döner. */
+  flush?(): Promise<void>;
+}
+export function createNotifier(o: { dir?: string; channel: () => ChannelConfig | null; fetch?: typeof fetch; log?: (l: string) => void; defer?: boolean }): Notifier {
   const dir = o.dir ?? defaultNotifyDir();
   const log = o.log ?? (() => {});
+  const pending: (() => Promise<void>)[] = [];
+  const send = async (n: Notice): Promise<void> => {
+    try {
+      const cfg = o.channel();
+      if (!cfg) return;
+      const title = n.kind === "capacity" ? "VLAD kapasite" : "VLAD görev açtı";
+      await new NtfyChannel(cfg, o.fetch).publishNotice({ title, message: `${n.server}: ${n.task}${n.trigger ? ` (${n.trigger})` : ""}` });
+    } catch (e) { log(`ntfy bildirimi gönderilemedi: ${(e as Error).name}`); }
+  };
   return {
     async notice(n) {
       try { enqueueNotice(dir, n); } catch (e) { log(`bildirim kuyruğa yazılamadı: ${(e as Error).message}`); }
-      try {
-        const cfg = o.channel();
-        if (!cfg) return;
-        const title = n.kind === "capacity" ? "VLAD kapasite" : "VLAD görev açtı";
-        await new NtfyChannel(cfg, o.fetch).publishNotice({ title, message: `${n.server}: ${n.task}${n.trigger ? ` (${n.trigger})` : ""}` });
-      } catch (e) { log(`ntfy bildirimi gönderilemedi: ${(e as Error).name}`); }
+      if (o.defer) pending.push(() => send(n)); else await send(n);
+    },
+    async flush() {
+      const jobs = pending.splice(0);
+      await Promise.all(jobs.map((j) => j())); // send hata fırlatmaz; eşzamanlı → toplam ≈ tek zaman aşımı
     },
   };
 }

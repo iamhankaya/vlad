@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Ajv, type ValidateFunction } from "ajv";
 import { parse } from "yaml";
 import { getVladHome } from "../kb/index.js";
+import { clean } from "./task-text.js";
 
 /**
  * spc `capacity.yaml` (haftalık kapasite raporunun tetikleyici tanımı; plan Karar 3). Şema `schemas/capacity.schema.json` (spc'den vendor).
@@ -17,6 +18,7 @@ export interface CapacityConfig {
   version: 1; server: string; source: string; warn_pct: number; consecutive_weeks: number;
   triggers: CapacityTrigger[]; manual?: { id: string; title: string; source_item: number }[];
 }
+
 
 export class CapacityConfigError extends Error {
   constructor(message: string) { super(message); this.name = "CapacityConfigError"; }
@@ -41,6 +43,10 @@ export function loadCapacityConfig(file: string, o: { schemaDir?: string } = {})
     throw new CapacityConfigError(`capacity.yaml geçersiz: ${(fn.errors ?? []).map((e) => `${e.instancePath || "/"} ${e.message ?? ""}`.trim()).join("; ")}`);
   }
   const c = doc as CapacityConfig;
+  // serbest metin alanları görev gövdesine girer: kontrol karakteri/satır sonu boşluk olur (sahte işaret/bölüm üretemez)
+  c.source = clean(c.source);
+  for (const t of c.triggers) { t.title = clean(t.title); t.unit = clean(t.unit); }
+  for (const m of c.manual ?? []) m.title = clean(m.title);
   const seen = new Set<string>();
   for (const id of [...c.triggers.map((t) => t.id), ...(c.manual ?? []).map((m) => m.id)]) {
     if (seen.has(id)) throw new CapacityConfigError(`capacity.yaml: yinelenen kimlik: ${id}`);
