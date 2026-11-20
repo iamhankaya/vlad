@@ -18,7 +18,7 @@
     "memoryDirs": { "type": "array", "items": { "type": "string", "minLength": 1 } },
     "kbDir": { "type": "string", "minLength": 1 },
     "kbRepo": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
-    "monitor": { "type": "object", "additionalProperties": false, "required": ["servers"], "properties": { "servers": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "agent_url", "project"], "properties": { "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }, "agent_url": { "type": "string", "pattern": "^https?://\\S+$" }, "project": { "type": "string", "minLength": 1 } } } } } },
+    "monitor": { "type": "object", "additionalProperties": false, "required": ["servers"], "properties": { "servers": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["id", "agent_url", "project"], "properties": { "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" }, "agent_url": { "type": "string", "pattern": "^https?://\\S+$" }, "project": { "type": "string", "minLength": 1 }, "capacity_file": { "type": "string", "minLength": 1 } } } } } },
     "brain": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "consoles": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["name"], "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" } } } },
     "machines": {

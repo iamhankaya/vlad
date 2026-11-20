@@ -8,6 +8,7 @@
     "alerts-page1-has-more.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: 3 critical firing, limit=2 → has_more true", "replacedBy": "spc canlı ajan yakalaması" },
     "alerts-page2-last.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: sayfa 2 (cursor ile), has_more false", "replacedBy": "spc canlı ajan yakalaması" },
     "error-401-unauthorized.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: yanlış belirteç → {status, body}", "replacedBy": "spc canlı ajan yakalaması" },
+    "capacity-medialog.yaml": { "kind": "TÜRETİLMİŞ", "source": "D-medialog-062 madde 1 ve 4 + spc servers/medialog/rules.yaml eşiklerinden elle yazıldı (T20261120-32); spc'deki servers/medialog/capacity.yaml spc pipeline'ında yazılır, o commit'ten sonra bu kopya onunla eşlenir", "replacedBy": "spc servers/medialog/capacity.yaml (spc commit'i girilecek)" },
     "error-410-cursor-invalid.json": { "kind": "TÜRETİLMİŞ", "source": "FakeAgentServer @ spc a4c5fd0: resetEpoch sonrası eski cursor → {status, body}", "replacedBy": "spc canlı ajan yakalaması" }
   }
 }

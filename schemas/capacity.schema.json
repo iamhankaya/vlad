@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "capacity.schema.json",
+  "title": "spc capacity.yaml (VLAD kopyası; kaynak: spc servers/capacity.schema.json)",
+  "description": "Haftalık kapasite raporunun tetikleyici tanımı. Kaynak karar D-medialog-062; eşikler servers/<ad>/rules.yaml ile aynı. Şema spc'de yazılır, buraya vendor edilir.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "server", "source", "warn_pct", "consecutive_weeks", "triggers"],
+  "properties": {
+    "version": { "const": 1 },
+    "server": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+    "source": { "type": "string", "minLength": 1 },
+    "warn_pct": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+    "consecutive_weeks": { "type": "integer", "minimum": 1, "maximum": 12 },
+    "triggers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "metric", "measure", "op", "threshold", "unit", "source_item"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "metric": { "type": "string", "minLength": 1 },
+          "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+          "measure": { "enum": ["peak", "daily_avg_peak"] },
+          "op": { "enum": [">", ">="] },
+          "threshold": { "type": "number", "exclusiveMinimum": 0 },
+          "unit": { "type": "string" },
+          "source_item": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "manual": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "source_item"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "title": { "type": "string", "minLength": 1 },
+          "source_item": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}
