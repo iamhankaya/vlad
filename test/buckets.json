@@ -68,6 +68,7 @@
     "test/tasks/denials.test.ts",
     "test/tasks/deps.test.ts",
     "test/tasks/idle.test.ts",
+    "test/tasks/nudge.test.ts",
     "test/tasks/pipeline.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
