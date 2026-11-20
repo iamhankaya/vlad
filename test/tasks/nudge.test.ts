@@ -36,7 +36,7 @@ describe("nudgeWorker (F-vlad-361)", () => {
     const { deps, calls } = fake([BOX("merhaba dünya"), BOX("")]);
     const r = await nudgeWorker("T1", "merhaba dünya", deps);
     expect(r).toEqual({ delivered: true, enters: 1 });
-    expect(calls[1]).toEqual(["send-keys", "-t", "vlad-T1", "-l", "merhaba dünya"]);
+    expect(calls[1]).toEqual(["send-keys", "-t", "vlad-T1", "-l", "--", "merhaba dünya"]);
   });
   it("meşgul çalışanda Enter yutulursa kutu dolu kaldığı sürece Enter'ı tekrarlar", async () => {
     const { deps } = fake([BOX("merhaba dünya"), BOX("merhaba dünya"), BOX("")]);
