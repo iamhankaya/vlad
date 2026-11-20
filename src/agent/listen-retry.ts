@@ -5,7 +5,13 @@
 export interface RetryOpts { sleep?: (ms: number) => Promise<void>; log: (line: string) => void; baseMs?: number; maxMs?: number; signal?: AbortSignal }
 
 export async function listenWithRetry<T>(fn: () => Promise<T>, o: RetryOpts): Promise<T> {
-  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  // Varsayılan uyku iptal sinyaliyle kesilir (SIGTERM'de ≤ 60 sn gecikme olmasın); enjekte `sleep` aynen kullanılır.
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => {
+    if (o.signal?.aborted) return r();
+    const done = (): void => { clearTimeout(t); o.signal?.removeEventListener("abort", done); r(); };
+    const t = setTimeout(done, ms);
+    o.signal?.addEventListener("abort", done, { once: true });
+  }));
   const base = o.baseMs ?? 1000, max = o.maxMs ?? 60_000;
   let delay = base, warned = false;
   for (;;) {

@@ -5,8 +5,7 @@ import { LIMITS } from "../../src/approver/types.js";
 
 const err = (code: string) => Object.assign(new Error(code), { code });
 
-// T20261121-31 doğrulama (F-vlad-358 / F-vlad-360). `it.fails` = hata kanıtlayan test; üretim kodu düzelince "beklenmedik geçti" diye
-// kırılır ve `it.fails` → `it` yapılır (gate yeşil kalsın diye).
+// T20261121-31 doğrulama (F-vlad-358 / F-vlad-360). iptal-uyku testi düzeltmeyle `it.fails` → `it` oldu.
 describe("doğrulama: listenWithRetry gerçek uyku", () => {
   it("normal yol: gerçek zamanlayıcıyla (küçük baseMs) başarır", async () => {
     let n = 0;
@@ -21,8 +20,8 @@ describe("doğrulama: listenWithRetry gerçek uyku", () => {
     const ac = new AbortController(); ac.abort();
     await expect(listenWithRetry(async () => { throw err("EADDRNOTAVAIL"); }, { sleep: async () => { throw new Error("uyumamalı"); }, log: () => {}, signal: ac.signal })).rejects.toMatchObject({ code: "EADDRNOTAVAIL" });
   });
-  // BUG: SIGTERM işleyicisi varsayılan çıkışı kapatır (start.ts), iptal ise uykuyu kesmez: <= 60 sn gecikme (launchd SIGKILL'e düşer).
-  it.fails("[BUG: iptal uykuyu kesmiyor] bekleme sırasında iptal hemen döner", async () => {
+  // SIGTERM işleyicisi varsayılan çıkışı kapatır (start.ts); iptal uykuyu kesmezse <= 60 sn gecikir (launchd SIGKILL'e düşer).
+  it("[F-vlad-358] iptal uykuyu keser: bekleme sırasında iptal hemen döner", async () => {
     const ac = new AbortController();
     const t0 = Date.now();
     const p = listenWithRetry(async () => { throw err("EADDRNOTAVAIL"); }, { log: () => {}, baseMs: 3000, maxMs: 3000, signal: ac.signal });
