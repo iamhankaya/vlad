@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { approverDir } from "../mode/token.js";
 import { userInfo } from "node:os";
 import { join } from "node:path";
@@ -50,6 +50,15 @@ const realLaunchctl: Launchctl = (args) => new Promise((resolve) => {
 const notLoaded = (r: { code: number; stderr: string }): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
 const realSleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
 
+/** F-vlad-355: yaşam döngüsü adımları approver.log'a zaman damgalı satır olarak yazılır (servis sessizce kalkarsa iz kalsın). En iyi çaba; sır yok (yollar/kodlar). */
+function lifecycleLog(line: string): void {
+  try {
+    const dir = approverDir();
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    appendFileSync(join(dir, "approver.log"), `${new Date().toISOString()} launchd: ${line.replace(/[\r\n]+/g, " ").slice(0, 500)}\n`, { mode: 0o600 });
+  } catch { /* günlük yazılamazsa kurulum/kaldırma bozulmaz */ }
+}
+
 export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?: string; homeDir?: string; sleep?: (ms: number) => Promise<void> } = {}): ServiceInstaller {
   const sleep = deps.sleep ?? realSleep;
   const lc = deps.launchctl ?? realLaunchctl;
@@ -58,6 +67,7 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
   return {
     async install(c) {
       const steps: string[] = [];
+      lifecycleLog(`install başladı (plist ${plist})`);
       mkdirSync(join(plist, ".."), { recursive: true });
       // launchd günlük dosyasını 0600 yapmaz: approver dizini (0700) altında önceden 0600 oluştur
       const dir = approverDir(), logPath = join(dir, "launchd.log");
@@ -70,22 +80,31 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
       steps.push(`plist yazıldı: ${plist}`);
       await lc(["bootout", `${target}/${LABEL}`]); // yoksa hata normal (yeniden kurulum idempotent)
       const r = await lc(["bootstrap", target, plist]);
-      if (r.code !== 0) { rmSync(plist, { force: true }); throw new Error(`launchctl bootstrap başarısız (${r.code}): ${r.stderr.trim() || r.stdout.trim()}; plist geri alındı`); }
+      if (r.code !== 0) {
+        rmSync(plist, { force: true });
+        lifecycleLog(`bootstrap başarısız (${r.code}): ${r.stderr.trim() || r.stdout.trim()}; plist geri alındı`);
+        throw new Error(`launchctl bootstrap başarısız (${r.code}): ${r.stderr.trim() || r.stdout.trim()}; plist geri alındı`);
+      }
       steps.push("launchctl bootstrap");
+      lifecycleLog("bootstrap başarılı");
       return steps;
     },
     async uninstall() {
       const steps: string[] = [];
+      lifecycleLog("uninstall başladı");
       const b = await lc(["bootout", `${target}/${LABEL}`]);
-      if (b.code !== 0 && !notLoaded(b)) throw new Error(`launchctl bootout başarısız (${b.code}): ${b.stderr.trim() || b.stdout.trim()}; dosyalar silinmedi`);
+      if (b.code !== 0 && !notLoaded(b)) {
+        lifecycleLog(`bootout başarısız (${b.code}): ${b.stderr.trim() || b.stdout.trim()}; dosyalar silinmedi`);
+        throw new Error(`launchctl bootout başarısız (${b.code}): ${b.stderr.trim() || b.stdout.trim()}; dosyalar silinmedi`);
+      }
       steps.push("launchctl bootout");
       for (let i = 0; ; i++) { // sonlanmayı doğrula: servis hâlâ yüklü/çalışıyorsa dosyalara dokunma
         const r = await lc(["print", `${target}/${LABEL}`]);
         if (r.code !== 0 || !/state = running/.test(r.stdout)) break;
-        if (i >= 9) throw new Error("servis bootout sonrası sonlanmadı; dosyalar silinmedi");
+        if (i >= 9) { lifecycleLog("servis bootout sonrası sonlanmadı; dosyalar silinmedi"); throw new Error("servis bootout sonrası sonlanmadı; dosyalar silinmedi"); }
         await sleep(200);
       }
-      if (existsSync(plist)) { rmSync(plist, { force: true }); steps.push(`plist silindi: ${plist}`); }
+      if (existsSync(plist)) { rmSync(plist, { force: true }); steps.push(`plist silindi: ${plist}`); lifecycleLog(`plist silindi: ${plist}`); }
       return steps;
     },
     async status() {
