@@ -50,7 +50,7 @@ describe("approver: allowlist (mode/install)", () => {
     ]) expect(argvReason(argv), argv.join(" ")).toBe("ok");
   });
   it("izinsiz komut/op not_allowlisted", () => {
-    for (const argv of [["task", "new"], ["mode", "status"], ["mode", "token", "--reset"], ["mode", "watch"], ["mode", "watch", "maybe"], ["mode"], [], ["uninstall"]])
+    for (const argv of [["mode", "token", "--reset"], ["task", "nope"], ["mode", "watch"], ["mode", "watch", "maybe"], ["mode"], [], ["uninstall"]])
       expect(argvReason(argv), argv.join(" ")).toBe("not_allowlisted");
   });
   it("bilinmeyen bayrak/yardımcı/pozisyonel/-- ve --x=y bad_flag", () => {

@@ -4,7 +4,7 @@ import type { Kit } from "../kit.js";
 import { SilentExit, type Opts } from "../ctx.js";
 import { getVladHome } from "../../kb/index.js";
 import { assertNotWorker } from "../../mode/guard.js";
-import { requireModeAuthority } from "../../mode/token.js";
+import { requireTtyOrApprovedOp } from "../../mode/token.js";
 import { loadMonitorConfig, MonitorConfigError } from "../../monitor/config.js";
 import { exitCodeOf, monitorStatus, pullAlerts } from "../../monitor/pull.js";
 import { createKeychainReader } from "../../monitor/secret.js";
@@ -38,8 +38,10 @@ export function registerMonitor(program: Command, k: Kit, deps: MonitorCliDeps =
   const guardPrivileged = (what: string): void => {
     assertNotWorker();
     if (platform() !== "darwin") throw new Error(`monitor ${what} yalnız macOS'ta çalışır`);
-    if (!(deps.isTTY ?? (() => process.stdin.isTTY === true))()) throw new Error(`monitor ${what} yalnız etkileşimli terminalde (TTY) çalışır`);
-    requireModeAuthority();
+    const tty = (deps.isTTY ?? (() => process.stdin.isTTY === true))();
+    try { requireTtyOrApprovedOp(tty); } catch (e) { // TTY yoksa yalnız approver servisinin yürüttüğü (VMT2, argv bağlı) bağlam geçer
+      throw new Error((e as Error).message.startsWith("yalnız etkileşimli") ? `monitor ${what} ${(e as Error).message}` : (e as Error).message);
+    }
   };
 
   def(monitor, "pull", "Ajanlardan alarmları çeker; critical firing için görev açar, resolved için not düşer", async (o: Opts) => {

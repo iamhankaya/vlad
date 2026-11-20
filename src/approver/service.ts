@@ -5,7 +5,7 @@ import { keyState, mintOpToken, readKey } from "../mode/token.js";
 import { assertSecretParentSecure } from "../mode/secure-fs.js";
 import type { ApproverChannel } from "./ntfy.js";
 import type { Executor } from "./exec.js";
-import { approveTag, computeDigest, denyTag, keyGen, newId, newNonce, newTopic, parseDecision, validateRequest, type RandomSource } from "./request.js";
+import { PROTECTED_OPS, approveTag, computeDigest, denyTag, keyGen, newId, newNonce, newTopic, parseDecision, validateRequest, type RandomSource } from "./request.js";
 import type { Store } from "./store.js";
 import { LIMITS, type AckRecord, type Ctx, type DropReason, type PendingRecord, type ResultRecord, type ResultStatus } from "./types.js";
 
@@ -93,8 +93,9 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
 
   // --- sonuçlandırma ---
   const settle = (p: PendingRecord, r: { status: ResultStatus; exitCode?: number | null; stdout?: string; stderr?: string; reason?: string }, kind: "approve" | "deny" | "expire" | null): void => {
-    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(redact(r.stdout ?? "")), stderr: clip(redact(r.stderr ?? "")), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester };
+    const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(redact(r.stdout ?? "")), stderr: clip(redact(r.stderr ?? "")), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester, ...(p.approvedAt ? { approvedAt: p.approvedAt } : {}) };
     try { store.writeResult(rec); } catch (e) { L(`sonuç yazılamadı: ${msg(e)}`); }
+    if (p.approvedAt) L(`çalıştırıldı: ${p.shortId} ${p.op} isteyen ${p.requester} onay ${p.approvedAt} çıkış ${rec.exitCode ?? "-"} (${r.status})`); // her çalıştırma kaydı: isteyen, argv (sonuç dosyasında), onay zamanı, çıkış kodu
     if (kind) { try { recordRate(kind); } catch (e) { L(`hız sınırı yazılamadı: ${msg(e)}`); } }
     try { store.clearPending(); } catch (e) { L(`pending.json silinemedi: ${msg(e)}`); }
     if (cur?.id === p.id) cur = null; // yanıt akışı açık kalır (tekrar oynatma `not_pending` olarak loglanır); yeni istek ya da servis durması kapatır
@@ -112,7 +113,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
       const running_: PendingRecord = { ...p, status: "executing" };
       store.writePending(running_); // yazılamazsa spawn edilmez
       cur = running_;
-      const token = mintOpToken(p.argv, LIMITS.tokenTtlMs, clock.now());
+      const token = PROTECTED_OPS.includes(p.op) ? mintOpToken(p.argv, LIMITS.tokenTtlMs, clock.now()) : ""; // VMT2 yalnız korunan komut kümesinde env'e girer
       const r = await executor.run(p.argv, token, p.ctx, { signal });
       const status: ResultStatus = r.aborted ? "interrupted" : r.timedOut ? "failed" : r.exitCode === 0 ? "done" : "failed";
       const reason = r.aborted ? "servis durduruldu" : r.timedOut ? "zaman aşımı" : undefined;
@@ -132,7 +133,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     if ("drop" in d) return drop(d.drop);
     // Karar tüketimi: await yok; ilk geçerli karar kazanır (bellekteki durum aynı gövdeli ikinci çağrıyı not_pending'e düşürür).
     try { if (!store.markClaim(p.id, "decision")) return drop("not_pending"); } catch (e) { L(`karar işaretçisi yazılamadı: ${msg(e)}`); return; }
-    const next: PendingRecord = { ...p, status: d.decision === "approve" ? "approved" : "denied" };
+    const next: PendingRecord = { ...p, status: d.decision === "approve" ? "approved" : "denied", ...(d.decision === "approve" ? { approvedAt: iso(nowMs()) } : {}) };
     cur = next;
     try { store.writePending(next); } catch (e) { L(`pending.json yazılamadı: ${msg(e)}`); return settle(p, { status: "denied", reason: "yazma hatası; çalıştırılmadı" }, null); }
     if (d.decision === "deny") return settle(next, { status: "denied", reason: "reddedildi" }, "deny");
