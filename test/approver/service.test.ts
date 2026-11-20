@@ -575,6 +575,21 @@ describe("approver: service sertleştirme (Codex P1/P2)", () => {
   });
 });
 
+describe("approver: service VMT2 yalnız korunan komut kümesine verilir", () => {
+  it("korunan komut (monitor install) token alır; korunmayan (task list) boş token alır", async () => {
+    start();
+    const p = await open(1, ["monitor", "install"], "monitor install");
+    ch.h!.onBody(body("a1", p));
+    await resultOf(p.id);
+    expect(execRun.mock.calls[0]![1]).toMatch(/^VMT2\./);
+    t += LIMITS.cooldownMs + 1000;
+    const p2 = await open(2, ["task", "list"], "task list");
+    ch.h!.onBody(body("a1", p2));
+    await resultOf(p2.id);
+    expect(execRun.mock.calls[1]![1]).toBe("");
+  });
+});
+
 describe("approver: service genel komut (her vlad alt komutu) ve çalıştırma kaydı", () => {
   it("manifest komutu onaylanınca argv birebir çalışır; kayıt isteyen, argv, onay zamanı ve çıkış kodunu taşır; log'a düşer", async () => {
     start();

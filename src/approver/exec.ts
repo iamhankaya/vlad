@@ -14,7 +14,7 @@ export interface Executor {
 
 /** Üretim env'i: PATH, HOME (passwd'dan), VLAD_HOME, LANG, VLAD_MODE_TOKEN ve doğrulanmış ctx.kb'den VLAD_KB_DIR (onaylanan komut bildirilen kb'yi değiştirir); VLAD_TASK_ID/USERPROFILE/NODE_OPTIONS yok. */
 export function defaultExecEnv(p: { path: string; home: string; vladHome: string; token: string; kb?: string }): NodeJS.ProcessEnv {
-  return { PATH: p.path, HOME: p.home, VLAD_HOME: p.vladHome, LANG: "en_US.UTF-8", VLAD_MODE_TOKEN: p.token, ...(p.kb ? { VLAD_KB_DIR: p.kb } : {}) };
+  return { PATH: p.path, HOME: p.home, VLAD_HOME: p.vladHome, LANG: "en_US.UTF-8", ...(p.token ? { VLAD_MODE_TOKEN: p.token } : {}), ...(p.kb ? { VLAD_KB_DIR: p.kb } : {}) };
 }
 
 /** Test için kısa değerler; üretim yolu varsayılanları kullanır. */

@@ -17,8 +17,17 @@ const bytes = (s: string): number => Buffer.byteLength(s, "utf8");
 
 /** Eski beş işlem: sıkı argüman şeması (aşağıda) korunur; diğer her manifest komutu genel yoldan (serbest argüman, boyut/kontrol sınırı) geçer. */
 const LEGACY_OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup"];
-/** Kendini isteyen/servisi yöneten komutlar (onay döngüsü; yürütülürken servisi öldüren işlem) ve kimlik bilgisi basan `mode token` (çıktısı sonuç kaydına/bildirime sızardı); her zaman reddedilir. */
-const BLOCKED_OPS: readonly Op[] = ["mode request", "mode token", "approver run", "approver install", "approver uninstall", "approver rotate", "approver unlock"];
+/**
+ * Korunan (VMT2 gerektiren) bilinçli izin kümesi, AÇIK liste: manifestte `console: none` olsalar da telefondan istenebilir ve yürütmede yalnız bunlara VMT2 verilir.
+ * Engelli küme manifest türevidir (`isBlockedPath`): `console.kind === "none"` olan her yol + `remote` + `agent *`, bu liste hariç. Yeni `console: none` komut otomatik engellenir
+ * (`mode request`/`mode token`/`approver run|install|uninstall|rotate|unlock`, `task close|release|repin`, `audit setup` … hepsi bu yoldan engelli).
+ */
+export const PROTECTED_OPS: readonly Op[] = ["mode night", "mode watch", "mode off", "install", "setup", "monitor install", "monitor uninstall"];
+const isBlockedPath = (path: readonly string[]): boolean => {
+  if (PROTECTED_OPS.includes(path.join(" "))) return false;
+  if (path[0] === "remote" || path[0] === "agent") return true;
+  return COMMANDS.some((c) => c.console.kind === "none" && c.path.length === path.length && c.path.every((t, i) => t === path[i]));
+};
 const COMMAND_PATHS: readonly (readonly string[])[] = COMMANDS.map((c) => c.path);
 /** İstemci için: argv'nin işlemi (manifestteki en uzun komut yolu, boşlukla birleşik) ya da null. */
 export const opOfArgv = (argv: string[]): string | null => commandPathOf(argv)?.join(" ") ?? null;
@@ -112,7 +121,7 @@ export function validateRequest(raw: unknown): Verdict {
   const path = commandPathOf(args);
   if (!path) return no("not_allowlisted", "bilinmeyen komut yolu");
   if (path.join(" ") !== op) return no("not_allowlisted", "op ile argv uyuşmuyor");
-  if (BLOCKED_OPS.includes(op)) return no("not_allowlisted", "bu komut uzaktan istenemez (onay döngüsü/servis yönetimi)");
+  if (isBlockedPath(path)) return no("not_allowlisted", "bu komut uzaktan istenemez (konsola/uzaktan açılmamış komut)");
   let bad: Bad | null = null;
   switch (op) {
     case "mode night": bad = parseFlags(args, 2, ARGV_SCHEMA["mode night"]); break;
@@ -158,8 +167,8 @@ const hhmmss = (iso: string): string => {
   return [d.getHours(), d.getMinutes(), d.getSeconds()].map((n) => String(n).padStart(2, "0")).join(":");
 };
 const tilde = (p: string): string => { const h = homedir(); return h.length > 1 && (p === h || p.startsWith(h + "/")) ? "~" + p.slice(h.length) : p; };
-/** Bildirimde bir argüman: güvenli karakterler çıplak, diğerleri (boşluk, boş, tırnak, sembol) JSON tırnaklı. */
-const quoteArg = (t: string): string => (/^[\w@%+=:,./~-]+$/.test(t) ? t : JSON.stringify(t));
+/** Bildirimde bir argüman: güvenli ASCII karakterler çıplak, diğerleri (boşluk, boş, tırnak, sembol) JSON tırnaklı; ASCII dışı her karakter `\uXXXX` (benzer harf/birleştirici işaret aldatmacası görünür; yalnız genel yolun gösteriminde, yürütülen argv değişmez). */
+const quoteArg = (t: string): string => (/^[\w@%+=:,./~-]+$/.test(t) ? t : JSON.stringify(t).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`));
 const flagValue = (argv: string[], f: string): string | undefined => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : undefined; };
 
 /** Bildirimin eylem bölümü (İşlem/bayrak satırları) üst sınırı (UTF-8 bayt); aşan istek validateRequest'te too_large (telefonda eksiksiz gösterilemez). */

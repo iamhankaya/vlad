@@ -5,7 +5,7 @@ import { keyState, mintOpToken, readKey } from "../mode/token.js";
 import { assertSecretParentSecure } from "../mode/secure-fs.js";
 import type { ApproverChannel } from "./ntfy.js";
 import type { Executor } from "./exec.js";
-import { approveTag, computeDigest, denyTag, keyGen, newId, newNonce, newTopic, parseDecision, validateRequest, type RandomSource } from "./request.js";
+import { PROTECTED_OPS, approveTag, computeDigest, denyTag, keyGen, newId, newNonce, newTopic, parseDecision, validateRequest, type RandomSource } from "./request.js";
 import type { Store } from "./store.js";
 import { LIMITS, type AckRecord, type Ctx, type DropReason, type PendingRecord, type ResultRecord, type ResultStatus } from "./types.js";
 
@@ -113,7 +113,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
       const running_: PendingRecord = { ...p, status: "executing" };
       store.writePending(running_); // yazılamazsa spawn edilmez
       cur = running_;
-      const token = mintOpToken(p.argv, LIMITS.tokenTtlMs, clock.now());
+      const token = PROTECTED_OPS.includes(p.op) ? mintOpToken(p.argv, LIMITS.tokenTtlMs, clock.now()) : ""; // VMT2 yalnız korunan komut kümesinde env'e girer
       const r = await executor.run(p.argv, token, p.ctx, { signal });
       const status: ResultStatus = r.aborted ? "interrupted" : r.timedOut ? "failed" : r.exitCode === 0 ? "done" : "failed";
       const reason = r.aborted ? "servis durduruldu" : r.timedOut ? "zaman aşımı" : undefined;
