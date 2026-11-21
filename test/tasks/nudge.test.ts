@@ -66,3 +66,44 @@ describe("nudgeWorker (F-vlad-361)", () => {
     await expect(nudgeWorker("T1", "a\nb", deps)).rejects.toThrow(/tek satır/);
   });
 });
+
+// D-vlad-087 (F-vlad-335): güven ekranında takılan VLAD çalışanına onay tuşu
+import { approveTrustScreen, type TrustDeps } from "../../src/tasks/nudge.js";
+const TRUST = "Quick safety check: Is this a project you created or one you trust?\n ❯ 1. Yes, I trust this folder\n   2. No, exit";
+function fakeTrust(panes: string[], o: { hasSession?: boolean } = {}) {
+  const calls: string[][] = [];
+  let i = 0;
+  const deps: TrustDeps = {
+    tmux: (args) => {
+      calls.push(args);
+      if (args[0] === "has-session") { if (o.hasSession === false) throw new Error("no session"); return ""; }
+      if (args[0] === "capture-pane") return panes[Math.min(i, panes.length - 1)];
+      if (args[0] === "send-keys") i++;
+      return "";
+    },
+    sleepSync: () => {},
+  };
+  return { deps, calls };
+}
+describe("approveTrustScreen (D-vlad-087)", () => {
+  it("güven ekranı görünürse yalnız Enter gönderir; ekran kalkınca true", () => {
+    const f = fakeTrust([TRUST, "● çalışıyor\n> "]);
+    expect(approveTrustScreen("T1", f.deps)).toBe(true);
+    expect(f.calls.filter((c) => c[0] === "send-keys")).toEqual([["send-keys", "-t", "vlad-T1", "Enter"]]);
+  });
+  it("tmux oturumu yoksa (VLAD penceresi değil) hiçbir tuş göndermez, false", () => {
+    const f = fakeTrust([TRUST], { hasSession: false });
+    expect(approveTrustScreen("T1", f.deps)).toBe(false);
+    expect(f.calls.some((c) => c[0] === "send-keys")).toBe(false);
+  });
+  it("ekran güven ekranı değilse tuş göndermez, false", () => {
+    const f = fakeTrust(["> hazır"]);
+    expect(approveTrustScreen("T1", f.deps)).toBe(false);
+    expect(f.calls.some((c) => c[0] === "send-keys")).toBe(false);
+  });
+  it("Enter sonrası ekran hâlâ güven ekranıysa false (tekrar tuş basılmaz)", () => {
+    const f = fakeTrust([TRUST]);
+    expect(approveTrustScreen("T1", f.deps)).toBe(false);
+    expect(f.calls.filter((c) => c[0] === "send-keys")).toHaveLength(1);
+  });
+});

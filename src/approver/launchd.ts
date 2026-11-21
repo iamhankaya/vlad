@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { approverDir } from "../mode/token.js";
-import { userInfo } from "node:os";
 import { join } from "node:path";
+import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl, launchdHome } from "../launchd-guard.js";
 
 /**
  * SÖZLEŞME iskeleti (gövde U5'te). macOS launchd; yalnız `approver` CLI grubunda dinamik `import()` ile yüklenir (Windows testini kırmaz).
@@ -39,12 +39,14 @@ export function approverPlist(c: { node: string; cli: string; home: string; path
 `;
 }
 
-const realLaunchctl: Launchctl = (args) => new Promise((resolve) => {
+const rawLaunchctl: Launchctl = (args) => new Promise((resolve) => {
   execFile("launchctl", args, (err, stdout, stderr) => {
     const c = (err as { code?: unknown } | null)?.code;
     resolve({ code: !err ? 0 : typeof c === "number" ? c : 1, stdout: String(stdout), stderr: String(stderr) });
   });
 });
+
+const realLaunchctl: Launchctl = guardLaunchctl(rawLaunchctl); // F-vlad-355: test ortamında değiştiren fiiller reddedilir
 
 /** "Servis zaten yüklü değil" çıkışları (ESRCH=3, 113 "Could not find service"); bunlar uninstall için başarıdır. */
 const notLoaded = (r: { code: number; stderr: string }): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
@@ -62,10 +64,17 @@ function lifecycleLog(line: string): void {
 export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?: string; homeDir?: string; sleep?: (ms: number) => Promise<void> } = {}): ServiceInstaller {
   const sleep = deps.sleep ?? realSleep;
   const lc = deps.launchctl ?? realLaunchctl;
-  const plist = join(deps.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents"), `${LABEL}.plist`);
+  const plistDir = deps.plistDir ?? join(launchdHome(), "Library", "LaunchAgents");
+  const plist = join(plistDir, `${LABEL}.plist`);
+  /** F-vlad-355: test ortamında gerçek LaunchAgents'a yazma/silme ve gerçek launchctl ile kurulum/kaldırma reddedilir (değiştiren adımların en başında). */
+  const guard = (): void => {
+    assertTestSafeLaunchd({ plistDir, injected: deps.plistDir !== undefined });
+    assertTestLaunchctlInjected(deps.launchctl !== undefined);
+  };
   const target = `gui/${process.getuid?.() ?? 501}`;
   return {
     async install(c) {
+      guard();
       const steps: string[] = [];
       lifecycleLog(`install başladı (plist ${plist})`);
       mkdirSync(join(plist, ".."), { recursive: true });
@@ -74,7 +83,7 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       writeFileSync(logPath, "", { flag: "a", mode: 0o600 });
       chmodSync(logPath, 0o600);
-      for (const h of new Set([c.home, deps.homeDir ?? userInfo().homedir])) rmSync(join(h, ".vlad-approver.log"), { force: true }); // eski günlük (F-vlad-346c); yalnız o dosya
+      for (const h of new Set([c.home, deps.homeDir ?? launchdHome()])) rmSync(join(h, ".vlad-approver.log"), { force: true }); // eski günlük (F-vlad-346c); yalnız o dosya
       writeFileSync(plist, approverPlist(c, logPath), { mode: 0o600 });
       chmodSync(plist, 0o600);
       steps.push(`plist yazıldı: ${plist}`);
@@ -90,6 +99,7 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
       return steps;
     },
     async uninstall() {
+      guard();
       const steps: string[] = [];
       lifecycleLog("uninstall başladı");
       const b = await lc(["bootout", `${target}/${LABEL}`]);

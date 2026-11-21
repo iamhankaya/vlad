@@ -41,6 +41,20 @@ describe("trust screen (F-vlad-261)", () => {
     expect(t.data.error).toMatch(/güven ekranı/);
     expect(t.body).toMatch(/güven ekranında/);
   });
+  it("D-vlad-087: onay tuşu gönderilebilirse çalışan stalled olmaz, günlüğe yazılır; yalnız bir kez denenir", () => {
+    const id = runningLocal(4);
+    let n = 0;
+    expect(stalledIds(probe({ trustScreen: () => true, approveTrust: () => { n++; return true; } }))).toEqual([]);
+    const t = getTask(id);
+    expect(t.data.state).toBe("running");
+    expect(t.body).toMatch(/otomatik onaylandı.*D-vlad-087/);
+    expect(n).toBe(1);
+  });
+  it("D-vlad-087: onay işe yaramazsa (ekran kalkmadı) eskisi gibi stalled", () => {
+    const id = runningLocal(4);
+    expect(stalledIds(probe({ trustScreen: () => true, approveTrust: () => false }))).toEqual([id]);
+    expect(getTask(id).data.state).toBe("stalled");
+  });
   it("leaves a just-launched worker (screen is normal for a moment), one with a transcript, or no screen alone", () => {
     runningLocal(1);
     expect(stalledIds(probe({ trustScreen: () => true }))).toEqual([]);

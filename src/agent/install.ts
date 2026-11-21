@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join, win32 } from "node:path";
 import type { Os } from "../fleet/types.js";
+import { assertTestSafeLaunchd, launchdHome } from "../launchd-guard.js";
 
 export interface InstallCtx { node: string; cli: string; home: string; path: string }
 
@@ -65,12 +65,13 @@ export function installPlan(os: Os, c: InstallCtx): Plan {
     };
   }
   if (os === "darwin") {
-    const file = join(homedir(), "Library", "LaunchAgents", "com.vlad.agent.plist");
+    const file = join(launchdHome(), "Library", "LaunchAgents", "com.vlad.agent.plist");
     const content = launchdPlist(c);
     return {
       description: "Mac LaunchAgent (RunAtLoad, KeepAlive, AbandonProcessGroup)", file, content,
       command: `launchctl bootstrap gui/$(id -u) ${file}`,
       apply: () => {
+        assertTestSafeLaunchd({ plistDir: dirname(file), injected: false }); // F-vlad-355: test ortamında gerçek LaunchAgents'a yazma yok
         mkdirSync(dirname(file), { recursive: true });
         writeFileSync(file, content);
         execFileSync("launchctl", ["bootstrap", `gui/${process.getuid?.() ?? 501}`, file], { stdio: "inherit" });

@@ -53,3 +53,30 @@ export async function nudgeWorker(taskId: string, text: string, deps: NudgeDeps 
   }
   return { delivered: false, enters: max };
 }
+
+// Claude Code's folder trust prompt ("Quick safety check" / "Do you trust the files in this folder?").
+export const trustScreenShown = (pane: string): boolean => /quick safety check|trust (the files in )?this folder/i.test(pane);
+
+export interface TrustDeps {
+  tmux(args: string[]): string;
+  sleepSync(ms: number): void;
+}
+
+const defaultTrustDeps: TrustDeps = {
+  tmux: defaultDeps.tmux,
+  sleepSync: (ms) => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); },
+};
+
+// D-vlad-087 (F-vlad-335): güven ekranında takılan çalışana onay tuşu. Yalnız VLAD'ın açtığı `vlad-<id>` tmux oturumunda ve
+// pane gerçekten güven ekranını gösteriyorsa tek bir Enter gönderir ("Yes, I trust this folder" varsayılan seçenektir); metin yazılmaz.
+// Enter sonrası ekranın kalktığı doğrulanırsa true. Kalkmadıysa false (çağıran takıldı sayar; tekrar basılmaz).
+export function approveTrustScreen(taskId: string, deps: TrustDeps = defaultTrustDeps): boolean {
+  const target = `vlad-${taskId}`;
+  try {
+    deps.tmux(["has-session", "-t", target]);
+    if (!trustScreenShown(deps.tmux(["capture-pane", "-p", "-t", target]))) return false;
+    deps.tmux(["send-keys", "-t", target, "Enter"]);
+    deps.sleepSync(1500);
+    return !trustScreenShown(deps.tmux(["capture-pane", "-p", "-t", target]));
+  } catch { return false; }
+}

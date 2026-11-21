@@ -18,6 +18,9 @@ export function cleanEnv(extra = {}) {
   if (path !== undefined) env.PATH = path;
   for (const k of ["SYSTEMROOT", "COMSPEC", "PATHEXT", "TMPDIR", "TEMP", "TMP"]) if (process.env[k] !== undefined) env[k] = process.env[k];
   Object.assign(env, { TZ: "UTC", COLUMNS: GOLDEN_COLUMNS, NO_COLOR: "1", VLAD_LAUNCHER: "noop", CLAUDE_CODE_REMOTE: "", VLAD_NO_NATIVE: "1" });
+  // F-vlad-355: `userInfo().homedir` HOME'u yok sayar; çocuk gerçek ~/.vlad-secret (ör. approver channel.json) ve LaunchAgents'a bakmasın diye gizli dizin shim'i
+  const shim = join(import.meta.dirname, "..", "..", "test", "support", "no-secret-shim.mjs");
+  env.NODE_OPTIONS = `--import=${pathToFileURL(shim).href}`;
   return { ...env, ...extra };
 }
 
