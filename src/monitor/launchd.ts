@@ -3,6 +3,7 @@ import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import type { ServiceInstaller, Launchctl } from "../approver/launchd.js";
+import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl } from "../launchd-guard.js";
 import { monitorStateDir } from "./state.js";
 import { MONITOR_LIMITS } from "./types.js";
 
@@ -49,12 +50,14 @@ export function capacityPlist(c: { node: string; cli: string; home: string; path
     c, logPath ?? join(monitorStateDir(), CAPACITY_LOG_NAME));
 }
 
-const realLaunchctl: Launchctl = (args) => new Promise((resolve) => {
+const rawLaunchctl: Launchctl = (args) => new Promise((resolve) => {
   execFile("launchctl", args, (err, stdout, stderr) => {
     const c = (err as { code?: unknown } | null)?.code;
     resolve({ code: !err ? 0 : typeof c === "number" ? c : 1, stdout: String(stdout), stderr: String(stderr) });
   });
 });
+
+const realLaunchctl: Launchctl = guardLaunchctl(rawLaunchctl); // F-vlad-355: test ortamında değiştiren fiiller reddedilir
 
 /** "Servis zaten yüklü değil" çıkışları (ESRCH=3, 113); bunlar uninstall için başarıdır. */
 const notLoaded = (r: { code: number; stderr: string }): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
@@ -79,8 +82,14 @@ export function createMonitorInstaller(first?: Launchctl | MonitorInstallerDeps,
     { label: MONITOR_LABEL, logName: MONITOR_LOG_NAME, make: monitorPlist },
     { label: CAPACITY_LABEL, logName: CAPACITY_LOG_NAME, make: capacityPlist },
   ].map((j) => ({ ...j, plist: join(plistDir, `${j.label}.plist`) }));
+  /** F-vlad-355: test ortamında gerçek LaunchAgents'a yazma/silme ve gerçek launchctl reddedilir. */
+  const guard = (): void => {
+    assertTestSafeLaunchd({ plistDir, injected: opts.plistDir !== undefined || opts.homeDir !== undefined });
+    assertTestLaunchctlInjected(opts.launchctl !== undefined);
+  };
   return {
     async install(c) {
+      guard();
       const steps: string[] = [];
       mkdirSync(plistDir, { recursive: true });
       // launchd günlük dosyasını 0600 yapmaz: dizin (0700) altında önceden 0600 oluştur
@@ -108,6 +117,7 @@ export function createMonitorInstaller(first?: Launchctl | MonitorInstallerDeps,
       return steps;
     },
     async uninstall() {
+      guard();
       const steps: string[] = [];
       for (const j of jobs) {
         const b = await lc(["bootout", `${target}/${j.label}`]);

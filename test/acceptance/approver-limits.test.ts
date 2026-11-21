@@ -6,6 +6,8 @@ import { assertSecureDir, writeAtomic } from "../../src/mode/secure-fs.js";
 import { LIMITS } from "../../src/approver/types.js";
 import type { PendingRecord, PendingStatus } from "../../src/approver/types.js";
 import type { Store } from "../../src/approver/store.js";
+import type { ServiceInstaller } from "../../src/approver/launchd.js";
+import type { ServiceInstaller } from "../../src/approver/launchd.js";
 import { b32, digestOf, dirFiles, logText, makeCid, makeWorld, resultOf, runVlad, sleep, startService, submit, untilWatching, waitAck, waitFor, writeRequest } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
 
@@ -33,6 +35,9 @@ function wrapStore(real: Store, hooks: Partial<{ [K in keyof Store]: (...a: Para
   return new Proxy(real, { get(t, k, r) { const v = Reflect.get(t, k, r); const h = (hooks as Record<string, (...a: unknown[]) => void>)[k as string]; return typeof v === "function" ? (...a: unknown[]) => { h?.(...a); return v.apply(t, a); } : v; } });
 }
 const eacces = () => Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+
+/** F-vlad-355: gerçek launchd kurucusu yerine sahte; rotate gerçek ~/Library/LaunchAgents servisini bootout/silip yeniden kurmasın. */
+const noopInstaller: ServiceInstaller = { install: async () => [], uninstall: async () => [], status: async () => ({ installed: false, running: false, detail: "sahte" }) };
 
 describe("approver-kabul: KK12 hız sınırı ve kilit", () => {
   it("soğuma: karardan hemen sonra rate_limited; 30 sn sonra kabul", async () => {
@@ -302,10 +307,10 @@ describe("approver-kabul: anahtar yarışları, rotate", () => {
     const old = JSON.parse(readFileSync(chFile, "utf8")).requestTopic as string;
     const tok = mintToken(60_000, w.clock.now());
     const env = { VLAD_TASK_ID: undefined, VLAD_MODE_TOKEN: tok };
-    const no = await runVlad(["approver", "rotate"], { approverDeps: { isTTY: () => false }, env });
+    const no = await runVlad(["approver", "rotate"], { approverDeps: { isTTY: () => false, installer: noopInstaller }, env });
     expect(no.code).toBe(1);
     expect(JSON.parse(readFileSync(chFile, "utf8")).requestTopic).toBe(old);
-    const ok = await runVlad(["approver", "rotate"], { approverDeps: { isTTY: () => true }, env: { VLAD_TASK_ID: undefined, VLAD_MODE_TOKEN: mintToken(60_000, w.clock.now()) } });
+    const ok = await runVlad(["approver", "rotate"], { approverDeps: { isTTY: () => true, installer: noopInstaller }, env: { VLAD_TASK_ID: undefined, VLAD_MODE_TOKEN: mintToken(60_000, w.clock.now()) } });
     expect(ok.code, ok.err).toBe(0);
     const fresh = JSON.parse(readFileSync(chFile, "utf8")).requestTopic as string;
     expect(fresh).toMatch(/^vlad-q-[a-z2-7]{26}$/); expect(fresh).not.toBe(old);

@@ -3,6 +3,7 @@ import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync
 import { approverDir } from "../mode/token.js";
 import { userInfo } from "node:os";
 import { join } from "node:path";
+import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl } from "../launchd-guard.js";
 
 /**
  * SÖZLEŞME iskeleti (gövde U5'te). macOS launchd; yalnız `approver` CLI grubunda dinamik `import()` ile yüklenir (Windows testini kırmaz).
@@ -39,12 +40,14 @@ export function approverPlist(c: { node: string; cli: string; home: string; path
 `;
 }
 
-const realLaunchctl: Launchctl = (args) => new Promise((resolve) => {
+const rawLaunchctl: Launchctl = (args) => new Promise((resolve) => {
   execFile("launchctl", args, (err, stdout, stderr) => {
     const c = (err as { code?: unknown } | null)?.code;
     resolve({ code: !err ? 0 : typeof c === "number" ? c : 1, stdout: String(stdout), stderr: String(stderr) });
   });
 });
+
+const realLaunchctl: Launchctl = guardLaunchctl(rawLaunchctl); // F-vlad-355: test ortamında değiştiren fiiller reddedilir
 
 /** "Servis zaten yüklü değil" çıkışları (ESRCH=3, 113 "Could not find service"); bunlar uninstall için başarıdır. */
 const notLoaded = (r: { code: number; stderr: string }): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
@@ -62,10 +65,17 @@ function lifecycleLog(line: string): void {
 export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?: string; homeDir?: string; sleep?: (ms: number) => Promise<void> } = {}): ServiceInstaller {
   const sleep = deps.sleep ?? realSleep;
   const lc = deps.launchctl ?? realLaunchctl;
-  const plist = join(deps.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents"), `${LABEL}.plist`);
+  const plistDir = deps.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents");
+  const plist = join(plistDir, `${LABEL}.plist`);
+  /** F-vlad-355: test ortamında gerçek LaunchAgents'a yazma/silme ve gerçek launchctl ile kurulum/kaldırma reddedilir (değiştiren adımların en başında). */
+  const guard = (): void => {
+    assertTestSafeLaunchd({ plistDir, injected: deps.plistDir !== undefined });
+    assertTestLaunchctlInjected(deps.launchctl !== undefined);
+  };
   const target = `gui/${process.getuid?.() ?? 501}`;
   return {
     async install(c) {
+      guard();
       const steps: string[] = [];
       lifecycleLog(`install başladı (plist ${plist})`);
       mkdirSync(join(plist, ".."), { recursive: true });
@@ -90,6 +100,7 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
       return steps;
     },
     async uninstall() {
+      guard();
       const steps: string[] = [];
       lifecycleLog("uninstall başladı");
       const b = await lc(["bootout", `${target}/${LABEL}`]);
