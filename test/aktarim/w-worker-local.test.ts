@@ -78,7 +78,7 @@ describe("--notify: def/forward düzeyindeki hatalar da bildirilir (F-vlad-237)"
 const BRAIN_ONLY = new Set([
   "project write", "project set", "project note", "project summary", "project refresh",
   "finding add", "finding set", "idea add", "idea set", "idea promote", "idea from-finding",
-  "task new", "task launch", "task release", "task repin", "task ingest", "task answer", "task set", "task deps", "task resume", "task cleanup", "task close", "task gate", "task merge-preview", "task merge", "task digested",
+  "task new", "task launch", "task release", "task repin", "task ingest", "task answer", "task set", "task deps", "task resume", "task nudge", "task cleanup", "task close", "task gate", "task merge-preview", "task merge", "task digested",
   "mode night", "mode watch", "mode off", "mode status", "mode token", "mode request",
   "approver install", "approver uninstall", "approver rotate", "approver unlock", "approver status", "approver requests", "approver show", "approver run",
   "monitor pull", "monitor capacity", "notices done", "monitor install", "monitor uninstall",

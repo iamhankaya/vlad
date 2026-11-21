@@ -49,6 +49,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["task", "deps"], { lock: "outer", console: { kind: "write" } }),
   c(["task", "resume"], { lock: "phased", console: { kind: "write" } }),
   c(["task", "close-window"], { worker: LOCAL, console: { kind: "write" } }),
+  c(["task", "nudge"], { console: none("tmux penceresine yazma yalnız yerel VLAD oturumundan; konsoldan açılmadı, ayrı karar") }),
   c(["task", "cleanup"], { lock: "phased", console: { kind: "write" } }),
   c(["task", "gate"], { console: { kind: "write", timeoutMs: 31 * 60_000 } }),
   c(["task", "merge-preview"], { console: { kind: "read" } }),

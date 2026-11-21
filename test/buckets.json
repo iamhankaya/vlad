@@ -1,5 +1,6 @@
 {
   "unit": [
+    "test/acceptance/nudge-verify.test.ts",
     "test/aktarim/v-prod-wiring.test.ts",
     "test/arch/**/*.test.ts",
     "test/audit/derived.test.ts",
@@ -68,6 +69,7 @@
     "test/tasks/denials.test.ts",
     "test/tasks/deps.test.ts",
     "test/tasks/idle.test.ts",
+    "test/tasks/nudge.test.ts",
     "test/tasks/pipeline.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
@@ -81,6 +83,7 @@
     "test/machines/branch-push-op.test.ts",
     "test/machines/branch-push-verify.test.ts",
     "test/tasks/gate-compare.test.ts",
+    "test/tasks/nudge-tmux.test.ts",
     "test/acceptance/cloud-ingest-real-shape.test.ts",
     "test/acceptance/cloud-ingest-verify2.test.ts",
     "test/acceptance/cloud-ingest.test.ts",

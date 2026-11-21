@@ -9,6 +9,7 @@ import { brainTransport, markCleaned, syncKb, remoteCleanup, remoteClose, remote
 import { workerContext } from "../../agent/forward.js";
 import { selfName } from "../../fleet/state.js";
 import type { Launcher } from "../../launcher/index.js";
+import { nudgeWorker } from "../../tasks/nudge.js";
 import { cleanupTask, closeTaskWindow, remoteMachineOf, modelInfo, getTask, resumeLocalCheck, resumePrepare } from "../../tasks/index.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -92,6 +93,12 @@ export function registerTaskResume(task: Command, k: Kit): void {
     const remote = remoteMachineOf(getTask(id), cfg0, workerContext()?.self); // işçide kendi görevi yerel kapanır (F-vlad-149)
     const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id, { closeWorker: closeWorkerWindow });
     out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
+  });
+  def(task, "nudge <id> <mesaj>", "Çalışanın tmux penceresine tek satır metin yazar, Enter'ı istem kutusu boşalana kadar tekrarlar (teslim doğrulanır)", async (id: string, msg: string, o: Opts) => {
+    getTask(id); // bilinmeyen görev açık hatayla düşer
+    const r = await nudgeWorker(id, msg);
+    out(o, { id, ...r }, r.delivered ? `${id}: mesaj teslim edildi (Enter ×${r.enters})` : `${id}: mesaj istem kutusunda kaldı (Enter ×${r.enters}); SendMessage ile dene`);
+    if (!r.delivered) process.exitCode = 1;
   });
   def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", async (id: string, o: Opts) => {
     // --- machines:C1 --- kb yazan cleanup kilitli; uzak makinedeki görevin worktree'si burada yok (C2)

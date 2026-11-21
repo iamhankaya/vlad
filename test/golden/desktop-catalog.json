@@ -340,6 +340,17 @@
   {
    "path": [
     "task",
+    "nudge"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "tmux penceresine yazma yalnız yerel VLAD oturumundan; konsoldan açılmadı, ayrı karar"
+   }
+  },
+  {
+   "path": [
+    "task",
     "cleanup"
    ],
    "json": true,
