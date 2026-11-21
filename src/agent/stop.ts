@@ -40,20 +40,25 @@ const notLoaded = (r: RunResult): boolean => r.code === 3 || r.code === 113 || /
  * Kayıt yoksa (elle `agent start` ile açılmış): pid dosyasındaki sürece sinyal.
  */
 export async function agentStop(d: StopDeps): Promise<StopResult> {
-  const wasRunning = await d.probe();
-  if (!wasRunning) return { stopped: true, wasRunning: false, method: "none", note: "Agent zaten çalışmıyor" };
+  // Durum ping'den BAĞIMSIZ denetlenir: Agent canlıyken ping'e yanıt veremeyebilir (listenWithRetry adres bekliyor).
+  const pingUp = await d.probe();
+  const pidFile = d.readPid();
+  const pidUp = pidFile !== null && d.isAlive(pidFile);
   let method: StopResult["method"] | null = null;
   let note = "";
   if (d.platform === "darwin") {
     const target = `gui/${d.uid}/${LAUNCHD_LABEL}`;
     const pr = await d.run("launchctl", ["print", target]);
-    if (pr.code === 0) {
+    // yüklü + çalışıyor: ping, pid dosyası ya da launchd'nin kendi `pid =`/`state = running` kaydı
+    const svcActive = pr.code === 0 && (pingUp || pidUp || /\bpid = \d+|state = running/.test(pr.stdout));
+    if (svcActive) {
       const r = await d.run("launchctl", ["bootout", target]);
       if (r.code !== 0 && !notLoaded(r)) throw new Error(`agent stop: launchctl bootout başarısız (kod ${r.code}): ${(r.stderr || r.stdout).trim()}`);
       method = "launchd-bootout";
       note = "launchd işi çıkarıldı (bootout); KeepAlive yeniden başlatmaz. Durdurma geçici: plist yerinde kalır, sonraki oturum açılışında Agent yeniden başlar. Hemen geri getirmek için `vlad agent install --apply` (bootstrap) ya da `vlad agent start`; kalıcı kapatma için plist'i kaldır.";
     }
   } else if (d.platform === "win32") {
+    // /End yalnız çalışan örnek varsa başarılı olur (kod 0); ping'e bakmadan denenir.
     const r = await d.run("schtasks", ["/End", "/TN", WIN_TASK]);
     if (r.code === 0) {
       method = "schtasks-end";
@@ -61,15 +66,25 @@ export async function agentStop(d: StopDeps): Promise<StopResult> {
     }
   }
   if (!method) {
-    const pid = d.readPid();
-    if (pid === null || !d.isAlive(pid)) throw new Error("agent stop: durdurulacak süreç bulunamadı (launchd/zamanlanmış görev kaydı yok, pid dosyası boş ya da süreç ölü); Agent başka biçimde çalışıyor olabilir");
-    d.kill(pid);
-    method = "signal";
-    note = `pid ${pid} sonlandırıldı (kayıtlı servis yok: elle başlatılmış Agent); yeniden başlatan bir şey yok, \`vlad agent start\` ile açılır`;
+    if (pidUp) {
+      d.kill(pidFile!);
+      method = "signal";
+      note = `pid ${pidFile} sonlandırıldı (kayıtlı servis yok: elle başlatılmış Agent); yeniden başlatan bir şey yok, \`vlad agent start\` ile açılır`;
+    } else if (pingUp) {
+      throw new Error("agent stop: durdurulacak süreç bulunamadı (launchd/zamanlanmış görev kaydı yok, pid dosyası boş ya da süreç ölü); Agent başka biçimde çalışıyor olabilir");
+    } else {
+      return { stopped: true, wasRunning: false, method: "none", note: "Agent zaten çalışmıyor (ping yok, servis/süreç etkin değil)" };
+    }
   }
+  // Doğrulama: yalnız ping kaybı yetmez; durdurma başında canlı olan süreç de bitmiş olmalı.
   const deadline = Date.now() + (d.waitMs ?? 10_000);
-  while (await d.probe()) {
-    if (Date.now() >= deadline) throw new Error(`agent stop: ${method} çalıştı ama Agent durmadı (hâlâ yanıt veriyor); \`vlad agent status\` ile bak`);
+  for (;;) {
+    const ping = await d.probe();
+    const proc = pidUp && d.isAlive(pidFile!);
+    if (!ping && !proc) break;
+    if (Date.now() >= deadline) {
+      throw new Error(`agent stop: ${method} çalıştı ama Agent durmadı (${ping ? "hâlâ yanıt veriyor" : `süreç ${pidFile} hâlâ canlı`}); \`vlad agent status\` ile bak`);
+    }
     await d.sleep(d.pollMs ?? 250);
   }
   return { stopped: true, wasRunning: true, method, note };
