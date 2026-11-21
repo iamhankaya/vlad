@@ -56,7 +56,7 @@ describe("branch-push uçtan uca (task close, uzak tek görev)", () => {
     expect(git(origin, "rev-parse", `vlad/${id}`).trim()).toBe(head);
     expect(git(origin, "rev-parse", "main").trim()).toBe(mainBefore); // ana dal origin'de değişmez
     expect(git(origin, "tag").trim()).toBe("");
-    expect(readFileSync(join(w.brainRepo, "iş.txt"), "utf8")).toBe("uzak iş\n");
+    expect(readFileSync(join(w.brainRepo, "iş.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("uzak iş\n"); // Windows: core.autocrlf checkout'u CRLF yapar
     expect(git(w.brainRepo, "branch", "--list", `vlad/${id}`).trim()).toBe(""); // yerel dal yaratılmaz
     expect(front(w.readTask(w.brain, id), "state")).toBe("done");
     expect(w.readTask(w.brain, id)).toContain(`branch-push: vlad/${id} @ ${head.slice(0, 12)}`);

@@ -10,6 +10,7 @@ import { buildScript } from "../../src/launcher/terminal.js";
 import { checkWorkerMode } from "../../src/hooks/mode-guard.js";
 import { makeHome } from "../helpers.js";
 import { runCli } from "../support/run-cli.js";
+import { IS_WIN } from "../support/platform.js";
 
 // F-vlad-287 (T20261113-18): imzalı mod belirteci. Gizli dizin geçici; gerçek ~/.vlad-secret'a dokunulmaz.
 let home: string, sdir: string;
@@ -315,7 +316,8 @@ describe("düzeltme turu: initKey/işaret sertleştirme", () => {
     expect(existsSync(join(sdir, "mode.key"))).toBe(false);
     expect(initKey(true)).toBe(true);
   });
-  it("işaret sembolik bağsa initKey bağı izleyip hedefe yazmaz; geçersiz işaret net hatayla fail-closed", () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM)
+  it.skipIf(IS_WIN)("işaret sembolik bağsa initKey bağı izleyip hedefe yazmaz; geçersiz işaret net hatayla fail-closed", () => {
     const target = join(sdir, "..", "hedef.txt");
     writeFileSync(target, "dokunma");
     symlinkSync(target, marker());
@@ -349,7 +351,8 @@ describe("düzeltme turu: task close --skip-machine çalışana kapalı", () => 
 
 describe("K2: bozuk işaret + sağlam anahtar kilitlenme yapmaz", () => {
   const marker = () => `${sdir}.active`;
-  it("bozuk/symlink işaret + sağlam anahtar + süresi dolmuş belirteç: 'broken'; --reset ve --disable yalnız SIFIRLA ile kurtarır", async () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM)
+  it.skipIf(IS_WIN)("bozuk/symlink işaret + sağlam anahtar + süresi dolmuş belirteç: 'broken'; --reset ve --disable yalnız SIFIRLA ile kurtarır", async () => {
     initKey();
     const old = mintToken(H, now);
     const later = new Date(now.getTime() + 2 * H);

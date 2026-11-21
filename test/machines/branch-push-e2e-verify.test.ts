@@ -66,7 +66,7 @@ describe("branch-push doğrulama (uçtan uca, gerçek Agent)", () => {
     const cleanup = o2.steps.find((s: { step: string }) => s.step === "cleanup");
     expect(cleanup?.status, JSON.stringify(o2.steps)).toBe("ok");
     expect(existsSync(wt)).toBe(false); // işçi worktree'si silindi; iş origin + beyinde duruyor
-    expect(readFileSync(join(w!.brainRepo, "iş.txt"), "utf8")).toBe("uzak iş\n");
+    expect(readFileSync(join(w!.brainRepo, "iş.txt"), "utf8").replace(/\r\n/g, "\n")).toBe("uzak iş\n"); // Windows: core.autocrlf checkout'u CRLF yapar
     expect(git(origin, "rev-parse", `vlad/${id}`).trim()).toBe(head);
   }, 240_000);
 

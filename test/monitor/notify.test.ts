@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { countNotices, enqueueNotice, listNotices, markDone, createNotifier, defaultNotifyDir } from "../../src/monitor/notify.js";
 import type { ChannelConfig } from "../../src/approver/types.js";
+import { IS_WIN } from "../support/platform.js";
 
 let dir: string;
 beforeEach(() => { dir = join(mkdtempSync(join(tmpdir(), "vlad-notify-")), "notify"); });
@@ -13,9 +14,10 @@ const n = (task: string, extra: object = {}) => ({ ts: 1_760_000_000_000, kind: 
 
 describe("notify kuyruğu", () => {
   it("varsayılan dizin ~/.vlad-monitor/notify altında", () => {
-    expect(defaultNotifyDir("/h")).toBe("/h/.vlad-monitor/notify");
+    expect(defaultNotifyDir("/h")).toBe(join("/h", ".vlad-monitor", "notify"));
   });
-  it("olay başına tek dosya, 0700/0600, belirleyici ad, idempotent", () => {
+  // Windows'ta atlanır: 0700/0600 mod bitleri POSIX'e özgü
+  it.skipIf(IS_WIN)("olay başına tek dosya, 0700/0600, belirleyici ad, idempotent", () => {
     enqueueNotice(dir, n("T20261120-01"));
     enqueueNotice(dir, n("T20261120-01"));
     const files = readdirSync(dir).filter((f) => f.endsWith(".json"));
