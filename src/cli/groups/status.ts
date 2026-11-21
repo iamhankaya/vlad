@@ -8,6 +8,7 @@ import { staleSummaryText, undigestedNote } from "../../projects/status.js";
 import { statusSummary } from "../../tasks/index.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
+import { approverServiceWarning } from "../../approver/health.js";
 import { countNotices, defaultNotifyDir, listNotices } from "../../monitor/notify.js";
 
 /** Monitor bildirim kuyruğu özeti; okunamazsa sessizce 0 (açılış özetini asla düşürme). */
@@ -26,6 +27,7 @@ export function registerStatus(program: Command, k: Kit): void {
     const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false, remotePlans: o.remotePlans as RemoteStallPlan[] | undefined });
     if (o.summary) {
       const mn = monitorNotices();
+      const approverWarn = approverServiceWarning(); // F-vlad-355: servis sessizce kalkarsa SessionStart'ta görünür
       // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
       const line =
         `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
@@ -37,6 +39,7 @@ export function registerStatus(program: Command, k: Kit): void {
         (s.kbLint.count ? `, ${s.kbLint.count} kb çelişkisi${lintStale ? " (lint önbelleği eski)" : lintAgeNote(s.kbLint)}` : lintStale ? ", kb lint önbelleği eski" : "") +
         (mn.count ? `, ${mn.count} monitor bildirimi (${mn.items.map((x) => x.task).join(", ")}${mn.count > mn.items.length ? ", …" : ""})` : "") +
         (s.kbDirty ? `; UYARI: ${s.kbDirty.message}` : "") +
+        (approverWarn ? `; UYARI: ${approverWarn}` : "") +
         (s.mode ? `; ${s.mode}` : "");
       if (o.hook) {
         // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
