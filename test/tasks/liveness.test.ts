@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { defaultConfig, nowIso, writeDoc } from "../../src/kb/index.js";
+import { defaultConfig, kbPaths, nowIso, writeDoc } from "../../src/kb/index.js";
 import { createTask, getTask, setState } from "../../src/tasks/index.js";
+import { runTrustGuardCli } from "../../src/tasks/trust-guard.js";
 import { markSilentWorkers, transcriptMtime, trustScreenShown, type LivenessProbe } from "../../src/tasks/liveness.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { makeHome } from "../helpers.js";
@@ -29,6 +30,18 @@ function runningLocal(ageMin: number, worktree = "C:\\x\\wt\\T1") {
   age(t.data.id, ageMin);
   return t.data.id;
 }
+/** Project card with a repo path (ownership of the worktree is derived from it + worktreeDir "{repo}-wt"). */
+function cardFor(project: string, path: string) {
+  writeDoc(join(kbPaths().projects, `${project}.md`), { slug: project, path }, "");
+}
+/** Running task whose worktree is exactly where VLAD would have put it (C:\x\repo-wt\<id>). */
+function ownedLocal(ageMin: number) {
+  cardFor("alpha", "C:\\x\\repo");
+  const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "" });
+  setState(t.data.id, "running", { worktree: `C:\\x\\repo-wt\\${t.data.id}` });
+  age(t.data.id, ageMin);
+  return t.data.id;
+}
 const probe = (o: Partial<LivenessProbe>): LivenessProbe => ({ alive: () => true, transcriptMtime: () => null, ...o });
 const stalledIds = (p: LivenessProbe, cfg = defaultConfig()) => markSilentWorkers(now, cfg, p, "win32").map((t) => t.data.id);
 
@@ -42,7 +55,7 @@ describe("trust screen (F-vlad-261)", () => {
     expect(t.body).toMatch(/güven ekranında/);
   });
   it("D-vlad-087: onay tuşu gönderilebilirse çalışan stalled olmaz, günlüğe yazılır; yalnız bir kez denenir", () => {
-    const id = runningLocal(4);
+    const id = ownedLocal(4);
     let n = 0;
     expect(stalledIds(probe({ trustScreen: () => true, approveTrust: () => { n++; return true; } }))).toEqual([]);
     const t = getTask(id);
@@ -50,8 +63,21 @@ describe("trust screen (F-vlad-261)", () => {
     expect(t.body).toMatch(/otomatik onaylandı.*D-vlad-087/);
     expect(n).toBe(1);
   });
-  it("D-vlad-087: onay işe yaramazsa (ekran kalkmadı) eskisi gibi stalled", () => {
+  it("T20261121-79: yabancı yoldaki (worktreeDir dışı) çalışana tuş gönderilmez, eskisi gibi stalled", () => {
+    const id = runningLocal(4, "C:\\x\\baska\\T1"); // kart yolu C:\x\repo → beklenen C:\x\repo-wt\<id>
+    cardFor("alpha", "C:\\x\\repo");
+    let n = 0;
+    expect(stalledIds(probe({ trustScreen: () => true, approveTrust: () => { n++; return true; } }))).toEqual([id]);
+    expect(n).toBe(0);
+  });
+  it("T20261121-79: kartı olmayan projede de tuş gönderilmez", () => {
     const id = runningLocal(4);
+    let n = 0;
+    expect(stalledIds(probe({ trustScreen: () => true, approveTrust: () => { n++; return true; } }))).toEqual([id]);
+    expect(n).toBe(0);
+  });
+  it("D-vlad-087: onay işe yaramazsa (ekran kalkmadı) eskisi gibi stalled", () => {
+    const id = ownedLocal(4);
     expect(stalledIds(probe({ trustScreen: () => true, approveTrust: () => false }))).toEqual([id]);
     expect(getTask(id).data.state).toBe("stalled");
   });
@@ -159,5 +185,54 @@ describe("transcriptMtime", () => {
     utimesSync(a, new Date(1_000_000), new Date(1_000_000));
     utimesSync(b, new Date(5_000_000), new Date(5_000_000));
     expect(transcriptMtime(wt, configDir)).toBe(5_000_000);
+  });
+});
+
+// T20261121-79 (F-vlad-335): ayrık gözetçinin gövdesi yalnız VLAD'ın kendi worktree'sinde güven kaydını yazar
+describe.skipIf(process.platform === "win32")("runTrustGuardCli", () => {
+  const withClaudeJson = async (fn: (file: string) => Promise<void>) => {
+    const file = join(mkdtempSync(join(tmpdir(), "vlad-guard-")), "claude.json");
+    const prev = process.env.VLAD_CLAUDE_JSON;
+    process.env.VLAD_CLAUDE_JSON = file;
+    try { await fn(file); } finally { if (prev === undefined) delete process.env.VLAD_CLAUDE_JSON; else process.env.VLAD_CLAUDE_JSON = prev; }
+  };
+  const running = (worktree: (id: string) => string) => {
+    writeDoc(join(kbPaths().projects, "alpha.md"), { slug: "alpha", path: "/tmp/guard/repo" }, "");
+    const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "" });
+    setState(t.data.id, "running", { worktree: worktree(t.data.id) });
+    return t.data.id;
+  };
+  it("kendi worktree'inde kayıp güven kaydını yeniden yazar ve günlüğe düşer", async () => {
+    await withClaudeJson(async (file) => {
+      const id = running((i) => `/tmp/guard/repo-wt/${i}`);
+      await runTrustGuardCli(id, { windowMs: 0 });
+      expect(JSON.parse(readFileSync(file, "utf8")).projects[`/tmp/guard/repo-wt/${id}`].hasTrustDialogAccepted).toBe(true);
+      expect(getTask(id).body).toMatch(/güven kaydı kayboldu, yeniden yazıldı/);
+    });
+  });
+  it("yabancı yol için hiçbir şey yazmaz", async () => {
+    await withClaudeJson(async (file) => {
+      const id = running(() => "/tmp/baska/klasor");
+      await runTrustGuardCli(id, { windowMs: 0 });
+      expect(existsSync(file)).toBe(false);
+    });
+  });
+});
+
+describe.skipIf(process.platform === "win32")("runTrustGuardCli durum kapsamı (review)", () => {
+  it("launch (queued) ve resume (stalled) anında da kaydı korur; bitmiş görevde dokunmaz", async () => {
+    for (const [state, acts] of [["queued", true], ["stalled", true], ["done", false]] as const) {
+      const file = join(mkdtempSync(join(tmpdir(), "vlad-guard-")), "claude.json");
+      const prev = process.env.VLAD_CLAUDE_JSON;
+      process.env.VLAD_CLAUDE_JSON = file;
+      try {
+        writeDoc(join(kbPaths().projects, "alpha.md"), { slug: "alpha", path: "/tmp/guard/repo" }, "");
+        const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "" });
+        setState(t.data.id, "running", { worktree: `/tmp/guard/repo-wt/${t.data.id}` });
+        if (state !== "running") { const f = getTask(t.data.id); writeDoc(f.file, { ...f.data, state }, f.body); }
+        await runTrustGuardCli(t.data.id, { windowMs: 0 });
+        expect(existsSync(file)).toBe(acts);
+      } finally { if (prev === undefined) delete process.env.VLAD_CLAUDE_JSON; else process.env.VLAD_CLAUDE_JSON = prev; }
+    }
   });
 });

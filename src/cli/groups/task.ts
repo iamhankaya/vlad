@@ -2,6 +2,7 @@ import type { Command } from "commander";
 import { join } from "node:path";
 import { probeIntegrationBranch } from "../../tasks/cloud.js";
 import { verifyTrustAfterLaunch } from "../../tasks/trust.js";
+import { startTrustGuard } from "../../tasks/trust-guard.js";
 import { readInput } from "../../kb/input.js";
 import { loadConfig, withKbLock } from "../../kb/index.js";
 import type { TaskKind, TaskState } from "../../kb/index.js";
@@ -124,9 +125,13 @@ export function registerTask(program: Command, k: Kit): void {
     // F-vlad-261: the trust record written before the window opens can be dropped by a live Claude; check after, repair or warn
     const launcher: Launcher = { launch: async (req) => {
       last = await real.launch(req);
-      if (last.ok && !o.dryRun && !o.external && !q.dir && mode !== "noop" && process.platform !== "win32") {
-        const w = verifyTrustAfterLaunch(req.cwd);
-        if (w) { warnings.push(w); ctx.stderr.write(`uyarı: ${w}\n`); }
+      if (last.ok && !o.dryRun && !o.external && !q.dir && mode !== "noop") {
+        if (process.platform !== "win32") {
+          const w = verifyTrustAfterLaunch(req.cwd);
+          if (w) { warnings.push(w); ctx.stderr.write(`uyarı: ${w}\n`); }
+        }
+        // F-vlad-335: a live Claude may drop the record seconds later; watch the first minute (re-write + approve a parked trust screen)
+        startTrustGuard(req.taskId);
       }
       return last;
     } };
