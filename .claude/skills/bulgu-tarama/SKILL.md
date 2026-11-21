@@ -39,7 +39,7 @@ VLAD iki gözü karşılaştırır. **Otomatik kapatır yalnız şu durumda:** i
 
 **Asla otomatik kapatılmaz** (taramaya girse bile kullanıcıya sorulur ya da `kalsın`):
 - `kritik` ve `yüksek` önemli bulgular;
-- güvenlik etkili olanlar (auth, yetki, sır, imza, oturum, veri silme);
+- güvenlik etkili (auth, yetki, sır, imza, oturum, veri silme) bulgunun **`wontfix`** önerisi (D-genel-027: güvenlik bayrağı `fixed` kapatmayı artık engellemez; iki göz `fixed` dedi **ve** VLAD kanıtı kendisi doğruladıysa kapatılır, kritik/yüksek, karar atfı ve kullanıcı adımı hariç);
 - karar ile ertelenmiş/kabul edilmiş risk (`deferred` + `D-…` atfı; kararı `vlad decision list --project <slug> --all --json` ile doğrula);
 - kullanıcının açtığı ya da bir kullanıcı adımını bekleyen bulgu (ör. "kullanıcı teyidi/anahtar/hesap bekliyor").
 

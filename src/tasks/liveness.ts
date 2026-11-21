@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { repoNameOf } from "../fleet/paths.js";
 import type { RemoteTransport } from "../fleet/types.js";
 import { RemoteError } from "../fleet/types.js";
+import { approveTrustScreen, trustScreenShown } from "./nudge.js";
 import { getTask, listTasks, logTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -24,10 +25,11 @@ export interface LivenessProbe {
   transcriptMtime(worktree: string): number | null;
   /** Does the worker's tmux pane show Claude Code's "trust this folder" screen? (F-vlad-261; detection only, never answers it) */
   trustScreen?(taskId: string): boolean;
+  /** D-vlad-087: sends the approve key to a worker parked on the trust screen; true = the screen is gone afterwards. VLAD tmux sessions only. */
+  approveTrust?(taskId: string): boolean;
 }
 
-/** Claude Code's folder trust prompt ("Quick safety check" / "Do you trust the files in this folder?"). */
-export const trustScreenShown = (pane: string): boolean => /quick safety check|trust (the files in )?this folder/i.test(pane);
+export { trustScreenShown };
 // the screen is normal for a moment after launch; a worker still parked there after this is stuck
 const TRUST_GRACE_MIN = 3;
 const tmuxPane = (taskId: string): string => {
@@ -95,6 +97,7 @@ export function defaultProbe(): LivenessProbe {
     },
     transcriptMtime,
     trustScreen: (taskId) => process.platform !== "win32" && trustScreenShown(tmuxPane(taskId)),
+    approveTrust: (taskId) => process.platform !== "win32" && approveTrustScreen(taskId),
   };
 }
 
@@ -135,8 +138,13 @@ export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessPr
     probe ??= defaultProbe();
     const transcript = probe.transcriptMtime(wt);
     const idleMs = now.getTime() - Math.max(updated, transcript ?? 0);
-    // F-vlad-261: no transcript yet + parked on the trust screen = stuck for good (nothing answers it); flag it, never auto-approve
+    // F-vlad-261: no transcript yet + parked on the trust screen = stuck for good (nothing answers it).
+    // D-vlad-087 (F-vlad-335): VLAD's own worker sessions (tmux vlad-<id>) get the approve key once; only if that fails the task is flagged stalled.
     if (transcript === null && idleMs >= TRUST_GRACE_MIN * MIN && probe.trustScreen?.(t.data.id)) {
+      if (probe.approveTrust?.(t.data.id)) {
+        logTask(t.data.id, "güven ekranı otomatik onaylandı (D-vlad-087; tmux vlad-<id> penceresine Enter gönderildi)");
+        continue;
+      }
       out.push(setState(t.data.id, "stalled", { error: "çalışan güven ekranında takıldı (hasTrustDialogAccepted kaydı yok)" }));
       logTask(t.data.id, "güven ekranında takıldı (Quick safety check): ~/.claude.json güven kaydı yok; pencerede onayla ya da `vlad task resume`");
       continue;
