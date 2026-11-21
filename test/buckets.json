@@ -74,7 +74,8 @@
     "test/tasks/pipeline.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
-    "test/tasks/transitions-consistency.test.ts"
+    "test/tasks/transitions-consistency.test.ts",
+    "test/agent-addr-check.test.ts"
   ],
   "process": [
     "test/approver/**/*.test.ts",
