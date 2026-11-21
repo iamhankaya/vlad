@@ -81,6 +81,13 @@ describe("guardTrust (launch sonrası pencere)", () => {
     expect(r.approved).toBe(true);
     expect(x.log.join("\n")).toMatch(/güven ekranı otomatik onaylandı/);
   });
+  it("ekran kalkmasa da Enter en fazla bir kez gönderilir (kalıcı metin kutuya Enter yağdırmaz)", async () => {
+    const f = fakePane([TRUST]); // ekran hiç kalkmaz
+    const x = deps({ recorded: [true] });
+    const r = await guardTrust({ dir: "/wt/T1", taskId: "T1", windowMs: 30_000, intervalMs: 3_000 }, { ...x.d, pane: f.pane });
+    expect(f.keys).toEqual(["Enter"]);
+    expect(r.approved).toBe(false);
+  });
   it("ekran yoksa onay denenmez; kayıt sağlamsa hiçbir şey yazılmaz", async () => {
     const x = deps({ recorded: [true] });
     const r = await guardTrust({ dir: "/wt/T1", taskId: "T1", windowMs: 10_000, intervalMs: 5_000 }, x.d);

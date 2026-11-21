@@ -82,15 +82,24 @@ export async function guardTrust(o: { dir: string; taskId: string; windowMs?: nu
   const deadline = d.now() + (o.windowMs ?? 45_000);
   const interval = o.intervalMs ?? 3_000;
   const res: GuardResult = { rewrites: 0, approved: false };
+  let tried = false;
   for (;;) {
     if (!d.recorded(o.dir)) {
       res.rewrites++;
       const w = d.rewrite(o.dir);
       d.log(`güven kaydı kayboldu, yeniden yazıldı (F-vlad-335)${w ? `; uyarı: ${w}` : ""}`);
     }
-    if (!res.approved && d.pane && approveTrustSync(d.pane, d.sleepSync)) {
-      res.approved = true;
-      d.log("güven ekranı otomatik onaylandı (D-vlad-087, F-vlad-335; çalışan penceresine Enter gönderildi)");
+    if (!tried && d.pane) {
+      // Enter at most once per watch, whether or not the screen went away (text that stays on screen must not get an Enter every tick)
+      let shown = false;
+      try { d.pane.exists(); shown = trustScreenShown(d.pane.capture()); } catch { /* no window yet */ }
+      if (shown) {
+        tried = true;
+        if (approveTrustSync(d.pane, d.sleepSync)) {
+          res.approved = true;
+          d.log("güven ekranı otomatik onaylandı (D-vlad-087, F-vlad-335; çalışan penceresine Enter gönderildi)");
+        }
+      }
     }
     if (d.now() >= deadline) return res;
     await d.sleep(interval);
@@ -123,7 +132,8 @@ export async function runTrustGuardCli(taskId: string, o: { windowMs?: number; i
     const { join } = await import("node:path");
     const t = getTask(taskId);
     const wt = t.data.worktree;
-    if (!wt || t.data.state !== "running") return;
+    // launch calls the guard before the task flips to running; resume's target is often stalled: only finished tasks are left alone
+    if (!wt || !["queued", "running", "stalled", "blocked"].includes(t.data.state)) return;
     const card = join(kbPaths().projects, `${t.data.project}.md`);
     const repoPath = existsSync(card) ? (readDoc<{ path?: string }>(card).data.path ?? null) : null;
     if (!ownsWorktree({ id: taskId, worktree: wt, repoPath }, loadConfig())) return;

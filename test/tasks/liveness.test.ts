@@ -218,3 +218,21 @@ describe.skipIf(process.platform === "win32")("runTrustGuardCli", () => {
     });
   });
 });
+
+describe.skipIf(process.platform === "win32")("runTrustGuardCli durum kapsamı (review)", () => {
+  it("launch (queued) ve resume (stalled) anında da kaydı korur; bitmiş görevde dokunmaz", async () => {
+    for (const [state, acts] of [["queued", true], ["stalled", true], ["done", false]] as const) {
+      const file = join(mkdtempSync(join(tmpdir(), "vlad-guard-")), "claude.json");
+      const prev = process.env.VLAD_CLAUDE_JSON;
+      process.env.VLAD_CLAUDE_JSON = file;
+      try {
+        writeDoc(join(kbPaths().projects, "alpha.md"), { slug: "alpha", path: "/tmp/guard/repo" }, "");
+        const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "" });
+        setState(t.data.id, "running", { worktree: `/tmp/guard/repo-wt/${t.data.id}` });
+        if (state !== "running") { const f = getTask(t.data.id); writeDoc(f.file, { ...f.data, state }, f.body); }
+        await runTrustGuardCli(t.data.id, { windowMs: 0 });
+        expect(existsSync(file)).toBe(acts);
+      } finally { if (prev === undefined) delete process.env.VLAD_CLAUDE_JSON; else process.env.VLAD_CLAUDE_JSON = prev; }
+    }
+  });
+});
