@@ -157,9 +157,11 @@ describe("approver-kabul: approver status | requests | show (salt okuma, sızın
 
   it("status servis yokken de çalışır (salt okuma) ve kurulu değilken bunu söyler", async () => {
     rmSync(join(w.dir, "channel.json"), { force: true });
-    const r = await runVlad(["approver", "status", "--json"], { env: ENV });
+    // Sahte installer: gerçek launchd durumuna (makinede approver kurulu/çalışıyor olabilir) bağlı kalma (F-vlad-355 sınıfı).
+    const notInstalled = { install: async () => [], uninstall: async () => [], status: async () => ({ installed: false, running: false, detail: "kurulu değil" }) };
+    const r = await runVlad(["approver", "status", "--json"], { env: ENV, approverDeps: { installer: notInstalled } });
     expect(r.code, r.err).toBe(0);
-    expect(JSON.stringify(JSON.parse(r.out))).toMatch(/false|kurulu değil|not.?installed/i);
+    expect(JSON.parse(r.out)).toMatchObject({ installed: false, running: false });
   });
 });
 
