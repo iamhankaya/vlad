@@ -1,9 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { userInfo } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import type { ServiceInstaller, Launchctl } from "../approver/launchd.js";
-import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl } from "../launchd-guard.js";
+import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl, launchdHome } from "../launchd-guard.js";
 import { monitorStateDir } from "./state.js";
 import { MONITOR_LIMITS } from "./types.js";
 
@@ -75,7 +74,7 @@ export interface MonitorInstallerDeps {
 export function createMonitorInstaller(first?: Launchctl | MonitorInstallerDeps, second: { plistDir?: string; stateDir?: string } = {}): ServiceInstaller {
   const opts: MonitorInstallerDeps = typeof first === "function" ? { launchctl: first, ...second } : { ...(first ?? {}), ...second };
   const lc = opts.launchctl ?? realLaunchctl; // arite 1: sözleşme testi
-  const plistDir = opts.plistDir ?? join(opts.homeDir ?? userInfo().homedir, "Library", "LaunchAgents");
+  const plistDir = opts.plistDir ?? join(opts.homeDir ?? launchdHome(), "Library", "LaunchAgents");
   const stateDir = opts.stateDir ?? (opts.homeDir ? monitorStateDir(opts.homeDir) : monitorStateDir());
   const target = `gui/${process.getuid?.() ?? 501}`;
   const jobs = [
