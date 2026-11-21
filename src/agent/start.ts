@@ -30,6 +30,7 @@ import { sweepScriptDir } from "./scripts/run.js";
 import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
+import { listenWithRetry } from "./listen-retry.js";
 import { addressOf, agentDir, ensurePrivateDir, assertPrivateBind, buildId, localFile, readLocal, roleOf, selfName, writeLocal } from "../fleet/state.js";
 
 const pidFile = () => join(agentDir(), "agent.pid");
@@ -110,13 +111,18 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
   await aktarim.sweep().catch((e) => process.stderr.write(`aktarım süpürme atlandı: ${(e as Error).message}\n`));
 
   let srv;
+  const stopRetry = new AbortController();
+  const onTerm = () => stopRetry.abort();
+  process.once("SIGTERM", onTerm); process.once("SIGINT", onTerm);
   try {
-    srv = await startServer({
+    srv = await listenWithRetry(() => startServer({
       self, kind, cfg: () => loadConfig(), keys, ops: aktarim.ops, journal, build, bind: bindIp, port,
       journaled: (op, args) => (op === "exec" ? execIsWrite(args) : undefined),
       ...(test ? { crashAt: process.env.VLAD_TEST_CRASH_AT, readTimeoutMs: Number(process.env.VLAD_AGENT_READ_TIMEOUT_MS) || undefined } : {}),
-    });
+    }), { log: (l) => process.stderr.write(l + "\n"), signal: stopRetry.signal });
+    process.removeListener("SIGTERM", onTerm); process.removeListener("SIGINT", onTerm);
   } catch (e) {
+    process.removeListener("SIGTERM", onTerm); process.removeListener("SIGINT", onTerm);
     if ((e as NodeJS.ErrnoException).code !== "EADDRINUSE") throw e;
     const p = await probeLocal();
     if (!p.alive) throw new Error(`agent: ${bind}:${port} başka bir süreç tarafından kullanılıyor (VLAD Agent yanıt vermiyor)`);

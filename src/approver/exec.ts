@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
+import { consoleTimeoutMs } from "../commands/accessors.js";
 import { LIMITS, type Ctx } from "./types.js";
 
 /**
@@ -17,14 +18,18 @@ export function defaultExecEnv(p: { path: string; home: string; vladHome: string
   return { PATH: p.path, HOME: p.home, VLAD_HOME: p.vladHome, LANG: "en_US.UTF-8", ...(p.token ? { VLAD_MODE_TOKEN: p.token } : {}), ...(p.kb ? { VLAD_KB_DIR: p.kb } : {}) };
 }
 
+/** F-vlad-360: yürütme süresi komutun manifest süre politikasından türer (task gate 31 dk vb.); en az LIMITS.execTimeoutMs. */
+export const execTimeoutFor = (argv: readonly string[]): number => Math.max(LIMITS.execTimeoutMs, consoleTimeoutMs(argv));
+
 /** Test için kısa değerler; üretim yolu varsayılanları kullanır. */
 export interface ExecOpts { timeoutMs?: number; killGraceMs?: number; maxOutputBytes?: number }
 
 /** Üretim yürütücüsü: sabit env üreticisi; `envExtra` yalnız test deps'inden gelir (üretim yolu `VLAD_*` env'den seam okumaz). */
 export function createExecutor(opts: ExecOpts = {}): Executor {
-  const timeoutMs = opts.timeoutMs ?? LIMITS.execTimeoutMs, graceMs = opts.killGraceMs ?? 5000, cap = opts.maxOutputBytes ?? LIMITS.maxOutputBytes;
+  const graceMs = opts.killGraceMs ?? 5000, cap = opts.maxOutputBytes ?? LIMITS.maxOutputBytes;
   return {
     run(argv, token, ctx, deps) {
+      const timeoutMs = opts.timeoutMs ?? execTimeoutFor(argv);
       const env = { ...defaultExecEnv({ path: process.env.PATH ?? "/usr/bin:/bin", home: userInfo().homedir, vladHome: ctx.home, token, kb: ctx.kb }), ...deps?.envExtra };
       return new Promise((resolve) => {
         const out: Buffer[] = [], err: Buffer[] = [];

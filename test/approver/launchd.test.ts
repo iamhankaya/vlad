@@ -137,3 +137,53 @@ describe("approver: launchd installer", () => {
     } finally { t.cleanup(); }
   });
 });
+
+describe("approver: launchd izlenebilirlik (F-vlad-355)", () => {
+  const logLines = (dir: string): string[] => {
+    const p = join(dir, "secret", "approver", "approver.log");
+    return existsSync(p) ? readFileSync(p, "utf8").trim().split("\n") : [];
+  };
+  const TS = /^\d{4}-\d\d-\d\dT[\d:.]+Z launchd: /;
+  it("install: başlangıç ve bootstrap başarısı zaman damgalı satır olarak approver.log'a yazılır", async () => {
+    const t = mk();
+    try {
+      await createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir }).install(ctx);
+      const l = logLines(t.dir);
+      expect(l.length).toBeGreaterThanOrEqual(2);
+      for (const x of l) expect(x).toMatch(TS);
+      expect(l.join("\n")).toMatch(/install.*başladı/);
+      expect(l.join("\n")).toMatch(/bootstrap.*başarılı/);
+    } finally { t.cleanup(); }
+  });
+  it("bootstrap başarısız: hata ve plist geri alma satırı yazılır", async () => {
+    const t = mk();
+    try {
+      t.results.bootstrap = { code: 5, stderr: "boom" };
+      await expect(createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir }).install(ctx)).rejects.toThrow(/boom/);
+      const l = logLines(t.dir).join("\n");
+      expect(l).toMatch(/bootstrap başarısız \(5\)/);
+      expect(l).toMatch(/plist geri alındı/);
+    } finally { t.cleanup(); }
+  });
+  it("uninstall: bootout ve plist silme satırları yazılır; bootout hatasında dosyalar silinmedi satırı", async () => {
+    const t = mk();
+    try {
+      const inst = createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir });
+      await inst.install(ctx);
+      await inst.uninstall();
+      const l = logLines(t.dir).join("\n");
+      expect(l).toMatch(/uninstall.*başladı/);
+      expect(l).toMatch(/plist silindi/);
+      t.results.bootout = { code: 7, stderr: "nope" };
+      await inst.install(ctx).catch(() => {}); // plist yeniden yazılır
+      await expect(inst.uninstall()).rejects.toThrow(/nope/);
+      expect(logLines(t.dir).join("\n")).toMatch(/bootout başarısız \(7\).*dosyalar silinmedi/);
+    } finally { t.cleanup(); }
+  });
+  it("gizli dizin yokken uninstall günlük yazamasa da çökmez", async () => {
+    const t = mk();
+    try {
+      await expect(createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir }).uninstall()).resolves.toBeDefined();
+    } finally { t.cleanup(); }
+  });
+});
