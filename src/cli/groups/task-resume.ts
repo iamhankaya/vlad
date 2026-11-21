@@ -5,7 +5,7 @@ import { soleTranscriptSession } from "../../tasks/liveness.js";
 import { trustWorktree } from "../../tasks/trust.js";
 import { kbPaths, loadConfig, withKbLock } from "../../kb/index.js";
 import { NoopLauncher, PosixLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, resolveLaunchMode, closeWorkerWindow } from "../../launcher/index.js";
-import { brainTransport, markCleaned, syncKb, remoteCleanup, remoteClose, remoteResume } from "../../machines/remote.js";
+import { brainTransport, markCleaned, syncKb, remoteCleanup, remoteClose, remoteNudge, remoteResume } from "../../machines/remote.js";
 import { workerContext } from "../../agent/forward.js";
 import { selfName } from "../../fleet/state.js";
 import type { Launcher } from "../../launcher/index.js";
@@ -94,10 +94,13 @@ export function registerTaskResume(task: Command, k: Kit): void {
     const r = remote ? { id, killed: await remoteClose(brainTransport(cfg0, selfName()), remote, id) } : closeTaskWindow(id, { closeWorker: closeWorkerWindow });
     out(o, r, r.killed.length ? `${id} penceresi kapatıldı (pid: ${r.killed.join(", ")})` : `${id} için açık pencere yok`);
   });
-  def(task, "nudge <id> <mesaj>", "Çalışanın tmux penceresine tek satır metin yazar, Enter'ı istem kutusu boşalana kadar tekrarlar (teslim doğrulanır)", async (id: string, msg: string, o: Opts) => {
-    getTask(id); // bilinmeyen görev açık hatayla düşer
-    const r = await nudgeWorker(id, msg);
-    out(o, { id, ...r }, r.delivered ? `${id}: mesaj teslim edildi (Enter ×${r.enters})` : `${id}: mesaj istem kutusunda kaldı (Enter ×${r.enters}); SendMessage ile dene`);
+  def(task, "nudge <id> <mesaj>", "Çalışanın penceresine (tmux; Windows konsolu; görev başka makinedeyse o makinenin Agent'ı) tek satır metin yazar, Enter'ı istem kutusu boşalana kadar tekrarlar (teslim doğrulanır)", async (id: string, msg: string, o: Opts) => {
+    const t = getTask(id); // bilinmeyen görev açık hatayla düşer
+    // F-vlad-370: görev başka makinede koşuyorsa istek o makinenin Agent'ına gider (pencere orada)
+    const cfg0 = loadConfig();
+    const remote = remoteMachineOf(t, cfg0, workerContext()?.self);
+    const r = remote ? await remoteNudge(brainTransport(cfg0, selfName()), remote, id, msg) : await nudgeWorker(id, msg);
+    out(o, { id, ...(remote ? { machine: remote } : {}), ...r }, r.delivered ? `${id}: mesaj teslim edildi${remote ? ` (${remote})` : ""} (Enter ×${r.enters})` : `${id}: mesaj istem kutusunda kaldı${remote ? ` (${remote})` : ""} (Enter ×${r.enters}); SendMessage ile dene`);
     if (!r.delivered) process.exitCode = 1;
   });
   def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", async (id: string, o: Opts) => {

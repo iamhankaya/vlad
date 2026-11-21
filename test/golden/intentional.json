@@ -175,6 +175,17 @@
         "task (bare)",
         "task nudge --help"
       ]
+    },
+    {
+      "id": "T20261121-50",
+      "keys": [
+        "agent --help",
+        "agent (bare)",
+        "agent stop --help",
+        "task --help",
+        "task (bare)",
+        "task nudge --help"
+      ]
     }
   ]
 }

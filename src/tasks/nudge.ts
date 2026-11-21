@@ -41,17 +41,47 @@ const defaultDeps: NudgeDeps = {
  * Metin yalnız bir kez yazılır (tekrar yazmak çoğaltırdı). `delivered: false` = sınırda hâlâ kutuda; çağıran SendMessage'a düşer.
  */
 export async function nudgeWorker(taskId: string, text: string, deps: NudgeDeps = defaultDeps, o: { maxEnters?: number; settleMs?: number } = {}): Promise<NudgeResult> {
+  return nudgeVia(tmuxPane(taskId, deps.tmux), text, deps.sleep, o);
+}
+
+// F-vlad-370: pencere soyutlaması; tmux ve Windows konsolu aynı teslim döngüsünü paylaşır.
+/** Çalışan penceresinin soyutlaması: tmux oturumu (Mac/Linux) ya da Windows konsolu. */
+export interface NudgePane {
+  /** pencere yoksa açık hata fırlatır */
+  exists(): void | Promise<void>;
+  /** metni (tek satır) yazar, Enter yollamaz */
+  type(text: string): void | Promise<void>;
+  enter(): void | Promise<void>;
+  /** görünen ekranın/pane'in metni (sarılmış satırlar birleşik) */
+  capture(): string | Promise<string>;
+}
+
+/** Metni pencereye yazar, Enter yollar ve istem kutusu boşalana kadar Enter'ı tekrarlar (metin yalnız bir kez yazılır). */
+export async function nudgeVia(pane: NudgePane, text: string, sleep: (ms: number) => Promise<void>, o: { maxEnters?: number; settleMs?: number } = {}): Promise<NudgeResult> {
   if (/[\r\n]/.test(text)) throw new Error("dürtme metni tek satır olmalı (satır sonu istemi bölerdi)");
-  const target = `vlad-${taskId}`;
-  try { deps.tmux(["has-session", "-t", target]); } catch { throw new Error(`tmux oturumu yok: ${target} (çalışan penceresi kapalı ya da tmux dışı)`); }
-  deps.tmux(["send-keys", "-t", target, "-l", "--", text]);
+  await pane.exists();
+  await pane.type(text);
   const max = o.maxEnters ?? 5;
   for (let enters = 1; enters <= max; enters++) {
-    deps.tmux(["send-keys", "-t", target, "Enter"]);
-    await deps.sleep(o.settleMs ?? 1500);
-    if (!inputBoxHolds(deps.tmux(["capture-pane", "-p", "-J", "-t", target]), text)) return { delivered: true, enters };
+    await pane.enter();
+    await sleep(o.settleMs ?? 1500);
+    if (!inputBoxHolds(await pane.capture(), text)) return { delivered: true, enters };
   }
   return { delivered: false, enters: max };
+}
+
+/** Pencere/oturum yok: çağıran bunu `not_found` olarak ayırt eder (uzak op'ta). */
+export class NoWindowError extends Error {}
+
+/** tmux oturumunu (`vlad-<id>`) `NudgePane` olarak sarar. */
+export function tmuxPane(taskId: string, tmux: (args: string[]) => string): NudgePane {
+  const target = `vlad-${taskId}`;
+  return {
+    exists: () => { try { tmux(["has-session", "-t", target]); } catch { throw new NoWindowError(`tmux oturumu yok: ${target} (çalışan penceresi kapalı ya da tmux dışı)`); } },
+    type: (text) => { tmux(["send-keys", "-t", target, "-l", "--", text]); },
+    enter: () => { tmux(["send-keys", "-t", target, "Enter"]); },
+    capture: () => tmux(["capture-pane", "-p", "-J", "-t", target]),
+  };
 }
 
 // Claude Code's folder trust prompt ("Quick safety check" / "Do you trust the files in this folder?").

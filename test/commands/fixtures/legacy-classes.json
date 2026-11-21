@@ -58,6 +58,7 @@
   "agent setkey",
   "agent start",
   "agent status",
+  "agent stop",
   "audit skills",
   "clip get",
   "clip off",

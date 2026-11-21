@@ -5,7 +5,8 @@ import { getVladHome, loadConfig } from "../../kb/index.js";
 import { runRemote, callLocal, workerContext } from "../../agent/forward.js";
 import { agentKeygen, agentSetKey, agentStart, agentStatus } from "../../agent/start.js";
 import { installPlan, stableNodePath } from "../../agent/install.js";
-import { selfName } from "../../fleet/state.js";
+import { agentDir, selfName } from "../../fleet/state.js";
+import { agentStop, realStopDeps } from "../../agent/stop.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -20,6 +21,10 @@ export function registerAgent(program: Command, k: Kit): void {
     const s = await agentStatus();
     out(o, s, s.running ? `çalışıyor: ${s.host}:${s.port}${s.pid ? ` (pid ${s.pid})` : ""}` : `çalışmıyor (${s.host}:${s.port})`);
     process.exitCode = s.running ? 0 : 1;
+  });
+  def(agent, "stop", "Yerel Agent'ı durdurur (Mac: launchctl bootout, Windows: schtasks /End; kayıtlı servis yoksa pid'ine sinyal). Durdurma geçicidir: sonraki oturum açılışında yeniden başlar", async (o: Opts) => {
+    const r = await agentStop(realStopDeps({ probe: async () => (await agentStatus()).running, pidFile: join(agentDir(), "agent.pid") }));
+    out(o, r, `${r.wasRunning ? "Agent durduruldu" : "Agent zaten çalışmıyor"} (${r.method})\n${r.note}`);
   });
   def(agent, "keygen <kimlik>", "Anahtar üretir, vlad.local.json'a yazar (anahtarı basmaz; --show ile basar). <karşı-taraf> = çift anahtar (yalnız bu iki makine bilir; karşı uçta `setkey <ad> -` çalıştır); <kendi-adın> = yerel çağrı anahtarı", (identity: string, o: Opts) => {
     const r = agentKeygen(identity, !!o.show);

@@ -36,7 +36,7 @@ const UNJOURNALED: ReadonlySet<AgentOp> = new Set<AgentOp>([...READ_ONLY, "xfer-
 const defaultJournaled = (op: AgentOp): boolean => !UNJOURNALED.has(op);
 
 /** Uzlaştırması argümana bakan işlemler: argüman `started` süresince günlükte saklanır. */
-const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "branch-push", "apply-write", "forward-write", "script-run"]); // yeni opId ile yeniden çalıştırma çift uygulama olur
+const MUTATING: ReadonlySet<AgentOp> = new Set<AgentOp>(["launch", "resume", "close", "cleanup", "merge", "branch-push", "apply-write", "forward-write", "script-run", "nudge"]); // nudge: uzak dürtme yeniden çalışırsa metin çift yazılır; yeni opId ile yeniden çalıştırma çift uygulama olur
 const KEEP_ARGS: ReadonlySet<AgentOp> = new Set<AgentOp>(["apply-write", "launch", "resume", "merge", "branch-push", "script-run"]);
 const hashArgs = (a: unknown) => createHash("sha256").update(canonicalJson(a), "utf8").digest("hex");
 const MAX_REPLY_BYTES = 6 * 1024 * 1024; // 8 MiB çerçeve sınırının altında (imza/meta payı); sınır bayt, karakter değil (F-vlad-126)
