@@ -1,9 +1,8 @@
 import { execFile } from "node:child_process";
 import { appendFileSync, chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { approverDir } from "../mode/token.js";
-import { userInfo } from "node:os";
 import { join } from "node:path";
-import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl } from "../launchd-guard.js";
+import { assertTestLaunchctlInjected, assertTestSafeLaunchd, guardLaunchctl, launchdHome } from "../launchd-guard.js";
 
 /**
  * SÖZLEŞME iskeleti (gövde U5'te). macOS launchd; yalnız `approver` CLI grubunda dinamik `import()` ile yüklenir (Windows testini kırmaz).
@@ -65,7 +64,7 @@ function lifecycleLog(line: string): void {
 export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?: string; homeDir?: string; sleep?: (ms: number) => Promise<void> } = {}): ServiceInstaller {
   const sleep = deps.sleep ?? realSleep;
   const lc = deps.launchctl ?? realLaunchctl;
-  const plistDir = deps.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents");
+  const plistDir = deps.plistDir ?? join(launchdHome(), "Library", "LaunchAgents");
   const plist = join(plistDir, `${LABEL}.plist`);
   /** F-vlad-355: test ortamında gerçek LaunchAgents'a yazma/silme ve gerçek launchctl ile kurulum/kaldırma reddedilir (değiştiren adımların en başında). */
   const guard = (): void => {
@@ -84,7 +83,7 @@ export function createLaunchdInstaller(deps: { launchctl?: Launchctl; plistDir?:
       mkdirSync(dir, { recursive: true, mode: 0o700 });
       writeFileSync(logPath, "", { flag: "a", mode: 0o600 });
       chmodSync(logPath, 0o600);
-      for (const h of new Set([c.home, deps.homeDir ?? userInfo().homedir])) rmSync(join(h, ".vlad-approver.log"), { force: true }); // eski günlük (F-vlad-346c); yalnız o dosya
+      for (const h of new Set([c.home, deps.homeDir ?? launchdHome()])) rmSync(join(h, ".vlad-approver.log"), { force: true }); // eski günlük (F-vlad-346c); yalnız o dosya
       writeFileSync(plist, approverPlist(c, logPath), { mode: 0o600 });
       chmodSync(plist, 0o600);
       steps.push(`plist yazıldı: ${plist}`);

@@ -75,3 +75,28 @@ describe("launchd koruması (test ortamı)", () => {
     expect(() => assertTestSafeLaunchd({ plistDir, injected: false, env: {} })).not.toThrow();
   });
 });
+
+describe("watchdogKick: selfUpdate yeniden başlatma yolundaki gerçek launchctl kickstart (T20261121-43)", () => {
+  it("test ortamında kickstart komutu üretilmez (gerçek servis tetiklenmez)", async () => {
+    const { watchdogKick } = await import("../../src/launchd-guard.js");
+    expect(watchdogKick("darwin", 501)).toBe("");
+    expect(watchdogKick("darwin", 501, { VLAD_TEST_GUARD: "1" })).toBe("");
+  });
+  it("test dışında Mac'te kickstart -k argv'sini JSON olarak verir; Mac dışı ya da uid yoksa boş", async () => {
+    const { watchdogKick } = await import("../../src/launchd-guard.js");
+    expect(JSON.parse(watchdogKick("darwin", 501, {}))).toEqual(["launchctl", "kickstart", "-k", "gui/501/com.vlad.agent"]);
+    expect(watchdogKick("linux", 501, {})).toBe("");
+    expect(watchdogKick("darwin", undefined, {})).toBe("");
+  });
+  it("start.ts kickstart'ı watchdogKick üzerinden kurar (ham kickstart dizesi yok)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync(join(import.meta.dirname, "..", "..", "src", "agent", "start.ts"), "utf8");
+    expect(src).toContain("watchdogKick(");
+    expect(src).not.toMatch(/"kickstart"/);
+  });
+  it("home: launchdHome HOME'u izler, yoksa userInfo'ya düşer", async () => {
+    const { launchdHome } = await import("../../src/launchd-guard.js");
+    expect(launchdHome({ HOME: "/tmp/x" })).toBe("/tmp/x");
+    expect(launchdHome({})).toBe(userInfo().homedir);
+  });
+});

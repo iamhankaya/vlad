@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { userInfo } from "node:os";
+import { launchdHome } from "../launchd-guard.js";
 import { join } from "node:path";
 import { approverDir as defaultApproverDir } from "../mode/token.js";
 
@@ -26,7 +26,7 @@ export function approverServiceWarning(d: ServiceWarningDeps = {}): string | nul
   try {
     if ((d.platform ?? process.platform) !== "darwin") return null;
     if (!existsSync(join(d.approverDir ?? defaultApproverDir(), "channel.json"))) return null; // approver hiç kurulmadı: uyarı yok
-    const plist = join(d.plistDir ?? join(userInfo().homedir, "Library", "LaunchAgents"), `${LABEL}.plist`);
+    const plist = join(d.plistDir ?? join(launchdHome(), "Library", "LaunchAgents"), `${LABEL}.plist`);
     if (!existsSync(plist)) return "approver servisi kurulu değil (kanal yapılandırılmış, plist yok): telefon onayı çalışmaz; terminalde vlad approver install";
     if (!(d.loaded ?? launchdLoaded)()) return "approver servisi launchd'de yüklü değil (plist var): telefon onayı çalışmaz; terminalde vlad approver install";
     return null;
