@@ -31,6 +31,7 @@ import { AgentQueue } from "./queue.js";
 import { reconcile } from "./reconcile.js";
 import { startServer } from "./server.js";
 import { listenWithRetry } from "./listen-retry.js";
+import { addressWarning } from "./addr-check.js";
 import { addressOf, agentDir, ensurePrivateDir, assertPrivateBind, buildId, localFile, readLocal, roleOf, selfName, writeLocal } from "../fleet/state.js";
 
 const pidFile = () => join(agentDir(), "agent.pid");
@@ -119,7 +120,7 @@ export async function agentStart(o: { port?: number; printPort?: boolean }): Pro
       self, kind, cfg: () => loadConfig(), keys, ops: aktarim.ops, journal, build, bind: bindIp, port,
       journaled: (op, args) => (op === "exec" ? execIsWrite(args) : undefined),
       ...(test ? { crashAt: process.env.VLAD_TEST_CRASH_AT, readTimeoutMs: Number(process.env.VLAD_AGENT_READ_TIMEOUT_MS) || undefined } : {}),
-    }), { log: (l) => process.stderr.write(l + "\n"), signal: stopRetry.signal });
+    }), { log: (l) => process.stderr.write(l + "\n"), signal: stopRetry.signal, explain: () => addressWarning(cfg, self) });
     process.removeListener("SIGTERM", onTerm); process.removeListener("SIGINT", onTerm);
   } catch (e) {
     process.removeListener("SIGTERM", onTerm); process.removeListener("SIGINT", onTerm);

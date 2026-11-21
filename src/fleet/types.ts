@@ -47,7 +47,8 @@ export type AgentOp =
   | "apply-write" | "exec" | "kb-head"
   | "forward-write" | "queue-list" | "queue-flush" | "queue-drop"
   | "xfer-begin" | "xfer-chunk" | "xfer-commit" | "xfer-abort" | "clip-push" // aktarım (T20261105-03 sözleşmesi)
-  | "script-list" | "script-run"; // kayıtlı bakım betikleri (T20261109-03 sözleşmesi, T20261109-05)
+  | "script-list" | "script-run"
+  | "nudge"; // uzak çalışana dürtme (F-vlad-370) // kayıtlı bakım betikleri (T20261109-03 sözleşmesi, T20261109-05)
 
 export type AgentCode =
   | "ok" | "bad_request" | "auth" | "clock_skew" | "proto_mismatch" | "forbidden" | "not_found" | "conflict"

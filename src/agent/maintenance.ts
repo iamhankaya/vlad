@@ -4,6 +4,10 @@
 /** Bakım sırasında da yanıtlanan, yan etkisiz op'lar: sağlık, uçuştaki sonucu sorgulama, betik listesi. */
 export const MAINT_FREE_OPS: ReadonlySet<string> = new Set(["ping", "op-status", "script-list"]);
 
+// Bakım betiğini bekletmeyen op'lar (F-vlad-368): salt-okunur, kendi zaman aşımı olan, yarım kalması zararsız arka plan işleri.
+// Uçuş sayımına girmezler (selfUpdate onları beklemez); bakım açıkken yine `busy` alırlar.
+export const BACKGROUND_OPS: ReadonlySet<string> = new Set(["queue-flush"]);
+
 export type MaintReason = "selfUpdate" | "recovery";
 export interface InflightOp { opId: string; op: string; ageMs: number }
 export interface MaintSnapshot { on: boolean; reason: MaintReason | null; sinceMs: number | null; attempts: number; stuck: boolean }

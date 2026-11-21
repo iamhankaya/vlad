@@ -54,6 +54,14 @@ export async function remoteClose(transport: RemoteTransport, machine: string, i
   return (await transport.call<{ killed: number[] }>(machine, "close", { taskId: id })).result.killed;
 }
 
+/**
+ * Uzak dürtme (F-vlad-370): metni işçi makinedeki çalışanın penceresine yazdırır; teslim işçide doğrulanır.
+ * Süre tavanı: yazma + en çok 5 Enter × 1,5 sn + pencere API'si; Agent çağrısı 60 sn'de keser.
+ */
+export async function remoteNudge(transport: RemoteTransport, machine: string, id: string, text: string): Promise<{ delivered: boolean; enters: number }> {
+  return (await transport.call<{ delivered: boolean; enters: number }>(machine, "nudge", { taskId: id, text }, { timeoutMs: 60_000 })).result;
+}
+
 /** Uzak resume: istem şablonu beyinde kurulur, worktree/kirli yol işçide doldurulur; kb durumu değişmez. */
 export async function remoteResume(
   transport: RemoteTransport, machine: string, task: Task, plan: ResumePlan, cfg: VladConfig,

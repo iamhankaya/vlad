@@ -968,6 +968,17 @@
   {
    "path": [
     "agent",
+    "stop"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "yerel makine yönetimi; konsol kataloğundan hariç"
+   }
+  },
+  {
+   "path": [
+    "agent",
     "keygen"
    ],
    "json": true,

@@ -2,7 +2,7 @@
  * F-vlad-358: bağlanma adresi yokken (EADDRNOTAVAIL; ör. başka ağa geçiş) Agent çıkıp launchd KeepAlive döngüsüne girmesin ve
  * agent.log dönüp geçmişi silmesin: geri çekilmeli (baseMs → maxMs) bekler, hatayı tek satır yazar. Başka hatalar hemen fırlar.
  */
-export interface RetryOpts { sleep?: (ms: number) => Promise<void>; log: (line: string) => void; baseMs?: number; maxMs?: number; signal?: AbortSignal }
+export interface RetryOpts { sleep?: (ms: number) => Promise<void>; log: (line: string) => void; baseMs?: number; maxMs?: number; signal?: AbortSignal; /** EADDRNOTAVAIL günlük satırına eklenecek açıklama (ör. hangi host yok, mevcut adresler) */ explain?: () => string | null }
 
 export async function listenWithRetry<T>(fn: () => Promise<T>, o: RetryOpts): Promise<T> {
   // Varsayılan uyku iptal sinyaliyle kesilir (SIGTERM'de ≤ 60 sn gecikme olmasın); enjekte `sleep` aynen kullanılır.
@@ -17,7 +17,12 @@ export async function listenWithRetry<T>(fn: () => Promise<T>, o: RetryOpts): Pr
   for (;;) {
     try { return await fn(); } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EADDRNOTAVAIL" || o.signal?.aborted) throw e;
-      if (!warned) { warned = true; o.log(`agent: bağlanma adresi şu an yok (EADDRNOTAVAIL); geri çekilmeyle yeniden denenecek (≤ ${Math.round(max / 1000)} sn aralık)`); }
+      if (!warned) {
+        warned = true;
+        let why: string | null = null;
+        try { why = o.explain?.() ?? null; } catch { /* açıklama üretilemezse düz satır */ }
+        o.log(`agent: bağlanma adresi şu an yok (EADDRNOTAVAIL${why ? `: ${why}` : ""}); geri çekilmeyle yeniden denenecek (≤ ${Math.round(max / 1000)} sn aralık)`);
+      }
       await sleep(delay);
       if (o.signal?.aborted) throw e;
       delay = Math.min(delay * 2, max);
