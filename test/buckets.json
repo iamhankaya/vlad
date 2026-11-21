@@ -74,7 +74,10 @@
     "test/tasks/pipeline.test.ts",
     "test/tasks/state.test.ts",
     "test/tasks/store.test.ts",
-    "test/tasks/transitions-consistency.test.ts"
+    "test/tasks/transitions-consistency.test.ts",
+    "test/agent-addr-check.test.ts",
+    "test/agent-stop.test.ts",
+    "test/tasks/nudge-win.test.ts"
   ],
   "process": [
     "test/approver/**/*.test.ts",
@@ -267,7 +270,9 @@
     "test/machines/agent-killtree.test.ts",
     "test/machines/agent-maintenance.test.ts",
     "test/machines/f279-blocked-report.test.ts",
-    "test/machines/script-vlad-guncelle.test.ts"
+    "test/machines/script-vlad-guncelle.test.ts",
+    "test/machines/flush-timeout.test.ts",
+    "test/machines/nudge-remote.test.ts"
   ],
   "platform": [
     "test/aktarim/a1-ledger-notify.test.ts",

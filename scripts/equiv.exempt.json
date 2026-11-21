@@ -7,6 +7,7 @@
     "mode token": "yeni komut (T20261113-18): yalnız TTY'de çalışır, anahtar üretir; davranış test/mode/mode-token.test.ts",
     "worktree prune": "yeni komut (T20261117-06): tabanda yok; davranış test/tasks/worktree-prune.test.ts",
     "task deny":"yeni komut (T20261110-13): tabanda yok, eski/yeni CLI eşdeğerliği anlamsız; davranış test/tasks/denials.test.ts",
+    "agent stop": "yeni komut (T20261121-50, F-vlad-368): tabanda yok; davranış test/agent-stop.test.ts (sahte launchctl/schtasks)",
     "agent install": "işletim sistemi hizmeti kurar",
     "vlad setup": "makine durumuna (araçlar, ~/.claude, kb) bağlı kurulum sihirbazı; çıktı deterministik değil, davranış test/setup/*'da",
     "queue list": "yerel Agent'a bağlanır (ağ)",

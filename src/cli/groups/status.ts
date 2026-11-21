@@ -3,6 +3,8 @@ import { join } from "node:path";
 import type { RemoteStallPlan } from "../../tasks/liveness.js";
 import { lintAgeNote, refreshLintCacheIfStale } from "../../audit/lint-cache.js";
 import { workerState } from "../../agent/forward.js";
+import { addressWarning } from "../../agent/addr-check.js";
+import { selfName } from "../../fleet/state.js";
 import { loadConfig } from "../../kb/index.js";
 import { staleSummaryText, undigestedNote } from "../../projects/status.js";
 import { statusSummary } from "../../tasks/index.js";
@@ -10,6 +12,14 @@ import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 import { approverServiceWarning } from "../../approver/health.js";
 import { countNotices, defaultNotifyDir, listNotices } from "../../monitor/notify.js";
+
+/** F-vlad-368: config'teki kendi Agent adresi bu makinede yoksa (DHCP) uyarı metni; okunamazsa sessizce null. */
+function agentAddressNote(): string | null {
+  try {
+    const cfg = loadConfig();
+    return cfg.machines ? addressWarning(cfg, selfName()) : null;
+  } catch { return null; }
+}
 
 /** Monitor bildirim kuyruğu özeti; okunamazsa sessizce 0 (açılış özetini asla düşürme). */
 function monitorNotices(): { count: number; items: { task: string; kind: string }[] } {
@@ -28,6 +38,7 @@ export function registerStatus(program: Command, k: Kit): void {
     if (o.summary) {
       const mn = monitorNotices();
       const approverWarn = approverServiceWarning(); // F-vlad-355: servis sessizce kalkarsa SessionStart'ta görünür
+      const addrWarn = agentAddressNote(); // F-vlad-368
       // "rapor" covers inbox records and closing reports of done tasks that /digest has not processed
       const line =
         `İşlenmemiş ${s.inbox + s.undigested} rapor, ${s.active.length} aktif görev ` +
@@ -40,6 +51,7 @@ export function registerStatus(program: Command, k: Kit): void {
         (mn.count ? `, ${mn.count} monitor bildirimi (${mn.items.map((x) => x.task).join(", ")}${mn.count > mn.items.length ? ", …" : ""})` : "") +
         (s.kbDirty ? `; UYARI: ${s.kbDirty.message}` : "") +
         (approverWarn ? `; UYARI: ${approverWarn}` : "") +
+        (addrWarn ? `; UYARI: ${addrWarn}` : "") +
         (s.mode ? `; ${s.mode}` : "");
       if (o.hook) {
         // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
@@ -55,6 +67,8 @@ export function registerStatus(program: Command, k: Kit): void {
     const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];
     if (s.mode) lines.push(`mod: ${s.mode}`);
     if (s.kbDirty) lines.push(`UYARI: ${s.kbDirty.message}`);
+    const addrWarn = agentAddressNote();
+    if (addrWarn) lines.push(`UYARI: ${addrWarn}`);
     if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
     if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
     out(o, { ...s, active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));

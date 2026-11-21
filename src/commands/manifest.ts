@@ -109,6 +109,7 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["worktree", "prune"], { console: none("silme; konsoldan açılmadı, ayrı karar (--yes onayı VLAD/kullanıcıdadır)") }),
   c(["agent", "start"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["agent", "status"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
+  c(["agent", "stop"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["agent", "keygen"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["agent", "setkey"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["agent", "install"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),

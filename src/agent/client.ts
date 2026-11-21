@@ -17,7 +17,13 @@ export interface ClientOpts {
   /** Her çağrıda taze config (adresler sonradan değişebilir). */
   config: () => VladConfig;
   defaultTimeoutMs?: number;
+  /** Bağlantı kurma sınırı (varsayılan 5 sn): erişilemeyen adres istek zaman aşımını (30-70 sn) beklemeden `unreachable` olur (F-vlad-368). */
+  connectTimeoutMs?: number;
+  /** Test dikişi: soketi üretir (varsayılan `net.connect`). */
+  connect?: (port: number, host: string) => net.Socket;
 }
+
+export const CONNECT_TIMEOUT_MS = 5_000;
 
 /** RemoteTransport'un gerçek gerçeklemesi: çağrı başına yeni bağlantı, tek deneme, yeniden deneme yok. */
 export class AgentClient implements RemoteTransport {
@@ -33,7 +39,7 @@ export class AgentClient implements RemoteTransport {
     const addr = addressOf(this.o.config(), to, this.o.self);
     const opId = c.opId ?? randomUUID();
     const req: AgentRequest = signRequest(key, { v: PROTO_VERSION, from, to, opId, ts: nowMs(), op, args });
-    const res = await this.exchange(to, addr, req, c.timeoutMs ?? this.o.defaultTimeoutMs ?? 30_000);
+    const res = await this.exchange(to, addr, req, c.timeoutMs ?? this.o.defaultTimeoutMs ?? 30_000, this.o.connectTimeoutMs ?? CONNECT_TIMEOUT_MS);
     if (res.opId !== opId) throw new RemoteError("auth", "auth: yanıt başka isteğe ait", to);
     if (res.sig) { if (!verifyResponse(key, res)) throw new RemoteError("auth", "auth: yanıt imzası geçersiz", to); }
     else if (res.code !== "auth" && UNSIGNED.has(res.code)) throw new RemoteError("timeout", `timeout: imzasız ${res.code} yanıtı (${res.error ?? ""}); yeniden denenir`, to); // imzasız yanıt kalıcı karar tetiklemez
@@ -42,18 +48,20 @@ export class AgentClient implements RemoteTransport {
     return { opId, result: res.result as T, ...(res.meta ? { meta: res.meta } : {}) };
   }
 
-  private exchange(to: string, addr: { host: string; port: number }, req: AgentRequest, timeoutMs: number): Promise<WireResponse> {
+  private exchange(to: string, addr: { host: string; port: number }, req: AgentRequest, timeoutMs: number, connectMs: number): Promise<WireResponse> {
     return new Promise((resolve, reject) => {
       const dec = new FrameDecoder();
-      const sock = net.connect(addr.port, addr.host);
+      const sock = (this.o.connect ?? net.connect)(addr.port, addr.host);
       let connected = false, done = false;
       const end = (e: RemoteError | null, r?: WireResponse) => {
         if (done) return;
-        done = true; clearTimeout(timer); sock.destroy();
+        done = true; clearTimeout(timer); clearTimeout(connTimer); sock.destroy();
         if (e) reject(e); else resolve(r!);
       };
       const timer = setTimeout(() => end(new RemoteError("timeout", `timeout: ${to} ${timeoutMs} ms içinde yanıt vermedi`, to)), timeoutMs);
-      sock.on("connect", () => { connected = true; sock.write(encodeFrame(req)); });
+      // bağlanma sınırı: SYN yanıtsız kalan adres (DHCP ile değişmiş IP, kapalı ağ) işletim sisteminin 75 sn+ zaman aşımını beklemez
+      const connTimer = setTimeout(() => { if (!connected) end(new RemoteError("unreachable", `unreachable: ${to} ${addr.host}:${addr.port} (bağlanma zaman aşımı, ${connectMs} ms)`, to)); }, connectMs);
+      sock.on("connect", () => { connected = true; clearTimeout(connTimer); sock.write(encodeFrame(req)); });
       sock.on("data", (d: Buffer) => {
         try { const [r] = dec.push(d); if (r) end(null, r as WireResponse); } catch (e) { end(e as RemoteError); }
       });

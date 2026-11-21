@@ -27,7 +27,9 @@ Her makinede `vlad.local.json` (git'e girmez): `{ "self": "<makine>", "keys": { 
 
 1. Her makinede yerel çağrı anahtarı: `vlad agent keygen <kendi-adın>` (kopyalanmaz).
 2. Her işçi için beyinde: `vlad agent keygen windows --show` → anahtarı üretir, `keys.windows` olarak yazar ve çıktıda `windows: <64 hex>` satırını basar (`--show` olmadan anahtar basılmaz; yeniden üretmek eskisini değiştirir). Anahtarın 64 hex kısmını **güvenli kanaldan elle** işçiye taşı; işçide `vlad agent setkey mac -` çalıştırıp anahtarı **stdin'den** ver (ör. PowerShell'de `'<anahtar>' | vlad agent setkey mac -`). Anahtar argv'ye yazılmaz: `setkey` argv'de anahtar alırsa reddeder (`src/cli/groups/agent.ts:36`). Konsol için de aynı, ancak konsol kimliği önce kök `consoles`'ta tanımlı olmalı (yoksa `keygen` "kimlik config'te tanımlı değil" der): beyinde `keygen desktop --show`, konsolda `vlad agent setkey mac -`.
-3. Agent'ları (yeniden) başlat: `vlad agent start`; durum: `vlad agent status`.
+3. Agent'ları (yeniden) başlat: `vlad agent start`; durum: `vlad agent status`; durdur: `vlad agent stop` (Mac: `launchctl bootout`, Windows: `schtasks /End /TN VladAgent`; durdurma geçicidir, sonraki oturum açılışında Agent yeniden başlar; ayrıntı `docs/commands.md`).
+
+**Uzak çalışana dürtme (F-vlad-370) ve ağ sorunları (F-vlad-368):** `vlad task nudge <id> <mesaj>` görev işçideyse isteği o makinenin Agent'ına (`nudge` op'u) iletir; Windows'ta metin çalışan penceresinin konsoluna (`AttachConsole` + `WriteConsoleInput`) yazılır ve ekran okunarak teslim doğrulanır (gerçek Windows'ta elle doğrulanmalıdır). Agent bağlantıları 5 sn'de, kuyruk boşaltma turu 45 sn'de zaman aşımına uğrar; uçuştaki `queue-flush` bakım betiğini (`selfUpdate`) bekletmez. Config'teki Agent adresi makinede yoksa (DHCP) Agent günlüğü ve `vlad status` "config'teki host X bu makinede yok; mevcut adres(ler): …" der.
 4. Oturum açılışında otomatik başlatma: `vlad agent install` kaydı basar, `--apply` ile kurar (Windows görev zamanlayıcı, Mac launchd). Kayıt kalıcılık oluşturur; kullanıcı kendisi çalıştırır.
 
 ## 3. Bağlantı denemesi

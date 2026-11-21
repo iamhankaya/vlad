@@ -119,14 +119,17 @@ export class AgentQueue {
    * Sıradan gönderir. `send` başarıyla döner → silinir; RemoteError: kalıcı → failed/ (+ aynı görevin kalanı), diğer → durur.
    * Süren bir boşaltma varsa bitmesini bekler, kalanı kendisi boşaltır; inflight (doğrudan gönderim) girdide durur.
    */
-  async flush(send: (it: QueueItem) => Promise<unknown>): Promise<{ sent: number; failed: number; remaining: number }> {
+  async flush(send: (it: QueueItem) => Promise<unknown>, o: { deadlineMs?: number } = {}): Promise<{ sent: number; failed: number; remaining: number }> {
     while (this.flushing) await this.flushing.catch(() => undefined); // süren boşaltma bitsin; kalanı bu çağrı boşaltır
-    const run = this.drain(send);
+    const run = this.drain(send, o.deadlineMs);
     this.flushing = run;
     try { return await run; } finally { this.flushing = null; }
   }
-  private async drain(send: (it: QueueItem) => Promise<unknown>): Promise<{ sent: number; failed: number; remaining: number }> {
+  /** `deadlineMs`: toplam süre sınırı (F-vlad-368); `send` dönmezse girdi pending kalır, boşaltma biter ve `flushing` kilidi düşer. */
+  private async drain(send: (it: QueueItem) => Promise<unknown>, deadlineMs?: number): Promise<{ sent: number; failed: number; remaining: number }> {
     const r = { sent: 0, failed: 0, remaining: 0 };
+    const t0 = Date.now();
+    const overdue = Symbol("deadline");
     this.recover();
     {
       const poisoned = new Map<string, number>(); // görev id → başarısız ilk seq
@@ -137,7 +140,18 @@ export class AgentQueue {
         if (it.state === "inflight") break;
         const prev = poisoned.get(it.id);
         if (prev !== undefined) { this.fail(f, it, `önceki başarısız: ${prev}`); r.failed++; continue; }
-        try { await send(it); this.unlink(join(this.dir, f)); r.sent++; } catch (e) {
+        try {
+          if (deadlineMs === undefined) await send(it);
+          else {
+            let timer: NodeJS.Timeout | undefined;
+            const cut = new Promise<typeof overdue>((res) => { timer = setTimeout(() => res(overdue), Math.max(deadlineMs - (Date.now() - t0), 0)); });
+            const sending = send(it);
+            sending.catch(() => {}); // kesilen gönderimin geç hatası işlenmemiş reddedilme olmasın
+            const done = await Promise.race([sending, cut]).finally(() => clearTimeout(timer));
+            if (done === overdue) { this.write(join(this.dir, f), { ...it, reason: `zaman aşımı: gönderim ${deadlineMs} ms içinde bitmedi (beyin erişilemiyor olabilir)` }); break; }
+          }
+          this.unlink(join(this.dir, f)); r.sent++;
+        } catch (e) {
           const code = e instanceof RemoteError ? e.code : "failed";
           if (PERMANENT.has(code)) { this.fail(f, it, `${code}: ${(e as Error).message}`); poisoned.set(it.id, it.seq); r.failed++; continue; }
           this.write(join(this.dir, f), { ...it, reason: (e as Error).message });

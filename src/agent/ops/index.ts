@@ -12,6 +12,7 @@ import { gateRun, mergeOp, mergePreview } from "./gate.js";
 import { branchPushOp } from "./branch-push.js";
 import { liveness } from "./liveness.js";
 import { scriptList, scriptRun } from "./script.js";
+import { nudgeOp } from "./nudge.js";
 import { queueDrop, queueFlush, queueList } from "./queue.js";
 import { createClipReceiver } from "../../clip/receive.js";
 import { createXferReceiver } from "../../transfer/receive.js";
@@ -38,7 +39,7 @@ export const TRANSFER_OPS: readonly AgentOp[] = ["xfer-begin", "xfer-chunk", "xf
 
 const ALLOWED: Record<AgentKind, Partial<Record<CallerRole, readonly AgentOp[]>>> = {
   "worker-agent": {
-    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "branch-push", "script-list", "script-run", ...TRANSFER_OPS],
+    brain: ["ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "branch-push", "script-list", "script-run", "nudge", ...TRANSFER_OPS],
     self: ["forward-write", "queue-list", "queue-flush", "queue-drop"],
   },
   "brain-agent": {
@@ -51,7 +52,7 @@ export const allowedOps = (agent: AgentKind, caller: CallerRole): readonly Agent
 export const isAllowed = (agent: AgentKind, caller: CallerRole, op: AgentOp): boolean => allowedOps(agent, caller).includes(op);
 
 const OPS: AgentOp[] = [
-  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "branch-push", "script-list", "script-run",
+  "ping", "op-status", "kb-sync", "launch", "resume", "close", "cleanup", "liveness", "probe-window", "gate-run", "merge-preview", "merge", "branch-push", "script-list", "script-run", "nudge",
   "apply-write", "exec", "kb-head", "forward-write", "queue-list", "queue-flush", "queue-drop",
   ...TRANSFER_OPS,
 ];
@@ -91,6 +92,9 @@ OP_TABLE["branch-push"] = (a) => branchPushOp(a);
 OP_TABLE["script-list"] = (a) => scriptList(a);
 OP_TABLE["script-run"] = (a, c) => scriptRun(a, undefined, c);
 // --- /scripts ---
+// --- nudge: uzak çalışana dürtme (F-vlad-370) ---
+OP_TABLE.nudge = (a) => nudgeOp(a);
+// --- /nudge ---
 
 /**
  * Aktarım S: op tablosunu `d`'ye bağlar. Süreç geneli durum yok: her çağrı ayrı alıcılar kurar (aynı süreçte iki Agent: test).
