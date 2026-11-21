@@ -267,7 +267,8 @@
     "test/machines/agent-killtree.test.ts",
     "test/machines/agent-maintenance.test.ts",
     "test/machines/f279-blocked-report.test.ts",
-    "test/machines/script-vlad-guncelle.test.ts"
+    "test/machines/script-vlad-guncelle.test.ts",
+    "test/machines/flush-timeout.test.ts"
   ],
   "platform": [
     "test/aktarim/a1-ledger-notify.test.ts",
