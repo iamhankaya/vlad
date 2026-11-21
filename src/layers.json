@@ -5,6 +5,7 @@
     "git": 0,
     "platform": 0,
     "stdout.ts": 0,
+    "launchd-guard.ts": 0,
     "tasks": 1,
     "findings": 1,
     "ideas": 1,
