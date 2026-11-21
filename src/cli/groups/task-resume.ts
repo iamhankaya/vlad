@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { soleTranscriptSession } from "../../tasks/liveness.js";
 import { trustWorktree } from "../../tasks/trust.js";
+import { startTrustGuard } from "../../tasks/trust-guard.js";
 import { kbPaths, loadConfig, withKbLock } from "../../kb/index.js";
 import { NoopLauncher, PosixLauncher, desktopQueueDir, enqueueDesktop, externalLaunch, secureDir, resolveLaunchMode, closeWorkerWindow } from "../../launcher/index.js";
 import { brainTransport, markCleaned, syncKb, remoteCleanup, remoteClose, remoteNudge, remoteResume } from "../../machines/remote.js";
@@ -67,6 +68,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
         }
         const res = await launcher.launch(req);
         if (!res.ok) throw new Error(`launcher başarısız (${res.method}): ${res.detail ?? "bilinmeyen hata"}`);
+        if (mode !== "noop") startTrustGuard(id); // F-vlad-335: same first-minute watch as `task launch`
         out(o, { ...r, method: res.method, detail: res.detail }, `${id} sürdürüldü (${res.method}) -> ${r.worktree}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`);
         return;
       }

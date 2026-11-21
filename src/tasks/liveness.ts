@@ -8,7 +8,8 @@ import { existsSync } from "node:fs";
 import { repoNameOf } from "../fleet/paths.js";
 import type { RemoteTransport } from "../fleet/types.js";
 import { RemoteError } from "../fleet/types.js";
-import { approveTrustScreen, trustScreenShown } from "./nudge.js";
+import { trustScreenShown } from "./nudge.js";
+import { approveTrustSync, ownsWorktree, platformPane } from "./trust-guard.js";
 import { getTask, listTasks, logTask, setState } from "./store.js";
 import type { Task } from "./store.js";
 
@@ -32,9 +33,11 @@ export interface LivenessProbe {
 export { trustScreenShown };
 // the screen is normal for a moment after launch; a worker still parked there after this is stuck
 const TRUST_GRACE_MIN = 3;
-const tmuxPane = (taskId: string): string => {
-  try { return execFileSync("tmux", ["capture-pane", "-p", "-t", `vlad-${taskId}`], { encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] }); } catch { return ""; }
+// tmux (Mac/Linux) ya da Windows konsol ekranı (nudge-win); pencere yoksa/okunamazsa ""
+const paneText = (taskId: string): string => {
+  try { return platformPane(taskId).capture(); } catch { return ""; }
 };
+const sleepSync = (ms: number): void => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); };
 
 /** Claude names a project dir after its path with every non-alphanumeric char mapped to `-`. */
 export const claudeProjectDir = (path: string): string => path.replace(/[^A-Za-z0-9]/g, "-");
@@ -96,8 +99,8 @@ export function defaultProbe(): LivenessProbe {
       return lines ? lines.some((l) => l.includes(taskId.toLowerCase())) : null;
     },
     transcriptMtime,
-    trustScreen: (taskId) => process.platform !== "win32" && trustScreenShown(tmuxPane(taskId)),
-    approveTrust: (taskId) => process.platform !== "win32" && approveTrustScreen(taskId),
+    trustScreen: (taskId) => trustScreenShown(paneText(taskId)),
+    approveTrust: (taskId) => approveTrustSync(platformPane(taskId), sleepSync),
   };
 }
 
@@ -141,8 +144,9 @@ export function markSilentWorkers(now: Date, cfg: VladConfig, probe?: LivenessPr
     // F-vlad-261: no transcript yet + parked on the trust screen = stuck for good (nothing answers it).
     // D-vlad-087 (F-vlad-335): VLAD's own worker sessions (tmux vlad-<id>) get the approve key once; only if that fails the task is flagged stalled.
     if (transcript === null && idleMs >= TRUST_GRACE_MIN * MIN && probe.trustScreen?.(t.data.id)) {
-      if (probe.approveTrust?.(t.data.id)) {
-        logTask(t.data.id, "güven ekranı otomatik onaylandı (D-vlad-087; tmux vlad-<id> penceresine Enter gönderildi)");
+      // only VLAD's own worktree (path derived from worktreeDir + task id) gets a key; anything else stays a plain stall
+      if (ownsWorktree({ id: t.data.id, worktree: wt, repoPath: repoPathOfProject(t.data.project) }, cfg, platform) && probe.approveTrust?.(t.data.id)) {
+        logTask(t.data.id, "güven ekranı otomatik onaylandı (D-vlad-087; VLAD çalışan penceresine Enter gönderildi)");
         continue;
       }
       out.push(setState(t.data.id, "stalled", { error: "çalışan güven ekranında takıldı (hasTrustDialogAccepted kaydı yok)" }));
@@ -167,10 +171,14 @@ export interface RemoteStallPlan {
 export const REMOTE_BUDGET_MS = 4000;
 const UNREACHABLE = new Set(["unreachable", "timeout"]);
 
-function repoNameOfProject(project: string): string | null {
+function repoPathOfProject(project: string): string | null {
   const f = join(kbPaths().projects, `${project}.md`);
   if (!existsSync(f)) return null;
-  const path = (readDoc<{ path?: string }>(f).data.path ?? "");
+  return readDoc<{ path?: string }>(f).data.path || null;
+}
+
+function repoNameOfProject(project: string): string | null {
+  const path = repoPathOfProject(project);
   return path ? repoNameOf(path) : null;
 }
 
