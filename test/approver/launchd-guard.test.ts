@@ -2,7 +2,8 @@
 import { mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setSecretDirForTests } from "../../src/mode/token.js";
 import { createLaunchdInstaller } from "../../src/approver/launchd.js";
 import { createMonitorInstaller } from "../../src/monitor/launchd.js";
 import { assertTestSafeLaunchd, guardLaunchctl, inTestEnv, realLaunchAgentsDir } from "../../src/launchd-guard.js";
@@ -15,6 +16,10 @@ const spyLc = () => {
   const calls: string[][] = [];
   return { calls, lc: async (a: string[]) => { calls.push(a); return { code: 0, stdout: "", stderr: "" }; } };
 };
+// installer yaşam döngüsü günlüğü (approver.log) gizli dizin altına yazar (launchd.ts lifecycleLog); varsayılan test gizli dizini süreçler arası paylaşılır ve orada kalan
+// "approver" alt dizini mode.test.ts'yi "gizli dizin var, anahtar yok" ile kırar (Windows tam koşusunda 1/4 gözlendi): bu dosya kendi geçici gizli dizinini kullanır.
+beforeEach(() => { setSecretDirForTests(join(tmp(), "secret")); });
+afterEach(() => setSecretDirForTests(null));
 const MUTATING = "bootstrap bootout kickstart load unload remove enable disable".split(" ");
 
 describe("launchd koruması (test ortamı)", () => {
