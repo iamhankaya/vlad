@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ALERT_MARKER_RE, alertMarker, parseAlertMarker } from "../../src/monitor/marker.js";
 import { keychainService } from "../../src/monitor/secret.js";
@@ -50,8 +51,8 @@ describe("monitor sözleşmesi: Keychain kaydı ve sunucu kimliği", () => {
 describe("monitor sözleşmesi: durum dosyası konumu ve şeması", () => {
   it("~/.vlad-monitor/state.json; boş durum v1", () => {
     expect(MONITOR_DIRNAME).toBe(".vlad-monitor");
-    expect(monitorStateDir("/h")).toBe("/h/.vlad-monitor");
-    expect(monitorStatePath("/h/.vlad-monitor")).toBe("/h/.vlad-monitor/state.json");
+    expect(monitorStateDir("/h")).toBe(join("/h", ".vlad-monitor")); // path.join: Windows'ta ayraç \
+    expect(monitorStatePath("/h/.vlad-monitor")).toBe(join("/h", ".vlad-monitor", "state.json"));
     expect(EMPTY_STATE).toEqual({ v: 1, servers: {} });
   });
 });

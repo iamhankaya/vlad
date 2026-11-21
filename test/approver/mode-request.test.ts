@@ -9,6 +9,7 @@ import { writeAtomic } from "../../src/mode/secure-fs.js";
 import { approverDir, setSecretDirForTests } from "../../src/mode/token.js";
 import { makeHome } from "../helpers.js";
 import { runCli } from "../support/run-cli.js";
+import { IS_WIN } from "../support/platform.js";
 
 const cwd0 = process.cwd();
 let tmp: string;
@@ -67,7 +68,8 @@ describe("approver: mode request istemcisi", () => {
     expect(r.exit).toBe(0);
   });
 
-  it("başarı: inbox dosyası geçerli ve 0600, cid rastgelelik kaynağından; çıktı {id,status,expiresAt}", async () => {
+  // Windows'ta atlanır: 0600 mod biti POSIX'e özgü
+  it.skipIf(IS_WIN)("başarı: inbox dosyası geçerli ve 0600, cid rastgelelik kaynağından; çıktı {id,status,expiresAt}", async () => {
     install();
     let seen: string | null = null;
     const h = harness(pendingAck, () => { seen ??= readdirSync(join(approverDir(), "inbox"))[0] ?? null; });

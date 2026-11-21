@@ -7,6 +7,7 @@ import { assertSecureDir } from "../../src/mode/secure-fs.js";
 import { spawnVlad, isolatedEnv } from "../support/spawn-vlad.js";
 import { dirFiles, makeWorld } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
+import { IS_WIN } from "../support/platform.js";
 
 // approver-kabul: gerçek VMT2 entegrasyonu (KK3/KK4 token yarısı, "Gerçek VMT2 entegrasyonu", "rotate/uninstall/--reset/--disable" tekrar oynatma).
 // Gizli dizin geçici; çocuk süreçler VLAD_TEST_SECRET_DIR ile (no-secret-shim) aynı geçici dizine bağlanır, gerçek ~/.vlad-secret'e dokunulmaz.
@@ -95,7 +96,8 @@ describe("approver-kabul: VMT2 token kuralları (süreç içi)", () => {
     } finally { delete process.env.VLAD_MODE_TOKEN; }
   });
 
-  it("`used/` yazılamıyorsa fail-closed (geçerli token bile geçmez); kök kullanıcıda skip değil açık hata", () => {
+  // Windows'ta atlanır: chmod 0500 ile yazılamaz dizin POSIX'e özgü; Windows'ta mod biti yazmayı engellemez
+  it.skipIf(IS_WIN)("`used/` yazılamıyorsa fail-closed (geçerli token bile geçmez); kök kullanıcıda skip değil açık hata", () => {
     if (process.getuid?.() === 0) throw new Error("kök kullanıcıda izin testi anlamsız: testler kök olmayan kullanıcıyla koşmalı");
     assertSecureDir(usedDir());
     expect(() => requireModeAuthority(env(mintOpToken(OFF, 60_000)), new Date(), OFF), "kontrol: yazılabilirken geçer").not.toThrow();

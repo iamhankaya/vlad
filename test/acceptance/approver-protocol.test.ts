@@ -7,6 +7,7 @@ import type { RejectReason } from "../../src/approver/types.js";
 import { SECRET_PATTERNS, secretHits } from "../support/approver-secrets.js";
 import { dirFiles, logText, makeCid, makeWorld, resultOf, sleep, startService, submit, untilStream, untilWatching, waitAck, waitFor, writeRequest } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
+import { IS_WIN } from "../support/platform.js";
 
 // approver-kabul: istemci↔servis protokolü, bildirim, tek kullanım, TTL, yetkisiz yanıt, allowlist.
 // Seviye: süreç içi `runApprover(deps)` + loopback sahte ntfy + gerçek NtfyChannel/Store; saat sahte (yalnız süreç içi).
@@ -332,7 +333,8 @@ describe("approver-kabul: istemci–servis protokolü ve allowlist", () => {
     expect(SECRET_PATTERNS.find((x) => x.name.startsWith("--answers"))!.re.test(m!.message)).toBe(false);
   });
 
-  it("anahtar kapalıyken (mode token --disable) yeni istek invalid:key_disabled", async () => {
+  // Windows'ta atlanır: anahtar bozukluğu chmod 0644 ile kurulur; Windows'ta mod bitleri yok
+  it.skipIf(IS_WIN)("anahtar kapalıyken (mode token --disable) yeni istek invalid:key_disabled", async () => {
     await boot();
     // `mode token --disable` secretDir'i (approver/ dahil) siler; servisin gördüğü durum keyState≠ok. approver/ ayakta kalsın diye anahtarı bozuyoruz (geniş izin ⇒ broken).
     chmodSync(join(w.secret, "mode.key"), 0o644);

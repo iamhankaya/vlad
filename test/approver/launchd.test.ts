@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, mkdtempSync, existsSync, readFileSync, realpa
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { statSync } from "node:fs";
+import { IS_WIN } from "../support/platform.js";
 import { setSecretDirForTests } from "../../src/mode/token.js";
 import { createLaunchdInstaller, approverPlist, type Launchctl } from "../../src/approver/launchd.js";
 
@@ -38,9 +39,10 @@ describe("approver: launchd günlük yolu", () => {
     const p = approverPlist(ctx, "/s/approver/launchd.log");
     expect(p).toContain("<key>StandardOutPath</key><string>/s/approver/launchd.log</string>");
     expect(p).toContain("<key>StandardErrorPath</key><string>/s/approver/launchd.log</string>");
-    expect(approverPlist(ctx)).toContain("/v/.vlad-approver.log");
+    expect(approverPlist(ctx)).toContain(join("/v", ".vlad-approver.log"));
   });
-  it("install: günlük approver dizininde, 0600; plist o yolu kullanır", async () => {
+  // Windows'ta atlanır: 0600/0700 mod bitleri POSIX'e özgü (launchd zaten yalnız macOS).
+  it.skipIf(IS_WIN)("install: günlük approver dizininde, 0600; plist o yolu kullanır", async () => {
     const t = mk();
     try {
       await createLaunchdInstaller({ launchctl: t.launchctl, plistDir: t.dir }).install(ctx);

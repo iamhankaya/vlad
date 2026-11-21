@@ -10,6 +10,7 @@ import { createTask, getTask, saveTask } from "../../src/tasks/index.js";
 import { pruneOrphanWorktrees } from "../../src/tasks/worktree-prune.js";
 import { makeHome, rmTemp } from "../helpers.js";
 import { spawnVlad } from "../support/spawn-vlad.js";
+import { IS_WIN } from "../support/platform.js";
 
 const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...args], { cwd, stdio: "pipe", encoding: "utf8" });
 
@@ -66,7 +67,8 @@ describe("pruneOrphanWorktrees (F-vlad: artık worktree klasörleri)", () => {
     expect(r.items.find((i) => i.dir === running)!.reason).toMatch(/running/);
   });
 
-  it("sembolik bağlantı klasörü ve hedefi silinmez (bağlantı izlenmez)", () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM)
+  it.skipIf(IS_WIN)("sembolik bağlantı klasörü ve hedefi silinmez (bağlantı izlenmez)", () => {
     const id = task("done");
     const target = join(base, "precious"); mkdirSync(target); writeFileSync(join(target, "k"), "keep");
     mkdirSync(wtRoot, { recursive: true });
@@ -78,12 +80,18 @@ describe("pruneOrphanWorktrees (F-vlad: artık worktree klasörleri)", () => {
   it("git worktree list okunamayan (repo yok) projede hiçbir şey silinmez", () => {
     const d = leftover(task("done"));
     rmTemp(join(repo, ".git"));
-    const r = pruneOrphanWorktrees(cfg, { yes: true });
-    expect(r.removed).toBe(0);
+    // git üst dizinlerde depo arar; geliştirici ev dizini bir git deposuysa (Windows'ta C:Users<ad> sık) "repo yok" durumu bozulur: tavan dizini ile aramayı geçici dizinde kes
+    const savedCeil = process.env.GIT_CEILING_DIRECTORIES;
+    process.env.GIT_CEILING_DIRECTORIES = base;
+    try {
+      const r = pruneOrphanWorktrees(cfg, { yes: true });
+      expect(r.removed).toBe(0);
+    } finally { if (savedCeil === undefined) delete process.env.GIT_CEILING_DIRECTORIES; else process.env.GIT_CEILING_DIRECTORIES = savedCeil; }
     expect(existsSync(d)).toBe(true);
   });
 
-  it("ASCII dışı (git'in tırnakladığı) yoldaki kayıtlı worktree silinmez (katman 1: -z ile literal karşılaştırma)", () => {
+  // Windows'ta atlanır: yeni satır içeren dosya adı Windows'ta geçersiz (git worktree add "Invalid argument" verir)
+  it.skipIf(IS_WIN)("ASCII dışı (git'in tırnakladığı) yoldaki kayıtlı worktree silinmez (katman 1: -z ile literal karşılaştırma)", () => {
     // newline + ü: git (non -z) quotes such paths ("w\n\303\274") and then samePath cannot match them
     const uRoot = join(base, "w\nü-ç");
     cfg.worktreeDir = uRoot;

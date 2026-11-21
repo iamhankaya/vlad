@@ -6,6 +6,7 @@ import { validateRequest } from "../../src/approver/request.js";
 import type { ServiceInstaller } from "../../src/approver/launchd.js";
 import { makeCid, makeWorld, runVlad } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
+import { IS_WIN } from "../support/platform.js";
 
 // approver-doğrulama (T20261116-07): doğrulama fazında hata avıyla bulunan gerçek hatalar. Kırmızı testler KASITLIDIR (düzeltme Developer görevi).
 // Yalnız geçici dizin/sahte launchctl/saf fonksiyon kullanır; gerçek ~/.vlad-secret, ~/.claude ya da canlı ntfy'ye dokunulmaz.
@@ -44,7 +45,8 @@ describe("approver-doğrulama V2: görünmez Unicode, isteğin kontrol-karakter 
 });
 
 describe("approver-doğrulama V3: belgedeki 'üst dizin grup yazılabilirse kurulum reddedilir' sözü", () => {
-  it("gizli dizinin üst dizini 0775 iken `approver install` reddedilir ve launchctl çağrılmaz", async () => {
+  // Windows'ta atlanır: grup yazılabilir mod biti (chmod 0775) POSIX'e özgü
+  it.skipIf(IS_WIN)("gizli dizinin üst dizini 0775 iken `approver install` reddedilir ve launchctl çağrılmaz", async () => {
     chmodSync(w.root, 0o775); // gizli dizin w.root/secret: üst dizin = w.root (geçici, bize ait)
     const calls: string[] = [];
     const installer: ServiceInstaller = { install: async () => { calls.push("install"); return ["fake"]; }, uninstall: async () => [], status: async () => ({ installed: false, running: false, detail: "" }) };

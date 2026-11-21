@@ -10,6 +10,7 @@ import { loadMonitorConfig } from "../../src/monitor/config.js";
 import { MONITOR_LABEL, CAPACITY_LABEL, capacityPlist, createMonitorInstaller, monitorPlist } from "../../src/monitor/launchd.js";
 import { EMPTY_STATE, MONITOR_LIMITS } from "../../src/monitor/types.js";
 import { parseAlertsResponse } from "../../src/monitor/contract.js";
+import { IS_WIN } from "../support/platform.js";
 
 const fx = (n: string) => JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "spc", n), "utf8"));
 const critical = () => parseAlertsResponse(fx("alerts-critical-firing.json"), "medialog").items[0]!;
@@ -19,7 +20,8 @@ beforeEach(() => { tmp = mkdtempSync(join(tmpdir(), "vlad-mon-u-")); });
 afterEach(() => { rmSync(tmp, { recursive: true, force: true }); });
 
 describe("state store", () => {
-  it("dosya yoksa boş durum; yazma 0700 dizin + 0600 dosya, atomik (tmp kalmaz); gidiş-dönüş", () => {
+  // Windows'ta atlanır: 0700/0600 mod bitleri POSIX'e özgü
+  it.skipIf(IS_WIN)("dosya yoksa boş durum; yazma 0700 dizin + 0600 dosya, atomik (tmp kalmaz); gidiş-dönüş", () => {
     const dir = join(tmp, "m");
     const s = createStateStore(dir);
     expect(s.load()).toEqual(EMPTY_STATE);
@@ -174,7 +176,8 @@ describe("launchd", () => {
     const calls: string[][] = [];
     return { calls, lc: async (args: string[]) => { calls.push(args); return fail && args[0] === fail ? { code: 5, stdout: "", stderr: "boom" } : { code: 0, stdout: "", stderr: "" }; } };
   };
-  it("install: plist 0600 yazılır, bootout sonra bootstrap gui/<uid>; tekrar install idempotent; günlük 0600", async () => {
+  // Windows'ta atlanır: 0600 mod biti POSIX'e özgü (launchd yalnız macOS)
+  it.skipIf(IS_WIN)("install: plist 0600 yazılır, bootout sonra bootstrap gui/<uid>; tekrar install idempotent; günlük 0600", async () => {
     const { calls, lc } = fakeLc();
     const inst = createMonitorInstaller(lc, { plistDir: join(tmp, "LA"), stateDir: join(tmp, "st") });
     await inst.install(c);
@@ -189,7 +192,8 @@ describe("launchd", () => {
     expect(calls.filter((a) => a[0] === "bootstrap")).toEqual([["bootstrap", `gui/${uid}`, plist], ["bootstrap", `gui/${uid}`, capPlist], ["bootstrap", `gui/${uid}`, plist], ["bootstrap", `gui/${uid}`, capPlist]]);
     expect(calls[0]).toEqual(["bootout", `gui/${uid}/${MONITOR_LABEL}`]);
   });
-  it("test kancası nesne biçimi: { launchctl, homeDir } gerçek ~/Library ve ~/.vlad-monitor'a dokunmadan kurar", async () => {
+  // Windows'ta atlanır: 0600 mod biti POSIX'e özgü (launchd yalnız macOS)
+  it.skipIf(IS_WIN)("test kancası nesne biçimi: { launchctl, homeDir } gerçek ~/Library ve ~/.vlad-monitor'a dokunmadan kurar", async () => {
     const { calls, lc } = fakeLc();
     const inst = createMonitorInstaller({ launchctl: lc, homeDir: tmp });
     await inst.install(c);

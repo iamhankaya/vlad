@@ -5,6 +5,22 @@ import { describe, expect, it } from "vitest";
 import { spawnGuarded } from "../support/spawn-vlad.js";
 import { rmTemp } from "../helpers.js";
 import { trustKey } from "../../src/tasks/trust.js";
+import { IS_WIN } from "../support/platform.js";
+
+/** POSIX tek tırnaklı sözcükleri ayrıştırır (q() çıktısı: '…', içteki tırnak '\''); `|| true` kuyruğu atılır. Windows'ta bash yok/PATH'te olmayabilir (servis PATH'i). */
+const argvOf = (line: string): string[] => {
+  const s = line.replace(/\s*\|\|\s*true\s*$/, ""), out: string[] = [];
+  let cur = "", has = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === "'") { i++; while (i < s.length && s[i] !== "'") cur += s[i++]; has = true; } // tek tırnak içi düz metin
+    else if (c === "\\") { cur += s[++i] ?? ""; has = true; } // '\'' dizisindeki kaçışlı tırnak
+    else if (c === " ") { if (has) { out.push(cur); cur = ""; has = false; } }
+    else { cur += c; has = true; }
+  }
+  if (has) out.push(cur);
+  return out;
+};
 
 const DIST = join(import.meta.dirname, "..", "..", "dist");
 
@@ -22,8 +38,13 @@ describe("launch script trust preflight (dist)", () => {
       expect(line).toBeDefined();
       expect(line).toContain(join("dist", "tasks", "trust.js").replaceAll("\\", "/"));
       const claudeJson = join(tmp, "claude.json");
-      const r = spawnGuarded("bash", ["-c", line as string], { encoding: "utf8", env: { PATH: process.env.PATH ?? "", HOME: tmp, VLAD_CLAUDE_JSON: claudeJson } });
-      expect(r.status).toBe(0);
+      const env = { PATH: process.env.PATH ?? "", HOME: tmp, VLAD_CLAUDE_JSON: claudeJson };
+      // Windows: gate servis PATH'inde bash yoksa (status null / ENOENT) test kırılıyordu; orada satırın argv'si doğrudan node ile koşulur (aynı dist/tasks/trust.js URL'si, aynı kayıt).
+      // POSIX'te bash -c kalır: tırnaklama doğruluğunu da sınar.
+      const r = IS_WIN
+        ? (() => { const [exe, ...rest] = argvOf(line as string); return spawnGuarded(exe!, rest, { encoding: "utf8", env }); })()
+        : spawnGuarded("bash", ["-c", line as string], { encoding: "utf8", env });
+      expect(r.status, `status=${r.status} error=${r.error?.message ?? ""} stderr=${r.stderr}`).toBe(0);
       expect(r.stderr).toBe("");
       const j = JSON.parse(readFileSync(claudeJson, "utf8")) as { projects: Record<string, unknown> };
       expect(Object.keys(j.projects)).toContain(trustKey(cwd)); // ürün anahtarı bilerek `/` ile yazar (Windows'ta `\` değil)
