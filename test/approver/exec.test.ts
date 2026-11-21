@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createExecutor, defaultExecEnv } from "../../src/approver/exec.js";
 import type { Ctx } from "../../src/approver/types.js";
+import { IS_WIN } from "../support/platform.js";
+
+// Windows: işletim sistemi çocuk sürece sistem değişkenlerini kendisi ekler (SYSTEMROOT, USERPROFILE, TEMP…); servis env'inden sızmış sayılmaz.
+const OS_INJECTED = IS_WIN ? /^(HOMEDRIVE|HOMEPATH|LOGONSERVER|SYSTEMDRIVE|SYSTEMROOT|TEMP|TMP|USERDOMAIN|USERDOMAIN_ROAMINGPROFILE|USERNAME|USERPROFILE|WINDIR|COMSPEC|PATHEXT|OS|NUMBER_OF_PROCESSORS|COMPUTERNAME|APPDATA|LOCALAPPDATA|ALLUSERSPROFILE|PUBLIC|DRIVERDATA|SESSIONNAME)$/i : /^$/;
 
 // approver: exec (T20261116-06 U4). Gerçek alt süreç, sahte "cli" (test/support/approver-exec-fixture.mjs); zamanlayıcılar kısa değerlerle enjekte edilir.
 const FIXTURE = join(import.meta.dirname, "..", "support", "approver-exec-fixture.mjs");
@@ -52,7 +56,7 @@ describe("approver: createExecutor", () => {
       expect(r.exitCode).toBe(0); expect(r.timedOut).toBe(false);
       const o = JSON.parse(r.stdout) as { argv: string[]; env: Record<string, string>; cwd: string };
       expect(o.argv).toEqual(["--a", "b"]);
-      expect(Object.keys(o.env).filter((k) => k !== "__CF_USER_TEXT_ENCODING").sort()).toEqual(["HOME", "LANG", "PATH", "VLAD_HOME", "VLAD_KB_DIR", "VLAD_MODE_TOKEN"]);
+      expect(Object.keys(o.env).filter((k) => k !== "__CF_USER_TEXT_ENCODING" && !OS_INJECTED.test(k)).sort()).toEqual(["HOME", "LANG", "PATH", "VLAD_HOME", "VLAD_KB_DIR", "VLAD_MODE_TOKEN"]);
       expect(o.env).toMatchObject({ HOME: userInfo().homedir, VLAD_HOME: home, VLAD_KB_DIR: ctx.kb, VLAD_MODE_TOKEN: "VMT2.tok" });
       expect(o.cwd).toBe(home);
     } finally {
@@ -75,7 +79,8 @@ describe("approver: createExecutor", () => {
     expect(r.exitCode).not.toBe(0);
   });
 
-  it("zaman aşımı: SIGTERM'i yok sayan süreç ve torunu grup SIGKILL ile ölür", async () => {
+  // Windows'ta atlanır: süreç grubu (detached + process.kill(-pid)) ve SIGTERM/SIGKILL semantiği POSIX'e özgü; onay servisi Mac'te çalışır.
+  it.skipIf(IS_WIN)("zaman aşımı: SIGTERM'i yok sayan süreç ve torunu grup SIGKILL ile ölür", async () => {
     const r = await createExecutor({ timeoutMs: 400, killGraceMs: 200 }).run(["stubborn"], "t", ctx);
     expect(r.timedOut).toBe(true);
     expect(r.exitCode).toBeNull();
@@ -89,7 +94,8 @@ describe("approver: createExecutor", () => {
     expect(r.stdout.length).toBe(1000); expect(r.stderr.length).toBe(1000);
   });
 
-  it("signal iptali grubu öldürür ve aborted döner", async () => {
+  // Windows'ta atlanır: süreç grubu öldürme POSIX'e özgü (yukarıdaki gibi).
+  it.skipIf(IS_WIN)("signal iptali grubu öldürür ve aborted döner", async () => {
     const ac = new AbortController();
     const p = createExecutor({ killGraceMs: 200 }).run(["hang"], "t", ctx, { signal: ac.signal });
     setTimeout(() => ac.abort(), 300);

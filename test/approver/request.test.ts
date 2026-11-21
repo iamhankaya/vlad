@@ -189,14 +189,14 @@ describe("approver: parseDecision", () => {
 });
 
 describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/test)", () => {
-  const savedTz = process.env.TZ, savedHome = process.env.HOME;
-  afterEach(() => { for (const [k, v] of [["TZ", savedTz], ["HOME", savedHome]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
+  const savedTz = process.env.TZ, savedHome = process.env.HOME, savedProfile = process.env.USERPROFILE; // os.homedir() Windows'ta USERPROFILE okur (HOME değil): ikisi birlikte ayarlanır/geri alınır
+  afterEach(() => { for (const [k, v] of [["TZ", savedTz], ["HOME", savedHome], ["USERPROFILE", savedProfile]] as const) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } });
   const names = readdirSync(fx).filter((f) => f.startsWith("golden-notification-")).sort();
   it("ek golden'lar mevcut", () => { expect(names).toEqual(expect.arrayContaining(["golden-notification-note-trunc.json", "golden-notification-argv-trunc.json"])); });
   for (const f of names) {
     it(`${f}: birebir`, () => {
       const g = json(f);
-      process.env.TZ = g.tz; process.env.HOME = g.homedir;
+      process.env.TZ = g.tz; process.env.HOME = process.env.USERPROFILE = g.homedir;
       const r = renderNotification(g.pending);
       expect(r).toEqual(g.expected);
       expect(secretHits(r.message, { allowTopic: true })).toEqual([]);
@@ -205,11 +205,11 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
   }
   it("uzak saat dilimi: yerel saat farklı çıkar (TZ gerçekten uygulanır)", () => {
     const g = json("golden-notification-night.json");
-    process.env.TZ = "UTC"; process.env.HOME = g.homedir;
+    process.env.TZ = "UTC"; process.env.HOME = process.env.USERPROFILE = g.homedir;
     expect(renderNotification(g.pending).message).toContain("İstek: 11:20:00 · Geçerli: 11:25:00");
   });
   it("--note alıntılı ve kesilmeden tam görünür (bildirimdeki not = kaydedilen not; D-vlad-084)", () => {
-    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = process.env.USERPROFILE = g.homedir;
     const note = "ş".repeat(30), argv = ["mode", "night", "--note", note];
     expect(validateRequest({ v: 1, cid: "a".repeat(26), op: "mode night", argv, requestedAt: "2026-11-16T14:20:00+03:00", requester: "r" }).ok).toBe(true);
     const m = renderNotification({ ...g.pending, argv }).message;
@@ -217,7 +217,7 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
     expect(renderNotification({ ...g.pending, argv: ["mode", "night", "--note", "a".repeat(60)] }).message).toContain(`--note "${"a".repeat(60)}"\n`);
   });
   it("her bayrak bildirimde ayrı satır olarak tam görünür (sondaki --push/--except/--until dahil)", () => {
-    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = process.env.USERPROFILE = g.homedir;
     const argv = ["mode", "night", "--until-task", "T20261116-10", "--projects", "a,b", "--note", "x", "--push", "--except", "foo,bar", "--until", "23:00"];
     expect(validateRequest({ v: 1, cid: "a".repeat(26), op: "mode night", argv, requestedAt: "2026-11-16T14:20:00+03:00", requester: "r" }).ok).toBe(true);
     const lines = renderNotification({ ...g.pending, argv }).message.split("\n");
@@ -225,7 +225,7 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
     expect(renderNotification({ ...g.pending, op: "install", argv: ["install", "--remove-menu"] }).message.split("\n").slice(0, 2)).toEqual(["İşlem: vlad install", "--remove-menu"]);
   });
   it("setup --yes ayrı satır; --yes yoksa satır yok", () => {
-    const g = json("golden-notification-setup-upgrade.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    const g = json("golden-notification-setup-upgrade.json"); process.env.TZ = g.tz; process.env.HOME = process.env.USERPROFILE = g.homedir;
     expect(renderNotification(g.pending).message.split("\n")).toContain("Bayrak: --yes");
     expect(renderNotification({ ...g.pending, argv: ["setup", "--upgrade"] }).message).not.toContain("--yes");
   });
@@ -237,7 +237,7 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
     expect(mk(["mode", "night", "--projects", "p".repeat(190)]).ok).toBe(true);
   });
   it("setup uninstall ve çıplak upgrade biçimleri; confirm yoksa 'yok'", () => {
-    const g = json("golden-notification-setup-upgrade.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    const g = json("golden-notification-setup-upgrade.json"); process.env.TZ = g.tz; process.env.HOME = process.env.USERPROFILE = g.homedir;
     const un = renderNotification({ ...g.pending, argv: ["setup", "--uninstall", "hooks"] }).message;
     expect(un.split("\n")[0]).toBe("Geri alma: hooks");
     expect(un).toContain("Dış etki: yok");
@@ -245,7 +245,7 @@ describe("approver: renderNotification golden (TZ=Europe/Istanbul, HOME=/Users/t
     expect(up.split("\n")[0]).toMatch(/^Yükseltme: /);
   });
   it("hedef $HOME dışındaysa mutlak kalır; yalnız tam önek (/Users/test2) kısaltılmaz", () => {
-    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = g.homedir;
+    const g = json("golden-notification-night.json"); process.env.TZ = g.tz; process.env.HOME = process.env.USERPROFILE = g.homedir;
     const m = renderNotification({ ...g.pending, ctx: { ...g.pending.ctx, home: "/Users/test2/x", kb: "/opt/kb" } }).message;
     expect(m).toContain("Hedef: /Users/test2/x | kb: /opt/kb");
   });

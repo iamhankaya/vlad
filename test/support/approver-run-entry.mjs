@@ -29,7 +29,7 @@ const fakeExecutor = {
   },
 };
 // gerçek mod: çocuk `dist/cli.js` gizli dizin olarak TEST dizinini görsün (shim + VLAD_TEST_SECRET_DIR); aksi halde gerçek kullanıcı dizinine bağlanırdı
-const realExecutor = { run: (argv, token, ctx) => createExecutor().run(argv, token, ctx, { envExtra: { VLAD_TEST_SECRET_DIR: process.env.VLAD_TEST_SECRET_DIR, NODE_OPTIONS: `--import=${cfg.shim}` } }) };
+const realExecutor = { run: (argv, token, ctx) => createExecutor().run(argv, token, ctx, { envExtra: { VLAD_TEST_SECRET_DIR: process.env.VLAD_TEST_SECRET_DIR, NODE_OPTIONS: `--import=${pathToFileURL(cfg.shim).href}` } }) };
 
 const ac = new AbortController();
 process.on("SIGTERM", () => ac.abort());

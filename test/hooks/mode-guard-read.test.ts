@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkWorkerMode } from "../../src/hooks/mode-guard.js";
 import { setSecretDirForTests } from "../../src/mode/token.js";
+import { IS_WIN } from "../support/platform.js";
 
 // T20261116-18: okuma araçları (Read/Grep/Glob) gizli dizine (anahtar, approver spool) erişemez. Yalnız geçici dizin kullanır.
 let root: string, secret: string, cwd: string;
@@ -19,7 +20,8 @@ const ctx = () => ({ vladHome: "/home/u/vlad", cwd });
 const run = (tool: string, input: Record<string, unknown>) => checkWorkerMode(tool, input, null, ctx());
 
 describe("okuma araçları gizli dizin koruması", () => {
-  it("Read: mutlak, ~ ve .. ile gizli dizine çözülen yollar reddedilir; sembolik bağ da", () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM)
+  it.skipIf(IS_WIN)("Read: mutlak, ~ ve .. ile gizli dizine çözülen yollar reddedilir; sembolik bağ da", () => {
     symlinkSync(secret, join(cwd, "link"));
     for (const p of [join(secret, "mode.key"), join(secret, "approver", "pending.json"), `${cwd}/../.vlad-secret/mode.key`, "link/mode.key", join(cwd, "link"), "~/.vlad-secret/mode.key"])
       expect(run("Read", { file_path: p }), p).toMatch(/okuma|anahtar/);
@@ -30,7 +32,8 @@ describe("okuma araçları gizli dizin koruması", () => {
     expect(run("Glob", { pattern: `${secret}/approver/*.json` })).not.toBeNull();
     expect(run("Glob", { pattern: "*", path: join(secret, "approver") })).not.toBeNull();
   });
-  it("ata dizinden özyinelemeli arama, süslü parantez, `*` ad jokeri ve joker ortasında symlink reddedilir", () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM)
+  it.skipIf(IS_WIN)("ata dizinden özyinelemeli arama, süslü parantez, `*` ad jokeri ve joker ortasında symlink reddedilir", () => {
     symlinkSync(secret, join(cwd, "s"));
     expect(run("Grep", { pattern: ".", path: root })).not.toBeNull();
     expect(run("Grep", { pattern: ".", path: "/" })).not.toBeNull();

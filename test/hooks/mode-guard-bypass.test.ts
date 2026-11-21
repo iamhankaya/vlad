@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { checkWorkerMode } from "../../src/hooks/mode-guard.js";
 import { setSecretDirForTests } from "../../src/mode/token.js";
 import { runSpawn } from "../support/spawn-vlad.js";
+import { IS_WIN } from "../support/platform.js";
 
 // T20261116-18 değişiklik turu: kapı bulgularındaki bypass'lar. Yalnız geçici dizin; gerçek ~/.vlad-secret'a dokunulmaz.
 let root: string, secret: string, cwd: string;
@@ -54,7 +55,8 @@ describe("(2) Glob göreli pattern araç path'ine göre de çözülür; '..' seg
 });
 
 describe("(3) yazma araçları da tam realpath kullanır (symlink s -> gizli dizin)", () => {
-  it("Write/Edit/MultiEdit/NotebookEdit s/mode.key reddedilir; dangling symlink de", () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM; Windows'ta geliştirici modu/yönetici gerekir)
+  it.skipIf(IS_WIN)("Write/Edit/MultiEdit/NotebookEdit s/mode.key reddedilir; dangling symlink de", () => {
     symlinkSync(secret, join(cwd, "s"));
     symlinkSync(join(secret, "yeni.json"), join(cwd, "dangling"));
     for (const t of ["Write", "Edit", "MultiEdit"]) { expect(run(t, { file_path: "s/mode.key" }), t).not.toBeNull(); expect(run(t, { file_path: "dangling" }), `${t} dangling`).not.toBeNull(); }

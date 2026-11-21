@@ -9,6 +9,7 @@ import type { Store } from "../../src/approver/store.js";
 import type { ServiceInstaller } from "../../src/approver/launchd.js";
 import { b32, digestOf, dirFiles, logText, makeCid, makeWorld, resultOf, runVlad, sleep, startService, submit, untilWatching, waitAck, waitFor, writeRequest } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
+import { IS_WIN } from "../support/platform.js";
 
 // approver-kabul: KK11 kanal kesintisi, KK12 hız sınırı/kilit, çökme sınırları, anahtar yarışları, çıktı/log/kota taşması.
 // Saat sahte ve yalnız süreç içi; çökme sınırları, disk üzerinde o sınırın durumu yazılıp servis (yeniden) başlatılarak sınanır.
@@ -91,7 +92,8 @@ describe("approver-kabul: KK12 hız sınırı ve kilit", () => {
     ["kesik JSON", (f: string) => writeAtomic(f, '{"v":1,"decisions":["2026', { overwrite: true })],
     ["yanlış izin (0644)", (f: string) => { writeAtomic(f, JSON.stringify({ v: 1, decisions: [], consecutiveDenied: 0, lockedUntil: null }), { overwrite: true }); chmodSync(f, 0o644); }],
     ["sembolik bağ", (f: string) => { rmSync(f, { force: true }); symlinkSync(join(w.root, "baska.json"), f); }],
-  ])("bozuk rate.json (%s): fail-closed locked/rate_state_corrupt; sayaç sıfırlanmaz", async (_n, corrupt) => {
+    // Windows'ta atlanır: "yanlış izin" chmod bitine, "sembolik bağ" symlink ayrıcalığına (EPERM) dayanır; yalnız "kesik JSON" satırı koşar.
+  ].filter(([n]) => !IS_WIN || n === "kesik JSON"))("bozuk rate.json (%s): fail-closed locked/rate_state_corrupt; sayaç sıfırlanmaz", async (_n, corrupt) => {
     await boot();
     const f = join(w.dir, "rate.json");
     writeAtomic(f, JSON.stringify({ v: 1, decisions: [w.clock.now().toISOString()], consecutiveDenied: 2, lockedUntil: null }), { overwrite: true });

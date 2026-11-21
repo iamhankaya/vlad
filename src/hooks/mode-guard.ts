@@ -94,6 +94,8 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
     if (inner && depth < 3) { const r = checkBash(inner, kbDir, ctx, depth + 1); if (r) return r; }
   }
   if (secretHit(cmd)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
+  // Windows: segments() ters eğik çizgiyi kabuk kaçışı sayıp siler (C:\Users → C:Users); sürücü harfli joker yolları kaçmasın diye ham sözcükler de denetlenir (yalnız daha sıkı)
+  const rawToks = cmd.split(/[\s;&|()]+/).filter(Boolean);
   for (const seg of segments(cmd)) {
     const mm = MODE_CMD.exec(seg);
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;
@@ -101,7 +103,7 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
     const toks = clean.split(SEP_TOKEN).filter(Boolean);
     const tools = WRITE_TOOL.test(clean);
     const redirectTargets = [...clean.matchAll(/>>?\s*([^\s;&|<>()]+)/g)].map((x) => x[1]!);
-    for (const t of clean.split(/\s+/)) if (globReachesSecret(t)) return `${WHY} (anahtar: joker gizli dizine açılabilir: ${t})`;
+    for (const t of [...clean.split(/\s+/), ...rawToks]) if (globReachesSecret(t)) return `${WHY} (anahtar: joker gizli dizine açılabilir: ${t})`;
     const kbUnder = (t: string) => kbDir !== null && norm(expand(t)).startsWith(norm(kbDir) + "/");
     for (const t of tools ? toks : redirectTargets) {
       const hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null);
@@ -118,7 +120,8 @@ const ancestorOfSecret = (x: string): boolean => { const n = norm(x); return n =
 /** Okuma aracı yolu gizli dizine çözülüyor mu (`base` = göreli yolun çözüldüğü dizin): `~`, `..`, symlink (tam realpath), joker kökü. `dirRoot`: arama kökü; gizli dizinin ATASI (HOME, `/`) da reddedilir (özyinelemeli arama içeri iner). */
 function readsSecret(p: string, base: string, dirRoot: boolean): boolean {
   if (secretHit(p)) return true;
-  const abs = resolve(base, expand(p.replace(/\\/g, "/")));
+  // Windows: resolve ters eğik çizgi döndürür; joker kökü `/` ile kesildiği için ileri eğik çizgiye normalize edilir (aksi halde kök "/" sanılıp her yol ret olurdu)
+  const abs = resolve(base, expand(p.replace(/\\/g, "/"))).replace(/\\/g, "/");
   const cut = abs.search(/[*?[{]/);
   if (cut < 0) { const f = real(abs); return insideSecret(f) || insideSecret(abs) || (dirRoot && (ancestorOfSecret(f) || ancestorOfSecret(abs))); }
   // joker: ilk jokerden önceki dizin (süslü parantez dahil) tam realpath ile çözülür; gizli dizinin içi ya da atası ise reddedilir (ad jokeri atadan erişebildiği için)
@@ -159,7 +162,7 @@ function segMatches(globSeg: string, name: string): boolean {
   try { return new RegExp(`^${re}$`, "i").test(name); } catch { return true; }
 }
 function globReachesSecret(tok: string): boolean {
-  if (!/[*?[{]/.test(tok) || !/^(~|\$\{?HOME\}?|\/)/.test(tok)) return false;
+  if (!/[*?[{]/.test(tok) || !/^(~|\$\{?HOME\}?|\/|[A-Za-z]:[\\/])/.test(tok)) return false; // Windows sürücü harfli mutlak yol da (C:\… / C:/…)
   const forms = [sdir(), real(sdir())].map((d) => d.replace(/\\/g, "/").split("/").filter(Boolean));
   for (const alt of braceExpand(expand(tok.replace(/\\/g, "/")))) {
     const gs = alt.split("/").filter(Boolean);

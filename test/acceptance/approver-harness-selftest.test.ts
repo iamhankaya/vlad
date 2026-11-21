@@ -5,6 +5,7 @@ import { approverDir, secretDir } from "../../src/mode/token.js";
 import { FakeClock, FakeNtfyServer, SeededRandom, digestOf, makeCid, makeWorld, waitFor, writeRequest } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
 import goldenDigest from "../fixtures/approver/golden-digest.json" with { type: "json" };
+import { IS_WIN } from "../support/platform.js";
 
 // approver-kabul: harness'in kendi sağlamlığı (stub'a bağlı değil; bugün YEŞİL). Kabul testlerinin kırmızısı harness hatasından değil eksik uygulamadan gelmeli.
 describe("approver-kabul: harness öz-sınaması", () => {
@@ -12,7 +13,8 @@ describe("approver-kabul: harness öz-sınaması", () => {
   beforeEach(async () => { w = await makeWorld(); });
   afterEach(async () => { await w.dispose(); });
 
-  it("gizli dizin ve VLAD_HOME geçici dizindedir; anahtar etkin; gerçek ~/.vlad-secret kullanılmaz", () => {
+  // Windows'ta atlanır: 0700 dizin / 0600 dosya mod bitleri POSIX'e özgü; Windows'ta fs.stat mode 0666/0777 döner
+  it.skipIf(IS_WIN)("gizli dizin ve VLAD_HOME geçici dizindedir; anahtar etkin; gerçek ~/.vlad-secret kullanılmaz", () => {
     expect(secretDir()).toBe(w.secret);
     expect(w.secret.startsWith(w.root)).toBe(true);
     expect(w.key).toMatch(/^[0-9a-f]{64}$/);
@@ -34,7 +36,8 @@ describe("approver-kabul: harness öz-sınaması", () => {
     expect(digestOf(goldenDigest.input)).toBe(goldenDigest.expected);
   });
 
-  it("writeRequest istemci gibi yazar: inbox/<cid>.json 0600, üzerine yazma yok", () => {
+  // Windows'ta atlanır: 0600 mod biti POSIX'e özgü
+  it.skipIf(IS_WIN)("writeRequest istemci gibi yazar: inbox/<cid>.json 0600, üzerine yazma yok", () => {
     const cid = writeRequest(w, { argv: ["mode", "off"] });
     const f = join(w.dir, "inbox", `${cid}.json`);
     expect(statSync(f).mode & 0o777).toBe(0o600);

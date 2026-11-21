@@ -9,6 +9,7 @@ import { createStore, type Store } from "../../src/approver/store.js";
 import { LIMITS, type AckRecord, type PendingRecord, type RateState, type ResultRecord } from "../../src/approver/types.js";
 import { approverDir, initKey, readKey, setSecretDirForTests } from "../../src/mode/token.js";
 import { secretHits } from "../support/approver-secrets.js";
+import { IS_WIN } from "../support/platform.js";
 
 // approver: service (T20261116-06 U4). Geçici gizli dizin + sahte kanal/saat/yürütücü; gerçek ~/.vlad-secret, ağ, süreç yok.
 // Servis döngüsü gerçek zamanlayıcıyla yoklar (200 ms); testler yalnız "oldu mu" diye bekler, süre iddiası yok. Mantıksal zaman sahte saattir.
@@ -286,7 +287,8 @@ describe("approver: service istek kontrolleri", () => {
 });
 
 describe("approver: service ctx gerçek yol", () => {
-  it("VLAD_HOME sembolik bağ olsa da ctx.home/kb gerçek yoldur (macOS /var → /private/var)", async () => {
+  // Windows'ta atlanır: symlink oluşturma ayrıcalık ister (EPERM); /var → /private/var macOS'a özgü
+  it.skipIf(IS_WIN)("VLAD_HOME sembolik bağ olsa da ctx.home/kb gerçek yoldur (macOS /var → /private/var)", async () => {
     const real = join(base, "gercek"); mkdirSync(real, { mode: 0o700 });
     const link = join(base, "bag"); symlinkSync(real, link);
     process.env.VLAD_HOME = link;

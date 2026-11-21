@@ -6,6 +6,7 @@ import { secretHits, SECRET_PATTERNS } from "../support/approver-secrets.js";
 import { spawnVlad } from "../support/spawn-vlad.js";
 import { dirFiles, makeWorld, resultOf, runVlad, sleep, startService, submit, untilWatching, waitFor, logText } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
+import { IS_WIN } from "../support/platform.js";
 
 // approver-kabul: `vlad mode request` (hata sırası, --wait, çıktı), `approver status|requests|show`, install TTY reddi, belge.
 // `mode request` süreç içi çalışır (gerçek servis döngüsü aynı süreçte, sahte ntfy); install yalnız ÇOCUK süreçte ve PATH'te sahte launchctl ile.
@@ -74,7 +75,8 @@ describe("approver-kabul: `mode request` servis ile", () => {
     expect(secretHits(r.out + r.err)).toEqual([]);
   });
 
-  it("servis ack'leri kullanıcıya düz Türkçe: key_disabled / busy / hız sınırı / kilit", async () => {
+  // Windows'ta atlanır: anahtar bozukluğu POSIX mod bitiyle (chmod 0644) kurulur; Windows'ta mod bitleri yok sayılır (F-vlad-338: ACL ayrı iş)
+  it.skipIf(IS_WIN)("servis ack'leri kullanıcıya düz Türkçe: key_disabled / busy / hız sınırı / kilit", async () => {
     startService(w); await untilWatching(w);
     const first = await request(["night", "--until", "23:00"]);
     expect(first.code, first.err).toBe(0);

@@ -91,9 +91,11 @@ describe("approver-kabul: servis tekliği ve yürütme env'i", () => {
     const [r] = records(rec);
     expect(r!.argv).toEqual(argv);
     expect(r!.tokenShape).toBe("VMT2");
-    const extra = r!.envKeys.filter((k) => !(ALLOWED_EXEC_ENV as readonly string[]).includes(k) && k !== "FAKE_RECORD" && !k.startsWith("__"));
+    // Windows: işletim sistemi çocuk sürece sistem değişkenlerini kendisi ekler (SYSTEMROOT, USERPROFILE, TEMP…); bunlar servis env'inden sızmış sayılmaz (POSIX'te boş küme beklenir).
+    const osInjected = process.platform === "win32" ? /^(HOMEDRIVE|HOMEPATH|LOGONSERVER|SYSTEMDRIVE|SYSTEMROOT|TEMP|TMP|USERDOMAIN|USERDOMAIN_ROAMINGPROFILE|USERNAME|USERPROFILE|WINDIR|COMSPEC|PATHEXT|OS|NUMBER_OF_PROCESSORS|COMPUTERNAME|APPDATA|LOCALAPPDATA|ALLUSERSPROFILE|PUBLIC|DRIVERDATA|SESSIONNAME)$/i : /^$/;
+    const extra = r!.envKeys.filter((k) => !(ALLOWED_EXEC_ENV as readonly string[]).includes(k) && k !== "FAKE_RECORD" && !k.startsWith("__") && !osInjected.test(k));
     expect(extra, "izin listesi dışı env").toEqual([]);
-    for (const bad of ["USERPROFILE", "NODE_OPTIONS", "VLAD_TASK_ID", "LEAK_CANARY", "VLAD_TEST_SECRET_DIR"]) expect(r!.envKeys).not.toContain(bad);
+    for (const bad of [...(process.platform === "win32" ? [] : ["USERPROFILE"]), "NODE_OPTIONS", "VLAD_TASK_ID", "LEAK_CANARY", "VLAD_TEST_SECRET_DIR"]) expect(r!.envKeys).not.toContain(bad);
     expect(r!.home).toBe(userInfo().homedir); // HOME passwd'dan, süreç env'inden değil
     expect(r!.home).not.toBe(process.env.HOME === homedir() ? "" : process.env.HOME);
     expect(r!.vladHome).toBe(w.vladHome);
