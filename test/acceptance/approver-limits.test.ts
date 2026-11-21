@@ -7,7 +7,6 @@ import { LIMITS } from "../../src/approver/types.js";
 import type { PendingRecord, PendingStatus } from "../../src/approver/types.js";
 import type { Store } from "../../src/approver/store.js";
 import type { ServiceInstaller } from "../../src/approver/launchd.js";
-import type { ServiceInstaller } from "../../src/approver/launchd.js";
 import { b32, digestOf, dirFiles, logText, makeCid, makeWorld, resultOf, runVlad, sleep, startService, submit, untilWatching, waitAck, waitFor, writeRequest } from "./approver-harness.js";
 import type { World } from "./approver-harness.js";
 
