@@ -28,7 +28,7 @@ export interface CapacityFetchOpts {
   fetch?: typeof fetch; timeoutMs?: number; maxPages?: number;
 }
 
-interface MinItem { ts: number; metric: string; labels: Record<string, string>; n: number; max: number; avg: number }
+interface MinItem { ts: number; metric: string; labels: Record<string, string>; n: number; min?: number; max: number; avg: number }
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -45,7 +45,7 @@ function parsePage(body: unknown, server: string): { items: MinItem[]; next: str
     const o = it as Record<string, unknown>;
     const labels: Record<string, string> = {};
     for (const [k, v] of Object.entries(o.labels as Record<string, unknown>)) { if (typeof v !== "string") return bad(`items[${i}].labels`); labels[k] = v; }
-    return { ts: o.ts as number, metric: o.metric as string, labels, n: o.n as number, max: o.max as number, avg: o.avg as number };
+    return { ts: o.ts as number, metric: o.metric as string, labels, n: o.n as number, min: isNum(o.min) ? o.min : undefined, max: o.max as number, avg: o.avg as number };
   });
   return { items, next: body.next_cursor, more: body.has_more, oldest: isNum(body.oldest_ts) ? body.oldest_ts : null };
 }
@@ -104,6 +104,7 @@ export async function fetchCapacitySeries(o: CapacityFetchOpts): Promise<Capacit
         const day = Math.floor(it.ts / DAY_MS);
         const b = days.get(day) ?? { day, n: 0, max: -Infinity, sum: 0 };
         b.n += it.n; b.sum += it.avg * it.n; b.max = Math.max(b.max, it.max);
+        if (it.min !== undefined) b.min = Math.min(b.min ?? Infinity, it.min);
         days.set(day, b);
       }
     }

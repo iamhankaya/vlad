@@ -55,6 +55,79 @@ triggers:
     unit: ms
     source_item: 4
 
+  # 1.1.0 tetikleyicileri (VLAD önerisi eşikler; kapasite tetikleyicisi alarm değildir, uyarı %70'te raporlanır).
+  - id: sys-load5
+    title: Sistem yükü (5 dk ortalama)
+    metric: system.load5
+    measure: daily_avg_peak
+    op: '>'
+    threshold: 2 # çekirdek sayısı; prova'da doğrulanır
+    unit: yük
+    source_item: 4
+
+  - id: sys-swap
+    title: Swap kullanımı
+    metric: system.swap.used_pct
+    measure: peak
+    op: '>'
+    threshold: 50
+    unit: '%'
+    source_item: 4
+
+  - id: sys-inode
+    title: Disk inode kullanımı
+    metric: system.disk.inode_used_pct
+    measure: peak
+    op: '>'
+    threshold: 80
+    unit: '%'
+    source_item: 4
+
+  - id: http-rate
+    title: HTTP istek hızı
+    metric: http.req_rate
+    measure: peak
+    op: '>'
+    threshold: 50
+    unit: istek/sn
+    source_item: 4
+
+  - id: http-5xx
+    title: HTTP 5xx oranı
+    metric: http.err5xx_pct
+    measure: daily_avg_peak
+    op: '>'
+    threshold: 1
+    unit: '%'
+    source_item: 4
+
+  - id: pg-cache
+    title: Postgres önbellek isabeti (düşükse kötü)
+    metric: pg.cache_hit_pct
+    measure: daily_avg_peak
+    op: '<'
+    threshold: 95
+    unit: '%'
+    source_item: 4
+
+  - id: tmdb-p95
+    title: TMDB çağrı p95 gecikmesi
+    metric: app.ext_tmdb_p95_ms_5m
+    measure: daily_avg_peak
+    op: '>'
+    threshold: 1500
+    unit: ms
+    source_item: 4
+
+  # Eğilim: yalnız raporlanır, eşik yok, görev açılmaz.
+  - id: product-active
+    title: Ürün büyümesi (7 gün aktif kullanıcı)
+    metric: app.product_active_7d
+    measure: daily_avg_peak
+    kind: trend
+    unit: kişi
+    source_item: 4
+
 # Otomatik ölçülemeyen kalemler (elle izlenir).
 manual:
   - id: item-2

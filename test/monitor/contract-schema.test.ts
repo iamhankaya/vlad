@@ -1,4 +1,6 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -98,5 +100,28 @@ describe("monitor sözleşmesi: şema sürümü uyuşmazlığı açık hata", ()
     const e = err(b);
     expect(e.message).not.toContain("SECRET-TOKEN-xyz");
     expect(e.message).not.toContain("IGNORE");
+  });
+});
+
+// Şema/yaml kopya kayması (T20261120-75): vendored kapasite şeması ve fixture yaml'ı spc kaynak commit'inin baytlarıyla aynı kalmalı.
+// Kaynak provenance.json `capacitySource` (repo + commit); spc reposu/commit'i makinede yoksa test atlanır ve uyarır.
+const root = join(import.meta.dirname, "..", "..");
+function gitBlob(repo: string, commit: string, path: string): string | null {
+  try { return execFileSync("git", ["-C", repo, "show", `${commit}:${path}`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { return null; }
+}
+const src = load("provenance.json").capacitySource as { repo: string; commit: string; schema: string; yaml: string };
+const spcRepo = src.repo.replace(/^~/, homedir());
+const upstream = { schema: gitBlob(spcRepo, src.commit, src.schema), yaml: gitBlob(spcRepo, src.commit, src.yaml) };
+if (upstream.schema === null) console.warn(`UYARI: spc kaynağı yok (${src.repo} @ ${src.commit}); şema kopya kayması testi atlandı`);
+
+describe("kapasite şeması ve fixture spc kaynağıyla aynı (kopya kayması)", () => {
+  it.skipIf(upstream.schema === null)("schemas/capacity.schema.json = spc servers/capacity.schema.json", () => {
+    expect(readFileSync(join(root, "schemas", "capacity.schema.json"), "utf8")).toBe(upstream.schema);
+  });
+  it.skipIf(upstream.yaml === null)("fixture capacity-medialog.yaml = spc servers/medialog/capacity.yaml", () => {
+    expect(readFileSync(join(dir, "capacity-medialog.yaml"), "utf8")).toBe(upstream.yaml);
+  });
+  it("kaynak okuyucu: olmayan commit null döner (test atlanır; sessizce geçmez, uyarı yazılır)", () => {
+    expect(gitBlob(spcRepo, "0000000000000000000000000000000000000000", src.schema)).toBeNull();
   });
 });

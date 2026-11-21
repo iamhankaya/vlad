@@ -240,6 +240,75 @@ describe("runCapacity: hatalar ve kapsam", () => {
   });
 });
 
+/** 1.1 ajanı sahtesi: haftalık seyir eskiden yeniye (4 hafta; ws ile aynı yerleşim). */
+const wk = (weeks: number[]) => (d: number): number | null => weeks[3 - Math.floor(d / 7)] ?? null;
+
+describe("runCapacity: hata oranı ve ürün büyümesi (spc 1.1.0, fixture TÜRETİLMİŞ: F-vlad-362)", () => {
+  it("rapor tablodan sonra 'Hata oranı ve ürün büyümesi' bölümü yazar: eşikli satırlar + trend satırı haftalık değerle", async () => {
+    const gen: Gen = { "http.err5xx_pct": wk([0.1, 0.1, 0.1, 0.1]), "app.ext_tmdb_p95_ms_5m": wk([400, 410, 420, 430]), "app.product_active_7d": wk([23, 26, 29, 31]) };
+    await runCapacity(mk({ gen: () => gen }).deps);
+    const txt = reportTask()!.body;
+    expect(txt.indexOf("Hata oranı ve ürün büyümesi")).toBeGreaterThan(txt.indexOf("| tetikleyici |"));
+    expect(txt).toMatch(/\| product-active \| Ürün büyümesi \(7 gün aktif kullanıcı\) \| 23 → 31 kişi \| \+2,7\/hafta \| eğilim \|/);
+    expect(txt).toMatch(/\| http-5xx \| HTTP 5xx oranı \| 0,1 → 0,1 % \| \+0\/hafta \| ok \|/);
+    expect(txt).toMatch(/\| tmdb-p95 \| TMDB çağrı p95 gecikmesi \| 400 → 430 ms \| \+10\/hafta \| ok \|/);
+    // trend satırı ana eşik tablosunda yok (eşiği yok)
+    expect(txt.split("Hata oranı ve ürün büyümesi")[0]).not.toContain("| product-active |");
+  });
+  it("trend tetikleyicisi görev açmaz, bildirim düşürmez; durumda tetikleyici sayacı yok", async () => {
+    const r = await runCapacity(mk({ gen: () => ({ "app.product_active_7d": wk([10, 100, 1000, 100000]) }) }).deps);
+    expect(architects()).toHaveLength(0);
+    expect(notices).toEqual([]);
+    const t = r.servers[0]!.triggers.find((x) => x.id === "product-active")!;
+    expect(t.status).toBe("ok");
+    expect(t.pct).toBeNull();
+    expect(stateFile().servers.medialog.triggers["product-active"]).toBeUndefined();
+  });
+  it("tek hafta trend verisi: insufficient ama satır yine yazılır", async () => {
+    const r = await runCapacity(mk({ gen: () => ({ "app.product_active_7d": (d: number) => (d < 5 ? 25 : null) }) }).deps);
+    expect(r.servers[0]!.triggers.find((x) => x.id === "product-active")!.status).toBe("insufficient");
+    // tam 7 günlük pencereler (T20261120-81): fixture'ın 8. gün kovası artık haftalığa girmez; eski 23 → 31 / +2,7 değeri 8 kovalı pencerenin ürünüydü
+    expect(reportTask()!.body).toMatch(/\| product-active \| [^|]+ \| 25 kişi \| - \| yetersiz veri \|/);
+  });
+  it("eski 1.0 ajanı (yalnız eski metrikler): yeni tetikleyiciler 'veri yok (ajan 1.1 gerekli)', görev açılmaz; 1.0 metriği eksikliği bunu söylemez", async () => {
+    const r = await runCapacity(mk({ gen: () => ws([20, 20, 20, 20]) }).deps);
+    expect(r.errors).toEqual([]);
+    expect(architects()).toHaveLength(0);
+    const txt = reportTask()!.body;
+    for (const id of ["sys-load5", "pg-cache", "http-5xx", "tmdb-p95"]) expect(txt).toMatch(new RegExp(`\\| ${id} \\|[^\\n]*veri yok \\(ajan 1\\.1 gerekli\\)`));
+    expect(txt).toMatch(/\| product-active \| [^|]+ \| veri yok \(ajan 1\.1 gerekli\) \| - \| yetersiz veri \|/);
+    expect(txt).not.toMatch(/\| proc-cpu \|[^\n]*ajan 1\.1 gerekli/);
+    expect(txt).toMatch(/\| proc-cpu \|[^\n]*yetersiz veri/);
+  });
+  it("pg.cache_hit_pct sabit 99,5: remaining 'artmıyor', warn ve görev yok", async () => {
+    await runCapacity(mk({ gen: () => ({ "pg.cache_hit_pct": wk([99.5, 99.5, 99.5, 99.5]) }) }).deps);
+    expect(architects()).toHaveLength(0);
+    expect(reportTask()!.body).toMatch(/\| pg-cache \|[^\n]*\| artmıyor \| ok \|/);
+  });
+  it("düşen önbellek isabeti eşiğe yaklaşınca tek architect görevi (gövdede '<' eşiği ve en düşük değer anlatımı)", async () => {
+    const r = await runCapacity(mk({ gen: () => ({ "pg.cache_hit_pct": wk([99.5, 99, 98, 97]) }) }).deps);
+    expect(r.servers[0]!.triggers.find((x) => x.id === "pg-cache")!.status).toBe("warn");
+    const a = architects();
+    expect(a).toHaveLength(1);
+    expect(a[0]!.body.split("\n")).toContain(capacityMarker("medialog", "pg-cache"));
+    expect(a[0]!.body).toMatch(/eşik < 95 %/);
+    expect(a[0]!.body).toMatch(/en düşü/);
+  });
+  it("fixture yeniden oynatma (since-medialog-1.1.json): rapor + yalnız eşiğe yaklaşanlar için görev", async () => {
+    const fx = JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "spc", "since-medialog-1.1.json"), "utf8"));
+    const f = (async () => new Response(JSON.stringify(fx), { status: 200 })) as unknown as typeof fetch;
+    const r = await runCapacity(mk({ fetch: f }).deps);
+    expect(r.errors).toEqual([]);
+    const st = Object.fromEntries(r.servers[0]!.triggers.map((t) => [t.id, t.status]));
+    expect(st).toMatchObject({ "sys-load5": "ok", "pg-cache": "warn", "http-5xx": "warn", "product-active": "ok", "ws-concurrent": "insufficient" });
+    expect(architects().map((t) => t.data.title).sort()).toEqual([
+      "[spc] kapasite: medialog/http-5xx — HTTP 5xx oranı",
+      "[spc] kapasite: medialog/pg-cache — Postgres önbellek isabeti (düşükse kötü)",
+    ]);
+    expect(reportTask()!.body).toMatch(/\| product-active \| [^|]+ \| 26 → 31 kişi \| \+1,7\/hafta \| eğilim \|/);
+  });
+});
+
 describe("isoWeekKey uyumu", () => {
   it("test varsayımı: W0 = 2026-W48", () => { expect(isoWeekKey(W0)).toBe("2026-W48"); });
 });

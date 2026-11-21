@@ -1,6 +1,6 @@
 import { createTask, getTask, listTasks, logTask, type Task } from "../tasks/index.js";
 import { calcTrigger, DAY_MS, isoWeekKey, type TriggerReport } from "./capacity-calc.js";
-import { CapacityConfigError, loadCapacityConfig, type CapacityConfig, type CapacityTrigger } from "./capacity-config.js";
+import { CapacityConfigError, loadCapacityConfig, isTrend, lowerIsWorse, type CapacityConfig, type CapacityTrigger, type ThresholdTrigger } from "./capacity-config.js";
 import { CapacityFetchError, fetchCapacitySeries } from "./capacity-fetch.js";
 import { emptyCapacityServer, loadCapacityState, saveCapacityState, type CapacityServerState } from "./capacity-state.js";
 import { parseCapacityMarker, parseCapacityReportMarker, capacityMarker, capacityReportMarker } from "./marker.js";
@@ -61,30 +61,54 @@ export function remainingText(r: TriggerReport["remaining"]): string {
   }
 }
 
-function row(t: CapacityTrigger, r: TriggerReport): string {
+/** spc 1.1.0 ajanının getirdiği metrikler (tasarım §10; eşik yaml'ında `app.ext_tmdb_p95_ms_5m`): bunlar yoksa eski (1.0) ajan demektir. */
+const AGENT_11_METRICS = new Set([
+  "system.load5", "system.swap.used_pct", "system.disk.inode_used_pct", "http.req_rate", "http.err5xx_pct",
+  "pg.cache_hit_pct", "app.product_active_7d", "app.ext_tmdb_p95_ms_5m",
+]);
+const NEEDS_AGENT_11 = "veri yok (ajan 1.1 gerekli)";
+const noData = (t: CapacityTrigger, r: TriggerReport): boolean => r.value7d === null && AGENT_11_METRICS.has(t.metric);
+const numTr = (n: number): string => num(n).replace(".", ",");
+
+function row(t: ThresholdTrigger, r: TriggerReport): string {
   const v = (x: number | null): string => (x === null ? "-" : `${num(x)} ${t.unit}`.trim());
   const slope = r.slopePerWeek === null ? "-" : `${r.slopePerWeek >= 0 ? "+" : ""}${num(r.slopePerWeek)} ${t.unit}/hafta`.trim();
-  return `| ${t.id} | ${v(r.value7d)} | ${v(r.value30d)} | ${t.op} ${num(t.threshold)} ${t.unit} | ${r.pct === null ? "-" : `%${num(r.pct)}`} | ${slope} | ${remainingText(r.remaining)} | ${r.status} |`;
+  return `| ${t.id} | ${v(r.value7d)} | ${v(r.value30d)} | ${t.op} ${num(t.threshold)} ${t.unit} | ${r.pct === null ? "-" : `%${num(r.pct)}`} | ${slope} | ${noData(t, r) ? NEEDS_AGENT_11 : remainingText(r.remaining)} | ${r.status} |`;
 }
 const TABLE_HEAD = ["| tetikleyici | 7g zirve | 30g zirve | eşik | % | haftalık artış | kalan süre | durum |", "|---|---|---|---|---|---|---|---|"];
+
+/** Hata oranı ve ürün büyümesi bölümü: yalnız `http-5xx`/`tmdb-p95` (eşikli) ve `kind: trend` satırları; haftalık değerler eskiden yeniye (ilk → son). */
+const GROWTH_IDS = new Set(["http-5xx", "tmdb-p95"]);
+const GROWTH_HEAD = ["| gösterge | ad | haftalık seyir | haftalık artış | durum |", "|---|---|---|---|---|"];
+function growthRow(t: CapacityTrigger, r: TriggerReport): string {
+  const f = (x: number): string => numTr(x);
+  const w = r.weekly;
+  const trend = w.length === 0 ? (noData(t, r) ? NEEDS_AGENT_11 : "-") : w.length === 1 ? `${f(w[0]!)} ${t.unit}` : `${f(w[0]!)} → ${f(w.at(-1)!)} ${t.unit}`;
+  const slope = r.slopePerWeek === null ? "-" : `${r.slopePerWeek >= 0 ? "+" : ""}${numTr(r.slopePerWeek)}/hafta`;
+  const state = r.status === "insufficient" ? "yetersiz veri" : isTrend(t) ? "eğilim" : r.status;
+  return `| ${t.id} | ${t.title} | ${trend} | ${slope} | ${state} |`;
+}
 
 function reportText(week: string, cfg: CapacityConfig, reports: TriggerReport[], oldestTs: number | null, now: number, notes: string[]): string {
   const start = oldestTs === null ? "bilinmiyor" : new Date(oldestTs).toISOString().slice(0, 10);
   const short = oldestTs !== null && oldestTs > now - 30 * DAY_MS ? " (30 günden az veri)" : "";
+  const rep = (t: CapacityTrigger): TriggerReport => reports.find((r) => r.id === t.id)!;
+  const growth = cfg.triggers.filter((t) => isTrend(t) || GROWTH_IDS.has(t.id));
   return [
     `kapasite raporu ${week} (kaynak ${cfg.source}); veri başlangıcı: ${start}${short}`,
     ...notes.map((n) => `Not: ${n}`),
     ...TABLE_HEAD,
-    ...cfg.triggers.map((t) => row(t, reports.find((r) => r.id === t.id)!)),
+    ...cfg.triggers.filter((t): t is ThresholdTrigger => !isTrend(t)).map((t) => row(t, rep(t))),
+    ...(growth.length === 0 ? [] : ["", "Hata oranı ve ürün büyümesi (haftalık seyir; eğilim satırlarında eşik yoktur, görev açılmaz):", ...GROWTH_HEAD, ...growth.map((t) => growthRow(t, rep(t)))]),
   ].join("\n");
 }
 
-function architectTask(server: string, cfg: CapacityConfig, t: CapacityTrigger, r: TriggerReport, week: string): { title: string; body: string } {
+function architectTask(server: string, cfg: CapacityConfig, t: ThresholdTrigger, r: TriggerReport, week: string): { title: string; body: string } {
   const title = `[spc] kapasite: ${server}/${t.id} — ${clean(t.title)}`.slice(0, 120);
   const body = [
     "## Tanım",
     `spc kapasite tetikleyicisi eşiğin %${num(cfg.warn_pct)} düzeyini geçti (${r.status}). Sunucu: ${server}. Tetikleyici: ${t.id} — ${clean(t.title)}. Kaynak: ${cfg.source} (madde ${t.source_item}).`,
-    `Ölçü: ${t.measure === "peak" ? "7 günlük zirve" : "günlük ortalamanın 7 günlük zirvesi"}; eşik ${t.op} ${num(t.threshold)} ${t.unit}. Hafta: ${week}.`,
+    `Ölçü: ${t.measure === "peak" ? (lowerIsWorse(t) ? "7 günlük en düşük" : "7 günlük zirve") : (lowerIsWorse(t) ? "günlük ortalamanın 7 günlük en düşüğü" : "günlük ortalamanın 7 günlük zirvesi")}; eşik ${t.op} ${num(t.threshold)} ${t.unit}. Hafta: ${week}.`,
     "",
     ...TABLE_HEAD,
     row(t, r),
@@ -211,6 +235,7 @@ export async function runCapacity(deps: CapacityDeps, opts: CapacityOptions = {}
 
     // 2) tetikleyici başına: ardışık over sayacı, architect görevi
     for (const t of cfg.triggers) {
+      if (isTrend(t)) continue; // eğilim tetikleyicisi yalnız raporlanır: görev, sayaç ve bildirim yok
       const r = reports.find((x) => x.id === t.id)!;
       const ts = st.triggers[t.id] ?? (st.triggers[t.id] = { architect_task: null, over_weeks: [] });
       const wasTriggered = ts.over_weeks.length >= cfg.consecutive_weeks;
