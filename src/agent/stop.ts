@@ -32,6 +32,16 @@ export const WIN_TASK = "VladAgent";
 /** launchd: "kayıtlı değil" çıkışları (ESRCH=3, 113 "Could not find service"). */
 const notLoaded = (r: RunResult): boolean => r.code === 3 || r.code === 113 || /no such process|could not find (specified )?service/i.test(r.stderr);
 
+// Süreç `ms` içinde bitti mi (poll).
+async function waitDead(d: StopDeps, pid: number, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (d.isAlive(pid)) {
+    if (Date.now() >= deadline) return false;
+    await d.sleep(d.pollMs ?? 250);
+  }
+  return true;
+}
+
 /**
  * `vlad agent stop`: yerel Agent'ı durdurur; `agent install` ile kurulan kayda göre.
  * Mac: launchd'de yüklüyse `launchctl bootout` (KeepAlive=true olduğu için kill/SIGTERM işi yeniden başlatırdı). Bootout işi launchd'den
@@ -61,8 +71,15 @@ export async function agentStop(d: StopDeps): Promise<StopResult> {
     // /End yalnız çalışan örnek varsa başarılı olur (kod 0); ping'e bakmadan denenir.
     const r = await d.run("schtasks", ["/End", "/TN", WIN_TASK]);
     if (r.code === 0) {
-      method = "schtasks-end";
-      note = `zamanlanmış görev (${WIN_TASK}) durduruldu; görev silinmedi, sonraki oturum açılışında Agent yeniden başlar. Kalıcı kapatma: schtasks /Change /TN ${WIN_TASK} /DISABLE`;
+      // /End görev bu örneğe sahip değilse de 0 dönebilir (elle başlatılmış Agent): süreç bitmediyse PID yedeğine düş.
+      if (pidUp && !(await waitDead(d, pidFile!, Math.min(d.waitMs ?? 10_000, 2_000)))) {
+        d.kill(pidFile!);
+        method = "signal";
+        note = `schtasks /End başarılı döndü ama süreç ${pidFile} canlı kaldı (görev bu örneğe sahip değil: elle başlatılmış Agent); pid sonlandırıldı. \`vlad agent start\` ile açılır`;
+      } else {
+        method = "schtasks-end";
+        note = `zamanlanmış görev (${WIN_TASK}) durduruldu; görev silinmedi, sonraki oturum açılışında Agent yeniden başlar. Kalıcı kapatma: schtasks /Change /TN ${WIN_TASK} /DISABLE`;
+      }
     }
   }
   if (!method) {

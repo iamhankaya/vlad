@@ -4,13 +4,13 @@ import { agentStop, type StopDeps } from "../src/agent/stop.js";
 // `vlad agent stop`: gerçek launchctl/schtasks ÇAĞRILMAZ; hepsi sahte `run` ile (launchd-guard ilkesi).
 type Call = { file: string; args: string[] };
 
-function mk(o: { platform: NodeJS.Platform; alive?: boolean[]; run?: (c: Call) => { code: number; stdout?: string; stderr?: string }; pid?: number | null; pidAlive?: boolean; pidAliveSeq?: boolean[] }) {
+function mk(o: { platform: NodeJS.Platform; alive?: boolean[]; run?: (c: Call) => { code: number; stdout?: string; stderr?: string }; pid?: number | null; pidAlive?: boolean; pidAliveSeq?: boolean[]; endNoop?: boolean }) {
   const calls: Call[] = []; const killed: number[] = [];
   const alive = [...(o.alive ?? [true, false])];
   let ended = false; const pidSeq = o.pidAliveSeq ? [...o.pidAliveSeq] : null;
   const d: StopDeps = {
     platform: o.platform, uid: 501,
-    run: async (file, args) => { const c = { file, args }; calls.push(c); if (args[0] === "bootout" || args[0] === "/End") ended = true; const r = o.run?.(c) ?? { code: 0 }; return { code: r.code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }; },
+    run: async (file, args) => { const c = { file, args }; calls.push(c); if (args[0] === "bootout" || (args[0] === "/End" && !o.endNoop)) ended = true; const r = o.run?.(c) ?? { code: 0 }; return { code: r.code, stdout: r.stdout ?? "", stderr: r.stderr ?? "" }; },
     probe: async () => (alive.length > 1 ? alive.shift()! : alive[0]!),
     readPid: () => (o.pid === undefined ? null : o.pid),
     isAlive: () => (pidSeq ? (pidSeq.length > 1 ? pidSeq.shift()! : pidSeq[0]!) : (o.pidAlive ?? !ended)),
@@ -59,6 +59,26 @@ describe("agent stop: Windows (zamanlanmış görev)", () => {
     const r = await agentStop(d);
     expect(killed).toEqual([777]);
     expect(r.method).toBe("signal");
+  });
+});
+
+// Codex P2 (T20261121-49): /End 0 döner ama görev bu örneğe sahip değil (elle başlatılmış Agent) → PID yedeği.
+describe("agent stop: Windows elle başlatılmış Agent (/End başarılı ama süreç canlı)", () => {
+  it("/End 0 döner, süreç canlı kalır → pid sonlandırılır, süreç bitişi doğrulanır", async () => {
+    const { d, calls, killed } = mk({ platform: "win32", alive: [true, false], pid: 777, endNoop: true });
+    const r = await agentStop(d);
+    expect(calls).toEqual([{ file: "schtasks", args: ["/End", "/TN", "VladAgent"] }]);
+    expect(killed).toEqual([777]);
+    expect(r).toMatchObject({ stopped: true, wasRunning: true, method: "signal" });
+  });
+  it("/End süreci sonlandırdıysa pid'e dokunmaz", async () => {
+    const { d, killed } = mk({ platform: "win32", alive: [true, false], pid: 777 });
+    expect(await agentStop(d)).toMatchObject({ method: "schtasks-end" });
+    expect(killed).toEqual([]);
+  });
+  it("PID yedeğine rağmen süreç ölmezse hata verir", async () => {
+    const { d } = mk({ platform: "win32", alive: [false], pid: 777, pidAlive: true, endNoop: true });
+    await expect(agentStop(d)).rejects.toThrow(/777/);
   });
 });
 
