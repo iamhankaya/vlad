@@ -28,7 +28,7 @@ const noCtl = (s: string) => !/[\0\r\n]/.test(s);
 // F-vlad-288: küçük bir tarayıcı (karakter sınıfı içi niceleyiciler sayılmaz; iç içe gruplar yukarı taşınır; `?` da değişken sayılır). Niceleyicili bir grup
 // değişken uzunluklu içerik ya da dal taşıyorsa reddedilir; tek istisna grubun mutlaka noktalama bir harfle başlaması ve geri kalan atomların o harfi eşleyememesi
 // (`(\.\d+)*`: her yineleme `.` ile başlar, `\d+` onu yiyemez ⇒ belirsizlik yok).
-interface RGroup { atoms: string[]; variable: boolean; alt: boolean }
+interface RGroup { atoms: string[]; variable: boolean; alt: boolean; firstQuantified?: boolean }
 export function hasRiskyQuantifiedGroup(p: string): boolean {
   const stack: RGroup[] = [{ atoms: [], variable: false, alt: false }];
   const top = () => stack[stack.length - 1]!;
@@ -42,11 +42,12 @@ export function hasRiskyQuantifiedGroup(p: string): boolean {
     let q: { len: number; unbounded: boolean; optional: boolean } | null = null;
     if (c === "+" || c === "*") q = { len: 1, unbounded: true, optional: false };
     else if (c === "?") q = { len: 1, unbounded: false, optional: true };
-    else if (c === "{") { const m = /^\{\d+(,\d*)?\}/.exec(p.slice(i)); if (m) q = { len: m[0].length, unbounded: true, optional: false }; }
+    else if (c === "{") { const m = /^\{(\d+)(,(\d*))?\}/.exec(p.slice(i)); if (m) q = { len: m[0].length, unbounded: m[2] !== undefined && m[3] === "", optional: false }; } // `{n}`/`{n,m}` sınırlı
     if (q && (p[i + q.len] === "?" || p[i + q.len] === "+")) q.len++; // lazy / possessive suffix
     return q;
   };
   const safeSeparated = (g: RGroup): boolean => {
+    if (g.firstQuantified) return false; // `(\.+)*`, `(\.?\d+)*`: ilk atom zorunlu değil ⇒ ayraç yok
     const first = g.atoms[0] ?? "";
     const lit = first.length === 2 && first[0] === "\\" ? first[1]! : first.length === 1 ? first : "";
     if (!lit || /[A-Za-z0-9]/.test(lit) || /[()|[\]{}*+?^$.\\]/.test(first.length === 1 ? first : "")) return false;
@@ -65,8 +66,9 @@ export function hasRiskyQuantifiedGroup(p: string): boolean {
       const g = stack.pop()!;
       const q = quantAt(i + 1);
       i += 1 + (q?.len ?? 0);
-      if (q && (q.unbounded || q.optional) && (g.variable || g.alt) && !(g.variable && !g.alt && safeSeparated(g))) return true;
+      if (q && q.unbounded && (g.variable || g.alt) && !(g.variable && !g.alt && safeSeparated(g))) return true;
       const parent = top();
+      if (!parent.atoms.length) parent.firstQuantified = !!q;
       parent.atoms.push(`(?:${g.atoms.join("")})`);
       if (g.variable || g.alt || (q && (q.unbounded || q.optional))) parent.variable = true;
       continue;
@@ -78,6 +80,7 @@ export function hasRiskyQuantifiedGroup(p: string): boolean {
     i = end;
     const q = quantAt(i);
     if (q) { i += q.len; top().variable = true; }
+    if (!top().atoms.length) top().firstQuantified = !!q;
     top().atoms.push(q ? `${atom}` : atom);
   }
   return false;

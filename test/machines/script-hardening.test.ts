@@ -59,6 +59,12 @@ describe("F-vlad-268: string param deseni ReDoS ön taraması", () => {
   it.each(["^v(\\d+)(\\.\\d+)*$", "^[+*a-z]+$", "^(\\d+)(-[a-z0-9]+)*$"])("meşru desen %s kabul edilir (ayraçlı grup ya da sınıf içi niceleyici)", (p) => {
     expect(() => validateScriptManifest(manifestWith(p))).not.toThrow();
   });
+  it.each(["^(a+){2}$", "^(a+)?$"])("sınırlı tekrar %s güvenli: kabul edilir", (p) => {
+    expect(() => validateScriptManifest(manifestWith(p))).not.toThrow();
+  });
+  it.each(["^(\\.+)*$", "^(\\.?\\d+)*$", "^(-*)*$", "^(\\.*\\d+)+$"])("ilk atomu niceleyicili grup ayraç sayılmaz: %s reddedilir", (p) => {
+    expect(() => validateScriptManifest(manifestWith(p))).toThrow(/pattern geçersiz/);
+  });
   it.each(["^(a?)*$", "^((a+)+)$", "^(a?){2,}$", "^(\\w+\\.?)+$"])("yanlış negatifti: %s reddedilir", (p) => {
     expect(() => validateScriptManifest(manifestWith(p))).toThrow(/pattern geçersiz/);
   });
