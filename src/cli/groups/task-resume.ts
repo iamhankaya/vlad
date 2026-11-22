@@ -11,6 +11,7 @@ import { workerContext } from "../../agent/forward.js";
 import { selfName } from "../../fleet/state.js";
 import type { Launcher } from "../../launcher/index.js";
 import { nudgeWorker } from "../../tasks/nudge.js";
+import { cleanupMerged, humanBytes, type MergedResult } from "../../tasks/cleanup-merged.js";
 import { cleanupTask, closeTaskWindow, remoteMachineOf, modelInfo, getTask, resumeLocalCheck, resumePrepare } from "../../tasks/index.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -105,9 +106,28 @@ export function registerTaskResume(task: Command, k: Kit): void {
     out(o, { id, ...(remote ? { machine: remote } : {}), ...r }, r.delivered ? `${id}: mesaj teslim edildi${remote ? ` (${remote})` : ""} (Enter ×${r.enters})` : `${id}: mesaj istem kutusunda kaldı${remote ? ` (${remote})` : ""} (Enter ×${r.enters}); SendMessage ile dene`);
     if (!r.delivered) process.exitCode = 1;
   });
-  def(task, "cleanup <id>", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır", async (id: string, o: Opts) => {
-    // --- machines:C1 --- kb yazan cleanup kilitli; uzak makinedeki görevin worktree'si burada yok (C2)
+  def(task, "cleanup [id]", "done/cancelled görevin çalışan penceresini kapatır ve worktree'sini kaldırır; --merged: merge edilmiş tüm görevlerin worktree'lerini toplu kaldırır", async (id: string | undefined, o: Opts & { merged?: boolean; project?: string; dryRun?: boolean }) => {
     const cfg0 = loadConfig();
+    if (o.merged) {
+      // F-vlad-375: toplu temizlik; --dry-run hiçbir şeye dokunmaz (kb dahil)
+      if (id) throw new Error("--merged ile görev ID'si verilmez");
+      const run = () => cleanupMerged(cfg0, { dryRun: !!o.dryRun, ...(o.project ? { project: o.project } : {}), closeWorker: closeWorkerWindow });
+      const r = o.dryRun ? run() : await withKbLock(run);
+      const label = (i: MergedResult["items"][number]) =>
+        i.action === "skip" ? `atlandı: ${i.id}: ${i.reason}`
+          : i.removed ? `kaldırıldı: ${i.id} (~${humanBytes(i.bytes ?? 0)})`
+          : i.error ? `HATA: ${i.id}: ${i.error}`
+          : `kaldırılacak: ${i.id} (~${humanBytes(i.bytes ?? 0)})`;
+      const nRemove = r.items.filter((i) => i.action === "remove").length;
+      const summary = r.dryRun
+        ? `${nRemove} worktree kaldırılacak (~${humanBytes(r.candidateBytes)}), ${r.items.length - nRemove} atlandı (dry-run; kaldırmak için --dry-run'sız çalıştır)`
+        : `${r.removed} worktree kaldırıldı (~${humanBytes(r.freedBytes)} boşaldı), ${r.errors} hata, ${r.items.length - nRemove} atlandı`;
+      out(o, r, [...r.items.map(label), summary].join("\n"));
+      if (r.errors) process.exitCode = 1;
+      return;
+    }
+    if (!id) throw new Error("görev ID'si gerekli (toplu temizlik için --merged)");
+    // --- machines:C1 --- kb yazan cleanup kilitli; uzak makinedeki görevin worktree'si burada yok (C2)
     const remote = await withKbLock(() => {
       const t = getTask(id);
       const m = remoteMachineOf(t, cfg0);
@@ -125,5 +145,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
     }
     // --- /machines:C1 ---
     out(o, { id }, `${id} worktree kaldırıldı`);
-  });
+  }).option("--merged", "toplu: merge edilmiş done/cancelled görevlerin worktree'lerini kaldırır (dal silinmez)")
+    .option("--project <slug>", "--merged: yalnız bu projenin görevleri")
+    .option("--dry-run", "--merged: yalnız listele, hiçbir şeye dokunma");
 }

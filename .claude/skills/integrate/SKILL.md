@@ -37,7 +37,7 @@ Paylaşılan kayıt dosyaları (test_map, registry, `contract.ts` gibi üretilen
 - **Bulut:** merge yerel `git merge` değil GitHub PR'dır (`create_pull_request` açık onayla, sonra `merge_pull_request`); PR linkini ve base'i göster.
 - **Merge başarısızsa** (çakışma): `git -C <hedef worktree> merge --abort`, hatayı göster, görevi **`done` yapma**; "değişiklik iste" ile developer'a `vlad/<çatı-id>` üzerine rebase iste.
 - **Merge'süz `done` yasağı:** pipeline **dev** fazında "olduğu gibi kabul et" sunma (bağımlı fazlar değişikliği görmeden başlar); kullanıcı yine de isterse riski söyle ve bağımlıları başlatmadan önce ayrıca onay al.
-- Başarılı merge sonrası `vlad task set <id> done` ve `vlad task cleanup <id>` (cleanup yalnız `done`/`cancelled` sonrası).
+- Başarılı merge sonrası `vlad task set <id> done` ve `vlad task cleanup <id>` (cleanup yalnız `done`/`cancelled` sonrası). Elle yürütülen kapıdan (ya da çatı/son kapıdan) sonra ayrıca `vlad task cleanup --merged --json` çalıştır: merge edilmiş tüm biten görevlerin worktree'lerini toplu süpürür (F-vlad-375; açık pencere/kirli/merge edilmemişe dokunmaz, nedenini yazar). Diski doldurmasın diye bu adım atlanmaz.
 
 ## Değişiklik isteği yolu
 `vlad task log <id> "Değişiklik isteği: <özet>"` + `vlad task set <id> running`; çalışan açıksa `SendMessage`, kapalıysa `claude --resume <session_id>` (session_id yoksa worktree'deki tek transcript; o da yoksa taze oturum, `--continue` kullanılmaz). Research fazında agent'ı değişiklik isteğiyle yeniden çalıştır.
