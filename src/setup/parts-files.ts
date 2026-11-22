@@ -255,6 +255,13 @@ export const pluginsPart: SetupPart = {
     const full = (p: string) => (p.includes("@") ? (marketOk(p) ? p : null) : KNOWN_MARKET[p] ? `${p}@${KNOWN_MARKET[p]}` : null);
     const want = (c.answers.plugins ?? []).map(full).filter((p): p is string => p !== null);
     const acts: ApplyAction[] = (c.answers.plugins ?? []).filter((p) => full(p) === null).map((p) => ({ kind: "print" as const, what: `${p}: claude içinde /plugin ile kur (sihirbaz plugin kurmaz); bilinmeyen pazar yeri (ad@market) yalnız confirm: plugins-write ile etkinleştirilir` }));
+    if (!want.length && !acts.length) {
+      // F-vlad-307: cevap yoksa apply bir şey yazmaz; ama --check eksik diyorken "zaten güncel" yazmak yanıltır
+      const s = safeSettings(c);
+      const en = s.ok ? Object.entries<boolean>(s.data?.enabledPlugins ?? {}).filter(([, v]) => v).map(([k]) => k) : [];
+      const missing = PLUGIN_NAMES.filter((n) => !en.some((k) => k === n || k.startsWith(`${n}@`)));
+      if (missing.length) return result("plugins", [{ kind: "print", what: `plugins cevabı yok, yazılmadı; etkin değil: ${missing.join(", ")} (claude içinde /plugin ile kur ya da answers.plugins ver)` }]);
+    }
     if (!want.length) return acts.length ? result("plugins", acts) : upToDate("plugins");
     const r = updateJson(c, settingsPath(c), (d) => { d.enabledPlugins = { ...(d.enabledPlugins ?? {}), ...Object.fromEntries(want.filter((p) => !(d.enabledPlugins ?? {})[p]).map((p) => [p, true])) }; return d; });
     if (r.changed) acts.push({ kind: "write", what: `enabledPlugins: ${want.join(", ")}`, target: settingsPath(c) });

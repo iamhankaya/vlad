@@ -239,6 +239,13 @@ describe("senaryo 8: çok makine ve anahtar", () => {
     expectOwnerOnly(join(root, "vlad.local.json"));
     expect(JSON.stringify(res)).not.toMatch(/[0-9a-f]{64}/);
   });
+  it("F-vlad-307: plugins cevabı yokken check 'eksik' derse apply 'zaten güncel' demez; eksikleri adlandırır", async () => {
+    const chk = (await runCheck(ctx(), { only: ["plugins"] })).parts[0]!;
+    expect(chk.items!.some((i) => i.status === "eksik")).toBe(true);
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["plugins"] });
+    expect(rs[0]!.changed).toBe(false);
+    expect(rs[0]!.actions.map((a) => a.what).join("\n")).toMatch(/etkin değil.*(superpowers|playwright)/s);
+  });
   it("F-vlad-295: linux işçide agentboot + agent-install yarıda kesmez; atlanır ve nedeni yazılır", async () => {
     const a = { ...MULTI("lx", "worker", "192.168.1.36"), agentboot: true, confirm: ["agent-install" as const] };
     const res = await runSetup(ctx(a, { yes: true, platform: "linux" }), { only: ["agent"] });
