@@ -239,6 +239,13 @@ describe("senaryo 8: çok makine ve anahtar", () => {
     expectOwnerOnly(join(root, "vlad.local.json"));
     expect(JSON.stringify(res)).not.toMatch(/[0-9a-f]{64}/);
   });
+  it("F-vlad-295: linux işçide agentboot + agent-install yarıda kesmez; atlanır ve nedeni yazılır", async () => {
+    const a = { ...MULTI("lx", "worker", "192.168.1.36"), agentboot: true, confirm: ["agent-install" as const] };
+    const res = await runSetup(ctx(a, { yes: true, platform: "linux" }), { only: ["agent"] });
+    const acts = res[0]!.actions.map((x) => `${x.kind}: ${x.what}`).join("\n");
+    expect(acts).toMatch(/skip: .*linux/i);
+    expect(acts).not.toMatch(/run: vlad agent install/);
+  });
   it("onaysız keygen anahtar üretmez", async () => {
     await runSetup(ctx(MULTI("mac", "brain", "192.168.1.35"), { yes: true }));
     expect(existsSync(join(root, "vlad.local.json")) ? jr(join(root, "vlad.local.json")).keys : {}).toEqual({});
