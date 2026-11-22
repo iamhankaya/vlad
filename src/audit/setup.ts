@@ -7,7 +7,9 @@ import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
 import { PONYTAIL_AB_VALID_FROM } from "../tasks/experiment.js";
-import { parseDenyLine } from "../tasks/denials.js";
+import { existsSync, readFileSync } from "node:fs";
+import { kbPaths } from "../kb/index.js";
+import { classifyDenial, parseDenyLine } from "../tasks/denials.js";
 import { firstAdded, installedSkills, lastChanged, roleSkillSince, skillDirs } from "./rules.js";
 import { auditSkills, parseSince } from "./skills.js";
 
@@ -25,8 +27,8 @@ export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: R
 /** Codex rounds written by /status at the final gate (`Codex turları: ara=<n> son=<n>`); `count` = ara + son. */
 export interface CodexRounds extends Signal { ara: number; son: number }
 export interface Signal { tasks: number; count: number; examples: string[] }
-/** The same tool+pattern denied (`vlad task deny`) in >= 2 tasks: a permission-rule candidate. `count` = denial lines, `tasks` = distinct tasks. */
-export interface PermissionCandidate { tool: string; pattern: string; tasks: number; count: number; examples: string[] }
+/** The same tool + denial class (`pattern` = classifyDenial label, e.g. "heredoc yazımı", "git push") denied (`vlad task deny`) in >= 2 tasks: a permission-rule candidate. `count` = denials, `tasks` = distinct tasks, `samples` = up to 3 raw commands. */
+export interface PermissionCandidate { tool: string; pattern: string; tasks: number; count: number; examples: string[]; samples: string[] }
 type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
 interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
 export interface SetupAudit {
@@ -60,6 +62,20 @@ export interface SetupAudit {
     stale: number;
     by_severity: Record<string, number>; by_project: Record<string, number>; by_source: Record<string, number>;
   };
+}
+
+/** Parsed lines of kb/logs/denials.jsonl; missing file or malformed lines are skipped. */
+function readDenialRecords(): { task: string; tool: string; pattern: string }[] {
+  const file = join(kbPaths().logs, "denials.jsonl");
+  if (!existsSync(file)) return [];
+  const recs: { task: string; tool: string; pattern: string }[] = [];
+  for (const line of readFileSync(file, "utf8").split("\n")) {
+    try {
+      const r = JSON.parse(line);
+      if (typeof r?.task === "string" && typeof r.tool === "string" && typeof r.pattern === "string") recs.push(r);
+    } catch { /* blank or malformed line */ }
+  }
+  return recs;
 }
 
 const bump = (m: Record<string, number>, k: string | null | undefined) => { const key = k || "-"; m[key] = (m[key] ?? 0) + 1; };
@@ -101,7 +117,18 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     s.tasks++; s.count += n;
     if (s.examples.length < EXAMPLES) s.examples.push(id);
   };
+  // grouped by tool + class (classifyDenial), not full command text; `samples` keeps up to 3 distinct raw commands
   const denied = new Map<string, PermissionCandidate>();
+  const seenDenials = new Map<string, Set<string>>();
+  const addDenial = (id: string, tool: string, pattern: string) => {
+    const cls = classifyDenial(tool, pattern);
+    const key = `${tool.toLowerCase()}\u0000${cls}`;
+    const c = denied.get(key) ?? { tool, pattern: cls, tasks: 0, count: 0, examples: [], samples: [] };
+    c.count++;
+    if (!c.examples.includes(id)) { c.tasks++; c.examples.push(id); }
+    if (c.samples.length < EXAMPLES - 2 && !c.samples.includes(pattern)) c.samples.push(pattern);
+    denied.set(key, c);
+  };
   for (const t of tasks) {
     const { id } = t.data;
     bump(out.tasks.by_role, t.data.role);
@@ -141,14 +168,13 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     // "İzin reddi", "permission denied", and the workers' real phrasings: "push reddedildi (auto mode classifier, Bash)", "sınıflayıcı tarafından engellendi" (F-vlad-279)
     signal(out.signals.izin_reddi, id, countLines(progress, IZIN_REDDI));
 
+    const seen = new Set<string>();
+    seenDenials.set(id, seen);
     for (const line of progress.split("\n")) {
       const d = parseDenyLine(line);
       if (!d) continue;
-      const key = `${d.tool.toLowerCase()}\u0000${d.pattern}`;
-      const c = denied.get(key) ?? { tool: d.tool, pattern: d.pattern, tasks: 0, count: 0, examples: [] };
-      c.count++;
-      if (!c.examples.includes(id)) { c.tasks++; c.examples.push(id); }
-      denied.set(key, c);
+      seen.add(`${d.tool.toLowerCase()}\u0000${d.pattern}`);
+      addDenial(id, d.tool, d.pattern);
     }
 
     // structural line only (`- <ts> Codex turları: ara=<n> son=<n>`); the last one wins, as the gate rewrites the total
@@ -168,6 +194,16 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     }
   }
   out.cancelled.without_reason_ids.sort();
+  // kb/logs/denials.jsonl: a second source for audited tasks; a record already seen as an [İZİN] line is not counted twice
+  for (const rec of readDenialRecords()) {
+    const seen = seenDenials.get(rec.task);
+    if (!seen) continue;
+    const pattern = rec.pattern.replace(/\s+/g, " ").trim();
+    const key = `${rec.tool.toLowerCase()}\u0000${pattern}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    addDenial(rec.task, rec.tool, pattern);
+  }
   out.permission_candidates = [...denied.values()].filter((c) => c.tasks >= 2)
     .sort((a, b) => b.tasks - a.tasks || b.count - a.count || a.tool.localeCompare(b.tool) || a.pattern.localeCompare(b.pattern));
 
