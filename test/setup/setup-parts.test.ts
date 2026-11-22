@@ -447,6 +447,19 @@ describe("sihirbaz (P1-2, G-bilgi-9)", () => {
     expect(out.role).toBe("brain"); expect(out.machines).toBe("single"); expect(out.kb?.mode).toBe("local");
     expect(prompts.find(([p]) => p.startsWith("kbDir"))![1]).toBeUndefined();
     expect(out.confirm).toEqual(["permissions-write"]);
+    expect(out.fresh).toBeUndefined();
+  });
+  it("F-vlad-298: temiz (fresh) kurulum açıkça sorulur; yalnız 'e' ile fresh:true olur", async () => {
+    const { interviewAnswers } = await import("../../src/setup/interactive.js");
+    const prompts: string[] = [];
+    const yes = await interviewAnswers(async (p) => { prompts.push(p); return p.startsWith("Temiz kurulum") ? "e" : ""; }, "darwin");
+    expect(yes.fresh).toBe(true);
+    expect(prompts.some((p) => p.startsWith("Temiz kurulum"))).toBe(true);
+  });
+  it("F-vlad-296: --confirm bayrağı sihirbazın etkileşimli onaylarıyla birleşir (tekrarsız)", async () => {
+    const { mergeConfirm } = await import("../../src/setup/interactive.js");
+    expect(mergeConfirm(["keygen", "agent-install"], ["agent-install", "permissions-write"])).toEqual(["keygen", "agent-install", "permissions-write"]);
+    expect(mergeConfirm(undefined, ["keygen"])).toEqual(["keygen"]);
   });
 });
 
