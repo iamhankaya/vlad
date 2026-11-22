@@ -61,6 +61,12 @@ describe("F-vlad-309 kalan: kısmi işareti devam satırında ve ASCII/varyant y
     const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
     expect(closedFindingTokens(rep(`- F-alpha-005 — ${v}`))).toEqual([]);
   });
+  it("F-vlad-334: 'kısmı' (the part) kısmi sayılmaz; 'kısmi'/'KISMİ' sayılır", async () => {
+    const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
+    expect(closedFindingTokens(rep("- F-alpha-001 — fixed — hatalı kısmı düzeltildi"))).toEqual(["F-alpha-001"]);
+    expect(closedFindingTokens(rep("- F-alpha-002 — KISMİ düzeltme"))).toEqual([]);
+    expect(closedFindingTokens(rep("- F-alpha-003 — kısmi düzeltme"))).toEqual([]);
+  });
   it("devam satırı bir sonraki maddeye sızmaz ve meşru satırlar kapanır", async () => {
     const { closedFindingTokens } = await import("../../src/findings/closed-report.js");
     const md = rep("- F-alpha-001 — fixed — abc\n  ek not: tam kapandı\n- F-alpha-002 — fixed — partial index eklendi");
