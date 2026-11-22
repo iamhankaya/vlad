@@ -26,8 +26,15 @@ export function parseDenyLine(line: string): Denial | null {
   return { tool: m[1].trim(), pattern: oneLine(m[2].replaceAll(ESCAPED_SEP, SEP)), ...(m[3] ? { reason: m[3].trim() } : {}) };
 }
 
-const SECRET_PATH = /(?:^|[\s/='"])\.(?:env\b|vlad-secret|ssh\b|aws\b|npmrc)|id_(?:rsa|ed25519)|\.pem\b|credentials(?:\.json)?\b/;
-const SUBCOMMAND_TOOLS = new Set(["git", "gh", "npm", "docker", "vlad"]);
+const SECRET_PATH = /(?:^|[\s/='"])\.(?:env(?!\.(?:example|sample|template))\b|vlad-secret|ssh\b|aws\b|npmrc)|id_(?:rsa|ed25519)|\.pem\b|\bcredentials\.json\b|[\\/]credentials\b/;
+// tools whose subcommand follows global flags; flags listed here take a value that must not be read as the subcommand
+const SUBCOMMAND_TOOLS: Record<string, Set<string>> = {
+  git: new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"]),
+  gh: new Set(["-R", "--repo"]),
+  npm: new Set(["--prefix", "-C", "--workspace", "-w"]),
+  docker: new Set(["-H", "--host", "-c", "--context"]),
+  vlad: new Set(),
+};
 
 /**
  * One class label for a denied command (setup audit groups `permission_candidates` by tool + class instead of full text):
@@ -37,9 +44,10 @@ const SUBCOMMAND_TOOLS = new Set(["git", "gh", "npm", "docker", "vlad"]);
  */
 export function classifyDenial(_tool: string, pattern: string): string {
   const p = pattern;
-  if (/<<-?\s*['"]?\w+/.test(p) || /\bcat\s*>>?\s*\S/.test(p)) return "heredoc yazımı";
+  // a heredoc counts only when it feeds a file write (`cat > f <<EOF`, `cat <<EOF > f`); `<<<`, `$((1<<3))` and `$(cat <<EOF)` as a message do not
+  if (/>>?\s*[^\s<>&|]+\s*<<(?!<)-?\s*['"]?\w/.test(p) || /<<(?!<)-?\s*['"]?\w+['"]?\s*>>?\s*[^\s<>&|]/.test(p)) return "heredoc yazımı";
   if (/\bpython3?\s+-c\b/.test(p)) return "python -c";
-  if (/\bsed\s+(?:-\w*\s+)*-i/.test(p)) return "sed -i";
+  if (/\bsed\s+(?:-\S+\s+)*(?:-\w*i\w*|--in-place\S*)(?=\s|$)/.test(p)) return "sed -i";
   if (/\|\s*tee\b|(?:^|[;&]\s*)tee\s/.test(p)) return "tee yazımı";
   if (SECRET_PATH.test(p)) return "gizli dosya yolu";
   const segs = oneLine(p).split(/\s*(?:&&|\|\||;|\|)\s*/).filter(Boolean);
@@ -47,8 +55,14 @@ export function classifyDenial(_tool: string, pattern: string): string {
   const first = (seg: string): string => {
     const w = words(seg);
     const cmd = (w[0] ?? "").replace(/^.*[\\/]/, "").replace(/\.exe$/i, "").toLowerCase();
-    if (SUBCOMMAND_TOOLS.has(cmd)) {
-      const sub = w.slice(1).find((x) => !x.startsWith("-"));
+    const valueFlags = SUBCOMMAND_TOOLS[cmd];
+    if (valueFlags) {
+      let sub: string | undefined;
+      for (let i = 1; i < w.length; i++) {
+        if (valueFlags.has(w[i])) { i++; continue; }
+        if (w[i].startsWith("-")) continue;
+        sub = w[i]; break;
+      }
       return sub ? `${cmd} ${sub}` : cmd;
     }
     return cmd;

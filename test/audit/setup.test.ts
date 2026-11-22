@@ -403,6 +403,15 @@ describe("auditSetup", () => {
     expect(r.permission_candidates).toMatchObject([{ tool: "Bash", pattern: "sed -i", tasks: 2, count: 2, examples: [a, b] }]);
   });
 
+  it("repeated identical denials in denials.jsonl (no [İZİN] line) each count (T20261122-55)", () => {
+    const a = task({ at: "2026-10-29" }), b = task({ at: "2026-10-29" });
+    const rec = (t: string) => JSON.stringify({ at: "2026-10-29T10:00:00+03:00", task: t, project: "alpha", tool: "Bash", pattern: "rm -rf x" });
+    mkdirSync(kbPaths().logs, { recursive: true });
+    writeFileSync(join(kbPaths().logs, "denials.jsonl"), [rec(a), rec(a), rec(b)].join("\n") + "\n");
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.permission_candidates).toMatchObject([{ pattern: "rm", tasks: 2, count: 3 }]);
+  });
+
   it("rejects an invalid since", () => {
     expect(() => auditSetup({ since: "dün", configDir: cfgDir })).toThrow(/geçersiz --since/);
   });

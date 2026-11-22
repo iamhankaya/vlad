@@ -61,6 +61,16 @@ describe("classifyDenial (T20261122-55)", () => {
     ["Bash", "pkill -f vite", "pkill"],
     ["Bash", "FOO=1 /usr/bin/node build.js", "node"],
     ["PowerShell", "powershell -File build.ps1", "powershell"],
+    ["Bash", "git -C /Users/x/dev/vlad-wt/T1 push origin vlad/T1", "git push"],
+    ["Bash", "npm --prefix web run build", "npm run"],
+    ["Bash", "gh -R o/r pr create", "gh pr"],
+    ["Bash", "git commit -m \"$(cat <<'EOF'\nmsg\nEOF\n)\" && git push origin vlad/T1", "git push"],
+    ["Bash", "echo $((1<<3)) && rm -rf x", "rm"],
+    ["Bash", "cat <<EOF > out.md\nx\nEOF", "heredoc yazımı"],
+    ["Bash", "grep credentials src", "grep"],
+    ["Bash", "cat .env.example", "cat"],
+    ["Bash", "cat config/credentials.json", "gizli dosya yolu"],
+    ["Bash", "sed --in-place s/a/b/ f", "sed -i"],
   ])("%s: %s → %s", (tool, pattern, cls) => {
     expect(classifyDenial(tool, pattern)).toBe(cls);
   });

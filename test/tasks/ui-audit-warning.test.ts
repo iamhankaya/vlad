@@ -29,6 +29,11 @@ describe("uiAuditWarning (T20261122-55)", () => {
     expect(uiAuditWarning({ role: "developer", body: "## Tanım\nBackend işi\n" }, NO_AUDIT)).toBeNull();
     expect(uiAuditWarning({ role: null, body: UI_BODY }, NO_AUDIT)).toBeNull();
   });
+  it("ignores UI mentions in İlerleme/Sorular/rapor sections, but sees the preamble before the first heading", () => {
+    const body = "## Tanım\nBackend\n\n## İlerleme\n- x UI öz-kontrol yapıldı\n\n## Önceki raporlar\nimpeccable audit çalıştır\n";
+    expect(uiAuditWarning({ role: "developer", body }, NO_AUDIT)).toBeNull();
+    expect(uiAuditWarning({ role: "developer", body: "UI öz-kontrol zorunlu.\n\n## Tanım\nx\n" }, NO_AUDIT)).not.toBeNull();
+  });
   it("also triggers when the task body mentions impeccable audit; the line must start the item, a bare mention does not satisfy it", () => {
     expect(uiAuditWarning({ role: "developer", body: "## Tanım\nimpeccable audit çalıştır\n" }, NO_AUDIT)).not.toBeNull();
     expect(uiAuditWarning({ role: "developer", body: UI_BODY }, "### Açık noktalar\nimpeccable audit yapılmadı\n")).not.toBeNull();

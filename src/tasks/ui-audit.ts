@@ -11,6 +11,8 @@ const HAS_AUDIT_LINE = /^[\s>*-]*impeccable audit:/im;
  */
 export function uiAuditWarning(task: { role?: string | null; body: string }, report: string): string | null {
   if (!task.role || !UI_ROLES.has(task.role)) return null;
-  if (!ASKS_UI_CHECK.test(task.body) || HAS_AUDIT_LINE.test(report)) return null;
+  // only what the task asks for: progress notes, questions and reports (which can mention a UI check) are skipped; text before the first heading counts
+  const request = task.body.split(/^(?=## )/m).filter((s) => !/^## (?:İlerleme|Sorular|Kapanış raporu|Önceki raporlar)\b/.test(s)).join("\n");
+  if (!ASKS_UI_CHECK.test(request) || HAS_AUDIT_LINE.test(report)) return null;
   return "UI raporunda `impeccable audit: <n> bulgu (kritik/yüksek/orta/düşük), <düzeltilen>/<kalan>` satırı yok; görev UI öz-kontrol istiyor (### Test sonuçları'na ekle ya da neden yapılmadığını Açık noktalar'a yaz)";
 }

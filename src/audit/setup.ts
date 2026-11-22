@@ -199,9 +199,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     const seen = seenDenials.get(rec.task);
     if (!seen) continue;
     const pattern = rec.pattern.replace(/\s+/g, " ").trim();
-    const key = `${rec.tool.toLowerCase()}\u0000${pattern}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (seen.has(`${rec.tool.toLowerCase()}\u0000${pattern}`)) continue; // already counted from the task's [İZİN] lines
     addDenial(rec.task, rec.tool, pattern);
   }
   out.permission_candidates = [...denied.values()].filter((c) => c.tasks >= 2)
