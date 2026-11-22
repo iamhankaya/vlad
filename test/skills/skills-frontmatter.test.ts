@@ -52,6 +52,12 @@ describe("skills/ references and de-duplication", () => {
     expect(t).not.toMatch(/en az \d+ öneri yaz/i);
   });
 
+  it("setup-audit separates Claude mod candidates from vlad mode (yetki) candidates and reads installed mods", () => {
+    const t = read(".claude/skills/setup-audit/SKILL.md");
+    for (const w of ["| **Claude mod adayı**", "| **Yetki modu adayı (`vlad mode`)**", "enabledPlugins", "@claude-mods", "claude-mods/mods", "panel/band/status line/toast/hook/komut", "mod türü"]) expect(t, w).toContain(w);
+    expect(t).not.toMatch(/\| \*\*Mod adayı\*\*/);
+  });
+
   it("second-opinion owns the Codex commands; delegate and status only point to it", () => {
     const so = read(".claude/skills/second-opinion/SKILL.md");
     expect(so).toContain("codex exec");

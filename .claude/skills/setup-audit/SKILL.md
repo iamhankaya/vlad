@@ -1,6 +1,6 @@
 ---
 name: setup-audit
-description: VLAD kurulumunun periyodik denetimi — biten görevlerin ölçümlerinden, açık noktalarından ve sürtünme işaretlerinden eksik/fazla/skill adayı/mod adayı/kural önerisi/bulgu hijyeni çıkarır, her adayı sonraki düzeltmelere karşı doğrular, raporlar. Kullan - kullanıcı "/setup-audit", "kurulumu denetle", "neyi otomatikleştirmeliyiz" dediğinde.
+description: VLAD kurulumunun periyodik denetimi — biten görevlerin ölçümlerinden, açık noktalarından ve sürtünme işaretlerinden eksik/fazla/skill adayı/yetki modu adayı/Claude mod adayı/kural önerisi/bulgu hijyeni çıkarır, her adayı sonraki düzeltmelere karşı doğrular, raporlar. Kullan - kullanıcı "/setup-audit", "kurulumu denetle", "neyi otomatikleştirmeliyiz" dediğinde.
 ---
 
 # /setup-audit — kurulum denetimi
@@ -38,6 +38,8 @@ vlad audit setup --since <tarih> --json
 - `rules` (`CLAUDE.md` ve rol dosyalarının son değişiklik tarihi, git geçmişinden).
 - `findings` (`unresolved` yaşa göre; `by_severity`, `by_project`, `by_source`, `stale`).
 
+**Kurulu Claude mod'ları** (CLI'da yok; salt okuma, agent ya da ana oturum okur): `~/.claude/settings.json` içindeki `enabledPlugins` anahtarlarından `@claude-mods` ile bitenler ve `~/.claude/plugins/marketplaces/claude-mods/mods/` altındaki dizinler (her mod bir dizin; `hooks/hooks.json` mod türünü ve tetiği verir). Bir aday kurulu bir mod'un yaptığı işle örtüşüyorsa yazılmaz.
+
 **Veri sınırları** (raporun `### Açık noktalar`ına yaz, önerinde dayanak yapma): `coverage` satırında `since_unknown: true` ise skill rol dosyasında commit edilmemiş ya da git geçmişi yok demektir; o satırda tüm görevler ölçülmüş olur, oran şişkin olabilir, "eksik" önerisini tarihi elle doğrulamadan yazma. Kullanım çıplak ada göre eşleşir; iki plugin'de aynı çıplak adlı skill (`a:review`, `b:review`) birbirinin kullanımını gösterir, `unused` o durumda eksik raporlar. Plugin önbelleği `<pazar>/<plugin>/<sürüm>/skills` düzenini varsayar; başka düzendeki plugin envantere girmeyebilir.
 
 Skill adları: plugin skill'leri `plugin:skill` biçimindedir; kullanıcının `~/.claude/skills`'i (`user`) ve plugin önbelleği (`plugin`) envantere girer. Kullanım karşılaştırması çıplak ada göre yapılır. `source: role` skill'i bir rol adlandırıyor ama hiçbir yerde kurulu değil demektir.
@@ -50,7 +52,7 @@ Agent'lar kb'ye yazmaz; sonuç taslaktır, kanıt ID'lerini VLAD örnekleyerek d
 
 `skills.unused` yalnız oturum kaydı bulunan görevlerden (`skills.transcripts`) ve VLAD oturumundan çıkar; kayıt sayısı azsa ya da görevlerin çoğunda kayıt yoksa "Fazla" önerisi yazma, bunu `### Açık noktalar`a veri sınırı olarak yaz.
 
-Sinyal okuma: `ci_tur` ve `review_bulgusu` yüksekse tekrarlı bir kalıp var mı bak; `test_itirazi`/`degisiklik_istegi` yüksekse kabul/sözleşme fazı ya da rol talimatı zayıf olabilir; `izin_reddi` tekrarı izin kuralı ya da mod penceresi adayıdır (somut kalıplar `permission_candidates`'ta); gerekçesiz iptaller kayıt hijyeni açığıdır.
+Sinyal okuma: `ci_tur` ve `review_bulgusu` yüksekse tekrarlı bir kalıp var mı bak; `test_itirazi`/`degisiklik_istegi` yüksekse kabul/sözleşme fazı ya da rol talimatı zayıf olabilir; `izin_reddi` tekrarı izin kuralı ya da yetki modu penceresi adayıdır (somut kalıplar `permission_candidates`'ta); gerekçesiz iptaller kayıt hijyeni açığıdır.
 
 ## 4. Sınıflandırma
 
@@ -61,11 +63,14 @@ Her aday şu kategorilerden birine girer:
 | **Eksik** | Tekrarlı elle yapılan iş, CLI/komut/otomasyon boşluğu |
 | **Fazla** | Kullanılmayan skill/rol/komut, ölü ya da çelişen kural (`skills.unused`, hiçbir rolün anmadığı skill) |
 | **Skill adayı** | En az 3 görevde tekrarlanan aynı akış (kanıt: ≥3 görev ID'si) |
-| **Mod adayı** | Tekrarlı yetki/izin pencereleri, aynı onayın sık istenmesi (`vlad mode` ile çözülebilir) |
+| **Yetki modu adayı (`vlad mode`)** | Tekrarlı yetki/izin pencereleri, aynı onayın sık istenmesi (`vlad mode` ile çözülebilir) |
+| **Claude mod adayı** | VLAD ya da çalışanların tekrar tekrar elle gözlediği ya da yokladığı durumlar; mod ile görünür ya da anlık hale getirilebilir. Örnekler: tmux ekranı okuma, nabız cron'unun yakaladığı gecikmiş kapı, bağlam sıkıştırma ya da `API Error` sonrası boşta kalma, kullanıcıya bildirilmesi gereken olay. Kanıt: görev ID'leri; ilgili `İlerleme` satırları ("bekçi: dürtüldü", "tmux ile dürtüldü", "nabız") ve VLAD oturum davranışı da kanıttır. |
 | **Kural/rol önerisi** | `CLAUDE.md` ya da `roles/` değişikliği; çalışma notu adayı |
 | **Bulgu hijyeni** | Çok eski (`age_days`), aslında kapanmış ya da artık geçersiz açık/ertelenmiş bulgular; `vlad finding set` önerisi |
 
 Tahmin yürütme: veride dayanağı olmayan aday yazma. ≥3 görev şartını sağlamayan "skill adayı" `Kural/rol önerisi` ya da `Eksik`'e iner.
+
+**Yetki modu ile Claude mod ayrımı:** izin penceresi (`vlad mode`, `permission_candidates`, `izin_reddi`) **yetki modu** adayıdır; arayüze ya da davranışa dair tekrarlı gözlem (tmux, nabız, sıkıştırma sonrası boşluk, bildirim) **Claude mod** adayıdır. Aynı olay iki kategoriye birden girmez; izin/onay penceresi değilse, bir gözlem ya da bildirim ihtiyacıysa Claude mod'dur.
 
 ## 5. Doğrulama (zorunlu)
 
@@ -76,6 +81,7 @@ Kontrol listesi (her aday için, ilgili olanlar):
 2. **Kararlar:** `vlad decision list --project <slug> --all --json`: konuyu kapatan ya da yerine geçen karar var mı?
 3. **Kural/rol/skill değişiklikleri:** `audit setup`'taki `rules` ve `inventory[].added` tarihleri; ayrıntı için `git -C <VLAD_HOME> log --since=<kanıt tarihi> --format="%h %cI %s" -- roles/ .claude/skills/ CLAUDE.md` (kuralın/rolün eklendiği commit tarihi).
 4. **Sonraki görevler:** kanıt tarihinden sonra biten görevlerin kapanış raporları (`vlad task list --json --fields id,title,state,updated`, sonra `vlad kb get <id> --section "## Kapanış raporu"`): sorun tekrarlıyor mu, düzelmiş mi?
+5. **Kurulu modlar (Claude mod adayı):** §3'teki kaynaklarda aynı işi yapan bir mod kurulu mu (`enabledPlugins` `@claude-mods` girdileri, `mods/` dizinleri, `hooks.json`)? Kurulu ise aday düşer ya da "kurulu mod'un kapsamını genişlet" olarak yeniden yazılır; mod kanıt tarihinden sonra kurulduysa bunu doğrulandı sütununa yaz.
 
 Sonuç:
 - Düzeltilmiş → madde **düşer** (isteğe bağlı olarak `### Açık noktalar`a ya da raporun sonunda "kapanmış" notu olarak tek satır).
@@ -98,6 +104,8 @@ Raporu geçici bir dosyaya yaz (`###` başlıklar; `## ` yok):
 (- [önem] başlık — ayrıntı; veri yetersizliği, oturum kaydı olmayan görevler)
 ```
 Tablodaki **doğrulandı** sütunu zorunludur: ne kontrol edildi ve hangi tarihe kadar (ör. `F-vlad-093 open (10-31), decision list --all temiz, git log roles/ 10-28→11-01 değişiklik yok`). Boş ya da "doğrulandı" tek başına yazılmış satır geçersizdir; böyle bir madde rapora girmez. Kategori boşsa tabloya "madde yok" satırı yaz. Her öneride ayrıca **kanıt ID'leri** (görev/bulgu/karar; kanıtsız öneri yazma), **etki**, **efor** (S/M/L), **öncelik** (yüksek/orta/düşük) bulunur.
+
+**Claude mod önerisi** için öneri hücresi dört alan taşır: **mod türü** (panel/band/status line/toast/hook/komut), **tetik** (ne zaman görünür ya da çalışır), **gösterdiği veri** ve **kaynak** (CLI komutu ya da dosya). Örnek: `status line | tetik: görev awaiting_approval olunca | veri: onay bekleyen sayısı | kaynak: vlad status --summary`.
 
 ```
 vlad task report <id> --file <rapor.md>
