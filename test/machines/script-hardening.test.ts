@@ -1,5 +1,5 @@
 import { encodeFrame, FrameDecoder } from "../../src/agent/frame.js";
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { recoverSelfUpdate } from "../../src/agent/ops/script.js";
@@ -55,6 +55,13 @@ describe("F-vlad-268: string param deseni ReDoS ön taraması", () => {
     expect(() => validateScriptManifest(manifestWith("^[a-z0-9-]+$"))).not.toThrow();
     expect(() => validateScriptManifest(manifestWith("^(v[0-9]+|main)$"))).not.toThrow();
   });
+  // F-vlad-288 (1): sürüm desenleri yanlış pozitif, `?` / iç içe grup yanlış negatifti
+  it.each(["^v(\\d+)(\\.\\d+)*$", "^[+*a-z]+$", "^(\\d+)(-[a-z0-9]+)*$"])("meşru desen %s kabul edilir (ayraçlı grup ya da sınıf içi niceleyici)", (p) => {
+    expect(() => validateScriptManifest(manifestWith(p))).not.toThrow();
+  });
+  it.each(["^(a?)*$", "^((a+)+)$", "^(a?){2,}$", "^(\\w+\\.?)+$"])("yanlış negatifti: %s reddedilir", (p) => {
+    expect(() => validateScriptManifest(manifestWith(p))).toThrow(/pattern geçersiz/);
+  });
 });
 
 describe("F-vlad-280: zaman aşımı sürerken gelen error olayı zaman aşımını ezmez", () => {
@@ -81,6 +88,25 @@ describe("F-vlad-281: recoverSelfUpdate rename hatasında dist'siz kalmaz", () =
       }
       const failing = (a: string, b: string) => { if (a.endsWith("dist-old")) throw new Error("EXDEV"); renameSync(a, b); };
       recoverSelfUpdate(repo, failing);
+      expect(readFileSync(join(repo, "dist", "cli.js"), "utf8")).toBe("NEW");
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+});
+
+describe("F-vlad-288 (2): çifte rename hatasında tek yeni kopya -recover içinde kalır, sonraki koşu onu silmez", () => {
+  posix("ilk koşu: old→cur ve geri-koyma ikisi de patlar; ikinci koşu da old→cur'da patlasa bile yeni kopya cur'a geri konmuş olur", () => {
+    const repo = mkdtempSync(join(tmpdir(), "vlad-f288-"));
+    try {
+      for (const [rel, v] of [["dist/cli.js", "NEW"], ["dist-old/cli.js", "OLD"], [".vlad-npm-ci-running", "swap"]] as const) {
+        mkdirSync(dirname(join(repo, rel)), { recursive: true }); writeFileSync(join(repo, rel), v);
+      }
+      // ilk koşu: dist→dist-recover geçer; dist-old→dist patlar; dist-recover→dist geri koyma da patlar ⇒ yeni kopya yalnız dist-recover'da
+      const failBoth = (a: string, b: string) => { if (a.endsWith("dist-old") || a.endsWith("dist-recover")) throw new Error("EXDEV"); renameSync(a, b); };
+      expect(recoverSelfUpdate(repo, failBoth)).toBe(false);
+      expect(existsSync(join(repo, "dist"))).toBe(false);
+      // ikinci koşu: old→cur yine patlar; -recover kopyası silinmemeli, dist'e geri konmalı
+      const failOld = (a: string, b: string) => { if (a.endsWith("dist-old")) throw new Error("EXDEV"); renameSync(a, b); };
+      expect(recoverSelfUpdate(repo, failOld)).toBe(false);
       expect(readFileSync(join(repo, "dist", "cli.js"), "utf8")).toBe("NEW");
     } finally { rmSync(repo, { recursive: true, force: true }); }
   });
