@@ -22,12 +22,12 @@ function agentAddressNote(): string | null {
   } catch { return null; }
 }
 
-/** Monitor bildirim kuyruğu özeti; okunamazsa sessizce 0 (açılış özetini asla düşürme). */
-/** F-vlad-375: low free disk on the worktree volume; a failing probe must never take status (or the SessionStart hook) down. */
-function safeDiskWarning(): DiskWarning | null {
-  try { return diskWarning(loadConfig()); } catch { return null; }
+/** F-vlad-375: low free disk on the worktree volume; a failing probe must never take status (or the SessionStart hook) down. The hook only reads the free space (no git scan). */
+function safeDiskWarning(hook: boolean): DiskWarning | null {
+  try { return diskWarning(loadConfig(), { scan: !hook }); } catch { return null; }
 }
 
+/** Monitor bildirim kuyruğu özeti; okunamazsa sessizce 0 (açılış özetini asla düşürme). */
 function monitorNotices(): { count: number; items: { task: string; kind: string }[] } {
   try {
     const dir = defaultNotifyDir();
@@ -41,7 +41,7 @@ export function registerStatus(program: Command, k: Kit): void {
     // SessionStart hook: refresh a stale lint cache first (short timeout); a refresh that did not finish shows the old numbers as "eski"
     const lintStale = o.hook && o.summary && o.mark !== false ? refreshLintCacheIfStale({ canRun: () => ["brain", "off"].includes(workerState().kind) }).stale : false;
     const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false, remotePlans: o.remotePlans as RemoteStallPlan[] | undefined });
-    const disk = safeDiskWarning(); // F-vlad-375
+    const disk = safeDiskWarning(!!o.hook); // F-vlad-375
     if (o.summary) {
       const mn = monitorNotices();
       const approverWarn = approverServiceWarning(); // F-vlad-355: servis sessizce kalkarsa SessionStart'ta görünür

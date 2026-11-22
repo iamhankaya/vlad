@@ -1,12 +1,12 @@
 import { existsSync, lstatSync, readdirSync, statfsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
-import { branchExists, runGit, runGitRaw, worktreePath } from "../git/git.js";
-import type { VladConfig } from "../kb/index.js";
+import { branchExists, runGit, runGitRaw, samePath, worktreePath } from "../git/git.js";
+import { withKbLockSync, type VladConfig } from "../kb/index.js";
 import { listProjects } from "../projects/store.js";
 import { defaultProbe, type LivenessProbe } from "./liveness.js";
 import { unmergedCommits } from "./launch-core.js";
 import { cleanupTask, integrationWorktrees, projectPath, remoteMachineOf } from "./launch.js";
-import { listTasks, type Task } from "./store.js";
+import { getTask, listTasks, type Task } from "./store.js";
 
 /**
  * F-vlad-375: finished tasks left their worktrees behind (APK builds ~6.6 GB each) and the disk filled up.
@@ -26,7 +26,11 @@ export type MergedItem = {
   removed?: boolean;
   error?: string;
 };
-export type MergedResult = { dryRun: boolean; items: MergedItem[]; removed: number; errors: number; candidateBytes: number; freedBytes: number };
+export type MergedResult = {
+  dryRun: boolean; items: MergedItem[]; removed: number; errors: number; candidateBytes: number; freedBytes: number;
+  /** the judging time budget ran out: tasks after the cut-off were not looked at */
+  truncated?: boolean;
+};
 export type MergedOpts = {
   dryRun: boolean;
   project?: string;
@@ -35,8 +39,12 @@ export type MergedOpts = {
   closeWorker?: (taskId: string) => void;
   /** test seam: the real removal */
   cleanup?: (id: string) => void;
-  /** time budget (ms) for size estimation across the whole run; the numbers are approximate */
+  /** time budget (ms) for size estimation across the whole run; the numbers are approximate (default 8 s) */
   sizeBudgetMs?: number;
+  /** time budget (ms) for judging (git calls) across the whole run; the rest stays unjudged and `truncated` is set (default: none) */
+  judgeBudgetMs?: number;
+  /** test seam: platform whose path style a recorded worktree must match */
+  platform?: NodeJS.Platform;
 };
 
 /** Only VLAD's own `.remember` folder (recreated by the remember plugin) does not count as uncommitted work. */
@@ -71,8 +79,11 @@ function dirBytes(dir: string, deadline: number): number {
 
 type Target = { repo: string; branch: string; worktree: string };
 
+// Drive-letter or UNC path (a Windows worktree); anything else is POSIX-style (same rule as markSilentWorkers, F-vlad-195).
+const isWindowsPath = (p: string): boolean => /^([A-Za-z]:[\\/]|\\\\)/.test(p);
+
 /** Worktrees to remove for the task and the reason it must stay; `null` reason = eligible. */
-function judge(t: Task, cfg: VladConfig, probe: Pick<LivenessProbe, "alive">): { targets: Target[]; reason: string | null } {
+function judge(t: Task, cfg: VladConfig, probe: Pick<LivenessProbe, "alive">, platform: NodeJS.Platform): { targets: Target[]; reason: string | null } {
   const id = t.data.id;
   if (remoteMachineOf(t, cfg)) return { targets: [], reason: "uzak makinede (bu makinede worktree yok)" };
   let repo: string;
@@ -80,9 +91,13 @@ function judge(t: Task, cfg: VladConfig, probe: Pick<LivenessProbe, "alive">): {
   if (!existsSync(repo)) return { targets: [], reason: "proje deposu bulunamadı" };
   const branch = `vlad/${id}`;
   const targets: Target[] = [];
+  // a recorded path of another OS (kb shared between machines) says nothing about this disk: never judge or clear it here
+  if (t.data.worktree && isWindowsPath(t.data.worktree) !== (platform === "win32")) return { targets: [], reason: "worktree başka işletim sisteminin yolu (bu makinede değil)" };
   if (t.data.kind === "pipeline") {
     // the pipeline's integration worktrees (one per project its phases ran in); all of them must have reached their main branch
     for (const w of integrationWorktrees(id, cfg)) targets.push({ repo: w.repo, branch: w.branch, worktree: w.worktree });
+    // the recorded folder is removed too (worktreeDir may have changed since the launch): it goes through the same checks
+    if (t.data.worktree && !targets.some((w) => samePath(w.worktree, t.data.worktree!))) targets.push({ repo, branch, worktree: t.data.worktree });
     const live = targets.filter((w) => existsSync(w.worktree));
     if (!t.data.worktree && !live.length) return { targets: [], reason: "worktree yok" };
     for (const w of live) {
@@ -114,6 +129,8 @@ function judge(t: Task, cfg: VladConfig, probe: Pick<LivenessProbe, "alive">): {
     if (alive) return { targets: [], reason: "çalışan penceresi açık" };
   }
   for (const w of live) {
+    // the folder may sit on another branch or a detached HEAD: its commits are not on `vlad/<id>` and would survive only in the reflog
+    if (runGit(w.worktree, ["symbolic-ref", "-q", "HEAD"]) !== `refs/heads/${w.branch}`) return { targets: [], reason: `worktree ${w.branch} dalında değil (başka dal ya da ayrık HEAD): ${w.worktree}` };
     const d = dirtyEntries(w.worktree);
     if (d === null) return { targets: [], reason: `git durumu okunamadı: ${w.worktree}` };
     if (d.length) return { targets: [], reason: `kirli: ${d.length} commit'lenmemiş değişiklik (${w.worktree})` };
@@ -123,16 +140,20 @@ function judge(t: Task, cfg: VladConfig, probe: Pick<LivenessProbe, "alive">): {
 
 export function cleanupMerged(cfg: VladConfig, o: MergedOpts): MergedResult {
   const probe = o.probe ?? defaultProbe();
-  const deadline = Date.now() + (o.sizeBudgetMs ?? 20_000);
+  const platform = o.platform ?? process.platform;
+  const deadline = Date.now() + (o.sizeBudgetMs ?? 8_000);
+  const judgeDeadline = o.judgeBudgetMs ? Date.now() + o.judgeBudgetMs : Infinity;
+  let truncated = false;
   const cleanup = o.cleanup ?? ((id: string) => cleanupTask(id, { cfg, ...(o.closeWorker ? { closeWorker: o.closeWorker } : {}) }));
   const items: MergedItem[] = [];
   const tasks = listTasks({ state: ["done", "cancelled"], ...(o.project ? { project: o.project } : {}) });
   for (const t of tasks.sort((a, b) => a.data.id.localeCompare(b.data.id))) {
+    if (Date.now() > judgeDeadline) { truncated = true; break; }
     const wt = t.data.worktree;
     // a pipeline can have integration worktrees even when its own `worktree` is empty
     if (!wt && t.data.kind !== "pipeline") continue;
     const base = { id: t.data.id, project: t.data.project, worktree: wt ?? "" };
-    const j = judge(t, cfg, probe);
+    const j = judge(t, cfg, probe, platform);
     if (j.reason !== null) {
       if (j.reason === "worktree yok") continue;
       items.push({ ...base, action: "skip", reason: j.reason });
@@ -145,12 +166,20 @@ export function cleanupMerged(cfg: VladConfig, o: MergedOpts): MergedResult {
   if (!o.dryRun) {
     for (const it of items.filter((i) => i.action === "remove")) {
       try {
-        cleanup(it.id);
+        // under the kb lock, per item: the task may have been resumed or changed since the scan, so judge again right before removing
+        const again = withKbLockSync(() => {
+          const fresh = getTask(it.id);
+          const j = fresh.data.state === "done" || fresh.data.state === "cancelled" ? judge(fresh, cfg, probe, platform) : { targets: [], reason: `görev ${fresh.data.state}` };
+          if (j.reason !== null) return j.reason;
+          cleanup(it.id);
+          return null;
+        });
+        if (again !== null) { it.action = "skip"; it.reason = `taramadan sonra değişti: ${again}`; continue; }
         it.removed = true; removed++; freedBytes += it.bytes ?? 0;
       } catch (e) { it.error = (e as Error).message; errors++; }
     }
   }
-  return { dryRun: o.dryRun, items, removed, errors, candidateBytes, freedBytes };
+  return { dryRun: o.dryRun, items, removed, errors, candidateBytes, freedBytes, ...(truncated ? { truncated } : {}) };
 }
 
 export const gb = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GB`;
@@ -161,6 +190,8 @@ export const DEFAULT_MIN_FREE_DISK_GB = 20;
 export type DiskWarning = {
   freeGb: number; thresholdGb: number; root: string;
   cleanable: { count: number; bytes: number };
+  /** false: the candidate scan was skipped or cut short, `cleanable` is a lower bound (or empty) */
+  scanned: boolean;
   text: string;
 };
 
@@ -195,7 +226,7 @@ function worktreeRoots(cfg: VladConfig): string[] {
  */
 export function diskWarning(
   cfg: VladConfig,
-  o: { freeBytes?: (dir: string) => number | null; probe?: Pick<LivenessProbe, "alive">; project?: string } = {},
+  o: { freeBytes?: (dir: string) => number | null; probe?: Pick<LivenessProbe, "alive">; project?: string; /** false (SessionStart hook): no git scan, only the free space */ scan?: boolean; scanBudgetMs?: number } = {},
 ): DiskWarning | null {
   const thresholdGb = cfg.minFreeDiskGb ?? DEFAULT_MIN_FREE_DISK_GB;
   const free = o.freeBytes ?? volumeFreeBytes;
@@ -205,13 +236,18 @@ export function diskWarning(
     if (b !== null && (!worst || b < worst.bytes)) worst = { root, bytes: b };
   }
   if (!worst || worst.bytes >= thresholdGb * 1024 ** 3) return null;
-  let count = 0, bytes = 0;
-  try {
-    const r = cleanupMerged(cfg, { dryRun: true, ...(o.probe ? { probe: o.probe } : {}), ...(o.project ? { project: o.project } : {}), sizeBudgetMs: 3000 });
-    for (const i of r.items) if (i.action === "remove") { count++; bytes += i.bytes ?? 0; }
-  } catch { /* the warning itself matters more than the estimate */ }
+  let count = 0, bytes = 0, scanned = false;
+  if (o.scan !== false) {
+    try {
+      const r = cleanupMerged(cfg, { dryRun: true, ...(o.probe ? { probe: o.probe } : {}), ...(o.project ? { project: o.project } : {}), sizeBudgetMs: 2000, judgeBudgetMs: o.scanBudgetMs ?? 4000 });
+      for (const i of r.items) if (i.action === "remove") { count++; bytes += i.bytes ?? 0; }
+      scanned = !r.truncated;
+    } catch { /* the warning itself matters more than the estimate */ }
+  }
   const freeGb = worst.bytes / 1024 ** 3;
   const text = `disk boş alanı ${freeGb.toFixed(1)} GB (eşik ${thresholdGb} GB; ${worst.root}); ` +
-    (count ? `temizlenebilir ${count} worktree (~${humanBytes(bytes)}): \`vlad task cleanup --merged\`` : "temizlenebilir (merge edilmiş) worktree yok");
-  return { freeGb, thresholdGb, root: worst.root, cleanable: { count, bytes }, text };
+    (count ? `temizlenebilir ${scanned ? "" : "en az "}${count} worktree (~${humanBytes(bytes)}): \`vlad task cleanup --merged\``
+      : scanned ? "temizlenebilir (merge edilmiş) worktree yok"
+      : "temizlenebilir worktree için `vlad task cleanup --merged --dry-run` çalıştır");
+  return { freeGb, thresholdGb, root: worst.root, cleanable: { count, bytes }, scanned, text };
 }

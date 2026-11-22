@@ -120,6 +120,59 @@ describe("cleanupMerged (F-vlad-375)", () => {
     expect(existsSync(a.wt)).toBe(true);
   });
 
+  it("worktree başka dalda ya da ayrık HEAD'de ise (vlad dalı merge edilmiş olsa da) atlanır: commit'ler yalnız reflog'da kalmasın", () => {
+    const a = mk("done", { commit: true, merge: true });
+    git(a.wt, "checkout", "-q", "--detach");
+    writeFileSync(join(a.wt, "kayip.txt"), "x"); git(a.wt, "add", "."); git(a.wt, "commit", "-q", "-m", "ayrik iş");
+    const r = cleanupMerged(cfg, opts());
+    expect(item(r, a.id).action).toBe("skip");
+    expect(item(r, a.id).reason).toMatch(/dalında değil|ayrık/);
+    expect(existsSync(a.wt)).toBe(true);
+    const b = mk("done", { commit: true, merge: true });
+    git(b.wt, "checkout", "-q", "-b", "baska");
+    expect(item(cleanupMerged(cfg, opts({ dryRun: true })), b.id).action).toBe("skip");
+  });
+
+  it("kb'de başka işletim sisteminin yolu kayıtlıysa (Windows yolu, POSIX makine) atlanır, kayıt silinmez", () => {
+    const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "## Tanım\nx\n" });
+    const r0 = getTask(t.data.id); r0.data.state = "done"; r0.data.worktree = "C:\\dev\\alpha-wt\\" + t.data.id; saveTask(r0);
+    const r = cleanupMerged(cfg, opts({ platform: "darwin" }));
+    expect(item(r, t.data.id).action).toBe("skip");
+    expect(item(r, t.data.id).reason).toMatch(/işletim sistemi/);
+    expect(getTask(t.data.id).data.worktree).toBe("C:\\dev\\alpha-wt\\" + t.data.id);
+  });
+
+  it("çatının kayıtlı worktree'si hesaplanan yoldan farklıysa o da denetlenir (kirliyse dokunulmaz)", () => {
+    const pipe = createTask({ project: "alpha", title: "p", kind: "pipeline", body: "## Tanım\nx\n" });
+    const pid = pipe.data.id;
+    const alt = join(base, "eski-wt", pid);
+    git(repo, "worktree", "add", "-b", `vlad/${pid}`, alt, "main");
+    writeFileSync(join(alt, "scratch.txt"), "dirty");
+    const pr = getTask(pid); pr.data.state = "done"; pr.data.worktree = alt; saveTask(pr);
+    const r = cleanupMerged(cfg, opts());
+    expect(item(r, pid).action).toBe("skip");
+    expect(item(r, pid).reason).toMatch(/kirli/);
+    expect(existsSync(alt)).toBe(true);
+  });
+
+  it("taramadan sonra görev yeniden başlatılmışsa (running) silme anında yeniden doğrulanır ve atlanır", () => {
+    const a = mk("done", { commit: true, merge: true });
+    let calls = 0;
+    const probe = { alive: () => { if (++calls === 1) { const t = getTask(a.id); t.data.state = "running"; saveTask(t); } return false; } };
+    const r = cleanupMerged(cfg, opts({ probe }));
+    expect(item(r, a.id).action).toBe("skip");
+    expect(item(r, a.id).reason).toMatch(/taramadan sonra değişti/);
+    expect(existsSync(a.wt)).toBe(true);
+    expect(r.removed).toBe(0);
+  });
+
+  it("yargı zaman bütçesi dolarsa tarama yarıda kalır ve truncated işaretlenir", () => {
+    mk("done", { commit: true, merge: true });
+    mk("done", { commit: true, merge: true });
+    const r = cleanupMerged(cfg, opts({ dryRun: true, judgeBudgetMs: 1, probe: { alive: () => { const t = Date.now(); while (Date.now() - t < 5); return false; } } }));
+    expect(r.truncated).toBe(true);
+  });
+
   it("running görev listeye girmez, worktree'sine dokunulmaz", () => {
     const a = mk("running", { commit: true, merge: true });
     const r = cleanupMerged(cfg, opts());
@@ -219,6 +272,13 @@ describe("diskWarning (F-vlad-375)", () => {
   it("eşik vlad.config.json'daki minFreeDiskGb ile ayarlanır", () => {
     expect(diskWarning({ ...cfg, minFreeDiskGb: 2 }, { freeBytes: () => 5 * GB })).toBeNull();
     expect(diskWarning({ ...cfg, minFreeDiskGb: 10 }, { freeBytes: () => 5 * GB })).not.toBeNull();
+  });
+  it("scan:false (SessionStart hook): git taraması yok, yalnız boş alan; dry-run önerisi yazılır", () => {
+    mk("done", { commit: true, merge: true });
+    const w = diskWarning(cfg, { freeBytes: () => 5 * GB, scan: false });
+    expect(w!.scanned).toBe(false);
+    expect(w!.cleanable.count).toBe(0);
+    expect(w!.text).toMatch(/task cleanup --merged --dry-run/);
   });
   it("boş alan okunamazsa (null) uyarı yok", () => {
     expect(diskWarning(cfg, { freeBytes: () => null })).toBeNull();

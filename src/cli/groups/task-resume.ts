@@ -112,7 +112,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
       // F-vlad-375: toplu temizlik; --dry-run hiçbir şeye dokunmaz (kb dahil)
       if (id) throw new Error("--merged ile görev ID'si verilmez");
       const run = () => cleanupMerged(cfg0, { dryRun: !!o.dryRun, ...(o.project ? { project: o.project } : {}), closeWorker: closeWorkerWindow });
-      const r = o.dryRun ? run() : await withKbLock(run);
+      const r = run(); // kb kilidi yalnız silme anında, öğe başına (cleanupMerged içinde)
       const label = (i: MergedResult["items"][number]) =>
         i.action === "skip" ? `atlandı: ${i.id}: ${i.reason}`
           : i.removed ? `kaldırıldı: ${i.id} (~${humanBytes(i.bytes ?? 0)})`
