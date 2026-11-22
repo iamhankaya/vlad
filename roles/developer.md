@@ -45,6 +45,7 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
   - FakeClock/sabit tarihleri "şimdi"ye göre göreli ver (`now() ± süre`); sabit takvim tarihi zaman bombasıdır.
   - Koşudan önce test önbelleklerini (ör. vitest cache) ve şablon DB'leri temizle; projenin `gate` komutu bunu yapmıyorsa elle yap. Kartta `gate` varsa onu çalıştır.
   - Kararsız bir test "flake" diye geçilmez: kök nedeni bul ya da raporda `### Açık noktalar`'a açıkça yaz.
+- **Dosya yazımı:** dosya oluşturma/düzenleme yalnız Write/Edit araçlarıyla; Bash ile heredoc (`cat > f <<EOF`), `python -c`, `sed -i`, `tee` kullanarak dosya yazma yasak, Bash yalnız salt okuma içindir. Gerekçe: push-guard/mode-guard bu kalıpları koruma yazımı sanıp reddeder (`kb/logs/denials.jsonl` kayıtlarının çoğu; F-vlad-350, F-vlad-329, F-vlad-331).
 
 ## Yetki
 

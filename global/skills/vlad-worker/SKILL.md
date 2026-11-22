@@ -30,6 +30,8 @@ Sen VLAD'ın devrettiği tek bir görev üzerinde çalışan bir session'sın. K
 - `autonomy: plan` → Yalnızca plan yaz, kod yazma. Planı `vlad task report` ile onaya sun (adım 6) ve dur.
 - `autonomy: commit` / `pr` → Mevcut iş akışını kullan: brainstorming/plan → TDD → review. Kabul kriterlerinin her birini karşıla.
 
+**Dosya yazımı:** dosya oluşturma/düzenleme yalnız Write/Edit araçlarıyla; Bash ile heredoc (`cat > f <<EOF`), `python -c`, `sed -i`, `tee` kullanarak dosya yazma yasak, Bash yalnız salt okuma içindir. Gerekçe: push-guard/mode-guard bu kalıpları koruma yazımı sanıp reddeder (`kb/logs/denials.jsonl` kayıtlarının çoğu; F-vlad-350, F-vlad-329, F-vlad-331).
+
 ## Kısa yazım
 
 Düz metinde (ilerleme notları, sorular, rapor gövdesi) kısa ve somut yaz; dolgu, selam ve tekrar yok. Kapanış raporunda ise başlıklar, ID'ler, komutlar, sayılar ve **kararların gerekçesi** olduğu gibi kalır: VLAD `/digest` bunlardan karar ve bulgu çıkarır, kısaltma bunları silmemeli.
