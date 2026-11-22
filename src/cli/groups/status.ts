@@ -13,6 +13,7 @@ import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 import { approverServiceWarning } from "../../approver/health.js";
 import { countNotices, defaultNotifyDir, listNotices } from "../../monitor/notify.js";
+import { uncommittedTaskIds } from "../../tasks/worker-dirty.js";
 
 /** F-vlad-368: config'teki kendi Agent adresi bu makinede yoksa (DHCP) uyarı metni; okunamazsa sessizce null. */
 function agentAddressNote(): string | null {
@@ -28,11 +29,14 @@ function safeDiskWarning(hook: boolean): DiskWarning | null {
 }
 
 /** Monitor bildirim kuyruğu özeti; okunamazsa sessizce 0 (açılış özetini asla düşürme). */
-function monitorNotices(): { count: number; items: { task: string; kind: string }[] } {
+function monitorNotices(): { count: number; items: { task: string; kind: string }[]; uncommitted: number } {
   try {
     const dir = defaultNotifyDir();
-    return { count: countNotices(dir), items: listNotices(dir, { limit: 3 }).map((x) => ({ task: x.task, kind: x.kind })) };
-  } catch { return { count: 0, items: [] }; }
+    const count = countNotices(dir);
+    // F-vlad-357: monitor pull commits nothing; remind VLAD when notice tasks are still uncommitted in the kb
+    const uncommitted = count ? uncommittedTaskIds(listNotices(dir, { limit: 200 }).map((x) => x.task)).length : 0;
+    return { count, items: listNotices(dir, { limit: 3 }).map((x) => ({ task: x.task, kind: x.kind })), uncommitted };
+  } catch { return { count: 0, items: [], uncommitted: 0 }; }
 }
 
 export function registerStatus(program: Command, k: Kit): void {
@@ -56,6 +60,7 @@ export function registerStatus(program: Command, k: Kit): void {
         (s.openSevereFindings ? `, ${s.openSevereFindings} açık kritik/yüksek bulgu` : "") +
         (s.kbLint.count ? `, ${s.kbLint.count} kb çelişkisi${lintStale ? " (lint önbelleği eski)" : lintAgeNote(s.kbLint)}` : lintStale ? ", kb lint önbelleği eski" : "") +
         (mn.count ? `, ${mn.count} monitor bildirimi (${mn.items.map((x) => x.task).join(", ")}${mn.count > mn.items.length ? ", …" : ""})` : "") +
+        (mn.uncommitted ? `, ${mn.uncommitted} monitor görevi kb'de commit bekliyor (vlad kb commit --push)` : "") +
         (s.kbDirty ? `; UYARI: ${s.kbDirty.message}` : "") +
         (approverWarn ? `; UYARI: ${approverWarn}` : "") +
         (addrWarn ? `; UYARI: ${addrWarn}` : "") +
