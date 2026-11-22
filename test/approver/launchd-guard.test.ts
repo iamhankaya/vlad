@@ -52,6 +52,10 @@ describe("launchd koruması (test ortamı)", () => {
     expect(() => assertTestSafeLaunchd({ plistDir: join(link, "sub"), injected: true, realDir: fakeReal })).toThrow(/gerçek/);
     expect(() => assertTestSafeLaunchd({ plistDir: join(tmp(), "LA2"), injected: true, realDir: fakeReal })).not.toThrow();
   });
+  // K1: realDir ek kontroldür; verilse bile gerçek ~/Library/LaunchAgents hâlâ reddedilir
+  it("guard: realDir verilse de gerçek LaunchAgents reddedilmeye devam eder (varsayılanın yerine geçmez)", () => {
+    expect(() => assertTestSafeLaunchd({ plistDir: realLaunchAgentsDir(), injected: true, realDir: join(tmp(), "baska") })).toThrow(/gerçek/);
+  });
   it("approver: sahte launchctl verilmeden (gerçek launchctl) kurulum test ortamında reddedilir", async () => {
     await expect(createLaunchdInstaller({ plistDir: join(tmp(), "LA") }).install(ctx)).rejects.toThrow(/launchctl/);
   });

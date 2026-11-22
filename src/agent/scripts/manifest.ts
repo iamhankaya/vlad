@@ -42,7 +42,7 @@ export function hasRiskyQuantifiedGroup(p: string): boolean {
     let q: { len: number; unbounded: boolean; optional: boolean } | null = null;
     if (c === "+" || c === "*") q = { len: 1, unbounded: true, optional: false };
     else if (c === "?") q = { len: 1, unbounded: false, optional: true };
-    else if (c === "{") { const m = /^\{(\d+)(,(\d*))?\}/.exec(p.slice(i)); if (m) q = { len: m[0].length, unbounded: m[2] !== undefined && m[3] === "", optional: false }; } // `{n}`/`{n,m}` sınırlı
+    else if (c === "{") { const m = /^\{(\d+)(,(\d*))?\}/.exec(p.slice(i)); if (m) { const max = m[2] === undefined ? Number(m[1]) : m[3] === "" ? Infinity : Number(m[3]); q = { len: m[0].length, unbounded: max > 1, optional: false }; } } // yalnız en çok 1 tekrar ({1}, {0,1}) güvenli; {n}/{n,m} (>1) üstel olabilir (K1)
     if (q && (p[i + q.len] === "?" || p[i + q.len] === "+")) q.len++; // lazy / possessive suffix
     return q;
   };
