@@ -134,8 +134,11 @@ export const hooksPart: SetupPart = {
     // Bağlı worktree'nin yolu hook'a gömülürse worktree silinince hook kırılır: yalnız ana çalışma kopyasından kurulur.
     if (existsSync(join(c.vladHome, ".git")) && statSync(join(c.vladHome, ".git")).isFile()) return result("hooks", [{ kind: "print", what: "VLAD kökü bir git worktree'si: SessionEnd hook'u yazılmadı (yolu worktree'ye gömülür); setup'ı ana çalışma kopyasından çalıştırın" }]);
     if (st === "çakışan") return result("hooks", [{ kind: "skip", what: "SessionEnd hook'u farklı timeout ile kayıtlı: değiştirilmedi (çakışan)", target: settingsPath(c) }]);
+    // F-vlad-304: yaşayan bir hook zaten varsa ölüler yalnız silinir; "yeniden yazıldı" yanıltıcı olur
+    const hasLive = (s.data?.hooks?.SessionEnd ?? []).flatMap((e: any) => (Array.isArray(e?.hooks) ? e.hooks : [])).some((h: any) => h?.command === cmd || (isSessionReportHook(h?.command) && !isDeadSessionReportHook(h.command)));
+    const what = st !== "eski" ? `SessionEnd hook ekle: ${cmd}` : hasLive ? "ölü yollu SessionEnd hook'ları temizlendi (yaşayan hook korundu)" : `ölü yollu SessionEnd hook'u yeniden yazıldı: ${cmd}`;
     const r = updateJson(c, settingsPath(c), (d) => mergeSessionEndHook(d, cmd));
-    return result("hooks", [{ kind: "write", what: st === "eski" ? `ölü yollu SessionEnd hook'u yeniden yazıldı: ${cmd}` : `SessionEnd hook ekle: ${cmd}`, target: settingsPath(c) }], r.backup ? [r.backup] : []);
+    return result("hooks", [{ kind: "write", what, target: settingsPath(c) }], r.backup ? [r.backup] : []);
   },
   async uninstall(c) {
     const cmd = hookCommand(c.vladHome);

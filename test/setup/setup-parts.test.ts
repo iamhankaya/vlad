@@ -552,8 +552,12 @@ describe("ölü yollu SessionEnd hook'u (son kapı tur 2 P1)", () => {
   it("ölü + yaşayan hook birlikteyse ölü atılır, ikinci hook eklenmez", async () => {
     const live = `node "${join(vladHome, "dist", "hooks", "session-report.js")}"`;
     w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }, { type: "command", command: live, timeout: 60 }] }] } }));
-    await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
     expect(ends()).toEqual([live]);
+    // F-vlad-304: yaşayan hook varken yalnız ölüler silindi; "yeniden yazıldı" denmez
+    const what = rs[0]!.actions.map((a) => a.what).join("\n");
+    expect(what).toMatch(/temizlendi/);
+    expect(what).not.toMatch(/yeniden yazıldı/);
   });
   it("--uninstall ölü yollu hook'u da kaldırır", async () => {
     w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }] }] } }));
