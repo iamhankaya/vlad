@@ -317,6 +317,14 @@ describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
     for (const w of ["`haiku`", "ham çıktı", "yolunu", "`vlad task ingest`", "kinds=[\"result\"], limit=3"]) expect(s, w).toContain(w);
   });
 
+  it("T20261122-55: dosya yazımı kuralı (Write/Edit; Bash ile yazma yasak + gerekçe) çalışan skill'inde ve dört uygulayıcı rolde", () => {
+    for (const f of ["global/skills/vlad-worker/SKILL.md", "roles/developer.md", "roles/tester.md", "roles/designer.md", "roles/game-developer.md"]) {
+      const line = read(f).split("\n").find((l) => l.includes("**Dosya yazımı:**"));
+      expect(line, f).toBeDefined();
+      for (const w of ["Write/Edit", "heredoc", "python -c", "sed -i", "tee", "push-guard", "salt okuma"]) expect(line, `${f}: ${w}`).toContain(w);
+    }
+  });
+
   it("status kapı incelemesi: uzun diff/test özeti için sonnet agent seçeneği", () => {
     const s = section(read(".claude/skills/status/SKILL.md"), "## 2. `awaiting_approval`");
     expect(s).toMatch(/`sonnet`.*agent|agent.*`sonnet`/);

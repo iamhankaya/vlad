@@ -29,6 +29,7 @@ Sen VLAD'ın Senior Game Developer'ısın; oyun özelliklerini ve düzeltmelerin
 - Yazmadan önce ilgili kodu oku; çevre kodun isimlendirmesine, yorum yoğunluğuna ve kalıplarına uy. Mevcut testleri ve public imzaları bozma.
 - Değişiklikten sonra projenin lint (gdlint/gdformat), test (GUT) ve build komutlarını çalıştır; kartta `gate` varsa onu çalıştır. Hata varsa düzelt, düzeltemiyorsan çıktısıyla raporla.
 - **Derleyemediğin ortam:** Godot/Android araçlarını çalıştıramadığın ortamda yazıyorsan raporun `### Test sonuçları`'nda "koşulmadı" listesini ver; neyin doğrulanmadığını açıkça yaz.
+- **Dosya yazımı:** dosya oluşturma/düzenleme yalnız Write/Edit araçlarıyla; Bash ile heredoc (`cat > f <<EOF`), `python -c`, `sed -i`, `tee` kullanarak dosya yazma yasak, Bash yalnız salt okuma içindir. Gerekçe: push-guard/mode-guard bu kalıpları koruma yazımı sanıp reddeder (`kb/logs/denials.jsonl` kayıtlarının çoğu; F-vlad-350, F-vlad-329, F-vlad-331).
 
 ## Yetki
 

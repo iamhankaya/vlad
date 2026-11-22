@@ -11,7 +11,7 @@ import { brainTransport, makeRemote } from "../../machines/remote.js";
 import { selfName } from "../../fleet/state.js";
 import { AgentClient } from "../../agent/client.js";
 import type { LaunchMode, LaunchResult, Launcher } from "../../launcher/index.js";
-import { TRANSITIONS, answerTask, denyTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, unknownTaskRefs, unmetDependencies, createPipeline } from "../../tasks/index.js";
+import { TRANSITIONS, answerTask, denyTask, askTask, cancelTask, createTask, launchTask, releaseTask, releaseWarning, repinPipeline, eventList, ingestEvents, logTask, pageWarnings, parseEvents, prepareCloudLaunch, reportReferencesPrior, reportTask, setDependencies, setState, uiAuditWarning, unknownTaskRefs, unmetDependencies, createPipeline } from "../../tasks/index.js";
 import { registerTaskResume } from "./task-resume.js";
 import { registerTaskGate } from "./task-gate.js";
 import { registerTaskClose } from "./task-close.js";
@@ -200,6 +200,8 @@ export function registerTask(program: Command, k: Kit): void {
       ? ["rapor önceki rapora atıf içeriyor (yerine geçer / üstüne ekler / aynen geçerli); tam metin olmalı. Önceki rapor '## Önceki raporlar'da saklandı"]
       : [];
     warnings.push(...closedFindingWarnings(md));
+    const uiWarning = uiAuditWarning({ role: t.data.role, body: t.body }, md);
+    if (uiWarning) warnings.push(uiWarning);
     out(o, { id, state: t.data.state, warnings }, [`${id} -> ${t.data.state}`, ...warnings.map((w) => `uyarı: ${w}`)].join("\n"));
   }).requiredOption("--file <md>", "rapor dosyası (- = stdin)");
   def(task, "set <id> <state>", "Durum makinesine uygun geçiş", (id: string, state: string, o: Opts) => {

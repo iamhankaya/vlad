@@ -380,8 +380,36 @@ describe("auditSetup", () => {
     const b = task({ at: "2026-10-29", progress: [L("PowerShell", "powershell  -File build.ps1 — neden")] });
     task({ at: "2026-10-29", progress: [L("Bash", "git push origin vlad/x")] });
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
-    expect(r.permission_candidates).toEqual([{ tool: "PowerShell", pattern: "powershell -File build.ps1", tasks: 2, count: 3, examples: [a, b] }]);
+    expect(r.permission_candidates).toEqual([{ tool: "PowerShell", pattern: "powershell", tasks: 2, count: 3, examples: [a, b], samples: ["powershell -File build.ps1"] }]);
     expect(r.signals.izin_reddi.count).toBe(4); // [İZİN] lines also count as the friction signal
+  });
+
+  it("groups denials by class, not full text: different heredoc writes in 2 tasks are one candidate (T20261122-55)", () => {
+    const L = (tool: string, pat: string) => `- 2026-10-29T10:00:00+03:00 [İZİN] ${tool}: ${pat}`;
+    const a = task({ at: "2026-10-29", progress: [L("Bash", "cat > a.ts <<EOF")] });
+    const b = task({ at: "2026-10-29", progress: [L("Bash", "cat > other/b.md <<'EOF'"), L("Bash", "git push origin vlad/x")] });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.permission_candidates).toEqual([{ tool: "Bash", pattern: "heredoc yazımı", tasks: 2, count: 2, examples: [a, b], samples: ["cat > a.ts <<EOF", "cat > other/b.md <<'EOF'"] }]);
+  });
+
+  it("counts kb/logs/denials.jsonl records of audited tasks that have no [İZİN] line, without double counting (T20261122-55)", () => {
+    const L = (tool: string, pat: string) => `- 2026-10-29T10:00:00+03:00 [İZİN] ${tool}: ${pat}`;
+    const a = task({ at: "2026-10-29", progress: [L("Bash", "sed -i s/a/b/ f")] });
+    const b = task({ at: "2026-10-29" });
+    const rec = (task: string, pattern: string) => JSON.stringify({ at: "2026-10-29T10:00:00+03:00", task, project: "alpha", tool: "Bash", pattern });
+    mkdirSync(kbPaths().logs, { recursive: true });
+    writeFileSync(join(kbPaths().logs, "denials.jsonl"), [rec(a, "sed -i s/a/b/ f"), rec(b, "sed -i s/x/y/ g"), rec("T-outside", "sed -i s/q/r/ h"), "bozuk satır"].join("\n") + "\n");
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.permission_candidates).toMatchObject([{ tool: "Bash", pattern: "sed -i", tasks: 2, count: 2, examples: [a, b] }]);
+  });
+
+  it("repeated identical denials in denials.jsonl (no [İZİN] line) each count (T20261122-55)", () => {
+    const a = task({ at: "2026-10-29" }), b = task({ at: "2026-10-29" });
+    const rec = (t: string) => JSON.stringify({ at: "2026-10-29T10:00:00+03:00", task: t, project: "alpha", tool: "Bash", pattern: "rm -rf x" });
+    mkdirSync(kbPaths().logs, { recursive: true });
+    writeFileSync(join(kbPaths().logs, "denials.jsonl"), [rec(a), rec(a), rec(b)].join("\n") + "\n");
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
+    expect(r.permission_candidates).toMatchObject([{ pattern: "rm", tasks: 2, count: 3 }]);
   });
 
   it("rejects an invalid since", () => {

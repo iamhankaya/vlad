@@ -47,7 +47,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad task deny` — `task deny <id> --tool <araç> --pattern "<komut>" [--reason]`: çalışanın izin reddini kaydeder (`## İlerleme`'ye `[İZİN]` satırı + `kb/logs/denials.jsonl`); `audit setup` tekrarlayanları izin kuralı adayı olarak listeler. _(beyne iletilir; konsol: yazma; --json)_
 - `vlad task ask` — `task ask <id> "<soru>"`: `## Sorular`'a soru yazar, görev `blocked` olur. İşçide beyne iletilir. _(beyne iletilir; konsol: yazma; --json)_
 - `vlad task answer` — `task answer <id> "<cevap>"`: soruya `**Cevap:**` yazar; blocked görevi running'e alır. Rapor açık soruyla yazılıp awaiting_approval'a geçmiş görevde (cevapsız soru varsa) yalnız Cevap yazar, durum awaiting_approval kalır (F-vlad-341). _(işçide reddedilir; konsol: yazma; --json)_
-- `vlad task report` — `task report <id> --file <md>`: kapanış raporunu yazar, görev `awaiting_approval` olur. Rapordaki `### Kapatılan bulgular` satırlarında kısaltılmış/bilinmeyen/kapalı ID için uyarır. İşçide beyne iletilir. _(beyne iletilir; konsol: yazma; --json)_
+- `vlad task report` — `task report <id> --file <md>`: kapanış raporunu yazar, görev `awaiting_approval` olur. Rapordaki `### Kapatılan bulgular` satırlarında kısaltılmış/bilinmeyen/kapalı ID için uyarır; görev `role: developer`/`game-developer` ve gövdesi UI öz-kontrol (ya da `impeccable audit`) istiyorsa ama raporda `impeccable audit:` satırı yoksa da uyarır (`--json`'da `warnings`; rapor yine yazılır). İşçide beyne iletilir. _(beyne iletilir; konsol: yazma; --json)_
 - `vlad task set` — `task set <id> <durum>`: durumu değiştirir (geçersiz geçiş reddedilir). `cancelled` için `--reason "<metin>"` zorunlu (gerekçesiz hata verir); `## İlerleme`'ye `İptal: <metin>` yazılır. `done` sonrası ilgili kart bloğu tazelenir; `done` çıktısı kartın durum özeti bayatsa (ya da yoksa) `summaryStale: true` ve `warnings` verir (özet güncelse `false`, kart okunamazsa alan yok). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task deps` — `task deps <id>`: queued pipeline fazının bağımlılıklarını değiştirir (tam olarak bir mod). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad task resume` — Kesilen (`running`/`stalled`) çalışanı sürdürür. `--external`: aynı alanlarla devam prompt'lu betik; kayıtlı `session_id` varsa `claude --resume <id>`, yoksa worktree'deki tek transcript, o da yoksa taze oturum (`--continue` kullanılmaz); `--model` korunur. Durumu değiştirmez (`stalled` ise önce `task set <id> running`); açık pencereyi kapatmaz, çift çalışan olmasın diye önce `close-window`. _(işçide reddedilir; konsol: yazma; --json)_
@@ -102,7 +102,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 ## audit
 
 - `vlad audit skills` — `audit skills [--since] [--project]`: beklenen/yüklenen/eksik skill denetimi. _(yerel; konsol: okuma; --json)_
-- `vlad audit setup` — `audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. `/setup-audit` kullanır. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad audit setup` — `audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. İzin kuralı adayları (`permission_candidates`) reddedilen komutları ret sınıfına göre gruplar (heredoc yazımı, `git push`, `rm`, gizli dosya yolu, ilk komut sözcüğü…; `kb/logs/denials.jsonl` da kaynak). `/setup-audit` kullanır. _(işçide reddedilir; konsolda yok; --json)_
 
 ## inbox
 

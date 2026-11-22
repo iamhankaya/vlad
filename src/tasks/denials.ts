@@ -26,7 +26,53 @@ export function parseDenyLine(line: string): Denial | null {
   return { tool: m[1].trim(), pattern: oneLine(m[2].replaceAll(ESCAPED_SEP, SEP)), ...(m[3] ? { reason: m[3].trim() } : {}) };
 }
 
-const DENY_WORDS = /[İiIı]zin reddi|reddetti|denied/i;
+const SECRET_PATH = /(?:^|[\s/='"])\.(?:env(?!\.(?:example|sample|template))\b|vlad-secret|ssh\b|aws\b|npmrc)|id_(?:rsa|ed25519)|\.pem\b|\bcredentials\.json\b|[\\/]credentials\b/;
+// tools whose subcommand follows global flags; flags listed here take a value that must not be read as the subcommand
+const SUBCOMMAND_TOOLS: Record<string, Set<string>> = {
+  git: new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace"]),
+  gh: new Set(["-R", "--repo"]),
+  npm: new Set(["--prefix", "-C", "--workspace", "-w"]),
+  docker: new Set(["-H", "--host", "-c", "--context"]),
+  vlad: new Set(),
+};
+
+/**
+ * One class label for a denied command (setup audit groups `permission_candidates` by tool + class instead of full text):
+ * file writes through the shell (heredoc, `python -c`, `sed -i`, `tee`), secret paths, else the first command word
+ * (two words for git/gh/npm/docker/vlad: `git push`). Chained commands (`cd x && git push`) classify by the first
+ * recognized class, falling back to the last command's word.
+ */
+export function classifyDenial(_tool: string, pattern: string): string {
+  const p = pattern;
+  // a heredoc counts only when it feeds a file write (`cat > f <<EOF`, `cat <<EOF > f`); `<<<`, `$((1<<3))` and `$(cat <<EOF)` as a message do not
+  if (/>>?\s*[^\s<>&|]+\s*<<(?!<)-?\s*['"]?\w/.test(p) || /<<(?!<)-?\s*['"]?\w+['"]?\s*>>?\s*[^\s<>&|]/.test(p)) return "heredoc yazımı";
+  if (/\bpython3?\s+-c\b/.test(p)) return "python -c";
+  if (/\bsed\s+(?:-\S+\s+)*(?:-\w*i\w*|--in-place\S*)(?=\s|$)/.test(p)) return "sed -i";
+  if (/\|\s*tee\b|(?:^|[;&]\s*)tee\s/.test(p)) return "tee yazımı";
+  if (SECRET_PATH.test(p)) return "gizli dosya yolu";
+  const segs = oneLine(p).split(/\s*(?:&&|\|\||;|\|)\s*/).filter(Boolean);
+  const words = (seg: string) => seg.split(" ").filter((w) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(w));
+  const first = (seg: string): string => {
+    const w = words(seg);
+    const cmd = (w[0] ?? "").replace(/^.*[\\/]/, "").replace(/\.exe$/i, "").toLowerCase();
+    const valueFlags = SUBCOMMAND_TOOLS[cmd];
+    if (valueFlags) {
+      let sub: string | undefined;
+      for (let i = 1; i < w.length; i++) {
+        if (valueFlags.has(w[i])) { i++; continue; }
+        if (w[i].startsWith("-")) continue;
+        sub = w[i]; break;
+      }
+      return sub ? `${cmd} ${sub}` : cmd;
+    }
+    return cmd;
+  };
+  const named = segs.map(first).filter(Boolean);
+  const hit = named.find((c) => c === "git push" || c === "rm" || c === "git merge" || c === "pkill");
+  return hit ?? named[named.length - 1] ?? "-";
+}
+
+const DENY_WORDS =/[İiIı]zin reddi|reddetti|denied/i;
 /** Stderr hint for `task log` text that reads like a permission denial but was not recorded with `task deny` (audit setup only counts `[İZİN]` lines); null otherwise. */
 export function denyLogHint(msg: string): string | null {
   if (msg.startsWith("[İZİN]") || !DENY_WORDS.test(msg)) return null;
