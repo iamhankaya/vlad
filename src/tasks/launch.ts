@@ -17,7 +17,7 @@ import type { Role } from "../roles/store.js";
 import { applyRemoteStalls, markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe, RemoteStallPlan } from "./liveness.js";
 import {
-  effectiveModel, getTask, listTasks, logTask, markStale, roleFor, saveTask, saveTaskQuiet, setState, syncAutonomy, unmetDependencies,
+  effectiveModel, getTask, listTasks, logInto, logTask, markStale, roleFor, saveTask, saveTaskQuiet, setState, syncAutonomy, unmetDependencies,
 } from "./store.js";
 import type { Task } from "./store.js";
 import { BLOCKS_HEADING, RELATED_FINDINGS_MAX, standardBlocks } from "./blocks.js";
@@ -487,8 +487,8 @@ export async function repinPipeline(id: string, to: string, o: { cfg: VladConfig
     }
     warnings.push(`entegrasyon dalı vlad/${id} ${to} makinesinde olmayabilir; launch origin'den kurar`);
     t.data.machine = to;
+    logInto(t, `Repin: ${from ?? "-"} → ${to}`); // F-vlad-262: pin ve İlerleme satırı tek yazmada; arada çökme satırı eksik bırakamaz
     saveTask(t);
-    logTask(id, `Repin: ${from ?? "-"} → ${to}`);
     return { task: getTask(id), from, warnings };
   });
 }
