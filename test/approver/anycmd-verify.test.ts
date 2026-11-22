@@ -106,7 +106,7 @@ describe("telefon onayı: genel komut uçtan uca (servis + sahte yürütücü)",
     await resultOf(p.id);
     expect(execRun.mock.calls[0]![1]).toMatch(TOKEN_RE);
   });
-  it.fails("onaydan sonra yürütülmeyen sonuç (ctx_changed) 'çalıştırıldı' diye kaydedilmemeli [BUG: yanıltıcı kayıt]", async () => {
+  it("onaydan sonra yürütülmeyen sonuç (ctx_changed) 'çalıştırıldı' diye kaydedilmemeli (F-vlad-359)", async () => {
     start();
     const p = await open(1, ["task", "list"], "task list");
     const other = join(base, "other-home"); mkdirSync(other, { recursive: true });
@@ -115,7 +115,8 @@ describe("telefon onayı: genel komut uçtan uca (servis + sahte yürütücü)",
     const r = await resultOf(p.id);
     expect(r).toMatchObject({ status: "denied", reason: "ctx_changed" });
     expect(execRun).not.toHaveBeenCalled();
-    expect(logText()).not.toMatch(/çalıştırıldı/); // şu an: "çalıştırıldı: … çıkış - (denied)"
+    expect(logText()).not.toMatch(/çalıştırıldı:/);
+    expect(logText()).toMatch(/onaylandı, çalıştırılmadı: \S+ task list .*\(denied: ctx_changed\) argv task list/);
   });
 });
 

@@ -92,10 +92,10 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
   };
 
   // --- sonuçlandırma ---
-  const settle = (p: PendingRecord, r: { status: ResultStatus; exitCode?: number | null; stdout?: string; stderr?: string; reason?: string }, kind: "approve" | "deny" | "expire" | null): void => {
+  const settle = (p: PendingRecord, r: { status: ResultStatus; exitCode?: number | null; stdout?: string; stderr?: string; reason?: string; ran?: boolean }, kind: "approve" | "deny" | "expire" | null): void => {
     const rec: ResultRecord = { v: 1, id: p.id, status: r.status, exitCode: r.exitCode ?? null, stdout: clip(redact(r.stdout ?? "")), stderr: clip(redact(r.stderr ?? "")), ...(r.reason ? { reason: r.reason } : {}), finishedAt: iso(nowMs()), op: p.op, argv: p.argv, requester: p.requester, ...(p.approvedAt ? { approvedAt: p.approvedAt } : {}) };
     try { store.writeResult(rec); } catch (e) { L(`sonuç yazılamadı: ${msg(e)}`); }
-    if (p.approvedAt) L(`çalıştırıldı: ${p.shortId} ${p.op} isteyen ${p.requester} onay ${p.approvedAt} çıkış ${rec.exitCode ?? "-"} (${r.status})`); // her çalıştırma kaydı: isteyen, argv (sonuç dosyasında), onay zamanı, çıkış kodu
+    if (p.approvedAt) L(r.ran ? `çalıştırıldı: ${p.shortId} ${p.op} isteyen ${p.requester} onay ${p.approvedAt} çıkış ${rec.exitCode ?? "-"} (${r.status}) argv ${redact(p.argv.join(" "))}` : `onaylandı, çalıştırılmadı: ${p.shortId} ${p.op} isteyen ${p.requester} onay ${p.approvedAt} (${r.status}: ${r.reason ?? "-"}) argv ${redact(p.argv.join(" "))}`); // F-vlad-359: yalnız spawn edilen sonuç "çalıştırıldı"; her çalıştırma kaydı: isteyen, argv (sonuç dosyasında), onay zamanı, çıkış kodu
     if (kind) { try { recordRate(kind); } catch (e) { L(`hız sınırı yazılamadı: ${msg(e)}`); } }
     try { store.clearPending(); } catch (e) { L(`pending.json silinemedi: ${msg(e)}`); }
     if (cur?.id === p.id) cur = null; // yanıt akışı açık kalır (tekrar oynatma `not_pending` olarak loglanır); yeni istek ya da servis durması kapatır
@@ -104,6 +104,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
 
   // --- yürütme ---
   const execute = async (p: PendingRecord): Promise<void> => {
+    let ran = false;
     try {
       if (!store.markClaim(p.id, "exec")) return settle(p, { status: "interrupted", reason: "yürütme işaretçisi zaten var; çalıştırılmadı" }, "approve");
       if (computeDigest(p) !== p.digest) return settle(p, { status: "denied", reason: "digest_mismatch" }, "approve");
@@ -114,12 +115,13 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
       store.writePending(running_); // yazılamazsa spawn edilmez
       cur = running_;
       const token = PROTECTED_OPS.includes(p.op) ? mintOpToken(p.argv, LIMITS.tokenTtlMs, clock.now()) : ""; // VMT2 yalnız korunan komut kümesinde env'e girer
+      ran = true;
       const r = await executor.run(p.argv, token, p.ctx, { signal });
       const status: ResultStatus = r.aborted ? "interrupted" : r.timedOut ? "failed" : r.exitCode === 0 ? "done" : "failed";
       const reason = r.aborted ? "servis durduruldu" : r.timedOut ? "zaman aşımı" : undefined;
-      settle(p, { status, exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr, ...(reason ? { reason } : {}) }, "approve");
+      settle(p, { status, exitCode: r.exitCode, stdout: r.stdout, stderr: r.stderr, ...(reason ? { reason } : {}), ran: true }, "approve");
     } catch (e) {
-      settle(p, { status: "failed", reason: `yürütme hatası: ${msg(e)}` }, "approve");
+      settle(p, { status: "failed", reason: `yürütme hatası: ${msg(e)}`, ran }, "approve");
     }
   };
 
@@ -217,7 +219,7 @@ export async function runApprover(deps: ApproverDeps): Promise<void> {
     if (done) { store.clearPending(); return; }
     const execStarted = store.hasClaim(p.id, "exec");
     if (p.status === "approved" || p.status === "executing" || execStarted) {
-      return settle(p, { status: "interrupted", reason: execStarted ? "servis yeniden başladı; sonuç bilinmiyor, terminalde `vlad mode status` ile doğrula" : "servis yeniden başladı; çalıştırılmadı" }, "approve");
+      return settle(p, { status: "interrupted", reason: execStarted ? "servis yeniden başladı; sonuç bilinmiyor, terminalde `vlad mode status` ile doğrula" : "servis yeniden başladı; çalıştırılmadı", ran: execStarted }, "approve");
     }
     if (p.status === "denied") return settle(p, { status: "denied", reason: "reddedildi" }, "deny");
     if (p.status === "expired" || !(nowMs() < Date.parse(p.expiresAt))) return settle(p, { status: "expired", reason: "süre doldu" }, "expire");
