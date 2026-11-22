@@ -421,10 +421,10 @@ export function createXferReceiver(d: XferDeps): XferReceiver {
       const run = beginChain.then(async () => { // begin ile yarışmasın: silmeden hemen önce yeniden kontrol
         if ([...active.values()].some((x) => x.id === e.name)) return false;
         const meta = await readMeta(stage);
-        if (!meta) { // meta.json yazılmadan çökme: yalnız boş/`tree`'li aşama, mtime eskiyse süpürülür (yabancı içeriğe dokunulmaz)
+        if (!meta) { // meta.json yazılmadan çökme ya da bozuk meta.json (F-vlad-288): yalnız boş/`tree`/`meta.json`'lu aşama, mtime eskiyse süpürülür (yabancı içeriğe dokunulmaz)
           const names = await fsp.readdir(stage).catch(() => ["?"]);
           const st = await fsp.lstat(stage).catch(() => null);
-          if (!st || !names.every((n) => n === "tree") || d.now() - st.mtimeMs <= XFER_STALE_MS) return false;
+          if (!st || !names.every((n) => n === "tree" || n === "meta.json") || d.now() - st.mtimeMs <= XFER_STALE_MS) return false;
           await rmStage(stage); return true;
         }
         if (typeof meta.createdAt !== "number" || d.now() - meta.createdAt <= XFER_STALE_MS) return false;
