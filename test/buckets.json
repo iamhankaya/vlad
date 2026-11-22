@@ -197,6 +197,8 @@
     "test/tasks/experiment.test.ts",
     "test/tasks/pipeline-cli.test.ts",
     "test/tasks/launch.test.ts",
+    "test/tasks/cleanup-merged-cli.test.ts",
+    "test/tasks/cleanup-merged.test.ts",
     "test/tasks/worktree-prune.test.ts",
     "test/tasks/resume-window.test.ts",
     "test/tasks/resume.test.ts",

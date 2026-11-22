@@ -165,6 +165,8 @@ export interface VladConfig {
   staleAfterHours: number;
   /** Minutes without a task-file update or transcript write before a local worker counts as silent (default 15). */
   workerSilentMinutes?: number;
+  /** Free space (GB) of the worktree volume below which `vlad status` and the SessionStart summary warn (F-vlad-375); default 20. */
+  minFreeDiskGb?: number;
   /** Max simultaneously `running` dev workers (all projects); absent → unlimited. */
   maxParallel?: number;
   launcher: Launcher;

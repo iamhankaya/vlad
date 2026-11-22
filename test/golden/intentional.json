@@ -186,6 +186,14 @@
         "task (bare)",
         "task nudge --help"
       ]
+    },
+    {
+      "id": "T20261122-37",
+      "keys": [
+        "task --help",
+        "task (bare)",
+        "task cleanup --help"
+      ]
     }
   ]
 }

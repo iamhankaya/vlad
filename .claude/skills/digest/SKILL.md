@@ -145,6 +145,8 @@ Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak 
 
 **Arşiv (adım 7'den önce):** `vlad kb maintain --days 14 --json` (varsayılan zaten 14 gün; arşiv şeffaftır, silme yok; `digested` boş `done` görev arşivlenmez, adım 6'da işlenmiş işaretlenenler yaşı dolmuşsa taşınır). Hata verirse kullanıcıya söyle, commit'e devam et.
 
+**Worktree temizliği (F-vlad-375; arşivden sonra, adım 7'den önce):** `vlad task cleanup --merged --dry-run --json` ile bak, sonra `vlad task cleanup --merged --json` çalıştır. Yalnız `done`/`cancelled` olup dalı hedefine (çatı entegrasyon dalı ya da ana dal) tamamen girmiş görevlerin worktree'sini kaldırır; dal silinmez; açık pencere, kirli ya da merge edilmemiş worktree'ye dokunmaz, `atlandı: <id>: <neden>` satırlarını verir. Atlananlardan kullanıcı kararı gerekeni (kirli/merge edilmemiş) söyle; hata verirse (çıkış 1) kullanıcıya söyle, commit'e devam et. Açılış özetinde `UYARI: disk boş alanı …` varsa bu adımı hemen çalıştır.
+
 ## 7. Hafızayı commit'le
 
 ```
