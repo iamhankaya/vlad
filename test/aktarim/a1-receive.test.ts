@@ -406,6 +406,17 @@ describe("A1.6 abort / sweep / idle", () => {
     expect(r.staging().sort()).toEqual([id, "0".repeat(32), young, "kullanici-klasoru"].sort());
     expect(readFileSync(join(r.downloads, "benim.txt"), "utf8")).toBe("kullanıcı");
   });
+  // F-vlad-288 (3): bozuk meta.json'lu aşama dizini süpürülmüyordu (names yalnız `tree` kabul ediyordu)
+  it("sweep eski ve bozuk meta.json'lu aşamayı da siler; genç olanı ve yabancı içerik taşıyanı bırakır", async () => {
+    const r = rig(); const inc = join(r.downloads, ".vlad-incoming"); mkdirSync(inc, { recursive: true });
+    const old = (id: string) => { const t = new Date(r.clock.t - 25 * 3600_000); utimesSync(join(inc, id), t, t); };
+    const bad = "4".repeat(32); mkdirSync(join(inc, bad)); writeFileSync(join(inc, bad, "meta.json"), "{bozuk"); mkdirSync(join(inc, bad, "tree")); old(bad);
+    const young = "5".repeat(32); mkdirSync(join(inc, young)); writeFileSync(join(inc, young, "meta.json"), "{bozuk");
+    const recent = new Date(r.clock.t - 3600_000); utimesSync(join(inc, young), recent, recent); // sahte saat gerçek saatten farklı olabilir
+    const foreign = "6".repeat(32); mkdirSync(join(inc, foreign)); writeFileSync(join(inc, foreign, "meta.json"), "{bozuk"); writeFileSync(join(inc, foreign, "benim.txt"), "x"); old(foreign);
+    expect(await r.rx.sweep()).toBe(1);
+    expect(r.staging().sort()).toEqual([young, foreign].sort());
+  });
   it.skipIf(!canSymlink())("sweep sembolik bağı izlemez", async () => {
     const r = rig(); const inc = join(r.downloads, ".vlad-incoming"); mkdirSync(inc);
     const victim = join(r.base, "victim"); mkdirSync(victim); writeFileSync(join(victim, "meta.json"), JSON.stringify({ from: "x", id: "3".repeat(32), manifestHash: "h", state: "receiving", createdAt: 0 })); writeFileSync(join(victim, "dokunma"), "x");

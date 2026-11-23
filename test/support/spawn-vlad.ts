@@ -94,4 +94,8 @@ export function spawnVlad(o: SpawnOpts): SpawnResult {
  * SIGKILLed after 30 s and output is capped at 10 MB unless the caller sets its own `timeout`/`killSignal`/`maxBuffer`.
  */
 export const spawnGuarded = ((file: string, argv?: readonly string[], opts?: SpawnSyncOptions) =>
-  spawnSync(file, argv ?? [], { timeout: 30_000, killSignal: "SIGKILL", maxBuffer: 10 * 1024 * 1024, ...opts })) as typeof spawnSync;
+  spawnSync(file, argv ?? [], {
+    timeout: 30_000, killSignal: "SIGKILL", maxBuffer: 10 * 1024 * 1024, ...opts,
+    // F-vlad-366: a test-provided env must not drop the launchd guard (VITEST/NODE_ENV are not carried over)
+    ...(opts?.env ? { env: { VLAD_TEST_GUARD: "1", ...opts.env } } : {}),
+  })) as typeof spawnSync;

@@ -5,7 +5,7 @@ import { createInterface } from "node:readline/promises";
 import { getVladHome } from "../../kb/index.js";
 import { readInput } from "../../kb/input.js";
 import { CONFIRM_ACTIONS, SETUP_EXIT, validateAnswers, type ConfirmAction, type SetupAnswers } from "../../setup/index.js";
-import { interviewAnswers, wizardSeed } from "../../setup/interactive.js";
+import { interviewAnswers, mergeConfirm, wizardSeed } from "../../setup/interactive.js";
 import { buildContext, parseOnly, runAddWorker, runCheck, runJoin, runSetup, runUninstall, runUpgrade } from "../../setup/run.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -70,7 +70,7 @@ export function registerSetup(program: Command, k: Kit): void {
         }
         answers = v.answers;
       }
-      if (confirmFlag.length) answers = { ...answers, confirm: confirmFlag as ConfirmAction[] }; // wizard kendi confirm cevaplarını taşır; bayrak ekler
+      if (confirmFlag.length) answers = { ...answers, confirm: mergeConfirm(answers.confirm, confirmFlag) as ConfirmAction[] }; // wizard kendi confirm cevaplarını taşır; bayrak onlarla birleşir (F-vlad-296)
       else if (!wizard) answers = { ...answers, confirm: [] };
     }
     let aw: { machine?: { agent?: { host?: string; port?: number } }; keys?: string; confirm?: string[] } = {};

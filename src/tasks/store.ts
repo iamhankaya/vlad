@@ -429,9 +429,15 @@ export function setState(id: string, to: TaskState, patch: Partial<TaskData> = {
 /** `at`: the moment the line describes (e.g. a cloud event's `created_at`); absent or unparsable → now. */
 export function logTask(id: string, msg: string, at?: string): Task {
   const t = getTask(id);
+  logInto(t, msg, at);
+  saveTask(t);
+  return t;
+}
+
+/** Appends the progress line to the in-memory task without saving, so a caller can persist it together with a field change in one write (F-vlad-262). */
+export function logInto(t: Task, msg: string, at?: string): Task {
   const when = at && !Number.isNaN(Date.parse(at)) ? new Date(at) : undefined;
   t.body = appendToSection(t.body, "## İlerleme", `- ${nowIso(when)} ${msg}`);
-  saveTask(t);
   return t;
 }
 

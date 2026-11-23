@@ -90,7 +90,11 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     fetch: (t, head) => fetchTaskBranch(t, head, cfg),
     preview: (t, m, into) => remoteMergePreview(transport(), m, t, into ? { into } : {}),
     merge: (t, m, into, message) => remoteMerge(transport(), m, t, { ...(into ? { into } : {}), ...(message ? { message } : {}) }),
-    cleanup: async (t, m, head) => { await remoteCleanup(transport(), m, t, head); await withKbLock(() => markCleaned(t.data.id)); },
+    cleanup: async (t, m, head) => {
+      const cw = await remoteCleanup(transport(), m, t, head);
+      await withKbLock(() => markCleaned(t.data.id));
+      if (cw?.length) await withKbLock(() => logTask(t.data.id, `cleanup uyarısı (${m}): ${cw.join("; ")}`)); // F-vlad-263
+    },
   };
 }
 function realDeps(o: Partial<CloseDeps>): CloseDeps {

@@ -13,7 +13,7 @@ import type { Launcher } from "../../launcher/index.js";
 import { nudgeWorker } from "../../tasks/nudge.js";
 import { cleanupMerged, humanBytes, type MergedResult } from "../../tasks/cleanup-merged.js";
 import { emuLabel, type EmuAction } from "../../tasks/emulators.js";
-import { cleanupTask, closeTaskWindow, remoteMachineOf, modelInfo, getTask, resumeLocalCheck, resumePrepare } from "../../tasks/index.js";
+import { cleanupTask, closeTaskWindow, logTask, remoteMachineOf, modelInfo, getTask, resumeLocalCheck, resumePrepare } from "../../tasks/index.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -142,8 +142,9 @@ export function registerTaskResume(task: Command, k: Kit): void {
     });
     if (remote) {
       // ağ çağrısı kb kilidi dışında; kilit yalnız `worktree: null` yazısı için
-      await remoteCleanup(brainTransport(cfg0, selfName()), remote, getTask(id));
+      const cw = await remoteCleanup(brainTransport(cfg0, selfName()), remote, getTask(id));
       await withKbLock(() => markCleaned(id));
+      if (cw?.length) { ctx.stderr.write(cw.map((w) => `uyarı: ${w}\n`).join("")); await withKbLock(() => logTask(id, `cleanup uyarısı (${remote}): ${cw.join("; ")}`)); } // F-vlad-263
     }
     // --- /machines:C1 ---
     out(o, { id, ...(emus.length ? { emulators: emus } : {}) }, `${id} worktree kaldırıldı${emus.length ? `; emülatör: ${emus.map(emuLabel).join(", ")}` : ""}`);

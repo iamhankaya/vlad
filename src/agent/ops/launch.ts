@@ -178,7 +178,7 @@ async function launchOne(args: unknown, c: { from: string; opId: string }, o: { 
     rmSync(recordFile(id), { force: true }); // launchCore undid its own work: nothing is running, a retry starts clean
     throw failed((e as Error).message);
   }
-  const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}), ...(defBase?.warning ? { warning: defBase.warning } : {}) };
+  const result: LaunchResultW = { branch: res.branch, worktree: res.worktree, method: res.method, ...(integration ? { integration } : {}), ...(defBase?.warning || res.warnings?.length ? { warning: [defBase?.warning, ...(res.warnings ?? [])].filter(Boolean).join("; ") } : {}) };
   writeRecord({ taskId: id, repo, worktree, branch: res.branch, opId: c.opId, ...(usedBase ? { base: usedBase } : {}), result }); // base stays: cleanup judges the branch against it (F-vlad-244)
   if (parent && integration) recordParent(parent, repo, integration);
   return result;

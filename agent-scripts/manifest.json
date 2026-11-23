@@ -78,6 +78,18 @@
       "outputMaxKb": 32,
       "selfUpdate": true,
       "params": []
+    },
+    {
+      "name": "claude-izin-ekle",
+      "title": "Claude izin ekle (gate/derleme komutlari icin sabit permissions.allow kurallari, yedekli)",
+      "platform": "win32",
+      "file": "agent-scripts/claude-izin-ekle.ps1",
+      "sha256": "d13421e331a9816af8c9ff1275390694db62f3753f03ba8f26a119488ae05cb7",
+      "class": "write",
+      "timeoutSec": 60,
+      "outputMaxKb": 16,
+      "selfUpdate": false,
+      "params": []
     }
   ]
 }

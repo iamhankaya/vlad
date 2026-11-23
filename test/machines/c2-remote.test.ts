@@ -115,6 +115,15 @@ describe("machines:C2 uzak close/resume/cleanup (beyin)", () => {
     expect(t.calls.map((c) => [c.op, c.args.project, c.args.repoName, c.args.terminal])).toEqual([["cleanup", "beta", "beta", true], ["cleanup", "alpha", "alpha", true]]);
   });
 
+  // F-vlad-263: işçinin cleanup uyarısı (ör. dal silinemedi) beyne taşınır; uyarı yoksa undefined
+  it("remoteCleanup: işçi cleanup yanıtındaki warning değerlerini döner; yoksa undefined", async () => {
+    const id = mkRunning(); setState(id, "cancelled" as any);
+    const warn = fake(() => ({ removed: true, warning: "dal silinemedi: vlad/x" }));
+    expect(await remoteCleanup(warn, "windows", getTask(id))).toEqual(["dal silinemedi: vlad/x"]);
+    const ok = fake(() => ({ removed: true }));
+    expect(await remoteCleanup(ok, "windows", getTask(id))).toBeUndefined();
+  });
+
   it("remoteCleanup: görevin kendi projesi hata verirse yükselir (geçici hata → exit 75 sınıfı)", async () => {
     const id = mkRunning(); setState(id, "cancelled" as any);
     const t: RemoteTransport = { call: async () => { throw new RemoteError("unreachable", "unreachable: windows"); } };

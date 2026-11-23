@@ -122,4 +122,12 @@ describe("spawnGuarded (F-vlad-258: drop-in spawnSync with timeout/maxBuffer gua
     expect(r.stdout).toBe("hi");
     expect(r.status).toBe(0);
   });
+
+  // F-vlad-366: kendi env'ini veren test de çocukta launchd korumasını (VLAD_TEST_GUARD) taşır
+  it("adds VLAD_TEST_GUARD=1 to a caller-provided env, without mutating it", () => {
+    const env = { PATH: process.env.PATH ?? "" };
+    const r = spawnGuarded(process.execPath, ["-e", "process.stdout.write(process.env.VLAD_TEST_GUARD ?? 'none')"], { encoding: "utf8", env });
+    expect(r.stdout).toBe("1");
+    expect(env).toEqual({ PATH: process.env.PATH ?? "" });
+  });
 });

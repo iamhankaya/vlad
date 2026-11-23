@@ -49,3 +49,18 @@ describe("F-vlad-196: kb dirty on a non-brain machine", () => {
     expect(statusSummary(cfg(), new Date(), undefined, undefined, { mark: false }).kbDirty?.files).toEqual(["a.md"]);
   });
 });
+
+describe("F-vlad-357: uncommitted monitor tasks in the kb", () => {
+  it("lists only the given task ids whose file is new/changed in the kb; none when clean", async () => {
+    const { uncommittedTaskIds } = await import("../../src/tasks/worker-dirty.js");
+    const { mkdirSync } = await import("node:fs");
+    mkdirSync(join(kb, "tasks"), { recursive: true });
+    writeFileSync(join(kb, "tasks", "T20261123-01.md"), "x");
+    git(kb, "add", "."); git(kb, "commit", "-m", "t1");
+    expect(uncommittedTaskIds(["T20261123-01", "T20261123-02"])).toEqual([]);
+    writeFileSync(join(kb, "tasks", "T20261123-01.md"), "changed");
+    writeFileSync(join(kb, "tasks", "T20261123-02.md"), "new");
+    writeFileSync(join(kb, "tasks", "T20261123-03.md"), "unrelated new");
+    expect(uncommittedTaskIds(["T20261123-01", "T20261123-02"]).sort()).toEqual(["T20261123-01", "T20261123-02"]);
+  });
+});
