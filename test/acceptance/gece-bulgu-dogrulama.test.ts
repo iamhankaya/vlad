@@ -17,12 +17,22 @@ describe("F-vlad-334 kısmi/kısmı ayrımı (davranış sınırı)", () => {
     }
   });
   // Hata: tümü büyük ASCII `KISMI` tr küçük harfinde `kısmı` olur → kısmi kapanış tam kapanış sayılır, bulgu yanlışlıkla kapanır.
-  it.fails("BÜYÜK ASCII `KISMI` kısmi sayılır (şu an kapatma yolunda tam sayılıyor)", () => {
+  it("BÜYÜK ASCII `KISMI` kısmi sayılır (şu an kapatma yolunda tam sayılıyor)", () => {
     expect(partialFindingTokens(section("- F-vlad-001 — KISMI düzeltme"))).toEqual(["F-vlad-001"]);
   });
   // Hata: şapkalı `kısmî` ne `kısmi` ne `kismi` eşleşir.
-  it.fails("şapkalı `kısmî` kısmi sayılır", () => {
+  it("şapkalı `kısmî` kısmi sayılır", () => {
     expect(partialFindingTokens(section("- F-vlad-001 — kısmî düzeltme"))).toEqual(["F-vlad-001"]);
+  });
+  it("kismiydi/kısmidir/kısmî/KISMI/Kısmî kısmi sayılır (T20261123-35)", () => {
+    for (const w of ["kismiydi", "kısmidir", "kısmî", "KISMI", "Kısmî", "KISMIDIR"]) {
+      expect(partialFindingTokens(section(`- F-vlad-001 — ${w} düzeltme`)), w).toEqual(["F-vlad-001"]);
+    }
+  });
+  it("küçük harf kısmı ve ekleri kısmi sayılmaz", () => {
+    for (const w of ["kısmı", "kısmını", "kısmıdır"]) {
+      expect(partialFindingTokens(section(`- F-vlad-001 — ${w} düzeldi`)), w).toEqual([]);
+    }
   });
 });
 

@@ -26,9 +26,14 @@ function sectionLines(md: string): string[] {
 const fold = (s: string): string => s.toLocaleLowerCase("tr").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/ö/g, "o").replace(/ü/g, "u");
 /** A line that says the finding is only partly fixed / stays open must not close it (F-vlad-309); fail closed. */
 const PARTIAL_RE = /kismen|partially|partial\s*(fix|:)|tam degil|acik kal(ir|iyor|di)(?![a-z])/;
-/** `kısmi` (partial) vs `kısmı` (the part): decided on the Turkish-lowercased text before ı/i folding (F-vlad-334); ASCII `kismi` stays partial. */
-const KISMI_RE = /kısmi(?![\p{L}])|kismi(?![\p{L}])/u;
-const isPartial = (line: string): boolean => PARTIAL_RE.test(fold(line)) || KISMI_RE.test(line.toLocaleLowerCase("tr"));
+/**
+ * Fail closed (F-vlad-334, T20261123-35): only lowercase `kısmı` (the part) with its suffixes is exempt;
+ * KISMI, kısmî, kismiydi, kısmidir and every other kismi/kısmi form stays partial.
+ */
+const isPartial = (line: string): boolean => {
+  const rest = line.replace(/[Kk]ısmı/g, "").replace(/[îÎ]/g, "i");
+  return PARTIAL_RE.test(fold(line)) || /kismi/.test(fold(rest));
+};
 const firstToken = (line: string): string => line.replace(/^\s*-\s*/, "").split(/\s+[—–-]\s+|\s+—\s+/)[0]!.trim().replace(/[`*]/g, "");
 
 /** Ids of `### Kapatılan bulgular` lines marked partial; close skips them and warns. */
