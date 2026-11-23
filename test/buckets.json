@@ -1,6 +1,7 @@
 {
   "unit": [
     "test/acceptance/nudge-verify.test.ts",
+    "test/acceptance/gece-bulgu-dogrulama.test.ts",
     "test/agent-listen-retry.test.ts",
     "test/aktarim/v-prod-wiring.test.ts",
     "test/arch/**/*.test.ts",
