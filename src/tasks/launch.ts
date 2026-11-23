@@ -40,6 +40,7 @@ import { machineDef, machinesOf } from "../fleet/registry.js";
 import { rawGateEnv } from "../fleet/gate-env.js";
 import { repoNameOf } from "../fleet/paths.js";
 import { RemoteError } from "../fleet/types.js";
+import { killTaskEmulators, type EmuAction, type EmuDeps } from "./emulators.js";
 import type { AgentCode, RemoteTransport } from "../fleet/types.js";
 
 const ALL_STATES: TaskState[] = [
@@ -681,12 +682,15 @@ export function closeTaskWindow(
  */
 export function cleanupTask(
   id: string,
-  o: { closeWorker?: (taskId: string) => void; cfg?: VladConfig } = {},
-): void {
+  o: { closeWorker?: (taskId: string) => void; cfg?: VladConfig; emuDeps?: EmuDeps } = {},
+): EmuAction[] {
   const t = getTask(id);
   if (t.data.state !== "done" && t.data.state !== "cancelled") {
     throw new Error(`cleanup yalnızca done/cancelled görevde yapılır (${t.data.state}): ${id}`);
   }
+  // F-vlad-384: the worker's own Android emulator(s) (VLAD_TASK_ID in the qemu environment) outlive its window; best effort, never throws
+  let emulators: EmuAction[] = [];
+  try { emulators = killTaskEmulators(id, o.emuDeps); } catch { /* the next status warning reports what is left */ }
   if (t.data.kind === "pipeline" && o.cfg) {
     // integration worktrees of the other projects the phases ran in (F-vlad-063); the own one is handled below
     for (const w of integrationWorktrees(id, o.cfg)) {
@@ -695,7 +699,7 @@ export function cleanupTask(
     }
   }
   const wt = t.data.worktree;
-  if (!wt) return;
+  if (!wt) return emulators;
   if (existsSync(wt)) {
     try {
       (o.closeWorker ?? noCloser)(id);
@@ -717,6 +721,7 @@ export function cleanupTask(
   if (trustWarning) console.error(`uyarı: ${trustWarning}`);
   t.data.worktree = null;
   saveTaskQuiet(t);
+  return emulators;
 }
 
 /**

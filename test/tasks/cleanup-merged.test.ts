@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig, type VladConfig } from "../../src/kb/index.js";
 import { writeProject } from "../../src/projects/store.js";
-import { createTask, getTask, saveTask } from "../../src/tasks/index.js";
+import { cleanupTask, createTask, getTask, saveTask } from "../../src/tasks/index.js";
 import { cleanupMerged, diskWarning } from "../../src/tasks/cleanup-merged.js";
 import { makeHome, rmTemp } from "../helpers.js";
 
@@ -56,6 +56,53 @@ function mk(state: "done" | "cancelled" | "running", o: { commit?: boolean; merg
   return { id, wt };
 }
 const item = (r: { items: { id: string }[] }, id: string) => r.items.find((i) => i.id === id) as { id: string; action: string; reason?: string; removed?: boolean; bytes?: number };
+
+/** F-vlad-384: sahte süreç listesi + sahte adb; gerçek ps/adb/kill çağrılmaz. */
+function fakeEmu(owners: Record<number, string | null>) {
+  const calls = { adb: [] as string[][], kills: [] as number[] };
+  const alive = new Set(Object.keys(owners).map(Number));
+  const ps = () => Object.entries(owners).filter(([pid]) => alive.has(Number(pid))).map(([pid, own]) =>
+    `${pid} 10:00 /sdk/qemu-system-aarch64 -avd x -port ${5000 + Number(pid)} HOME=/h${own ? ` VLAD_TASK_ID=${own}` : ""}`).join("\n");
+  const deps = {
+    platform: "darwin" as NodeJS.Platform, ps,
+    adb: (a: string[]) => { calls.adb.push(a); alive.delete(Number(a[1]!.replace("emulator-", "")) - 5000); return true; },
+    kill: (pid: number) => { calls.kills.push(pid); alive.delete(pid); },
+    alive: (pid: number) => alive.has(pid), sleep: () => {},
+  };
+  return { deps, calls };
+}
+
+describe("cleanupMerged kapatır: görevin emülatörü (F-vlad-384)", () => {
+  it("--merged: yalnız görevin emülatörü emu kill ile kapanır, başkasınınki ve sahipsiz olan dokunulmaz; çıktıda görünür", () => {
+    const a = mk("done", { commit: true, merge: true });
+    const { deps, calls } = fakeEmu({ 11: a.id, 12: "T20990101-01", 13: null });
+    const r = cleanupMerged(cfg, opts({ emuDeps: deps }));
+    expect(calls.adb).toEqual([["-s", "emulator-5011", "emu", "kill"]]);
+    expect(calls.kills).toEqual([]);
+    expect(item(r, a.id)).toMatchObject({ action: "remove", removed: true, emulators: [{ port: 5011, pid: 11, action: "adb" }] });
+  });
+  it("dry-run emülatöre dokunmaz", () => {
+    const a = mk("done", { commit: true, merge: true });
+    const { deps, calls } = fakeEmu({ 11: a.id });
+    cleanupMerged(cfg, opts({ dryRun: true, emuDeps: deps }));
+    expect(calls.adb).toEqual([]);
+  });
+  it("adb yokken hata vermeden geçer (SIGTERM'e düşer), worktree yine kaldırılır", () => {
+    const a = mk("done", { commit: true, merge: true });
+    const { deps, calls } = fakeEmu({ 11: a.id });
+    const r = cleanupMerged(cfg, opts({ emuDeps: { ...deps, adb: () => null } }));
+    expect(r.errors).toBe(0);
+    expect(calls.kills).toEqual([11]);
+    expect(existsSync(a.wt)).toBe(false);
+  });
+  it("tek görev cleanup (cleanupTask) de aynı davranır ve sonucu döner", () => {
+    const a = mk("done", { commit: true, merge: true });
+    const { deps, calls } = fakeEmu({ 11: a.id, 12: "T20990101-01" });
+    const killed = cleanupTask(a.id, { cfg, closeWorker: () => {}, emuDeps: deps });
+    expect(killed).toEqual([{ port: 5011, pid: 11, action: "adb" }]);
+    expect(calls.adb).toEqual([["-s", "emulator-5011", "emu", "kill"]]);
+  });
+});
 
 describe("cleanupMerged (F-vlad-375)", () => {
   it("done + dalı ana dala girmiş → worktree kaldırılır, dal silinmez, kb'de worktree null", () => {

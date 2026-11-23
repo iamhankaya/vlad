@@ -7,6 +7,7 @@ import { defaultProbe, type LivenessProbe } from "./liveness.js";
 import { unmergedCommits } from "./launch-core.js";
 import { cleanupTask, integrationWorktrees, projectPath, remoteMachineOf } from "./launch.js";
 import { getTask, listTasks, type Task } from "./store.js";
+import type { EmuAction, EmuDeps } from "./emulators.js";
 
 /**
  * F-vlad-375: finished tasks left their worktrees behind (APK builds ~6.6 GB each) and the disk filled up.
@@ -24,6 +25,8 @@ export type MergedItem = {
   bytes?: number;
   /** set after a real removal attempt */
   removed?: boolean;
+  /** F-vlad-384: the task's own emulators closed (or failed to) by the removal */
+  emulators?: EmuAction[];
   error?: string;
 };
 export type MergedResult = {
@@ -37,8 +40,10 @@ export type MergedOpts = {
   /** a process mentioning the task id means its window is open */
   probe?: Pick<LivenessProbe, "alive">;
   closeWorker?: (taskId: string) => void;
-  /** test seam: the real removal */
-  cleanup?: (id: string) => void;
+  /** test seam: the real removal (may return the emulators it closed) */
+  cleanup?: (id: string) => EmuAction[] | void;
+  /** test seam: process list / adb / kill used to close the task's emulators */
+  emuDeps?: EmuDeps;
   /** time budget (ms) for size estimation across the whole run; the numbers are approximate (default 8 s) */
   sizeBudgetMs?: number;
   /** time budget (ms) for judging (git calls) across the whole run; the rest stays unjudged and `truncated` is set (default: none) */
@@ -144,7 +149,7 @@ export function cleanupMerged(cfg: VladConfig, o: MergedOpts): MergedResult {
   const deadline = Date.now() + (o.sizeBudgetMs ?? 8_000);
   const judgeDeadline = o.judgeBudgetMs ? Date.now() + o.judgeBudgetMs : Infinity;
   let truncated = false;
-  const cleanup = o.cleanup ?? ((id: string) => cleanupTask(id, { cfg, ...(o.closeWorker ? { closeWorker: o.closeWorker } : {}) }));
+  const cleanup = o.cleanup ?? ((id: string) => cleanupTask(id, { cfg, ...(o.closeWorker ? { closeWorker: o.closeWorker } : {}), ...(o.emuDeps ? { emuDeps: o.emuDeps } : {}) }));
   const items: MergedItem[] = [];
   const tasks = listTasks({ state: ["done", "cancelled"], ...(o.project ? { project: o.project } : {}) });
   for (const t of tasks.sort((a, b) => a.data.id.localeCompare(b.data.id))) {
@@ -165,16 +170,19 @@ export function cleanupMerged(cfg: VladConfig, o: MergedOpts): MergedResult {
   let removed = 0, errors = 0, freedBytes = 0;
   if (!o.dryRun) {
     for (const it of items.filter((i) => i.action === "remove")) {
+      const got: { emus?: EmuAction[] } = {};
       try {
         // under the kb lock, per item: the task may have been resumed or changed since the scan, so judge again right before removing
         const again = withKbLockSync(() => {
           const fresh = getTask(it.id);
           const j = fresh.data.state === "done" || fresh.data.state === "cancelled" ? judge(fresh, cfg, probe, platform) : { targets: [], reason: `görev ${fresh.data.state}` };
           if (j.reason !== null) return j.reason;
-          cleanup(it.id);
+          const killed = cleanup(it.id);
+          if (killed) got.emus = killed;
           return null;
         });
         if (again !== null) { it.action = "skip"; it.reason = `taramadan sonra değişti: ${again}`; continue; }
+        if (got.emus?.length) it.emulators = got.emus;
         it.removed = true; removed++; freedBytes += it.bytes ?? 0;
       } catch (e) { it.error = (e as Error).message; errors++; }
     }
