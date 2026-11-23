@@ -25,8 +25,10 @@ function sectionLines(md: string): string[] {
 /** ASCII-fold Turkish letters so `kismen`/`acik kalir` match like `kısmen`/`açık kalır`. */
 const fold = (s: string): string => s.toLocaleLowerCase("tr").replace(/ı/g, "i").replace(/ş/g, "s").replace(/ç/g, "c").replace(/ğ/g, "g").replace(/ö/g, "o").replace(/ü/g, "u");
 /** A line that says the finding is only partly fixed / stays open must not close it (F-vlad-309); fail closed. */
-const PARTIAL_RE = /kismen|kismi|partially|partial\s*(fix|:)|tam degil|acik kal(ir|iyor|di)(?![a-z])/;
-const isPartial = (line: string): boolean => PARTIAL_RE.test(fold(line));
+const PARTIAL_RE = /kismen|partially|partial\s*(fix|:)|tam degil|acik kal(ir|iyor|di)(?![a-z])/;
+/** `kısmi` (partial) vs `kısmı` (the part): decided on the Turkish-lowercased text before ı/i folding (F-vlad-334); ASCII `kismi` stays partial. */
+const KISMI_RE = /kısmi(?![\p{L}])|kismi(?![\p{L}])/u;
+const isPartial = (line: string): boolean => PARTIAL_RE.test(fold(line)) || KISMI_RE.test(line.toLocaleLowerCase("tr"));
 const firstToken = (line: string): string => line.replace(/^\s*-\s*/, "").split(/\s+[—–-]\s+|\s+—\s+/)[0]!.trim().replace(/[`*]/g, "");
 
 /** Ids of `### Kapatılan bulgular` lines marked partial; close skips them and warns. */

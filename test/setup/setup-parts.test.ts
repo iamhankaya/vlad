@@ -239,6 +239,20 @@ describe("senaryo 8: çok makine ve anahtar", () => {
     expectOwnerOnly(join(root, "vlad.local.json"));
     expect(JSON.stringify(res)).not.toMatch(/[0-9a-f]{64}/);
   });
+  it("F-vlad-307: plugins cevabı yokken check 'eksik' derse apply 'zaten güncel' demez; eksikleri adlandırır", async () => {
+    const chk = (await runCheck(ctx(), { only: ["plugins"] })).parts[0]!;
+    expect(chk.items!.some((i) => i.status === "eksik")).toBe(true);
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["plugins"] });
+    expect(rs[0]!.changed).toBe(false);
+    expect(rs[0]!.actions.map((a) => a.what).join("\n")).toMatch(/etkin değil.*(superpowers|playwright)/s);
+  });
+  it("F-vlad-295: linux işçide agentboot + agent-install yarıda kesmez; atlanır ve nedeni yazılır", async () => {
+    const a = { ...MULTI("lx", "worker", "192.168.1.36"), agentboot: true, confirm: ["agent-install" as const] };
+    const res = await runSetup(ctx(a, { yes: true, platform: "linux" }), { only: ["agent"] });
+    const acts = res[0]!.actions.map((x) => `${x.kind}: ${x.what}`).join("\n");
+    expect(acts).toMatch(/skip: .*linux/i);
+    expect(acts).not.toMatch(/run: vlad agent install/);
+  });
   it("onaysız keygen anahtar üretmez", async () => {
     await runSetup(ctx(MULTI("mac", "brain", "192.168.1.35"), { yes: true }));
     expect(existsSync(join(root, "vlad.local.json")) ? jr(join(root, "vlad.local.json")).keys : {}).toEqual({});
@@ -440,6 +454,19 @@ describe("sihirbaz (P1-2, G-bilgi-9)", () => {
     expect(out.role).toBe("brain"); expect(out.machines).toBe("single"); expect(out.kb?.mode).toBe("local");
     expect(prompts.find(([p]) => p.startsWith("kbDir"))![1]).toBeUndefined();
     expect(out.confirm).toEqual(["permissions-write"]);
+    expect(out.fresh).toBeUndefined();
+  });
+  it("F-vlad-298: temiz (fresh) kurulum açıkça sorulur; yalnız 'e' ile fresh:true olur", async () => {
+    const { interviewAnswers } = await import("../../src/setup/interactive.js");
+    const prompts: string[] = [];
+    const yes = await interviewAnswers(async (p) => { prompts.push(p); return p.startsWith("Temiz kurulum") ? "e" : ""; }, "darwin");
+    expect(yes.fresh).toBe(true);
+    expect(prompts.some((p) => p.startsWith("Temiz kurulum"))).toBe(true);
+  });
+  it("F-vlad-296: --confirm bayrağı sihirbazın etkileşimli onaylarıyla birleşir (tekrarsız)", async () => {
+    const { mergeConfirm } = await import("../../src/setup/interactive.js");
+    expect(mergeConfirm(["keygen", "agent-install"], ["agent-install", "permissions-write"])).toEqual(["keygen", "agent-install", "permissions-write"]);
+    expect(mergeConfirm(undefined, ["keygen"])).toEqual(["keygen"]);
   });
 });
 
@@ -552,8 +579,12 @@ describe("ölü yollu SessionEnd hook'u (son kapı tur 2 P1)", () => {
   it("ölü + yaşayan hook birlikteyse ölü atılır, ikinci hook eklenmez", async () => {
     const live = `node "${join(vladHome, "dist", "hooks", "session-report.js")}"`;
     w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }, { type: "command", command: live, timeout: 60 }] }] } }));
-    await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
+    const rs = await runSetup(ctx(ans(), { yes: true }), { only: ["hooks"] });
     expect(ends()).toEqual([live]);
+    // F-vlad-304: yaşayan hook varken yalnız ölüler silindi; "yeniden yazıldı" denmez
+    const what = rs[0]!.actions.map((a) => a.what).join("\n");
+    expect(what).toMatch(/temizlendi/);
+    expect(what).not.toMatch(/yeniden yazıldı/);
   });
   it("--uninstall ölü yollu hook'u da kaldırır", async () => {
     w(settings(), JSON.stringify({ hooks: { SessionEnd: [{ hooks: [{ type: "command", command: dead, timeout: 60 }] }] } }));

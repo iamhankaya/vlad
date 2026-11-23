@@ -70,7 +70,8 @@ export const agentPart: SetupPart = {
       }
     }
     if (c.answers.agentboot) {
-      if (!c.confirmed.has("agent-install")) acts.push({ kind: "skip", what: "Agent oto-başlatma açık onay ister (confirm: agent-install)" });
+      if (c.platform === "linux") acts.push({ kind: "skip", what: "Agent oto-başlatma linux'ta desteklenmiyor (yalnız macOS launchd / Windows görev zamanlayıcı); atlandı, Agent'ı elle başlatın (vlad agent start)" }); // F-vlad-295
+      else if (!c.confirmed.has("agent-install")) acts.push({ kind: "skip", what: "Agent oto-başlatma açık onay ister (confirm: agent-install)" });
       else {
         acts.push({ kind: "run", what: "vlad agent install --apply" });
         if (!c.dryRun) { const r = run(process.execPath, [join(c.vladHome, "dist", "cli.js"), "agent", "install", "--apply"], { timeoutMs: 60_000 }); if (!r.ok) throw new Error(`agent install başarısız: ${r.stderr.trim()}`); }

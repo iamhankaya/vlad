@@ -134,8 +134,11 @@ export const hooksPart: SetupPart = {
     // Bağlı worktree'nin yolu hook'a gömülürse worktree silinince hook kırılır: yalnız ana çalışma kopyasından kurulur.
     if (existsSync(join(c.vladHome, ".git")) && statSync(join(c.vladHome, ".git")).isFile()) return result("hooks", [{ kind: "print", what: "VLAD kökü bir git worktree'si: SessionEnd hook'u yazılmadı (yolu worktree'ye gömülür); setup'ı ana çalışma kopyasından çalıştırın" }]);
     if (st === "çakışan") return result("hooks", [{ kind: "skip", what: "SessionEnd hook'u farklı timeout ile kayıtlı: değiştirilmedi (çakışan)", target: settingsPath(c) }]);
+    // F-vlad-304: yaşayan bir hook zaten varsa ölüler yalnız silinir; "yeniden yazıldı" yanıltıcı olur
+    const hasLive = (s.data?.hooks?.SessionEnd ?? []).flatMap((e: any) => (Array.isArray(e?.hooks) ? e.hooks : [])).some((h: any) => h?.command === cmd || (isSessionReportHook(h?.command) && !isDeadSessionReportHook(h.command)));
+    const what = st !== "eski" ? `SessionEnd hook ekle: ${cmd}` : hasLive ? "ölü yollu SessionEnd hook'ları temizlendi (yaşayan hook korundu)" : `ölü yollu SessionEnd hook'u yeniden yazıldı: ${cmd}`;
     const r = updateJson(c, settingsPath(c), (d) => mergeSessionEndHook(d, cmd));
-    return result("hooks", [{ kind: "write", what: st === "eski" ? `ölü yollu SessionEnd hook'u yeniden yazıldı: ${cmd}` : `SessionEnd hook ekle: ${cmd}`, target: settingsPath(c) }], r.backup ? [r.backup] : []);
+    return result("hooks", [{ kind: "write", what, target: settingsPath(c) }], r.backup ? [r.backup] : []);
   },
   async uninstall(c) {
     const cmd = hookCommand(c.vladHome);
@@ -252,6 +255,13 @@ export const pluginsPart: SetupPart = {
     const full = (p: string) => (p.includes("@") ? (marketOk(p) ? p : null) : KNOWN_MARKET[p] ? `${p}@${KNOWN_MARKET[p]}` : null);
     const want = (c.answers.plugins ?? []).map(full).filter((p): p is string => p !== null);
     const acts: ApplyAction[] = (c.answers.plugins ?? []).filter((p) => full(p) === null).map((p) => ({ kind: "print" as const, what: `${p}: claude içinde /plugin ile kur (sihirbaz plugin kurmaz); bilinmeyen pazar yeri (ad@market) yalnız confirm: plugins-write ile etkinleştirilir` }));
+    if (!want.length && !acts.length) {
+      // F-vlad-307: cevap yoksa apply bir şey yazmaz; ama --check eksik diyorken "zaten güncel" yazmak yanıltır
+      const s = safeSettings(c);
+      const en = s.ok ? Object.entries<boolean>(s.data?.enabledPlugins ?? {}).filter(([, v]) => v).map(([k]) => k) : [];
+      const missing = PLUGIN_NAMES.filter((n) => !en.some((k) => k === n || k.startsWith(`${n}@`)));
+      if (missing.length) return result("plugins", [{ kind: "print", what: `plugins cevabı yok, yazılmadı; etkin değil: ${missing.join(", ")} (claude içinde /plugin ile kur ya da answers.plugins ver)` }]);
+    }
     if (!want.length) return acts.length ? result("plugins", acts) : upToDate("plugins");
     const r = updateJson(c, settingsPath(c), (d) => { d.enabledPlugins = { ...(d.enabledPlugins ?? {}), ...Object.fromEntries(want.filter((p) => !(d.enabledPlugins ?? {})[p]).map((p) => [p, true])) }; return d; });
     if (r.changed) acts.push({ kind: "write", what: `enabledPlugins: ${want.join(", ")}`, target: settingsPath(c) });

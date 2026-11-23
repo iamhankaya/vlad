@@ -29,16 +29,17 @@ function realish(p: string): string {
   }
 }
 
-const isReal = (plistDir: string): boolean => {
-  const a = realish(plistDir), b = realish(realLaunchAgentsDir());
-  return a === b || a.startsWith(`${b}/`);
+const isReal = (plistDir: string, extraRealDir?: string): boolean => {
+  const a = realish(plistDir);
+  // gerçek ~/Library/LaunchAgents her zaman korunur; `extraRealDir` yalnız ek (testler) — varsayılanın yerine geçmez
+  return [realLaunchAgentsDir(), ...(extraRealDir ? [extraRealDir] : [])].some((d) => { const b = realish(d); return a === b || a.startsWith(`${b}/`); });
 };
 
 /** `injected`: çağıran plist dizinini (plistDir/homeDir) kendisi verdi. Test ortamında verilmemesi ya da gerçek dizin olması hata. */
-export function assertTestSafeLaunchd(o: { plistDir: string; injected: boolean; env?: NodeJS.ProcessEnv }): void {
+export function assertTestSafeLaunchd(o: { plistDir: string; injected: boolean; env?: NodeJS.ProcessEnv; /** yalnız testler: gerçek ~/Library/LaunchAgents'a EK olarak "gerçek" sayılacak dizin (varsayılanın yerine geçmez) */ realDir?: string }): void {
   if (!inTestEnv(o.env)) return;
   if (!o.injected) throw new Error("test ortamı: plist dizini enjekte edilmedi; gerçek ~/Library/LaunchAgents'a yazma/silme reddedildi (plistDir/homeDir ver)");
-  if (isReal(o.plistDir)) throw new Error(`test ortamı: gerçek LaunchAgents dizinine (${o.plistDir}) yazma/silme reddedildi; geçici dizin kullan`);
+  if (isReal(o.plistDir, o.realDir)) throw new Error(`test ortamı: gerçek LaunchAgents dizinine (${o.plistDir}) yazma/silme reddedildi; geçici dizin kullan`);
 }
 
 type Lc = (args: string[]) => Promise<{ code: number; stdout: string; stderr: string }>;

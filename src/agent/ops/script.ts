@@ -225,6 +225,8 @@ export function recoverSelfUpdate(repo: string, rename: (a: string, b: string) =
     // F-vlad-281: eskiyi geri koymadan önce mevcut olanı silme; rename patlarsa mevcut geri konur
     const restore = (cur: string, old: string): void => {
       const trash = `${cur}-recover`;
+      // F-vlad-288: önceki koşu çifte rename hatasıyla çöktüyse tek yeni kopya `-recover`'dadır (cur yok): silmeden önce geri koy
+      if (!existsSync(cur) && existsSync(trash)) rename(trash, cur);
       rmSync(trash, { recursive: true, force: true });
       if (existsSync(cur)) rename(cur, trash);
       try { rename(old, cur); } catch (e) { if (existsSync(trash)) rename(trash, cur); throw e; }

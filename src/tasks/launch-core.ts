@@ -46,7 +46,7 @@ export interface LaunchCoreReq extends Omit<LaunchRequest, "cwd"> {
   /** test seam: the branch a worktree sits on (default: git) */
   branchOf?: (worktree: string) => string | null;
 }
-export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string; reused?: boolean };
+export type LaunchCoreResult = LaunchResult & { branch: string; worktree: string; reused?: boolean; /** F-vlad-263: re-adopt warnings (behind base, dirty worktree); also on stderr, but that never reaches the brain from a worker Agent */ warnings?: string[] };
 
 /**
  * F-vlad-244: commits only `branch` has (not reachable from `base`); null = no proof (missing ref, git error, `base` is the branch
@@ -97,6 +97,7 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
   // the owner checks out: the folder is a git worktree sitting on exactly `branch`, or only the branch is left. Anything else
   // (foreign folder, other branch) falls through to addWorktree, which refuses with "zaten var".
   let reused = false;
+  const warnings: string[] = [];
   if (!adopt) { /* first launch: anything already there is foreign, addWorktree refuses */ }
   else if (existsSync(wt)) {
     reused = (await g.isWorktree(repo, wt)) && (await (branchOf ?? g.worktreeBranch)(wt)) === branch;
@@ -116,11 +117,13 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
   }
   // F-vlad-248: a late retry may sit behind the base (integration moved on); the worker's commits stay, the brain is told
   if (reused && base && (await g.branchExists(repo, base)) && (await g.runGit(repo, ["merge-base", "--is-ancestor", base, branch])) === null) {
-    console.error(`uyarı: ${branch}, ${base} dalının geride kalmış (yeniden bağlandı); işçi ${base} dalını kendi dalına almalı`);
+    const w = `${branch}, ${base} dalının geride kalmış (yeniden bağlandı); işçi ${base} dalını kendi dalına almalı`;
+    warnings.push(w); console.error(`uyarı: ${w}`);
   }
   // F-vlad-248: uncommitted files in a re-adopted worktree are the earlier worker's unfinished work; keep them, tell the brain
   if (reused && existsSync(wt) && (await g.runGit(wt, ["status", "--porcelain"]))) {
-    console.error(`uyarı: ${wt} kirli (işlenmemiş değişiklik var; önceki işçinin yarım işi olabilir, silinmedi)`);
+    const w = `${wt} kirli (işlenmemiş değişiklik var; önceki işçinin yarım işi olabilir, silinmedi)`;
+    warnings.push(w); console.error(`uyarı: ${w}`);
   }
   if (!reused) await g.addWorktree(repo, wt, branch, base);
   // F-vlad-044: a worktree left on another branch (e.g. the integration branch) would let the worker commit past the gate
@@ -168,7 +171,7 @@ export async function launchCore(req: LaunchCoreReq, launcher: Launcher, g: GitA
     untrustWorktree(wt);
     throw new Error(`${failure}${cleanup ? `; temizlik başarısız: ${cleanup}` : ""}`);
   }
-  return { ...res, branch, worktree: wt, ...(reused ? { reused } : {}) };
+  return { ...res, branch, worktree: wt, ...(reused ? { reused } : {}), ...(warnings.length ? { warnings } : {}) };
 }
 
 /**

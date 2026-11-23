@@ -190,6 +190,19 @@ describe("launchCore: failed görevin bıraktığı worktree/dal ile yeniden lau
     } finally { err.mockRestore(); }
   });
 
+  // F-vlad-263: stderr işçi Agent'ta beyne ulaşmaz; uyarı sonuç alanında da döner
+  it("geride kalan dal uyarısı sonuçta `warnings` olarak da döner; temiz yeniden bağlamada alan yok", async () => {
+    const r = req({ base: "main" });
+    await launchCore({ ...r, adopt: true }, fake());
+    expect((await launchCore({ ...r, adopt: true }, fake())).warnings).toBeUndefined();
+    writeFileSync(join(repo, "b.txt"), "2"); git(repo, "add", "."); git(repo, "commit", "-m", "ilerledi");
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const res = await launchCore({ ...r, adopt: true }, fake());
+      expect(res.warnings?.join("\n")).toMatch(/main.*geride/);
+    } finally { err.mockRestore(); }
+  });
+
   it("base ile güncel dalda uyarı yok", async () => {
     const r = req({ base: "main" });
     await launchCore({ ...r, adopt: true }, fake());
