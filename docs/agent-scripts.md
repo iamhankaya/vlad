@@ -44,6 +44,17 @@ Hata iletisi biçimi: `<kod>: [<neden>] <ayrıntı>`; nedenler: bad_name, bad_pa
 
 Kök klasörlerdeki (`--param root=<ad>` ya da config `roots`) git depolarında `fetch --prune` + `pull --ff-only`. Agent'ın kendi klonu, symlink/junction alt dizinler, detached HEAD, upstream'siz, kirli ve ayrışmış depolar **atlanır**; fetch/pull hatası `error` sayılır. En çok 80 depo ayrıntısı döner (`omitted`).
 
+## claude-izin-ekle (yalnız win32)
+
+Windows işçisinde `%USERPROFILE%\.claude\settings.json` içindeki `permissions.allow` listesine gate/derleme komutları için **betiğe gömülü sabit** kuralları ekler (`git fetch origin vlad/*`, `git reset --hard FETCH_HEAD`, `git checkout --detach FETCH_HEAD`, `build.ps1`, `npm ci|test|run build|run lint`, `npx vitest run`, `dotnet test`, `bash tools/gate.sh`, `pip install -q -r tools/ci/requirements-ci.txt`, `winget install` Node/VS BuildTools; her biri `Bash(...)`/`PowerShell(...)` biçimlerinde, toplam 27). Parametre yok; dışarıdan kural verilemez. Neden betik: Windows'taki çalışan kendi izin ayarını aktarılan onayla değiştirmeyi (doğru olarak) reddeder; değişiklik kullanıcı onaylı, karması manifestte sabit betikle yapılır (karar 2026-11-24, T20261124-02).
+
+```
+vlad machine run windows claude-izin-ekle --plan
+vlad machine run windows claude-izin-ekle --confirmed <plan-id>      # yalnız kullanıcı onayından sonra
+```
+
+Davranış: ayar yoksa `{}` ile başlar; bozuk JSON'da dosyaya dokunmadan hata verir (yedek de açılmaz). Eksik kural varsa önce `settings.json.bak-<yyyyMMddHHmmss>` yedeği alır, yalnız eksikleri ekler (sıra korunur, kopya yok, başka anahtar değişmez), BOM'suz UTF-8 yazar ve dosyayı yeniden ayrıştırarak doğrular (başarısızsa yedeği geri koyar). Hepsi zaten varsa hiçbir şey yazmaz (`added: 0`, yedek yok). Sonuç: `@@VLAD-RESULT@@ {ok, added, total, backup}`. Not: PowerShell 5.1 `ConvertTo-Json` dosyayı yeniden biçimlendirir (içerik anlamı aynı kalır).
+
 ## Kendini güncelleme: `vlad-guncelle` (selfUpdate)
 
 Agent'ın kendi vlad klonunu günceller (`win32` `.ps1`, `darwin` `.sh`; manifestte `class: write`, `selfUpdate: true`, parametresiz). Önce `--plan`, kullanıcı onayından sonra `--confirmed` (diğer write betikleri gibi).

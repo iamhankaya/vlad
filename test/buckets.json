@@ -276,6 +276,7 @@
     "test/machines/agent-maintenance.test.ts",
     "test/machines/f279-blocked-report.test.ts",
     "test/machines/script-vlad-guncelle.test.ts",
+    "test/machines/script-claude-izin-ekle.test.ts",
     "test/machines/flush-timeout.test.ts",
     "test/machines/nudge-remote.test.ts"
   ],
