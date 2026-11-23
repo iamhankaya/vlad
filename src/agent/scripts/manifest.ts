@@ -25,8 +25,67 @@ const noCtl = (s: string) => !/[\0\r\n]/.test(s);
 
 /** Tam eşleşmeli desen; geçersizse null. */
 // shortcut: yalnız yaygın ReDoS biçimi (niceleyicili/dallı grubun kendisi niceleniyor: (a+)+, (a|aa)*) reddedilir; tam analiz değil, güvenli-regex kütüphanesine geçiş gerekirse yükselt.
-const QUANTIFIED_COMPLEX_GROUP = /\((?:[^()\\]|\\.)*(?:[+*|]|\{\d*,)(?:[^()\\]|\\.)*\)(?:[+*]|\{)/;
-const fullRe = (p: string): RegExp | null => { if (QUANTIFIED_COMPLEX_GROUP.test(p)) return null; try { return new RegExp(`^(?:${p})$`); } catch { return null; } };
+// F-vlad-288: küçük bir tarayıcı (karakter sınıfı içi niceleyiciler sayılmaz; iç içe gruplar yukarı taşınır; `?` da değişken sayılır). Niceleyicili bir grup
+// değişken uzunluklu içerik ya da dal taşıyorsa reddedilir; tek istisna grubun mutlaka noktalama bir harfle başlaması ve geri kalan atomların o harfi eşleyememesi
+// (`(\.\d+)*`: her yineleme `.` ile başlar, `\d+` onu yiyemez ⇒ belirsizlik yok).
+interface RGroup { atoms: string[]; variable: boolean; alt: boolean; firstQuantified?: boolean }
+export function hasRiskyQuantifiedGroup(p: string): boolean {
+  const stack: RGroup[] = [{ atoms: [], variable: false, alt: false }];
+  const top = () => stack[stack.length - 1]!;
+  const atomEnd = (i: number): number => { // index after the atom starting at i
+    if (p[i] === "\\") return i + 2;
+    if (p[i] === "[") { let j = i + 1; if (p[j] === "^") j++; if (p[j] === "]") j++; while (j < p.length && p[j] !== "]") j += p[j] === "\\" ? 2 : 1; return j + 1; }
+    return i + 1;
+  };
+  const quantAt = (i: number): { len: number; unbounded: boolean; optional: boolean } | null => {
+    const c = p[i];
+    let q: { len: number; unbounded: boolean; optional: boolean } | null = null;
+    if (c === "+" || c === "*") q = { len: 1, unbounded: true, optional: false };
+    else if (c === "?") q = { len: 1, unbounded: false, optional: true };
+    else if (c === "{") { const m = /^\{(\d+)(,(\d*))?\}/.exec(p.slice(i)); if (m) { const max = m[2] === undefined ? Number(m[1]) : m[3] === "" ? Infinity : Number(m[3]); q = { len: m[0].length, unbounded: max > 1, optional: false }; } } // yalnız en çok 1 tekrar ({1}, {0,1}) güvenli; {n}/{n,m} (>1) üstel olabilir (K1)
+    if (q && (p[i + q.len] === "?" || p[i + q.len] === "+")) q.len++; // lazy / possessive suffix
+    return q;
+  };
+  const safeSeparated = (g: RGroup): boolean => {
+    if (g.firstQuantified) return false; // `(\.+)*`, `(\.?\d+)*`: ilk atom zorunlu değil ⇒ ayraç yok
+    const first = g.atoms[0] ?? "";
+    const lit = first.length === 2 && first[0] === "\\" ? first[1]! : first.length === 1 ? first : "";
+    if (!lit || /[A-Za-z0-9]/.test(lit) || /[()|[\]{}*+?^$.\\]/.test(first.length === 1 ? first : "")) return false;
+    return g.atoms.slice(1).every((a) => { try { return !new RegExp(`^(?:${a})$`).test(lit); } catch { return false; } });
+  };
+  for (let i = 0; i < p.length;) {
+    const c = p[i]!;
+    if (c === "(") {
+      stack.push({ atoms: [], variable: false, alt: false });
+      i++;
+      if (p[i] === "?" && /[:=!]/.test(p[i + 1] ?? "")) i += 2; else if (p[i] === "?" && p[i + 1] === "<" && /[=!]/.test(p[i + 2] ?? "")) i += 3; else if (p[i] === "?" && p[i + 1] === "<") { const e = p.indexOf(">", i); i = e < 0 ? p.length : e + 1; }
+      continue;
+    }
+    if (c === ")") {
+      if (stack.length === 1) return false; // unbalanced: `new RegExp` rejects it anyway
+      const g = stack.pop()!;
+      const q = quantAt(i + 1);
+      i += 1 + (q?.len ?? 0);
+      if (q && q.unbounded && (g.variable || g.alt) && !(g.variable && !g.alt && safeSeparated(g))) return true;
+      const parent = top();
+      if (!parent.atoms.length) parent.firstQuantified = !!q;
+      parent.atoms.push(`(?:${g.atoms.join("")})`);
+      if (g.variable || g.alt || (q && (q.unbounded || q.optional))) parent.variable = true;
+      continue;
+    }
+    if (c === "|") { top().alt = true; i++; continue; }
+    if (c === "^" || c === "$") { i++; continue; }
+    const end = atomEnd(i);
+    const atom = p.slice(i, end);
+    i = end;
+    const q = quantAt(i);
+    if (q) { i += q.len; top().variable = true; }
+    if (!top().atoms.length) top().firstQuantified = !!q;
+    top().atoms.push(q ? `${atom}` : atom);
+  }
+  return false;
+}
+const fullRe = (p: string): RegExp | null => { if (hasRiskyQuantifiedGroup(p)) return null; try { return new RegExp(`^(?:${p})$`); } catch { return null; } };
 
 function checkParam(p: unknown, at: string): ScriptParamSpec {
   if (!isObj(p)) throw badManifest(`${at}: param nesne olmalı`);

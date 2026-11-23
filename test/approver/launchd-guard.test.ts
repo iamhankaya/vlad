@@ -1,5 +1,5 @@
 // F-vlad-355 kök neden: test ortamında gerçek ~/Library/LaunchAgents'a yazma/silme ve gerçek launchctl değişikliği imkânsız olmalı.
-import { mkdtempSync, realpathSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -40,10 +40,21 @@ describe("launchd koruması (test ortamı)", () => {
   it.skipIf(IS_WIN)("approver: açıkça verilen plistDir gerçek LaunchAgents ise (sembolik bağ dahil) reddedilir", async () => {
     const { calls, lc } = spyLc();
     await expect(createLaunchdInstaller({ launchctl: lc, plistDir: realLaunchAgentsDir() }).uninstall()).rejects.toThrow(/gerçek/);
-    const link = join(tmp(), "LA");
-    symlinkSync(realLaunchAgentsDir(), link);
-    await expect(createLaunchdInstaller({ launchctl: lc, plistDir: link }).uninstall()).rejects.toThrow(/gerçek/);
     expect(calls).toEqual([]);
+  });
+  // F-vlad-363: sembolik bağ dalı gerçek ev dizinine bağlı olmadan sınanır (sahte "gerçek" dizin geçici HOME'da)
+  it.skipIf(IS_WIN)("guard: sahte gerçek LaunchAgents'a giden sembolik bağ (ve altı) reddedilir; ilgisiz geçici dizin geçer", () => {
+    const fakeReal = join(tmp(), "Library", "LaunchAgents");
+    mkdirSync(fakeReal, { recursive: true });
+    const link = join(tmp(), "LA");
+    symlinkSync(fakeReal, link);
+    expect(() => assertTestSafeLaunchd({ plistDir: link, injected: true, realDir: fakeReal })).toThrow(/gerçek/);
+    expect(() => assertTestSafeLaunchd({ plistDir: join(link, "sub"), injected: true, realDir: fakeReal })).toThrow(/gerçek/);
+    expect(() => assertTestSafeLaunchd({ plistDir: join(tmp(), "LA2"), injected: true, realDir: fakeReal })).not.toThrow();
+  });
+  // K1: realDir ek kontroldür; verilse bile gerçek ~/Library/LaunchAgents hâlâ reddedilir
+  it("guard: realDir verilse de gerçek LaunchAgents reddedilmeye devam eder (varsayılanın yerine geçmez)", () => {
+    expect(() => assertTestSafeLaunchd({ plistDir: realLaunchAgentsDir(), injected: true, realDir: join(tmp(), "baska") })).toThrow(/gerçek/);
   });
   it("approver: sahte launchctl verilmeden (gerçek launchctl) kurulum test ortamında reddedilir", async () => {
     await expect(createLaunchdInstaller({ plistDir: join(tmp(), "LA") }).install(ctx)).rejects.toThrow(/launchctl/);

@@ -86,16 +86,21 @@ export async function remoteResume(
  * entegrasyon worktree'leri de. Fazların başka projeleri için kayıt yoksa (forbidden/not_found) atlanır; görevin kendisi hata verirse yükselir.
  * Başarıdan sonra çağıran, kilit altında `worktree: null` yazar (`markCleaned`).
  */
-export async function remoteCleanup(transport: RemoteTransport, machine: string, task: Task, expectHead?: string): Promise<void> {
+export async function remoteCleanup(transport: RemoteTransport, machine: string, task: Task, expectHead?: string): Promise<string[] | undefined> {
   const own = task.data.project;
   const projects = new Set<string>();
   if (task.data.kind === "pipeline") for (const c of listTasks({ parent: task.data.id })) projects.add(c.data.project);
   projects.delete(own);
-  const call = (project: string) => transport.call(machine, "cleanup", {
-    taskId: task.data.id, project, repoName: repoNameOf(cardOf(project).path), terminal: true,
-    ...(expectHead && project === own ? { expectHead } : {}),
-    ...(task.data.state === "cancelled" ? { dropBranch: true } : {}),
-  });
+  const warnings: string[] = []; // F-vlad-263: the worker's cleanup warnings (e.g. branch not deleted) reach the brain
+  const call = async (project: string) => {
+    const r = await transport.call(machine, "cleanup", {
+      taskId: task.data.id, project, repoName: repoNameOf(cardOf(project).path), terminal: true,
+      ...(expectHead && project === own ? { expectHead } : {}),
+      ...(task.data.state === "cancelled" ? { dropBranch: true } : {}),
+    });
+    const w = (r?.result as { warning?: unknown } | undefined)?.warning;
+    if (typeof w === "string" && w) warnings.push(w);
+  };
   for (const p of projects) {
     try { await call(p); } catch (e) {
       if (e instanceof RemoteError && (e.code === "forbidden" || e.code === "not_found")) continue;
@@ -104,9 +109,10 @@ export async function remoteCleanup(transport: RemoteTransport, machine: string,
   }
   try { await call(own); } catch (e) {
     // retry after a lost `markCleaned`: the worker already removed its record and worktree
-    if (e instanceof RemoteError && e.code === "forbidden" && e.message.includes("başlatma kaydı yok")) return;
+    if (e instanceof RemoteError && e.code === "forbidden" && e.message.includes("başlatma kaydı yok")) return warnings.length ? warnings : undefined;
     throw e;
   }
+  return warnings.length ? warnings : undefined;
 }
 
 /** Kilit altında: görevin worktree alanını temizler (uzak cleanup başarılıysa). */

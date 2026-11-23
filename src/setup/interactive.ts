@@ -37,6 +37,9 @@ export function wizardSeed(vladHome: string): WizardSeed {
   return { choices };
 }
 
+/** F-vlad-296: `--confirm` bayrağı sihirbazın kendi onaylarının yerine geçmez, onlarla birleşir (sıra korunur, tekrarsız). */
+export const mergeConfirm = (existing: readonly string[] | undefined, flag: readonly string[]): string[] => [...new Set([...(existing ?? []), ...flag])];
+
 /** Boş cevap = soruyu atla (varsayılan davranış/mevcut değer korunur); `seed` varsa varsayılanlar mevcut config'ten gelir. */
 export async function interviewAnswers(ask: Ask, platform: string, seed: WizardSeed = { choices: {} }): Promise<SetupAnswers> {
   const out: Record<string, any> = { lang: "tr" };
@@ -57,6 +60,8 @@ export async function interviewAnswers(ask: Ask, platform: string, seed: WizardS
     const host = (await ask("Bu makinenin özel LAN adresi (Agent host)", seed.host ?? "")).trim() || (seed.host ?? "");
     if (host) setPath(out, "machine.agent.host", host);
   }
+  // F-vlad-298: tracked config sahibin kişisel ayarlarını taşır; arkadaş/temiz kurulum yalnız açık "e" ile fresh olur (varsayılan hayır)
+  if (/^(e|evet|y|yes)$/i.test((await ask("Temiz kurulum (fresh): sahibin kişisel ayarları (projects/experiments/filo) devralınmasın mı? e/H", "")).trim())) out.fresh = true;
   // Dış etkili eylemler tek tek, açıkça sorulur (varsayılan hayır); onay yalnız bu oturum için geçerlidir.
   const need: [string, boolean][] = [
     ["kb-repo-create", out.kb?.mode === "github-new"], ["keygen", out.machines === "multi" && out.keys === "generate"], ["agent-install", out.agentboot === true],

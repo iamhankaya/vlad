@@ -1,5 +1,6 @@
 import { spawnGuarded } from "../support/spawn-vlad.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { kbPaths } from "../../src/kb/index.js";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -35,6 +36,18 @@ describe("status --summary monitor bildirimi", () => {
     expect(hook.systemMessage).toContain("4 monitor bildirimi");
     markDone(dir(), "all");
     expect(JSON.parse(run(["status", "--summary", "--json", "--no-mark"]).out).summary).not.toContain("monitor bildirimi");
+  });
+  it("F-vlad-357: kb'de commit'lenmemiş monitor görevi için satır `vlad kb commit --push` hatırlatır; commit sonrası kaybolur", () => {
+    const kb = kbPaths().kb;
+    const git = (...a: string[]) => spawnGuarded("git", ["-c", "user.name=T", "-c", "user.email=t@t", ...a], { cwd: kb, encoding: "utf8" });
+    git("init", "-b", "main");
+    mkdirSync(join(kb, "tasks"), { recursive: true });
+    writeFileSync(join(kb, "tasks", "T20261120-01.md"), "x");
+    n("T20261120-01", 1); n("T20261120-02", 2);
+    const j = JSON.parse(run(["status", "--summary", "--json", "--no-mark"]).out);
+    expect(j.summary).toContain("1 monitor görevi kb'de commit bekliyor (vlad kb commit --push)");
+    git("add", "."); git("commit", "-m", "t");
+    expect(JSON.parse(run(["status", "--summary", "--json", "--no-mark"]).out).summary).not.toContain("commit bekliyor");
   });
   it("bozuk dosya SessionStart'ı düşürmez", () => {
     n("T20261120-01", 1);
