@@ -142,7 +142,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
       // ağ çağrısı kb kilidi dışında; kilit yalnız `worktree: null` yazısı için
       const cw = await remoteCleanup(brainTransport(cfg0, selfName()), remote, getTask(id));
       await withKbLock(() => markCleaned(id));
-      if (cw?.length) { ctx.stderr.write(cw.map((w) => `uyarı: ${w}\n`).join("")); logTask(id, `cleanup uyarısı (${remote}): ${cw.join("; ")}`); } // F-vlad-263
+      if (cw?.length) { ctx.stderr.write(cw.map((w) => `uyarı: ${w}\n`).join("")); await withKbLock(() => logTask(id, `cleanup uyarısı (${remote}): ${cw.join("; ")}`)); } // F-vlad-263
     }
     // --- /machines:C1 ---
     out(o, { id }, `${id} worktree kaldırıldı`);

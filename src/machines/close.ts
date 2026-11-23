@@ -93,7 +93,7 @@ function defaultRemote(cfg: VladConfig): CloseRemote {
     cleanup: async (t, m, head) => {
       const cw = await remoteCleanup(transport(), m, t, head);
       await withKbLock(() => markCleaned(t.data.id));
-      if (cw?.length) logTask(t.data.id, `cleanup uyarısı (${m}): ${cw.join("; ")}`); // F-vlad-263
+      if (cw?.length) await withKbLock(() => logTask(t.data.id, `cleanup uyarısı (${m}): ${cw.join("; ")}`)); // F-vlad-263
     },
   };
 }
