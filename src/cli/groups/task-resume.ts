@@ -12,6 +12,7 @@ import { selfName } from "../../fleet/state.js";
 import type { Launcher } from "../../launcher/index.js";
 import { nudgeWorker } from "../../tasks/nudge.js";
 import { cleanupMerged, humanBytes, type MergedResult } from "../../tasks/cleanup-merged.js";
+import { emuLabel, type EmuAction } from "../../tasks/emulators.js";
 import { cleanupTask, closeTaskWindow, remoteMachineOf, modelInfo, getTask, resumeLocalCheck, resumePrepare } from "../../tasks/index.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
@@ -115,7 +116,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
       const r = run(); // kb kilidi yalnız silme anında, öğe başına (cleanupMerged içinde)
       const label = (i: MergedResult["items"][number]) =>
         i.action === "skip" ? `atlandı: ${i.id}: ${i.reason}`
-          : i.removed ? `kaldırıldı: ${i.id} (~${humanBytes(i.bytes ?? 0)})`
+          : i.removed ? `kaldırıldı: ${i.id} (~${humanBytes(i.bytes ?? 0)})${i.emulators?.length ? `; emülatör: ${i.emulators.map(emuLabel).join(", ")}` : ""}`
           : i.error ? `HATA: ${i.id}: ${i.error}`
           : `kaldırılacak: ${i.id} (~${humanBytes(i.bytes ?? 0)})`;
       const nRemove = r.items.filter((i) => i.action === "remove").length;
@@ -128,6 +129,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
     }
     if (!id) throw new Error("görev ID'si gerekli (toplu temizlik için --merged)");
     // --- machines:C1 --- kb yazan cleanup kilitli; uzak makinedeki görevin worktree'si burada yok (C2)
+    let emus: EmuAction[] = []; // F-vlad-384: kapatılan emülatörler
     const remote = await withKbLock(() => {
       const t = getTask(id);
       const m = remoteMachineOf(t, cfg0);
@@ -135,7 +137,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
         if (t.data.state !== "done" && t.data.state !== "cancelled") throw new Error(`cleanup yalnızca done/cancelled görevde yapılır (${t.data.state}): ${id}`);
         return m;
       }
-      cleanupTask(id, { cfg: cfg0, closeWorker: closeWorkerWindow });
+      emus = cleanupTask(id, { cfg: cfg0, closeWorker: closeWorkerWindow });
       return null;
     });
     if (remote) {
@@ -144,7 +146,7 @@ export function registerTaskResume(task: Command, k: Kit): void {
       await withKbLock(() => markCleaned(id));
     }
     // --- /machines:C1 ---
-    out(o, { id }, `${id} worktree kaldırıldı`);
+    out(o, { id, ...(emus.length ? { emulators: emus } : {}) }, `${id} worktree kaldırıldı${emus.length ? `; emülatör: ${emus.map(emuLabel).join(", ")}` : ""}`);
   }).option("--merged", "toplu: merge edilmiş done/cancelled görevlerin worktree'lerini kaldırır (dal silinmez)")
     .option("--project <slug>", "--merged: yalnız bu projenin görevleri")
     .option("--dry-run", "--merged: yalnız listele, hiçbir şeye dokunma");

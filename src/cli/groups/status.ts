@@ -9,6 +9,7 @@ import { loadConfig } from "../../kb/index.js";
 import { staleSummaryText, undigestedNote } from "../../projects/status.js";
 import { statusSummary } from "../../tasks/index.js";
 import { diskWarning, type DiskWarning } from "../../tasks/cleanup-merged.js";
+import { emulatorWarning, type EmulatorWarning } from "../../tasks/emulators.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 import { approverServiceWarning } from "../../approver/health.js";
@@ -27,6 +28,11 @@ function safeDiskWarning(hook: boolean): DiskWarning | null {
   try { return diskWarning(loadConfig(), { scan: !hook }); } catch { return null; }
 }
 
+/** F-vlad-384: emulators open for hours with no active task; only reports, never closes. A failing probe must never take status down. */
+function safeEmulatorWarning(activeIds: string[]): EmulatorWarning | null {
+  try { return emulatorWarning(new Set(activeIds)); } catch { return null; }
+}
+
 /** Monitor bildirim kuyruğu özeti; okunamazsa sessizce 0 (açılış özetini asla düşürme). */
 function monitorNotices(): { count: number; items: { task: string; kind: string }[] } {
   try {
@@ -42,6 +48,7 @@ export function registerStatus(program: Command, k: Kit): void {
     const lintStale = o.hook && o.summary && o.mark !== false ? refreshLintCacheIfStale({ canRun: () => ["brain", "off"].includes(workerState().kind) }).stale : false;
     const s = statusSummary(loadConfig(), new Date(), undefined, undefined, { mark: o.mark !== false, remotePlans: o.remotePlans as RemoteStallPlan[] | undefined });
     const disk = safeDiskWarning(!!o.hook); // F-vlad-375
+    const emu = safeEmulatorWarning(s.active.map((t) => t.data.id)); // F-vlad-384
     if (o.summary) {
       const mn = monitorNotices();
       const approverWarn = approverServiceWarning(); // F-vlad-355: servis sessizce kalkarsa SessionStart'ta görünür
@@ -60,6 +67,7 @@ export function registerStatus(program: Command, k: Kit): void {
         (approverWarn ? `; UYARI: ${approverWarn}` : "") +
         (addrWarn ? `; UYARI: ${addrWarn}` : "") +
         (disk ? `; UYARI: ${disk.text}` : "") +
+        (emu ? `; UYARI: ${emu.text}` : "") +
         (s.mode ? `; ${s.mode}` : "");
       if (o.hook) {
         // SessionStart hook JSON: systemMessage kullanıcıya görünür, additionalContext modelin bağlamına girer.
@@ -69,7 +77,7 @@ export function registerStatus(program: Command, k: Kit): void {
         }) + "\n");
         return;
       }
-      out(o, { ...s, ...(mn.count ? { monitorNotices: mn } : {}), ...(disk ? { diskWarning: disk } : {}), active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
+      out(o, { ...s, ...(mn.count ? { monitorNotices: mn } : {}), ...(disk ? { diskWarning: disk } : {}), ...(emu ? { emulatorWarning: emu } : {}), active: s.active.map((t) => t.data), failed: s.failed.map((t) => t.data), summary: line }, line);
       return;
     }
     const lines = [...s.active.map(statusLine), `inbox: ${s.inbox}`];
@@ -78,9 +86,10 @@ export function registerStatus(program: Command, k: Kit): void {
     const addrWarn = agentAddressNote();
     if (addrWarn) lines.push(`UYARI: ${addrWarn}`);
     if (disk) lines.push(`UYARI: ${disk.text}`);
+    if (emu) lines.push(`UYARI: ${emu.text}`);
     if (s.newlyStalled.length) lines.push(`takıldı: ${s.newlyStalled.join(", ")}`);
     if (s.failed.length) lines.push(`hatalı: ${s.failed.map((t) => t.data.id).join(", ")}`);
-    out(o, { ...s, ...(disk ? { diskWarning: disk } : {}), active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
+    out(o, { ...s, ...(disk ? { diskWarning: disk } : {}), ...(emu ? { emulatorWarning: emu } : {}), active: s.active.map((t) => withModel(t)), failed: s.failed.map((t) => t.data) }, lines.join("\n"));
   }).option("--summary", "tek satır özet")
     .option("--no-mark", "yan etkisiz okuma: stalled işaretleme ve mod penceresi temizliği yapılmaz (aynı JSON şekli)")
     .option("--hook", "--summary ile: SessionStart hook JSON'u (systemMessage + additionalContext)");

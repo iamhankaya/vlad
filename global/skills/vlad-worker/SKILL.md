@@ -69,6 +69,8 @@ Ardından **bildirim gönder** (adım 7; gönder, olmazsa logla) ve cevabı bekl
 
 **Kendi süreçlerini durdurma:** başlattığın süreci PID ya da portla durdur (`kill <pid>`, port için `lsof -ti :<port>` ile bulduğun pid). `pkill -f <desen>` ve `rm -rf` içeren birleşik komutlar sınıflayıcıca reddedilir (T20261109-46, T20261111-41, T20261113-32); temizliği ayrı, tek amaçlı komutlarla yap.
 
+**Android emülatörü (F-vlad-384):** kendi `-port`'unla, kendi kabuğundan başlat (VLAD sahipliği `VLAD_TASK_ID` ortamından tanır; `env -i`/`setsid` yok), yalnız `adb -s emulator-<port> …` (`adb kill-server` yok); rapordan önce `adb -s emulator-<port> emu kill` ile kapat. `task cleanup` kapatmayı unutulan emülatörü de kapatır ama buna güvenme.
+
 **Boşta bekleme:** uzun bir bekleme (CI, kullanıcı cevabı) için oturumu tüketme. Tek bir `gh run watch <run-id> --exit-status --interval 60` kullan (varsayılan 3 sn aralık API sınırını tüketir), yoklama döngüsü kurma. `gh run watch` bitince (yeşil ya da kırmızı) **aynı turda** sonraki adıma geç: yeşilse raporu yaz (adım 6) ve bildirimi gönder (adım 7), kırmızıysa `ci-triage`. "İzliyorum" diyerek turu asla bitirme. Bellek/oturum uyarısı ya da ~20 dk sessizlik olursa bekleyişi bırak, `vlad task log <id> "bekliyor: <ne>"` yaz ve raporla ya da `vlad task ask` ile sor.
 
 **CI tur kuralı:** kendi kırmızını düzeltip yeniden push edebilirsin; aynı neden ikinci kez kırmızı çıkarsa dur ve `vlad task ask` ile sor. Entegrasyon dalından gelen (kendi değişikliğin olmayan) kırmızı tur sayılmaz: düzeltmeye çalışma, `### Açık noktalar`'a yaz.
