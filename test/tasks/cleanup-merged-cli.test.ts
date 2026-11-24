@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,8 +31,10 @@ beforeEach(() => {
 });
 afterEach(() => { rmTemp(base); rmTemp(home); });
 
+// F-vlad-377: test görevleri gerçek bir çalışanın ID'siyle çakışamasın (cleanup `ps`'te ID'yi arar); sabit geçmiş tarih
+const TEST_DAY = new Date("2001-01-01T12:00:00Z");
 function mergedDone() {
-  const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "## Tanım\nx\n" });
+  const t = createTask({ project: "alpha", title: "t", kind: "dev", body: "## Tanım\nx\n" }, TEST_DAY);
   const id = t.data.id, wt = join(wtRoot, id);
   git(repo, "worktree", "add", "-b", `vlad/${id}`, wt, "main");
   writeFileSync(join(wt, "f.txt"), "x"); git(wt, "add", "."); git(wt, "commit", "-m", "w");
@@ -63,6 +65,19 @@ describe("vlad task cleanup --merged (F-vlad-375)", () => {
     expect(existsSync(a.wt)).toBe(false);
     expect(git(repo, "branch", "--list", `vlad/${a.id}`)).toContain(a.id);
     expect(getTask(a.id).data.worktree).toBeNull();
+  });
+
+  it("görev ID'sini anan bir süreç (açık çalışan penceresi) varsa worktree'ye dokunmaz", () => {
+    const a = mergedDone();
+    const child = spawn(process.execPath, ["-e", "setTimeout(()=>{},60000)", `vlad-${a.id}`], { stdio: "ignore" });
+    try {
+      const r = run("task", "cleanup", "--merged", "--json");
+      expect(r.status, r.stderr).toBe(0);
+      const j = JSON.parse(r.stdout);
+      expect(j.removed).toBe(0);
+      expect(j.items).toEqual([expect.objectContaining({ id: a.id, action: "skip" })]);
+      expect(existsSync(a.wt)).toBe(true);
+    } finally { child.kill(); }
   });
 
   it("--project süzgeci ve --merged ile ID birlikte reddi", () => {
