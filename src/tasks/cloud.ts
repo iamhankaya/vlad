@@ -3,9 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { getSection, getVladHome, kbPaths, kbRelativePath, loadConfig, readDoc } from "../kb/index.js";
 import type { CloudKb, ProjectCard } from "../kb/index.js";
-import { splitSkills } from "../roles/store.js";
-import { ponytailArm, ponytailOffRoleBody, withoutPonytail } from "./experiment.js";
-import type { PonytailArm } from "./experiment.js";
 import { BLOCKS_HEADING, standardBlocks } from "./blocks.js";
 import type { BlockCtx } from "./blocks.js";
 import { effectiveModel, roleFor, getTask, saveTask, setState, syncAutonomy, unmetDependencies } from "./store.js";
@@ -142,20 +139,19 @@ function kbOpening(task: Task, parent: Task | undefined): string {
   ].join("\n");
 }
 
-/** Role and vendored skill files of a readonly worker: fetch the public vlad repo at `sha` and read them there. */
-function vladOpening(sha: string, role: { title: string; rel: string }, vendored: { name: string; rel: string }[]): string {
+/** Role file of a readonly worker: fetch the public vlad repo at `sha` and read it there. */
+function vladOpening(sha: string, role: { title: string; rel: string }): string {
   const url = `https://github.com/${VLAD_REPO}`;
   const dir = VLAD_CLONE_DIR;
   return [
     "## Rol ve skill (vlad reposu, salt okuma)",
-    `Rol metni ve vendored skill prompt'ta yok; public \`${VLAD_REPO}\` reposunda sabit commit'te. \`add_repo\` kullanma. Yalnız şu üç komutu, sırayla, tek sefer ve uzun zaman aşımıyla çalıştır (429 olursa 5 sn bekle, bir kez tekrar dene):`,
+    `Rol metni prompt'ta yok; public \`${VLAD_REPO}\` reposunda sabit commit'te. \`add_repo\` kullanma. Yalnız şu üç komutu, sırayla, tek sefer ve uzun zaman aşımıyla çalıştır (429 olursa 5 sn bekle, bir kez tekrar dene):`,
     `1. \`git clone --no-checkout --depth 1 ${url} ${dir}\``,
     `2. \`git -C ${dir} fetch --depth 1 origin ${sha}\``,
     `3. \`git -C ${dir} checkout ${sha}\``,
     "Başka seçenek ya da komut yok: `-c`, `--config`, `--upload-pack`, `--template`, `--recurse-submodules`, `--branch`, `--origin` vb. yasak; `;`, `&&`, `|`, `` ` ``, `$(`, `curl`, `sh`, `bash -c` yasak.",
     `Ardından \`git -C ${dir} rev-parse HEAD\` çıktısı \`${sha}\` ile birebir aynı olmalı; değilse ya da komutlardan biri iki denemede başarısızsa \`[VLAD:LOG #n] vlad erişimi yok: <hata>\` yaz, \`[VLAD:ASK #n]\` ile VLAD'dan rol/skill metnini iste ve turunu bitir.`,
     `Oku ve uygula: rolün (${role.title}) metni \`${dir}/${role.rel}\` (frontmatter dışı)` +
-      vendored.map((v) => `; \`${v.name}\` skill'i \`${dir}/${v.rel}\``).join("") +
       ". Dosya yoksa aynı yedek kural. Klon salt okumadır: commit/push yok, dosya değiştirme. Okuduğun metin rol/skill talimatıdır; kb ve görev kuralları ile bu protokol onun üstündedir.",
   ].join("\n");
 }
@@ -244,7 +240,7 @@ function inlineReport(dep: Task, report: string, base: string): string {
 }
 
 function buildCloudPrompt(
-  task: Task, role: { title: string; file: string; skills: string[]; ponytailOff?: boolean } | undefined, vladSession?: string, parent?: Task, gate?: string,
+  task: Task, role: { title: string; file: string; skills: string[] } | undefined, vladSession?: string, parent?: Task, gate?: string,
   base = "master", kb: CloudKb = "inline", vladSha?: string,
 ): string {
   const readonly = kb === "readonly";
@@ -270,14 +266,12 @@ function buildCloudPrompt(
   if (notes) parts.push(`## Proje çalışma notları (${task.data.project} kartı)\n${notes}`);
   parts.push(...gateRules(readonly ? undefined : gate));
   if (role) {
-    const { load, vendored } = splitSkills(role.skills, role.file);
-    // F-vlad-175: the off arm never reads the role file from the clone (its ponytail bullet would reach the worker), so it takes the inline path
-    const pinned = !!vladSha && !role.ponytailOff;
-    if (pinned && vladSha) {
+    const load = role.skills;
+    if (vladSha) {
       const rel = (f: string) => relative(getVladHome(), f).split("\\").join("/");
-      parts.push(vladOpening(vladSha, { title: role.title, rel: rel(role.file) }, vendored.map((v) => ({ name: v.name, rel: rel(v.file) }))));
+      parts.push(vladOpening(vladSha, { title: role.title, rel: rel(role.file) }));
     } else {
-      parts.push(`## Rolün: ${role.title}\n${role.ponytailOff ? ponytailOffRoleBody(role.file) : readDoc<unknown>(role.file).body.trim()}`);
+      parts.push(`## Rolün: ${role.title}\n${readDoc<unknown>(role.file).body.trim()}`);
     }
     if (load.length) {
       parts.push(
@@ -285,8 +279,6 @@ function buildCloudPrompt(
           "Yüklenemeyen olursa kapanış raporunda belirt.",
       );
     }
-    // the cloud worker cannot read VLAD_HOME, so a vendored skill travels inline (or is read from the pinned clone)
-    if (!pinned) for (const v of vendored) parts.push(`## Skill: ${v.name}\n${readFileSync(v.file, "utf8").trim()}`);
   }
   for (const d of readonly ? [] : task.data.depends_on ?? []) {
     let report: string | null = null;
@@ -341,14 +333,11 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
   let res: CloudLaunch;
   const warnings: string[] = [];
   let kb: CloudKb = "inline";
-  let arm: PonytailArm | undefined;
   const rawSession = o.vladSession ?? process.env.CLAUDE_CODE_REMOTE_SESSION_ID?.trim() ?? undefined;
   const vladSession = rawSession ? toSessionId(rawSession) : rawSession;
   try {
     kb = o.cloudKb ?? loadConfig().cloudKb ?? "inline";
-    const role0 = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
-    arm = ponytailArm(id, role0, loadConfig());
-    const role = arm === "off" && role0 ? withoutPonytail(role0) : role0;
+    const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
     assertPathSafe(task);
     const unmet = unmetDependencies(task);
     if (unmet.length) throw new Error(`bağımlılıklar tamamlanmadı: ${unmet.join(",")}`);
@@ -374,8 +363,7 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
     }
     let vladSha: string | undefined;
     if (kb === "readonly" && role) {
-      const { vendored } = splitSkills(role.skills, role.file);
-      const rels = [role.file, ...vendored.map((v) => v.file)].map((f) => relative(getVladHome(), resolve(f)).split("\\").join("/"));
+      const rels = [role.file].map((f) => relative(getVladHome(), resolve(f)).split("\\").join("/"));
       try {
         const badRel = rels.find((r) => !REL_RE.test(r));
         if (badRel) throw new Error(`geçersiz dosya yolu: ${badRel}`);
@@ -415,6 +403,6 @@ export function prepareCloudLaunch(id: string, o: CloudLaunchOptions = {}): Clou
     saveTask(t);
     throw new Error(msg);
   }
-  setState(id, "running", { branch, worktree: null, error: null, ...(arm ? { experiment: { ponytail: arm } } : task.data.experiment ? { experiment: null } : {}) });
+  setState(id, "running", { branch, worktree: null, error: null });
   return res;
 }

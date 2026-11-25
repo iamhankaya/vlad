@@ -220,25 +220,12 @@ describe("F-vlad-062: bulut testleri Windows'ta gerçek terminal açmaz", () => 
   });
 });
 
-describe("ponytail (T20261026-04)", () => {
-  it("SKILL.md blob SHA'sı SOURCE.md ile aynı (kaynakla birebir); LICENSE MIT; başka ponytail dosyası yok", () => {
-    const dir = join(root, "vendor", "skills", "ponytail");
-    const sha = execFileSync("git", ["hash-object", join(dir, "SKILL.md")], { encoding: "utf8" }).trim();
-    expect(read("vendor/skills/ponytail/SOURCE.md")).toContain(sha);
-    expect(read("vendor/skills/ponytail/LICENSE")).toMatch(/MIT License/);
-    expect(execFileSync("git", ["ls-files", "--", "vendor/skills/ponytail"], { cwd: root, encoding: "utf8" }).trim().split(/\r?\n/).sort())
-      .toEqual(["vendor/skills/ponytail/LICENSE", "vendor/skills/ponytail/SKILL.md", "vendor/skills/ponytail/SOURCE.md"]);
-  });
-
-  it("vlad role list --json: deney kapandı (T20261116-22), hiçbir rolün skills'inde ponytail yok", () => {
+describe("ponytail (T20261026-04; deney kapandı, vendor/ kaldırıldı)", () => {
+  it("vlad role list --json: hiçbir rolün skills'inde ponytail yok", () => {
     const r = vlad(root, ["role", "list", "--json"]);
     expect(r.code, r.err).toBe(0);
     const j = JSON.parse(r.out) as { roles: Array<{ slug: string; skills: string[] }>; warnings: string[] };
     expect(j.warnings).toEqual([]);
     expect(j.roles.filter((x) => x.skills.includes("ponytail")).map((x) => x.slug)).toEqual([]);
-  });
-
-  it("developer rolleri ponytail kuralı taşımaz (deney kapandı)", () => {
-    for (const f of ["roles/developer.md", "roles/game-developer.md"]) expect(read(f), f).not.toContain("ponytail");
   });
 });

@@ -6,7 +6,6 @@ import { listFindingsWithWarnings, UNRESOLVED } from "../findings/store.js";
 import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
-import { PONYTAIL_AB_VALID_FROM } from "../tasks/experiment.js";
 import { existsSync, readFileSync } from "node:fs";
 import { kbPaths } from "../kb/index.js";
 import { classifyDenial, parseDenyLine } from "../tasks/denials.js";
@@ -23,13 +22,16 @@ const IZIN_REDDI = new RegExp(`[iİ]zin reddi|\\[izin\\]|permission denied|${DEN
 const countLines = (s: string, re: RegExp) => s.split("\n").filter((l) => re.test(l.replace(/İ/g, "i").replace(/I/g, "ı"))).length;
 const bare = (s: string) => s.slice(s.lastIndexOf(":") + 1);
 
+/** Kapanan ponytail A/B deneyi (D-vlad-083): istem kesilmesi düzeltmesinden önce açılan kol görevleri `by_ponytail`'a girmez. Yalnız geçmiş ölçümü okur. */
+const PONYTAIL_AB_VALID_FROM = "2026-11-03T12:00:00+03:00";
+
 export interface ArmMeasure { tasks: number; tasks_with_measure: number; sums: Record<string, number> }
 /** Codex rounds written by /status at the final gate (`Codex turları: ara=<n> son=<n>`); `count` = ara + son. */
 export interface CodexRounds extends Signal { ara: number; son: number }
 export interface Signal { tasks: number; count: number; examples: string[] }
 /** The same tool + denial class (`pattern` = classifyDenial label, e.g. "heredoc yazımı", "git push") denied (`vlad task deny`) in >= 2 tasks: a permission-rule candidate. `count` = denials, `tasks` = distinct tasks, `samples` = up to 3 raw commands. */
 export interface PermissionCandidate { tool: string; pattern: string; tasks: number; count: number; examples: string[]; samples: string[] }
-type Source = "repo" | "global" | "vendor" | "user" | "plugin" | "role";
+type Source = "repo" | "global" | "user" | "plugin" | "role";
 interface CoverageRow { role: string; skill: string; since: string | null; since_unknown: boolean; expected_tasks: number; loaded_tasks: number; rate: number }
 export interface SetupAudit {
   since: string;
@@ -209,7 +211,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   const home = getVladHome();
   const configDir = o.configDir ?? process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
   const found = new Map<string, { source: Source; roles: Set<string>; added: string | null }>();
-  for (const [dir, source] of [[".claude/skills", "repo"], ["global/skills", "global"], ["vendor/skills", "vendor"]] as const) {
+  for (const [dir, source] of [[".claude/skills", "repo"], ["global/skills", "global"]] as const) {
     for (const n of skillDirs(join(home, dir))) found.set(n, { source, roles: new Set(), added: firstAdded(home, `${dir}/${n}`) });
   }
   for (const i of installedSkills(configDir)) if (!found.has(i.name)) found.set(i.name, { source: i.source, roles: new Set(), added: null });
@@ -234,14 +236,12 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   for (const r of roles) out.rules.roles[r.slug] = lastChanged(home, `roles/${r.slug}.md`);
   const allTasks = listTasks();
   const created = new Map(allTasks.map((t) => [t.data.id, t.data.created]));
-  const ponytailOff = new Set(allTasks.filter((t) => t.data.experiment?.ponytail === "off").map((t) => t.data.id)); // A/B off arm: ponytail was left out on purpose
   const rows = new Map<string, CoverageRow>();
   const cov = out.skills.coverage;
   for (const t of usage.tasks) {
     const role = roles.find((r) => r.slug === t.role);
     if (!t.transcript || !role) continue;
     for (const s of role.skills) {
-      if (s === "ponytail" && ponytailOff.has(t.id)) continue;
       const key = `${role.slug}\u0000${s}`;
       const row = rows.get(key) ?? (() => {
         const at = roleSkillSince(home, `roles/${role.slug}.md`, s);

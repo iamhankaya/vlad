@@ -29,12 +29,9 @@ export type XferPurpose = "file" | "clip-image";
 export interface XferEntry { path: string; kind: "file" | "dir"; size: number }
 export interface XferBeginArgs { id: string; purpose: XferPurpose; entries: XferEntry[]; meta?: Record<string, string | number> }
 export interface XferBeginResult { id: string; chunkBytes: number; state: "new" | "receiving" | "committed"; received?: number[]; items?: XferItem[] }
-export interface XferChunkArgs { id: string; entry: number; offset: number; data: string }
 export interface XferChunkResult { received: number }
-export interface XferCommitArgs { id: string; sha256: (string | null)[] }
 export interface XferItem { name: string; kind: "file" | "dir"; size: number; path: string }
 export interface XferCommitResult { items: XferItem[]; failed?: { name: string; error: string }; clip?: "applied" | "stale" | "disabled" | "invalid" }
-export interface XferAbortArgs { id: string }
 export type ClipImageResult = "applied" | "stale" | "disabled" | "invalid";
 export interface ClipImageSink { enabled(): boolean; apply(png: Buffer, meta: { eventTs: number; rank: 0 | 1 }, from: string): Promise<ClipImageResult> }
 

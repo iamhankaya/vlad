@@ -1,33 +1,15 @@
 import { existsSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { getVladHome, readDoc, validate, type RoleData } from "../kb/index.js";
 
 export type Role = Omit<RoleData, "model"> & { file: string; skills: string[]; model: string | null };
 
 /**
- * Skills the VLAD repo carries as plain files instead of under `.claude/skills`, where they would be
- * listed in every session of the repo whatever the task. A role naming one gets "read this file and
- * apply it" in the worker prompt instead of "load this skill". Paths are relative to VLAD_HOME.
- */
-const VENDORED_SKILLS: Record<string, string> = { ponytail: "vendor/skills/ponytail/SKILL.md" };
-
-/**
- * Uzak istem şablonundaki `{{ROLE_FILE:<slug>}}` / `{{VENDOR_SKILL:<ad>}}` yer tutucularını verilen VLAD_HOME'a göre doldurur
- * (işçi kendi yoluyla çözer). Bilinmeyen ad/slug dokunulmadan kalır: yol dışarı kaçamaz.
+ * Uzak istem şablonundaki `{{ROLE_FILE:<slug>}}` yer tutucusunu verilen VLAD_HOME'a göre doldurur
+ * (işçi kendi yoluyla çözer). Bilinmeyen slug dokunulmadan kalır: yol dışarı kaçamaz.
  */
 export function fillRolePlaceholders(s: string, home: string): string {
-  return s
-    .replace(/\{\{ROLE_FILE:([a-z0-9][a-z0-9-]{0,63})\}\}/g, (_m, slug: string) => join(home, "roles", `${slug}.md`))
-    .replace(/\{\{VENDOR_SKILL:([a-z0-9-]+)\}\}/g, (m, name: string) => (Object.hasOwn(VENDORED_SKILLS, name) ? join(home, VENDORED_SKILLS[name]!) : m));
-}
-
-/** Splits a role's skills into ones the worker loads by name and vendored ones with the file to read. */
-export function splitSkills(skills: string[], roleFile: string): { load: string[]; vendored: { name: string; file: string }[] } {
-  const home = resolve(dirname(roleFile), "..");
-  return {
-    load: skills.filter((s) => !Object.hasOwn(VENDORED_SKILLS, s)),
-    vendored: skills.filter((s) => Object.hasOwn(VENDORED_SKILLS, s)).map((name) => ({ name, file: join(home, VENDORED_SKILLS[name]) })),
-  };
+  return s.replace(/\{\{ROLE_FILE:([a-z0-9][a-z0-9-]{0,63})\}\}/g, (_m, slug: string) => join(home, "roles", `${slug}.md`));
 }
 
 /**

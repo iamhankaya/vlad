@@ -211,51 +211,26 @@ describe("inline cloud launch", () => {
   });
 });
 
-describe("role and vendored skill from the public vlad repo (T20261026-55)", () => {
+describe("role from the public vlad repo (T20261026-55)", () => {
   const SHA = "0123456789abcdef0123456789abcdef01234567";
-  const vendor = () => {
-    mkdirSync(join(home, "vendor", "skills", "ponytail"), { recursive: true });
-    writeFileSync(join(home, "vendor", "skills", "ponytail", "SKILL.md"), "SKILL-GÖVDESİ\n");
-    const f = join(home, "roles", "developer.md");
-    writeFileSync(f, readFileSync(f, "utf8").replace("skills:\n", "skills:\n  - ponytail\n"));
-  };
 
-  it("replaces the embedded role/skill text with clone steps pinned to a sha", () => {
-    vendor();
+  it("replaces the embedded role text with clone steps pinned to a sha", () => {
     const seen: string[][] = [];
     const r = prepareCloudLaunch(mk().data.id, { vladPin: (f) => (seen.push(f), SHA) });
-    expect(seen).toEqual([["roles/developer.md", "vendor/skills/ponytail/SKILL.md"]]);
+    expect(seen).toEqual([["roles/developer.md"]]);
     expect(r.prompt).not.toContain("ROL-GÖVDESİ");
-    expect(r.prompt).not.toContain("SKILL-GÖVDESİ");
     expect(r.prompt).toContain(`checkout ${SHA}`);
     expect(r.prompt).toContain("--no-checkout --depth 1 https://github.com/iamhankaya/vlad /tmp/vlad-ro");
     expect(r.prompt).toContain("`/tmp/vlad-ro/roles/developer.md`");
-    expect(r.prompt).toContain("`/tmp/vlad-ro/vendor/skills/ponytail/SKILL.md`");
     expect(r.prompt).toContain("[VLAD:LOG #n] vlad erişimi yok");
     expect(r.prompt).toContain("superpowers:test-driven-development");
     expect(r.extra_allowed_tools).toEqual([ADD]);
     expect(r.warnings).toEqual([]);
   });
 
-  it("F-vlad-175: ponytail off arm on the pinned-clone path embeds the stripped role body, never points at the role file", () => {
-    cfg({ cloudKb: "readonly", experiments: { ponytail: "ab" } });
-    vendor();
-    const f = join(home, "roles", "developer.md");
-    writeFileSync(f, readFileSync(f, "utf8") + "- **ponytail (deneme):** PONYTAIL-KURALI\n");
-    let t = mk();
-    while (Number(t.data.id.slice(-1)) % 2 === 0) t = mk();
-    const p = prepareCloudLaunch(t.data.id, { vladPin: () => SHA }).prompt;
-    expect(p).toContain("ROL-GÖVDESİ sorumluluk");
-    expect(p).not.toContain("PONYTAIL-KURALI");
-    expect(p).not.toContain("/tmp/vlad-ro/roles/developer.md");
-    expect(p).not.toContain("SKILL-GÖVDESİ");
-  });
-
   it("falls back to embedded text with a warning when the files are dirty or unpushed", () => {
-    vendor();
     const r = prepareCloudLaunch(mk().data.id, { vladPin: () => { throw new Error("roles/developer.md origin/master'dan farklı"); } });
     expect(r.prompt).toContain("ROL-GÖVDESİ sorumluluk");
-    expect(r.prompt).toContain("## Skill: ponytail\nSKILL-GÖVDESİ");
     expect(r.prompt).not.toContain("rev-parse HEAD");
     expect(r.warnings.join("\n")).toMatch(/gömüldü.*farklı/);
   });
@@ -269,10 +244,8 @@ describe("role and vendored skill from the public vlad repo (T20261026-55)", () 
 
   it("inline mode keeps the embedded role and never pins", () => {
     cfg({ cloudKb: "inline" });
-    vendor();
     const r = prepareCloudLaunch(mk().data.id, { vladPin: () => { throw new Error("must not be called"); } });
     expect(r.prompt).toContain("ROL-GÖVDESİ sorumluluk");
-    expect(r.prompt).toContain("SKILL-GÖVDESİ");
     expect(r.warnings).toEqual([]);
   });
 });

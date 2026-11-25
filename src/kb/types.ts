@@ -84,7 +84,7 @@ export interface TaskData {
   /** Uzak `task gate` yeşil koşusu (yalnız recordGreenGate yazar; çalışan yazamaz): merge öncesi dal ucuyla karşılaştırılır (F-vlad-139). */
   last_green_gate?: { head: string; target: "task" | "integration"; at: string } | null;
   released_ops?: { machine: string; op: string }[] | null;
-  /** ponytail A/B (config `experiments.ponytail: "ab"`): hangi kolda koşuldu; deney dışı görevde yok. */
+  /** Kapanan ponytail A/B deneyinin (D-vlad-083) geçmiş görevlerdeki kol kaydı; yalnız `audit setup` `by_ponytail` okur, yeni görevde yazılmaz. */
   experiment?: { ponytail: "on" | "off" } | null;
 }
 
@@ -188,6 +188,6 @@ export interface VladConfig {
   consoles?: ConsoleDef[];
   /** spc köprüsü (`vlad monitor`, çatı T20261119-18): ajan listesi; sır yok (belirteç Keychain'de). */
   monitor?: { servers: { id: string; agent_url: string; project: string; /** Haftalık kapasite işi: spc checkout'undaki capacity.yaml mutlak yolu (yoksa sunucu kapasite işinden atlanır). */ capacity_file?: string }[] };
-  /** Deneyler (varsayılan kapalı; VLAD açar). `ponytail: "ab"`: developer/game-developer görevlerinde ID'nin son hanesi tekse ponytail yüklenmez. */
+  /** Kapanan deney (D-vlad-083) için eski config dosyalarını reddetmemek üzere şemada tutulur; hiçbir kod okumaz. */
   experiments?: { ponytail?: "ab" };
 }

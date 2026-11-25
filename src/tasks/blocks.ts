@@ -59,7 +59,7 @@ const prLocal = (id: string): string =>
   `\`vlad task log ${id} "CI: <run-id> izleniyor/bekliyor"\` yaz ve raporla; boşta bekleyerek oturum tüketme. ` +
   "CI tur kuralı: kırmızıyı düzeltip yeniden push edersin, ama aynı neden ikinci kez kırmızı çıkarsa dur ve " +
   `\`vlad task ask ${id} "CI: <neden>, 2. tur"\` sor; entegrasyon dalından gelen (kendi değişikliğin olmayan) kırmızı tur sayılmaz: ` +
-  "düzeltmeye çalışma, raporun `### Açık noktalar`'ına yaz. Push sonrası `ci-triage` skill'ini Skill aracıyla yükle (zorunlu; yüklenemezse bu kural yeterlidir, raporda belirt).";
+  "düzeltmeye çalışma, raporun `### Açık noktalar`'ına yaz. Kırmızıyı sınıflarken (`gh run view --log-failed`) kendi değişikliği / entegrasyondan gelen / ortam / Linux farkı / bayat kayıt dosyası ayrımını yap; push'tan önce betiklerin `100755` olduğunu ve kayıt dosyalarının üretici betikle eşleştiğini denetle (ayrıntı: `vlad-worker` skill'i, \"CI izleme\").";
 
 const commitLocal = (id: string): string =>
   `Yetki (autonomy commit): yalnız \`vlad/${id}\` dalında commit'le; push etme, PR açma, ana veya entegrasyon dalına merge etme. CI yoksa kapı komutunu yerelde koş.`;

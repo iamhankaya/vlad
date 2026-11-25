@@ -36,7 +36,6 @@ export function buildOverlay(c: SetupContext, cur: Obj, tracked: Obj, localExist
   if (a.autonomy) o.defaultAutonomy = a.autonomy;
   if (a.ctx?.worker) o.workerAutoCompact = a.ctx.worker;
   if (a.limits?.maxParallel) o.maxParallel = a.limits.maxParallel;
-  if (a.experiments?.ponytail) o.experiments = { ponytail: a.experiments.ponytail };
 
   if (a.machines === "single") {
     // Sahibin çok makineli tracked filosu yalnız açık `fresh: true` ile kapatılır; sihirbaz varsayılanı ("single") filoyu sessizce düşüremez.

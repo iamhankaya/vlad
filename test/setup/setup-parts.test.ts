@@ -69,7 +69,7 @@ describe("senaryo 1: tek makine, yerel kb", () => {
   it("settings + skill + overlay + kb yazılır; arkadaşa maintainer'ın makineleri/projeleri taşınmaz; sonra --check yeşil", async () => {
     await runSetup(ctx(ans({ fresh: true }), { yes: true }));
     expect(jr(settings()).hooks.SessionEnd[0].hooks[0].command).toContain("session-report.js");
-    for (const n of ["vlad-worker", "ci-triage"]) expect(existsSync(join(claudeDir, "skills", n, "SKILL.md"))).toBe(true);
+    for (const n of ["vlad-worker"]) expect(existsSync(join(claudeDir, "skills", n, "SKILL.md"))).toBe(true);
     const local = jr(join(vladHome, "vlad.config.local.json"));
     expect(local).toMatchObject({ machines: null, brain: null, workerAutoCompact: null, experiments: null, projects: null, kbDir: join(root, "kb"), roots: [join(home, "dev")] });
     expect(existsSync(join(root, "kb", ".git"))).toBe(true);

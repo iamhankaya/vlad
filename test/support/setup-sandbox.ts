@@ -64,7 +64,6 @@ export function makeSandbox(o: { withDist?: boolean; platform?: "win32" | "darwi
   // repo kopyası: kaynak/şema/skill dosyaları; dist en son (src'den yeni kalsın)
   for (const e of readdirSync(src)) if (!SKIP.has(e) && !isLocalState(e)) cpSync(join(src, e), join(vladHome, e), { recursive: true });
   cpSync(join(src, ".claude"), join(vladHome, ".claude"), { recursive: true, filter: (s) => !s.endsWith("settings.local.json") });
-  cpSync(join(src, "vendor"), join(vladHome, "vendor"), { recursive: true });
   if (o.withDist !== false) cpSync(join(repoRoot, "dist"), join(vladHome, "dist"), { recursive: true });
   for (const [name, body] of Object.entries(FAKE_TOOLS)) {
     const logLine = LOGGED_TOOLS.includes(name) ? `echo "${name} $*" >> "$FAKE_LOG"\n` : "";

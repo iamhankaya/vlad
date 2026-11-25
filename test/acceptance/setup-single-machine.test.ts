@@ -21,8 +21,8 @@ describe("S1: Mac, tek makine, yerel kb (mutlu yol)", () => {
     expect(cmds[0].timeout).toBeGreaterThanOrEqual(10);
     expect(Object.keys(s.hooks)).toEqual(["SessionEnd"]);
   });
-  it("global skill'ler kurulur (vlad-worker, ci-triage)", () => {
-    for (const n of ["vlad-worker", "ci-triage"]) expect(existsSync(join(sb.claudeDir, "skills", n, "SKILL.md")), n).toBe(true);
+  it("global skill kurulur (vlad-worker)", () => {
+    for (const n of ["vlad-worker"]) expect(existsSync(join(sb.claudeDir, "skills", n, "SKILL.md")), n).toBe(true);
   });
   it("vlad.config.local.json var; machines/brain yok; kbDir sandbox içinde", () => {
     const f = join(sb.vladHome, "vlad.config.local.json");

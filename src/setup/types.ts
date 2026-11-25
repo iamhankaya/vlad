@@ -5,7 +5,6 @@ import type { VladConfig } from "../kb/types.js";
 
 /** `--check` çıkış kodları: 0 hepsi ok/n/a; 1 en az bir hata; 2 kullanım hatası (ör. etkileşimsizde eksik --answers). */
 export const SETUP_EXIT = { ok: 0, failed: 1, usage: 2 } as const;
-export type SetupExit = (typeof SETUP_EXIT)[keyof typeof SETUP_EXIT];
 
 /** Kurulum parçaları (spec "Komut yüzeyi"); `--only` bu adları alır. */
 export const PART_IDS = [
@@ -126,7 +125,6 @@ export interface SetupAnswers {
   limits?: { maxParallel?: number };
   launcher?: VladConfig["launcher"];
   autonomy?: VladConfig["defaultAutonomy"];
-  experiments?: { ponytail?: "ab" };
   plugins?: string[];
   perms?: boolean;
   claudedirs?: boolean;
@@ -158,4 +156,3 @@ export interface Question {
 
 // ---- Config overlay ---------------------------------------------------------
 /** `vlad.config.local.json`: tracked `vlad.config.json` üstüne sığ birleşim; `null` anahtarı siler. Birleşim config şemasına göre doğrulanır. */
-export type LocalConfigOverlay = { [K in keyof VladConfig]?: VladConfig[K] | null };

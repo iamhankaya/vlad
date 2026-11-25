@@ -12,7 +12,6 @@ import { countOpenSevere } from "../findings/store.js";
 import { relatedOpenFindings } from "../findings/similar.js";
 import { countInbox } from "../inbox/inbox.js";
 import type { Launcher } from "../launcher/index.js";
-import { splitSkills } from "../roles/store.js";
 import type { Role } from "../roles/store.js";
 import { applyRemoteStalls, markSilentWorkers } from "./liveness.js";
 import type { LivenessProbe, RemoteStallPlan } from "./liveness.js";
@@ -31,8 +30,6 @@ import { countPending } from "../digest/pending.js";
 import type { StaleSummary } from "../projects/status.js";
 import { expireMode, modeLine } from "../mode/store.js";
 import { untrustWorktree } from "./trust.js";
-import { ponytailArm, ponytailOffRoleBody, withoutPonytail } from "./experiment.js";
-import type { PonytailArm } from "./experiment.js";
 import { ensureIntegrationGit, launchCore, unmergedCommits } from "./launch-core.js";
 import { nowMs } from "../fleet/clock.js";
 import { capsOf, machineLoad, pickMachine } from "../fleet/placement.js";
@@ -84,7 +81,7 @@ function relatedFindingsOf(task: Task): NonNullable<BlockCtx["relatedFindings"]>
 }
 
 export function buildPrompt(
-  taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; ponytailOff?: boolean },
+  taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[] },
   ctx?: { taskId: string; parent: string | null; projectSkills?: string[]; relatedFindings?: BlockCtx["relatedFindings"]; gateEnv?: Record<string, string> },
   portable = false,
 ): string {
@@ -95,28 +92,21 @@ export function buildPrompt(
 }
 
 /**
- * `portable` (uzak işçi): rol dosyası ve vendored skill yolları beynin yerel yolları olamaz (Mac yolu Windows'ta yok);
- * `{{ROLE_FILE:<slug>}}` / `{{VENDOR_SKILL:<ad>}}` bırakılır, işçi kendi VLAD_HOME'una göre doldurur.
+ * `portable` (uzak işçi): rol dosyası yolu beynin yerel yolu olamaz (Mac yolu Windows'ta yok);
+ * `{{ROLE_FILE:<slug>}}` bırakılır, işçi kendi VLAD_HOME'una göre doldurur.
  */
-function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; slug?: string; ponytailOff?: boolean }, portable = false): string {
+function promptCore(taskFile: string, autonomy: string, role?: { title: string; file: string; skills?: string[]; slug?: string }, portable = false): string {
   const base =
     `Sen bir VLAD çalışanısın. Görevin: \`${taskFile}\`. ` +
     `Önce \`vlad-worker\` skill'ini yükle ve protokolünü uygula. Yetki seviyen: \`${autonomy}\`.`;
   if (!role) return base;
-  // off arm: the filtered role body travels inline (the worker never reads the role file, so the ponytail bullet cannot reach it)
-  const withRole = role.ponytailOff
-    ? `${base} Rolün: ${role.title}. Oradaki sorumluluk, yetki ve çıktı kurallarına uy; rol tanımı:
-
-${ponytailOffRoleBody(role.file)}
-`
-    : `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${portable ? `{{ROLE_FILE:${slugOf(role.file)}}}` : role.file}\` dosyasını oku ` +
-      `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
-  const { load, vendored } = splitSkills(role.skills ?? [], role.file);
+  const withRole = `${base} Rolün: ${role.title}. Göreve başlamadan önce \`${portable ? `{{ROLE_FILE:${slugOf(role.file)}}}` : role.file}\` dosyasını oku ` +
+    `ve oradaki sorumluluk, yetki ve çıktı kurallarına uy.`;
+  const load = role.skills ?? [];
   const parts = [withRole];
   if (load.length) {
     parts.push(`İşe başlamadan şu skill'leri yükle: ${load.map((s) => `\`${s}\``).join(", ")}. Yüklenemeyen olursa kapanış raporunda belirt.`);
   }
-  for (const v of vendored) parts.push(`\`${v.name}\` skill'i yüklü değildir; \`${portable ? `{{VENDOR_SKILL:${v.name}}}` : v.file}\` dosyasını oku ve uygula.`);
   return parts.join(" ");
 }
 
@@ -305,11 +295,8 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   let wt: string;
   let role: Role | undefined;
   let base: string | undefined;
-  let arm: PonytailArm | undefined;
   try {
     if (task.data.role) role = roleFor(task.data.role, task.data.kind);
-    arm = ponytailArm(id, role, cfg);
-    if (arm === "off") role = withoutPonytail(role!);
     repo = projectPath(task.data.project, cfg);
     wt = worktreePath(cfg, repo, id, process.platform as "win32" | "darwin" | "linux");
     // a pipeline phase branches from the pipeline's integration branch; the rollback in launchCore leaves it alone
@@ -320,7 +307,6 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
     throw new Error(msg);
   }
   const model = effectiveModel(task.data, role);
-  const experiment = arm ? { ponytail: arm } : task.data.experiment ? null : undefined; // null: clears a stale arm from an earlier launch
   const autoCompact = cfg.workerAutoCompact;
   // yerel (brain) yerleşim de kapasiteyi kilit altında ayırır (placeTask'ın kontrolü kilitsizdi: eşzamanlı iki launch ikisi de açılırdı)
   // ve çatıyı pencere açılmadan önce sabitler: eşzamanlı uzak kardeş faz başka makineye kayamaz
@@ -391,7 +377,7 @@ async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string 
   }
   try {
     return await withKbLock(() => {
-      const t = setState(id, "running", { branch, worktree: wt, error: null, ...(experiment !== undefined ? { experiment } : {}), ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : { launch_op: undefined }) }); // machines'siz: alan eski davranıştaki gibi yazılmaz (golden)
+      const t = setState(id, "running", { branch, worktree: wt, error: null, ...patch, ...(patch.machine ? { machine_reserved: null, launch_op: null } : { launch_op: undefined }) }); // machines'siz: alan eski davranıştaki gibi yazılmaz (golden)
       if (patch.machine) pinPipeline(t.data.parent, patch.machine);
       return t;
     });
@@ -586,17 +572,13 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
     return opId;
   });
 
-  // the adopt path (op-status 'done') commits before the role is built below, so the arm is derived here, not from that scope
-  const armNow = (): PonytailArm | undefined => { try { return ponytailArm(id, task.data.role ? roleFor(task.data.role, task.data.kind) : undefined, cfg); } catch { return undefined; } };
   /** Verify the reservation is still ours, then record the running task (kb lock). */
   const commit = (opId: string, r: RemoteLaunched): Promise<Task> => withKbLock(() => {
     const t = getTask(id);
     if (t.data.launch_op !== opId || t.data.state !== "queued") {
       throw new LostRace(`başka deneme kazandı (${id}, launch_op değişti ya da görev artık queued değil); yazılmadı`);
     }
-    const arm = armNow();
-    const experimentNow = arm ? { ponytail: arm } : t.data.experiment ? null : undefined;
-    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null, ...(experimentNow !== undefined ? { experiment: experimentNow } : {}) });
+    const run = setState(id, "running", { branch: r.branch, worktree: r.worktree, machine, machine_reserved: null, launch_op: null, error: null });
     if (r.integration && parent) recordIntegration(parent, task.data.project, r.integration.branch, r.integration.worktree);
     pinPipeline(parent, machine);
     return run;
@@ -617,9 +599,7 @@ async function launchRemote(task: Task, o: LaunchOpts, machine: string, remote: 
   }
   if (parent && CLOSED.includes(getTask(parent).data.state)) throw new Error(`çatı görev ${parent} ${getTask(parent).data.state}; fazı başlatılamaz`);
   // built before the reservation: a missing role file must not leave a reservation behind
-  const role0 = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
-  const arm = ponytailArm(id, role0, cfg);
-  const role = arm === "off" && role0 ? withoutPonytail(role0) : role0;
+  const role = task.data.role ? roleFor(task.data.role, task.data.kind) : undefined;
   const model = effectiveModel(task.data, role);
   const def = card.default_branch ?? undefined;
   const args = {

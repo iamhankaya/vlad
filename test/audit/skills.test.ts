@@ -70,7 +70,7 @@ describe("scanTranscript", () => {
 });
 
 describe("auditSkills", () => {
-  it("expected = vlad-worker + role skills (+ ci-triage when pushed); reports loaded/missing and rates", () => {
+  it("expected = vlad-worker + role skills ; reports loaded/missing and rates", () => {
     role("developer", ["superpowers:test-driven-development", "ponytail"]);
     const a = task(w("C:", "w", "a"), { role: "developer" });
     transcript(w("C:", "w", "a"), [skill("vlad-worker"), skill("superpowers:test-driven-development")]);
@@ -81,24 +81,11 @@ describe("auditSkills", () => {
     const by = Object.fromEntries(r.tasks.map((t) => [t.id, t]));
     expect(by[a].expected.sort()).toEqual(["ponytail", "test-driven-development", "vlad-worker"]);
     expect(by[a].missing).toEqual(["ponytail"]);
-    expect(by[b].expected).toContain("ci-triage");
-    expect(by[b].missing).toEqual(["ci-triage"]);
+    expect(by[b].expected).not.toContain("ci-triage"); // ci-triage skill'i vlad-worker'a taşındı (T20261125-50)
+    expect(by[b].missing).toEqual([]);
     expect(by[c]).toMatchObject({ transcript: false, missing: [] });
-    expect(r.summary).toMatchObject({ tasks: 3, audited: 2, expected: 7, loaded: 5 });
-    expect(r.summary.rate).toBeCloseTo(5 / 7);
-  });
-
-  it("does not expect ponytail from a task on the experiment's off arm (same rule as audit setup)", () => {
-    role("developer", ["superpowers:test-driven-development", "ponytail"]);
-    const off = task(w("C:", "w", "off"), { role: "developer" });
-    const t = getTask(off); t.data.experiment = { ponytail: "off" }; writeDoc(t.file, t.data, t.body);
-    const on = task(w("C:", "w", "on"), { role: "developer" });
-    const t2 = getTask(on); t2.data.experiment = { ponytail: "on" }; writeDoc(t2.file, t2.data, t2.body);
-    for (const wt of ["off", "on"]) transcript(w("C:", "w", wt), [skill("vlad-worker"), skill("superpowers:test-driven-development")]);
-    const by = Object.fromEntries(auditSkills({ configDir: cfgDir }).tasks.map((x) => [x.id, x]));
-    expect(by[off].expected.sort()).toEqual(["test-driven-development", "vlad-worker"]);
-    expect(by[off].missing).toEqual([]);
-    expect(by[on].missing).toEqual(["ponytail"]);
+    expect(r.summary).toMatchObject({ tasks: 3, audited: 2, expected: 6, loaded: 5 });
+    expect(r.summary.rate).toBeCloseTo(5 / 6);
   });
 
   it("project card skills are expected too", () => {

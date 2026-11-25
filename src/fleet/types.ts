@@ -132,13 +132,10 @@ export interface HeldByLimit { id: string; reasons: { machine: string; reason: H
 // Kapı işlemleri (brain → worker Agent; push YOK). Gövdeleri sonraki fazlar bağlar; şekil sözleşmedir.
 /** `gate-run`: kartın gate komutunu entegrasyon worktree'sinde koşar (yolu işçi kendi hesaplar). */
 /** `target: "base"`: hedef dalın (çatı dalı ya da kartın ana dalı) ucunda koşar; `cachedHead` uçla aynıysa koşmadan `cached: true` döner (task gate --compare-base). */
-export interface GateRunArgs { taskId: string; project: string; repoName: string; target: "integration" | "task" | "base"; cachedHead?: string }
 export interface GateRunResult { exit: number; stdout: string; stderr: string; /** commit the gate ran on (F-vlad-139) */ head?: string; /** HEAD before the gate, set only when the gate moved HEAD (F-vlad-154) */ headBefore?: string; /** base target only: the cached result for `head` is still current, the gate was not rerun */ cached?: boolean }
 /** `merge-preview`: log + diff --stat + merge-tree; yazmaz. */
-export interface MergePreviewArgs { taskId: string; project: string; repoName: string; from: string; into: string }
 export interface MergePreviewResult { log: string; diffStat: string; conflicts: string[] }
 /** `merge`: faz → vlad/<çatı> ya da son kapıda ana dal; yalnız brain'den, görev/makine eşleşmeli. */
-export interface MergeArgs { taskId: string; project: string; repoName: string; from: string; into: string; message?: string }
 export interface MergeResult { head: string; merged: boolean }
 
 // `branch-push` (F-vlad-314, çatı T20261111-48, sözleşme T20261111-50). Davranış yok; uygulama fazları bu şekle bağlanır.
@@ -162,7 +159,6 @@ export type ScriptPlatform = Os;
 export type ScriptClass = "read" | "write";
 
 export const SCRIPT_PARAM_TYPES = ["string", "enum", "int", "bool", "root"] as const;
-export type ScriptParamType = (typeof SCRIPT_PARAM_TYPES)[number];
 
 /** Hata mesajındaki makine okunur neden: `<AgentCode> [<neden>]`; `bad_param` için `[bad_param:<ad>]`. */
 export const SCRIPT_REASONS = [
@@ -170,7 +166,6 @@ export const SCRIPT_REASONS = [
   "dirty", "hash_mismatch", "not_regular", "not_in_head", "unpushed", "no_upstream", "approval",
   "bad_manifest", "no_repo",
 ] as const;
-export type ScriptReason = (typeof SCRIPT_REASONS)[number];
 
 /** ad: `^[a-z][a-z0-9-]{0,47}$`; manifest araması `Map` ile yapılır (`__proto__` anahtar olmaz). */
 export const SCRIPT_NAME_RE = /^[a-z][a-z0-9-]{0,47}$/;
