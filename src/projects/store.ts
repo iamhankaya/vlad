@@ -56,7 +56,6 @@ export function listProjects(): ProjectSummary[] {
 }
 
 export const SETTABLE_FIELDS = ["exposure", "repo", "default_branch", "local_only", "local_only_reason", "gate", "machines"] as const;
-export type SettableField = (typeof SETTABLE_FIELDS)[number];
 
 /** Sets (or, with an empty value, removes) one optional card field; the rest of the card and its body stay as they are. */
 export function setProjectField(slug: string, field: string, value: string): ProjectCard {

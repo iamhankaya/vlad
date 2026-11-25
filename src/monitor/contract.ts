@@ -4,7 +4,6 @@
 
 /** Vendored şema sürümü. spc `AlertsResponse`'ta bugün `schema` alanı yok (yokluk = 1); `schema: 2` gelirse açık hata. */
 export const SPC_CONTRACT_SCHEMA = 1;
-export const SPC_CONTRACT_SOURCE = "spc packages/contract/src/types.ts @ a4c5fd0";
 
 export type Labels = Record<string, string>;
 export type Op = ">" | ">=" | "<" | "<=" | "==" | "!=";
@@ -56,7 +55,6 @@ export interface AlertsResponse {
 export type SpcErrorCode =
   | "invalid_param" | "unauthorized" | "not_found" | "method_not_allowed"
   | "cursor_invalid" | "rate_limited" | "internal" | "unavailable";
-export interface ApiError { error: { code: SpcErrorCode; message: string; details: Record<string, unknown> } }
 /** Kod → HTTP durumu (spc ERROR_STATUS ile aynı). */
 export const SPC_ERROR_STATUS: Readonly<Record<SpcErrorCode, number>> = {
   invalid_param: 400, unauthorized: 401, not_found: 404, method_not_allowed: 405,
