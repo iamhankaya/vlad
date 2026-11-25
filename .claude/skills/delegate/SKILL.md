@@ -49,7 +49,7 @@ vlad project list --json
 
 **Dış API gerçek fixture'ı:** iş dış bir API/servis yanıtına dayanıyorsa `spec`/`plan` fazının Tanım'ına "plan öncesi gerçek yanıt örnekleri" ekle (analyst/architect gerçek yanıtı kaydedip raporda verir; yoksa kullanıcıdan alınacağını `### Açık noktalar`'a yazar). Taslakta örnek yoksa bunu uyarı olarak göster ve kullanıcıdan iste. Kabul ve unit testler kaydedilmiş gerçek fixture'a karşı yazılır; uydurma yanıt şekline değil.
 
-**Model dağıtımı:** varsayılan rolün modeli (Model sütununa onu yaz, `--model` geçirme); Haiku yalnız mekanik fazda (kod yazan fazda değil); Opus yalnız gerekçeyle ve kullanıcının açık onayıyla (`--model-reason` zorunlu). Faz başına sapma `--phase-model`; kurallar ve komut biçimi: `reference/model-dagitimi.md`.
+**Model dağıtımı:** taslağın faz tablosuna Model sütunu koy; tüm kurallar (Haiku/Opus sınırı, `--phase-model`, komut biçimi) tek yerde: `reference/model-dagitimi.md`.
 
 İşaretler: sıfırdan mı; dokunulan dosya/modül sayısı; arayüz/şema değişikliği; gereksinimin netliği; kullanıcıya görünür davranış.
 - İşaretler aynı döngüyü gösteriyorsa sen seç; taslağa tek cümlelik gerekçe yaz.

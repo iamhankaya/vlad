@@ -37,7 +37,7 @@ Ayrıntı (kuyruk JSON v2, `scriptSha256`, ACL, `resume` kuralları, geri dönü
 
 ## Bulgular ve çalışma notları
 
-- **Bulgular:** ertelenen/açık noktalar kaybolmasın diye `kb/findings/<id>.md` altında tutulur (`F-<proje>-NNN`; önem: kritik|yüksek|orta|düşük|bilgi; durum: open|deferred|fixed|wontfix). `/digest` kapanış raporlarının `### Açık noktalar` maddelerini `vlad finding add` ile kaydeder; `vlad status --summary` açık (open+deferred) kritik/yüksek bulgu sayısını da gösterir.
+- **Bulgular:** ertelenen/açık noktalar kaybolmasın diye `kb/findings/<id>.md` altında tutulur (`F-<proje>-NNN`; önem: kritik|yüksek|orta|düşük|bilgi; durum: open|deferred|fixed|wontfix). `/digest` kapanış raporlarının `### Açık noktalar` maddelerinden yalnız orta ve üstünü `vlad finding add` ile kaydeder (düşük/bilgi raporda kalır, dondurulmuş projede bulgu taraması yok: D-genel-033); `vlad status --summary` açık (open+deferred) kritik/yüksek bulgu sayısını da gösterir.
 - **Çalışma notları:** kartın `## Çalışma notları` bölümü projede öğrenilmiş kalıcı derslerdir; yalnızca `vlad project note` yazar (pipeline son kapısından sonra `/status` retrosu). Çalışanlar ve roller işe başlarken okur; bulut çalışanın prompt'una satır içi girer. Rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur.
 
 ## Yetki sınırları
@@ -108,7 +108,7 @@ Sonuç yalnızca sohbette kalmamalı; daima görev dosyasına yazılır.
 
 ## Model dağıtımı
 
-Görev modeli sırası: görevin `model` alanı (`haiku|sonnet|opus`, `vlad task new --model`) ?? rolün `model`i ?? varsayılan; yerel launch (`claude --model`), bulut launch (`create_session.model`) ve research arka plan agent'ı aynı sırayı kullanır, `vlad task list --json` görev başına `effective_model`/`role_model` verir. `/delegate` taslağın faz tablosunda Model sütununu gösterir: varsayılan rolün modeli; Haiku yalnızca mekanik fazlarda (belge, eşitleme, arama, özet), kod yazan fazda değil; Opus yalnızca en kritik işte, gerekçesi taslakta yazılı ve kullanıcının açık onayıyla (`--model-reason` olmadan CLI reddeder). `vlad status` rolün modelinden sapan görev modelini gösterir. Çalışanların otomatik sıkıştırma eşiği `vlad.config.json`'daki `workerAutoCompact` ile (ör. `"300k"`) verilir: yerel launch, `--external` launch ve `task resume --external` betiklerinde `claude --autocompact <değer>` olur (bulutta yok); ana VLAD oturumu kullanıcı ayarıyla kalır, `CLAUDE_CODE_AUTO_COMPACT_WINDOW` env değişkeni bayraktan önceliklidir ve betik onu ayarlamaz.
+Görev modeli sırası: görevin `model` alanı (`haiku|sonnet|opus`, `vlad task new --model`) ?? rolün `model`i ?? varsayılan; yerel launch (`claude --model`), bulut launch (`create_session.model`) ve research arka plan agent'ı aynı sırayı kullanır, `vlad task list --json` görev başına `effective_model`/`role_model` verir. Seçim kuralları (Haiku/Opus sınırı, gerekçe) tek yerde: `delegate/reference/model-dagitimi.md`; CLI `--model-reason` olmadan Opus'u reddeder. `vlad status` rolün modelinden sapan görev modelini gösterir. Çalışanların otomatik sıkıştırma eşiği `vlad.config.json`'daki `workerAutoCompact` ile (ör. `"300k"`) verilir: yerel launch, `--external` launch ve `task resume --external` betiklerinde `claude --autocompact <değer>` olur (bulutta yok); ana VLAD oturumu kullanıcı ayarıyla kalır, `CLAUDE_CODE_AUTO_COMPACT_WINDOW` env değişkeni bayraktan önceliklidir ve betik onu ayarlamaz.
 
 ## Orkestratör disiplini
 

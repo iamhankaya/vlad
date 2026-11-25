@@ -55,7 +55,7 @@ describe("gate rules: integrate is the single source", () => {
     expect(TEXT.second).toMatch(/integrate` K4/);
   });
   it("the Codex round-count line format and the multi-machine gate rule are in integrate only (K5, K6)", () => {
-    expect(TEXT.integrate).toMatch(/"Codex turları: ara=<n> son=<n>"/);
+    expect(TEXT.integrate).toMatch(/Codex turları: ara=<n> son=<n>/); // written by `task close` (close-codex-rounds.test.ts pins the format the audit counts)
     expect(TEXT.integrate).toMatch(/Gate <makine>: yeşil <sha>/);
     for (const d of ["claude", "second", "delegate"] as const) expect(TEXT[d], d).not.toMatch(/Codex turları: ara=/);
     for (const d of ["claude", "status"] as const) expect(TEXT[d], d).not.toMatch(/Gate <makine>: yeşil/);
