@@ -177,7 +177,7 @@ describe("iki özellik birlikte: bayat özetli projede refs çalışır ve skill
     expect(status).toMatch(/bayat/i);
     expect(status).toMatch(/\/digest/);
     expect(status).toMatch(/sabah raporu/i);
-    const claude = readFileSync(join(root, "CLAUDE.md"), "utf8");
+    const claude = readFileSync(join(root, "CLAUDE.md"), "utf8") + readFileSync(join(root, "docs/claude-ayrinti.md"), "utf8");
     expect(claude).toMatch(/bayat\/eksik proje özeti/);
     expect(claude).toContain("docs/commands.md");
     expect(readFileSync(join(root, "docs/commands.md"), "utf8")).toContain("`vlad kb refs`");

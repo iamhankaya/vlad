@@ -119,3 +119,23 @@ describe("blocks/ related open findings", () => {
     expect(buildPrompt("f.md", "commit", undefined, { taskId: ID, parent: null, relatedFindings: rel(1) })).toContain("F-alpha-001");
   });
 });
+
+describe("blocks/ çok makine işçisi bloğu (T20261125-52)", () => {
+  const MARK = "Çok makine işçisi";
+  it("yalnız remote=true yerel dev prompt'unda var; beyin, plan ve bulutta yok", () => {
+    const t = text({ autonomy: "commit", remote: true });
+    expect(t).toContain(MARK);
+    expect(t).toContain("salt okunur");
+    expect(t).toContain("task set");
+    expect(t).toContain("vlad queue flush");
+    expect(t).toContain("çıkış 75");
+    for (const c of [{}, { remote: false }, { mode: "cloud" as const, remote: true }, { autonomy: "plan" as const, remote: true }]) {
+      expect(text({ autonomy: "commit", ...c }), JSON.stringify(c)).not.toContain(MARK);
+    }
+  });
+  it("buildPrompt: remote ctx bloğu taşır, ctx'siz/beyin taşımaz", () => {
+    const base = { taskId: ID, parent: null };
+    expect(buildPrompt("f.md", "commit", undefined, { ...base, remote: true })).toContain(MARK);
+    expect(buildPrompt("f.md", "commit", undefined, base)).not.toContain(MARK);
+  });
+});

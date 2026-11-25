@@ -13,6 +13,8 @@ export type BlockCtx = {
   relatedFindings?: { id: string; severity: string; title: string }[];
   /** Per-machine gate environment (`machines[].gateEnv[project]`, values as written, `$VAR` unexpanded); local non-plan prompts only. */
   gateEnv?: Record<string, string>;
+  /** Worker runs on a machine that is not the brain (multi-machine); local non-plan prompts only. */
+  remote?: boolean;
 };
 
 /**
@@ -69,6 +71,15 @@ const cloudAuthority = (id: string, a: string): string =>
   "görev `## Bağlam`'ında önceki CI günlükleri verildiyse işe başlamadan oku. Aynı kırmızı neden ikinci kez çıkarsa `[VLAD:ASK #n]` ile sor; " +
   "entegrasyon dalından gelen kırmızıyı düzeltmeye çalışma, `### Açık noktalar`'a yaz.";
 
+/** Remote worker rules (moved out of the vlad-worker skill: only a task placed on a non-brain machine needs them). */
+const remoteBlock = (): string =>
+  "Çok makine işçisi (bu makine beyin değil): kb klonun **salt okunurdur**; kb'ye yazma beyindedir. `vlad task log|ask|report|session` yerel VLAD Agent'a iletilir ve beyinde işlenir (`--file` rapor yine yerel dosyadan okunur). " +
+  "Başka yazma komutu (`task set`, `finding add`, `kb commit`) işçide reddedilir: zorlama; gerekirse `vlad task ask` ile bildir. " +
+  "Takılırsan (`stalled`) ya da görevi tamamlayamazsan `task set` çalışmaz: nedeni `vlad task log` ile yaz, gerekirse `vlad task ask` ile bildir (beyin `task set <id> running` ile geri alır). " +
+  "Beyne ulaşılamazsa yazma yedek kuyruğa alınır (`kuyruğa alındı (seq N)`; hata değil, devam et); durum `vlad queue list`, şimdi dene `vlad queue flush`, başarısız girdi `vlad queue drop <seq>`; rapor kuyruktaysa `awaiting_approval` beyne ulaşana dek oluşmaz. " +
+  "Yerel Agent çalışmıyorsa komut \"yerel VLAD Agent çalışmıyor (vlad agent status)\" ile geçici hata verir (çıkış 75); kullanıcıya söyle. " +
+  "Görev klasörün (`worktree`) işçide; kb'yi işçideki klondan oku (beyin push ettiğinde `kb-sync` ile güncellenir).";
+
 const SHARED_FILES =
   "Paylaşılan kayıt dosyalarında (test_map, registry, `contract.ts`) yalnız kendi satırlarını ekle; çakışırsa dosyayı üretici betikle yeniden üret, elle satır karıştırma.";
 
@@ -101,5 +112,6 @@ export function standardBlocks(ctx: BlockCtx): string[] {
     : [];
   const related = mode === "local" && ctx.relatedFindings?.length ? [relatedFindingsBlock(ctx.relatedFindings)] : [];
   const gateEnv = mode === "local" && ctx.gateEnv && Object.keys(ctx.gateEnv).length ? [gateEnvBlock(ctx.gateEnv)] : [];
-  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...repoSkills, ...gateEnv, ...related, realSource(mode)];
+  const remote = mode === "local" && ctx.remote ? [remoteBlock()] : [];
+  return [authority, ...(parent ? [pipelineBlock(parent, mode)] : []), ...remote, ...repoSkills, ...gateEnv, ...related, realSource(mode)];
 }
