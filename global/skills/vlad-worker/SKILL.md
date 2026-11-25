@@ -89,7 +89,7 @@ Ardından **bildirim gönder** (adım 7; gönder, olmazsa logla) ve cevabı bekl
 
 ## 6. Kapanış raporu
 
-**Entegrasyon öncesi kontrol (pipeline fazı, `parent` dolu):** rapordan önce entegrasyon branch'ini (`vlad/<parent>`) kendi branch'ine merge et (`git merge vlad/<parent>`; bu, kendi branch'ine güncel tabanı almaktır, entegrasyon branch'ine merge değildir), sonra lint + `gate` (yoksa tam test/build) koş. Çakışma veya kırmızı varsa kendi kapsamındaysa düzelt; değilse (başka fazın kodu, ortam) çözmeye çalışma, raporun `### Test sonuçları`'na kanıtıyla ve `### Açık noktalar`'a `- [yüksek] entegrasyon kontrolü kırmızı — …` olarak yaz. Merge'ü geri alma gerekirse `git merge --abort`. Faz kapısında sürpriz çıkmasın diye kapıdan önce koşulur. **Rapor satırı (zorunlu biçim):** `### Test sonuçları`'na tam şu satırı yaz, `task close` precheck'i bunu arar: `Entegrasyon öncesi kontrol: vlad/<parent> merge (<sha>) + lint + gate yeşil` (`<parent>` = frontmatter'daki çatı ID'si, `<sha>` = merge sonrası HEAD; kırmızıysa "yeşil" yerine sonucu yaz).
+**Entegrasyon öncesi kontrol (pipeline fazı, `parent` dolu):** rapordan önce görev prompt'undaki "Pipeline fazı" bloğunu uygula; adımlar ve `task close`'un aradığı zorunlu rapor satırı (`Entegrasyon öncesi kontrol: vlad/<parent> merge (<sha>) + lint + gate yeşil`) tek kaynak olarak orada tanımlıdır (`src/tasks/blocks.ts`). Merge'ü geri alma gerekirse `git merge --abort`.
 
 Rapordan önce proje kartında `gate` alanı varsa (`vlad project list --json` → `gate`) o komutu worktree'de çalıştır ve sonucunu (komut, çıkış kodu, kırmızıysa özet) `### Test sonuçları`'na yaz. `gate` yoksa projenin bilinen build/test komutlarını çalıştır ve "gate tanımlı değil" diye not düş.
 
@@ -104,7 +104,7 @@ Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `#
 ### Kabul kriterleri
 (her biri: karşılandı / karşılanmadı + neden)
 ### Açık noktalar
-(ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` bunları bulgu kaydına geçirir. **Görevin amacı bulgu çözmekse** (Tanım/Bağlam bir `F-…`'yi kapatıyor) maddeyi etiketle: `- [önem] [regresyon] başlık — …` (senin getirdiğin regresyon), `- [önem] [kalan F-…] başlık — …` (çözdüğün bulgunun kalan kısmı; yeni bulgu açılmaz, mevcut açık kalır); etiketsiz ve kritik/yüksek olmayan maddeler raporda kalır, bulgu olmaz)
+(ertelenen/çözülmeyen her nokta tek madde: `- [önem] başlık — ayrıntı`; önem: kritik|yüksek|orta|düşük|bilgi. `/digest` yalnız orta ve üstünü bulgu kaydına geçirir; düşük/bilgi raporda kalır (D-genel-033). **Görevin amacı bulgu çözmekse** (Tanım/Bağlam bir `F-…`'yi kapatıyor) maddeyi etiketle: `- [önem] [regresyon] başlık — …` (senin getirdiğin regresyon), `- [önem] [kalan F-…] başlık — …` (çözdüğün bulgunun kalan kısmı; yeni bulgu açılmaz, mevcut açık kalır); etiketsiz ve kritik/yüksek olmayan maddeler raporda kalır, bulgu olmaz)
 ### Kapatılan bulgular
 (yalnız bu görev bir bulguyu kapattıysa, görevin amacı o olmasa da; launch prompt'undaki "Projenin açık bulguları" listesine bak: dokunduğun alanda düzelttiğin bulgu varsa yaz. Her satır: `- F-<proje>-NNN — fixed|zaten düzelmiş — kanıt (commit <sha> ya da dosya:satır)`. **Tam ID zorunlu**: aralık/kısaltma (`F-014,017-024`, `F-024`, `#24`) yasak; commit mesajlarında da tam ID kullan. Bölüm yoksa digest eski yoldan (rapor metninde ID arama) kapatır; kısaltılmış ID'yi digest kapatmaz, onaya taşır)
 ### Test itirazı (hızlı yol)

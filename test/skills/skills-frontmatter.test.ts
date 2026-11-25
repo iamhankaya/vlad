@@ -79,14 +79,14 @@ describe("skills/ references and de-duplication", () => {
     expect(s).not.toContain("merge --no-ff");
   });
 
-  it("integration-branch merge precondition applies only to pipeline dev phases (parent set), not single tasks", () => {
-    for (const f of [".claude/skills/integrate/SKILL.md", ".claude/skills/status/SKILL.md"]) {
-      const t = read(f);
-      const line = t.split(/\r?\n/).find((l) => l.includes("entegrasyon branch'i merge + lint + gate"));
-      expect(line, f).toBeDefined();
-      expect(line, f).toMatch(/parent/);
-      expect(line, f).toMatch(/tek görev/i);
+  it("integration-branch merge precondition: the CLI enforces it for phases only; skills do not restate the procedure (B2)", () => {
+    // behavior lives in `task close` (close.test.ts: phase without the evidence line stops, single task passes) and the worker prompt (blocks.test.ts)
+    for (const f of [".claude/skills/integrate/SKILL.md", "global/skills/vlad-worker/SKILL.md"]) {
+      expect(read(f), f).not.toMatch(/entegrasyon branch'i merge \+ lint \+ gate/);
     }
+    const status = read(".claude/skills/status/SKILL.md").split(/\r?\n/).find((l) => l.startsWith("**Entegrasyon öncesi kontrol"));
+    expect(status, "status keeps the one-line gate reaction").toBeDefined();
+    expect(status).toMatch(/tek görev/i);
   });
 
   it("the tiered security rule lives only in integrate K1; status, delegate and the security-reviewer role refer to it", () => {

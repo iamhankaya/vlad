@@ -5,7 +5,7 @@ description: Aktif görevlerin durumunu gösterir; onay bekleyen görevler için
 
 # /status — görev takibi ve onay
 
-**Onay kapısı:** `git push`, `gh pr create` ve merge yalnızca kullanıcının o görev ve o eylem için verdiği **açık onaydan** sonra yapılır. Seçenekleri sun, cevabı bekle; varsayılan eylem yoktur.
+**Onay kapısı:** push, PR ve merge için `CLAUDE.md` "Yetki sınırları" geçerlidir; seçenekleri sun, cevabı bekle; varsayılan eylem yoktur.
 
 ## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
 
@@ -54,13 +54,13 @@ Görev beyin dışında bir işçide koşuyorsa kapı komutları uzak op'larla y
   Diff ya da test çıktısı uzunsa özeti bir `sonnet` agent'ına yaptırabilirsin (isteğe bağlı; agent yalnız okur, sonucu VLAD kontrol eder).
 **`role: tester` ya da `kabul`/`karakterizasyon`/`doğrulama` fazı:** kırmızı test kuralı `reference/kapi-ayrintilari.md` §Tester ve kırmızı testler (`### Kırmızı bırakılan testler`'i seçeneklerden önce göster).
 **Güvenlik incelemesi:** kural `integrate` K1'dedir (tetikleyici, kademe, tur sınırı, `exposure` istisnası); merge'den önce uygula.
-**Bulgu turu kuralı (D-genel-008):** tek kaynak `digest` §4b (düzeltme fazında yalnız kritik/yüksek yeni bulgu tur açar; orta/düşük bulgu fazın merge'ünü durdurmaz, tur açmaz, son kapı listesine girer; bulgu çözen görevin açık noktaları için `digest` skill'ine bak). Toplu kapanış `vlad finding set … --reason …`; eski düşük/bilgi yığını için `/bulgu-tarama`.
+**Bulgu turu kuralı (D-genel-008):** tek kaynak `digest` §4b (düzeltme fazında yalnız kritik/yüksek yeni bulgu tur açar; orta bulgu fazın merge'ünü durdurmaz, tur açmaz, son kapı listesine girer, düşük/bilgi bulgu olmaz (D-genel-033); bulgu çözen görevin açık noktaları için `digest` skill'ine bak). Toplu kapanış `vlad finding set … --reason …`; eski düşük/bilgi yığını için `/bulgu-tarama`.
 
 **Ara Codex kapısı:** tetikleyici, tur sınırı ve loglama `integrate` K2'dedir; faz merge'ünden önce uygula.
 
 **Test itirazı hızlı yolu:** raporda `### Test itirazı (hızlı yol)` varsa `reference/kapi-ayrintilari.md` §Test itirazı hızlı yolu'nu uygula (yalnız mekanik düzeltme kabul; niyet değişikliği hızlı yol değildir).
 
-**Entegrasyon öncesi kontrol (yalnız pipeline dev fazı, `parent` dolu):** raporun `### Test sonuçları`'nda entegrasyon branch'i merge + lint + gate sonucu yoksa veya kırmızıysa (çakışma, kırmızı) merge önerme; çalışana düzeltme iste (seçenek 3). Tek görevde (`parent` boş) entegrasyon branch'i yoktur, bu kanıt istenmez. Raporda yeşilse kapıdaki doğrulamayı yine de yap.
+**Entegrasyon öncesi kontrol (yalnız pipeline dev fazı, `parent` dolu):** `task close` raporda kanıt satırı yoksa durur; satır var ama sonuç kırmızıysa (çakışma, kırmızı) merge önerme, çalışana düzeltme iste (seçenek 3). Tek görevde bu kanıt istenmez.
 
 **Role/faza özel kapı kontrolleri:** rapor şunlardan biriyse `reference/kapi-ayrintilari.md`'deki bölümü uygula: `denetim` fazı pipeline ortasında (ara denetim); `role: devops` (prova matrisi, canlıya alma önerme); `role: developer` + UI (ekran görüntülü öz-kontrol ve `impeccable audit:` satırı zorunlu, yoksa değişiklik isteğiyle geri çevir); `tasarım` kapısında ek seçim; `role: designer` (görsel onay kapısı, `denetim` bulguları).
 
@@ -100,7 +100,7 @@ vlad task ready --parent <çatı-id> --json
 **Tüm fazlar `done`** (`vlad task list --parent <çatı-id> --json`; `cancelled` fazlar yerine yenisi açılmışsa onlar sayılmaz) → `vlad task set <çatı-id> awaiting_approval --json` ve son kapı:
 - **`prova` fazı / dispatch iş akışı kontrolü (son kapı):** `reference/kapi-ayrintilari.md` §Son kapı: prova ve dispatch (kırmızı prova canlıya almayı engeller; yalnız entegrasyon dalındaki dispatch iş akışı için uyar).
 - Doğrulama fazının sonucunu göster (tüm suite, kırmızı test var mı) ve **kapı doğrulamasını** yap (yukarıdaki "Kapı doğrulaması (`gate`)": kartta `gate` varsa onunla, yoksa ad hoc koşu + uyarı). Yeşil değilse ana branch'e merge önerme; adım 2'deki "yeni uygulama + doğrulama fazı" yolunu öner.
-- **Codex review (3. göz), tur sınırı ve yedek:** `integrate` K3–K4 (komutlar `second-opinion`'da). Orta/düşük/bilgi bulgular kapıda listelenir.
+- **Codex review (3. göz), tur sınırı ve yedek:** `integrate` K3–K4 (komutlar `second-opinion`'da). Orta bulgular kapıda listelenir (düşük/bilgi bulgu olmaz, D-genel-033).
 - **Çok makineli gate:** `integrate` K6; yeşil satırı eksik makine varken merge/PR önerme.
 - **Codex tur ölçümü:** son kapıda karar sunulmadan önce `integrate` K5 satırını yaz.
 - Fazların `### Açık noktalar` bölümlerini (danışman rollerde eşdeğerleri) topla ve tek listede göster; ayrıca açık bulguları ekle (`vlad finding list --project <slug> --state open,deferred --json`; kritik/yüksek olanlar kapıda ayrıca vurgulanır); kapsam dışı öneriler (ör. "CI'a ekle") burada kullanıcıya sunulur, istenirse ayrı görev açılır.

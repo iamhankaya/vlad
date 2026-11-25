@@ -10,7 +10,8 @@ VLAD ana oturumu yürütür. Kb'ye **yalnız `vlad` CLI** ile yazılır (elle d�
 ## Girdi
 
 - **Proje(ler):** bir ya da birden çok slug (belirtilmezse sor).
-- **Önem:** varsayılan `düşük,bilgi`; kullanıcı isterse `orta` eklenir. `kritik`/`yüksek` hiç taranmaz.
+- **Önem:** varsayılan `düşük,bilgi`; kullanıcı isterse `orta` eklenir. `kritik`/`yüksek` hiç taranmaz. Bu tarama yalnız **eski** düşük/bilgi yığınını eritir: D-genel-033'ten beri `/digest` yeni düşük/bilgi bulgu açmaz, bu yüzden tarama yeni birikim üretmez.
+- **Dondurulmuş proje:** kartı `paused`/`archived` olan proje taranmaz (D-genel-033); kullanıcı açıkça o projeyi adlandırırsa önce uyar ve onay iste. Durum: `vlad project list --json` → `status`.
 - **Yaş süzgeci (isteğe bağlı):** `--older-than <gün>`.
 
 Aday listesi: `vlad finding list --project <slug> --state open,deferred --severity <önemler> [--older-than <gün>] [--source <görev>] --json` (ayrıntı gövdede `detail`).

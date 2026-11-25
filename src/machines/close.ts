@@ -130,6 +130,17 @@ function sub(md: string, title: string): string {
   return end < 0 ? rest : rest.slice(0, end);
 }
 
+/**
+ * K5: the final-gate Codex round line, counted from the progress notes (`Codex ara turu:` / `Codex son turu:`, anchored at line start
+ * after the timestamp so quoted text never counts). Returns null when the last written total already matches.
+ */
+export function codexRoundsLine(body: string): string | null {
+  const count = (kind: string) => (body.match(new RegExp(`^- \\S+ Codex ${kind} turu:`, "gm")) ?? []).length;
+  const line = `Codex turları: ara=${count("ara")} son=${count("son")}`;
+  const last = [...body.matchAll(/^- \S+ (Codex turları: ara=\d+ son=\d+)\s*$/gm)].pop();
+  return last?.[1] === line ? null : line;
+}
+
 class Stop extends Error {
   constructor(public step: CloseStepName, msg: string) { super(msg); }
 }
@@ -178,7 +189,7 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (!w) stop("precheck", `${parent} entegrasyon worktree'si bulunamadı`);
       targetDir = w!.worktree;
     }
-    if (t0.data.kind === "pipeline" && !isResearch && !opts.into && integrationWorktrees(id, d.cfg).length > 1) stop("precheck", "çok projeli çatı: integrate skill §5 elle");
+    if (t0.data.kind === "pipeline" && !isResearch && !opts.into && integrationWorktrees(id, d.cfg).length > 1) stop("precheck", "çok projeli çatı: integrate skill 'Elle yürütme' bölümü elle");
     const from = `vlad/${id}`;
     r.target = isResearch ? undefined : into;
     if (wasDone && !isResearch && !remoteMachine && g(repoDir, ["rev-parse", "--verify", "-q", `refs/heads/${from}`]).code === 0
@@ -191,6 +202,9 @@ export async function closeTask(id: string, opts: CloseOpts = {}, depsIn: Partia
       if (gh && g(repoDir, ["merge-base", "--is-ancestor", gh, into!]).code !== 0) stop("precheck", `görev done ama gate'lenen head (${gh.slice(0, 12)}), ${into} içinde değil; merge edilmemiş`);
     }
     add("precheck", "ok", wasDone ? "zaten done: kalan adımlar tamamlanıyor" : undefined);
+    if (t0.data.kind === "pipeline" && !wasDone) { // K5: çatıda tur sayısını CLI yazar (elle biçim hatası yok)
+      await withKbLock(() => { const line = codexRoundsLine(getTask(id).body); if (line) logTask(id, line); });
+    }
 
     let gateGreen = wasDone;
     let how = null as string | null; // decide() atar
