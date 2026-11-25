@@ -49,7 +49,7 @@ describe("kb salt okuma: metin sözleşmesi (T20261026-20)", () => {
   });
 
   it("CLAUDE.md: salt okuma + vlad kb check cümlesi ve komut listesi", () => {
-    const c = read("CLAUDE.md");
+    const c = read("CLAUDE.md") + read("docs/claude-ayrinti.md"); // kb bakımı ayrıntısı docs'a taşındı (T20261125-52)
     expect(c).toMatch(/`cloudKb: "readonly"` yalnız açıkça seçilirse kb salt okuma eklenir; yazma yalnız VLAD'dır ve yabancı commit `vlad kb check` ile izlenir/);
     expect(c).toContain("docs/commands.md"); // command list lives in the generated reference (T20261110-09)
     expect(read("docs/commands.md")).toContain("`vlad kb check`");

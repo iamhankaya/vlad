@@ -152,6 +152,6 @@ describe("dokümanlar: model dağıtımı", () => {
     expect(d).toContain("Model");
     expect(d).toContain("--model-reason");
     expect(d).toMatch(/Haiku/);
-    expect(read("CLAUDE.md")).toMatch(/Model dağıtımı/);
+    expect(read("CLAUDE.md") + read("docs/claude-ayrinti.md")).toMatch(/Model dağıtımı/);
   });
 });

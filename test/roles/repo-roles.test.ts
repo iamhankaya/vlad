@@ -174,7 +174,7 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     const status = read(".claude/skills/status/SKILL.md");
     expect(status).toContain("Güvenlik incelemesi");
     expect(read(".claude/skills/integrate/SKILL.md")).toContain("security-reviewer");
-    expect(read("CLAUDE.md")).toContain("güvenlik incelemesi");
+    expect(read("CLAUDE.md") + read("docs/claude-ayrinti.md")).toContain("güvenlik incelemesi");
   });
 
   it("security review is tiered: critical/high blocks, lower go to findings, 1 round, exception tied to the finding", () => {
@@ -190,7 +190,7 @@ describe("team improvement rules (sözleşme, itiraz, entegrasyon kontrolü, erk
     expect(t, f).toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
     expect(t, f).toMatch(/kimlik doğrulamasız[^.]*sır[^.]*imza[^.]*yetki yükseltme/);
     expect(t, f).not.toMatch(/faz auth\/yetki\/oturum\/sır\/veri silmeye dokunuyorsa/);
-    const claude = read("CLAUDE.md");
+    const claude = read("CLAUDE.md") + read("docs/claude-ayrinti.md");
     expect(claude).toMatch(/güvenlik incelemesi[\s\S]{0,300}`integrate` skill'inde tek kaynak/i);
     expect(claude).not.toMatch(/exposure[^.]*internet[^.]*dışarıdan doğrudan istismar/);
     expect(claude).not.toMatch(/auth\/yetki\/oturum\/sır\/veri silme ya da/);
@@ -280,7 +280,7 @@ describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
   };
 
   it("CLAUDE.md: model değiştirme yok, agent model kademeleri, agent kb'ye yazmaz, sonuç taslak", () => {
-    const s = section(read("CLAUDE.md"), "## Orkestratör disiplini");
+    const s = section(read("docs/claude-ayrinti.md"), "## Orkestratör disiplini");
     for (const w of ["modelini değiştirmez", "arka plan agent", "`haiku`", "`sonnet`", "`opus`", "kb'ye yazmaz", "taslak", "kullanıcı onayı"]) expect(s, w).toContain(w);
   });
 

@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 const root = resolve(import.meta.dirname, "..", "..");
 const read = (p: string) => readText(resolve(root, p));
 const TEXT = {
-  claude: read("CLAUDE.md"),
+  claude: read("CLAUDE.md") + read("docs/claude-ayrinti.md"), // ayrıntılar docs'a taşındı (T20261125-52)
   status: read(".claude/skills/status/SKILL.md"),
   second: read(".claude/skills/second-opinion/SKILL.md"),
   integrate: read(".claude/skills/integrate/SKILL.md"),
