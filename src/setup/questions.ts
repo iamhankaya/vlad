@@ -25,7 +25,6 @@ export const QUESTIONS: readonly Question[] = [
   { id: "limits.maxParallel", prompt: "Aynı anda en çok çalışan", type: "number", default: "sınırsız", writes: "config-local" },
   { id: "launcher", prompt: "Çalışan başlatıcı", type: "choice", choices: ["auto", "wt", "powershell", "tmux", "terminal", "cloud"], default: "auto", writes: "config-local" },
   { id: "autonomy", prompt: "Varsayılan yetki", type: "choice", choices: ["plan", "commit", "pr"], default: "commit", writes: "config-local" },
-  { id: "experiments.ponytail", prompt: "ponytail A/B deneyi", type: "choice", choices: ["ab"], default: "kapalı", writes: "config-local" },
   { id: "plugins", prompt: "Plugin'ler", type: "list", default: "superpowers, frontend-design, playwright", writes: "claude-settings" },
   { id: "perms", prompt: "Çalışan push/CI izinleri", type: "boolean", default: "autonomy=pr kullanılacaksa evet", writes: "claude-settings" },
   { id: "claudedirs", prompt: "additionalDirectories (kb + vlad)", type: "boolean", default: "kb VLAD_HOME dışındaysa evet", writes: "claude-settings" },
@@ -57,7 +56,7 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
   const bool = (v: unknown, p: string) => { if (v !== undefined && typeof v !== "boolean") e(p, "boolean olmalı"); };
   const strList = (v: unknown, p: string) => { if (v !== undefined && !(Array.isArray(v) && v.every((x) => typeof x === "string" && x))) e(p, "boş olmayan metin listesi olmalı"); };
 
-  known(raw, ["role", "machines", "machine", "keys", "kb", "cloud", "roots", "worktreeDir", "ignore", "models", "ctx", "limits", "launcher", "autonomy", "experiments", "plugins", "perms", "claudedirs", "mainsession", "agentboot", "digest", "lang", "confirm", "fresh"], "");
+  known(raw, ["role", "machines", "machine", "keys", "kb", "cloud", "roots", "worktreeDir", "ignore", "models", "ctx", "limits", "launcher", "autonomy", "plugins", "perms", "claudedirs", "mainsession", "agentboot", "digest", "lang", "confirm", "fresh"], "");
   oneOf(raw.role, ROLES, "role");
   oneOf(raw.machines, MACHINES, "machines");
   if (raw.keys !== undefined && raw.keys !== "generate" && raw.keys !== "stdin") e("keys", "yalnız 'generate' ya da 'stdin' (anahtar değeri cevap dosyasına konmaz)");
@@ -116,8 +115,6 @@ export function validateAnswers(raw: unknown, opts: ValidateOptions): AnswerVali
   }
   const limits = sub("limits", ["maxParallel"]);
   if (limits && limits.maxParallel !== undefined && !(Number.isInteger(limits.maxParallel) && (limits.maxParallel as number) >= 1)) e("limits.maxParallel", ">=1 tamsayı olmalı");
-  const exp = sub("experiments", ["ponytail"]);
-  if (exp) oneOf(exp.ponytail, ["ab"], "experiments.ponytail");
   const digest = sub("digest", ["daily"]);
   if (digest) bool(digest.daily, "digest.daily");
   if (raw.confirm !== undefined) {

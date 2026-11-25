@@ -30,7 +30,7 @@ Gövde: aralık ve amaç (bir iki satır). Onay istenmez.
 vlad audit setup --since <tarih> --json
 ```
 Çıktı (salt okuma):
-- `tasks` (sayı, rol/faz/model dağılımı), `measures.sums` (review_bulgusu, ci_tur, yeni_test, `satir_eklenen`/`satir_silinen`), `open_points` (önem dağılımı). `measures.by_ponytail` aynı toplamları görevin frontmatter'ındaki `experiment.ponytail` koluna (`on`/`off`; `vlad.config.json` `experiments.ponytail: "ab"` açıkken launch yazar) göre ayırır: kollar yalnız ölçümlü görev sayısı yeterliyken karşılaştırılır; deney dışı görevler hiçbirinde yok.
+- `tasks` (sayı, rol/faz/model dağılımı), `measures.sums` (review_bulgusu, ci_tur, yeni_test, `satir_eklenen`/`satir_silinen`), `open_points` (önem dağılımı). `measures.by_ponytail` aynı toplamları görevin frontmatter'ındaki `experiment.ponytail` koluna (`on`/`off`) göre ayırır; deney kapandı (D-vlad-083), launch artık kol yazmaz: yalnız geçmiş görevler görünür, deney dışı görevler hiçbirinde yok.
 - `permission_candidates` (`vlad task deny` ile kaydedilen, ≥2 görevde reddedilen araç+ret sınıfı; `kb/logs/denials.jsonl` da kaynak: `tool`, `pattern` = sınıf adı (ör. "heredoc yazımı", "git push", "rm", "gizli dosya yolu"; tam komut değil), `tasks`, `count`, `examples`, `samples` = en çok 3 ham komut): izin kuralı adayları; `settings.json` kuralı ya da mod penceresi olarak öner.
 - `signals` (`test_itirazi`, `degisiklik_istegi`, `karar`, `izin_reddi`: görev sayısı, adet, örnek ID'ler). Sayımlar yapısal satırlardan gelir (`**Soru:**`, `### Önceki rapor #N`, zaman damgalı `[KARAR]`, satır başı `Ölçüm:`); şablon/alıntı metin sayılmaz. Bunları elle `kb search`/grep ile yeniden sayma.
 - `cancelled` (iptal edilenler, gerekçesi yazılı/yazısız ID'ler).

@@ -95,8 +95,8 @@ export interface SkillAudit {
 
 /**
  * Matches each started task to its worker transcripts (`<claude config>/projects/<worktree slug>/*.jsonl`) and compares
- * the skills it loaded with the ones it should have: vlad-worker, its role's skills, ci-triage after a push by an
- * `autonomy: pr` worker. The VLAD session itself is checked for the final-gate skills once a pipeline closed.
+ * the skills it loaded with the ones it should have: vlad-worker, its role's skills and its project card's skills.
+ * The VLAD session itself is checked for the final-gate skills once a pipeline closed.
  */
 /** `--since` as ms: a bare date is the start of that LOCAL day (Date.parse would read it as UTC midnight and shift the window by the zone offset, F-vlad-090); NaN if unparsable. */
 export function parseSince(s: string): number {
@@ -123,9 +123,7 @@ export function auditSkills(o: { configDir?: string; since?: string; project?: s
     if (!scan) { tasks.push({ ...base, transcript: false, expected: [], loaded: [], missing: [], scanned: [] }); continue; }
     let roleSkills: string[] = [];
     try { roleSkills = t.data.role ? getRole(t.data.role).skills : []; } catch { /* role file gone: only the base protocol is checked */ }
-    // A/B off arm: ponytail was left out on purpose (same rule as audit setup)
-    if (t.data.experiment?.ponytail === "off") roleSkills = roleSkills.filter((s) => bare(s) !== "ponytail");
-    const expected = [...new Set(["vlad-worker", ...roleSkills.map(bare), ...cardSkills(t.data.project), ...(t.data.autonomy === "pr" && scan.pushed ? ["ci-triage"] : [])])];
+    const expected = [...new Set(["vlad-worker", ...roleSkills.map(bare), ...cardSkills(t.data.project)])];
     const loaded = expected.filter((s) => scan.loaded[s]);
     tasks.push({ ...base, transcript: true, expected, loaded, missing: expected.filter((s) => !scan.loaded[s]), scanned: Object.keys(scan.loaded) });
   }

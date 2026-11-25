@@ -33,7 +33,7 @@ describe("u2 scope: file → bucket selection", () => {
   it.each([
     "package.json", "vitest.config.ts", "test/global-setup.ts", "test/isolate-env.ts", "test/support/helper.ts",
     "test/machines/harness.ts", "test/fixtures/kb-mini/vlad.config.json", "src/cli/program.ts", "src/commands/manifest.ts",
-    "src/kb/types.ts", "schemas/task.schema.json", "roles/developer.md", "global/skills/ci-triage/SKILL.md", "test/buckets.json", "test/scope.json",
+    "src/kb/types.ts", "schemas/task.schema.json", "roles/developer.md", "global/skills/vlad-worker/SKILL.md", "test/buckets.json", "test/scope.json",
   ])("shared infrastructure %s selects every bucket", (f) => {
     const r = sel(f);
     expect(r.all).toBe(true);

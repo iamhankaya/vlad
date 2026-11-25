@@ -125,7 +125,6 @@ export interface SetupAnswers {
   limits?: { maxParallel?: number };
   launcher?: VladConfig["launcher"];
   autonomy?: VladConfig["defaultAutonomy"];
-  experiments?: { ponytail?: "ab" };
   plugins?: string[];
   perms?: boolean;
   claudedirs?: boolean;

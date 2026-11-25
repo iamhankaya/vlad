@@ -8,8 +8,8 @@ const read = (p: string) => readText(resolve(root, p));
 const frontmatter = (md: string) => /^---\r?\n([\s\S]*?)\r?\n---/.exec(md)?.[1] ?? "";
 const field = (md: string, key: string) => new RegExp(`^${key}:\s*(.+)$`, "m").exec(frontmatter(md))?.[1].trim() ?? "";
 
-const NEW_VLAD_SKILLS = ["second-opinion", "integrate", "art-prompt", "setup-audit", "release"];
-const WORKER_SKILLS = ["vlad-worker", "ci-triage"];
+const NEW_VLAD_SKILLS = ["second-opinion", "integrate", "setup-audit", "release"];
+const WORKER_SKILLS = ["vlad-worker"];
 
 describe("skills/ frontmatter", () => {
   for (const [dir, names] of [[".claude/skills", NEW_VLAD_SKILLS], ["global/skills", WORKER_SKILLS]] as const) {
@@ -31,7 +31,7 @@ describe("skills/ frontmatter", () => {
         if (/^(?!superpowers:)S+:/.test(s)) continue; // other plugins ship their own skills
         if (/^(?!superpowers:)\S+:/.test(s)) continue; // other plugins ship their own skills
         const bare = s.replace(/^superpowers:/, "");
-        expect(have.has(bare) || existsSync(resolve(root, "vendor/skills", bare, "SKILL.md")), `${f}: ${s}`).toBe(true);
+        expect(have.has(bare), `${f}: ${s}`).toBe(true);
       }
     }
   });
@@ -40,7 +40,7 @@ describe("skills/ frontmatter", () => {
 describe("skills/ references and de-duplication", () => {
   it("CLAUDE.md skill table lists the new skills and matches the skill dirs", () => {
     const c = read("CLAUDE.md");
-    for (const n of [...NEW_VLAD_SKILLS, "ci-triage"]) expect(c, n).toContain(n);
+    for (const n of NEW_VLAD_SKILLS) expect(c, n).toContain(n);
     expect(c).toContain("security-reviewer");
     expect(c).toContain("docs/commands.md"); // full command list is the generated reference (T20261110-09)
     expect(read("docs/commands.md")).toContain("`vlad task deps`");
@@ -95,23 +95,22 @@ describe("skills/ references and de-duplication", () => {
     expect(read(".claude/skills/delegate/SKILL.md")).toContain("security-reviewer");
   });
 
-  it("art-prompt routes character concepts to ChatGPT and keeps Codex for icons/effects/code", () => {
-    const a = read(".claude/skills/art-prompt/SKILL.md");
-    for (const w of ["ChatGPT", "art/source/", "-gpt-"]) expect(a, w).toContain(w);
+  it("game roles carry the ChatGPT art-prompt procedure (art-prompt skill folded in, T20261125-50) and keep Codex for icons/effects/code", () => {
     for (const r of ["game-developer", "game-director"]) {
       const b = read(`roles/${r}.md`);
-      expect(b, r).toContain("art-prompt");
       expect(b, r).toMatch(/karakter konsept/);
+      expect(b, r).not.toContain("`art-prompt` skill'iyle");
     }
+    const d = read("roles/game-director.md");
+    for (const w of ["ChatGPT", "art/source/", "-gpt-", "PROMPT.md", "Stil bloğu"]) expect(d, w).toContain(w);
+    expect(existsSync(resolve(root, ".claude/skills/art-prompt"))).toBe(false);
   });
 
-  it("ci-triage and vlad-worker carry the CI round rule, idle-wait rule, visual-proof, permission patterns", () => {
+  it("vlad-worker carries the CI round rule, idle-wait rule, CI triage (folded from ci-triage), visual-proof, permission patterns", () => {
     const w = read("global/skills/vlad-worker/SKILL.md");
-    for (const x of ["ci-triage", "Boşta bekleme", "visual-proof", "İzin kalıpları", "Ölçüm:"]) expect(w, x).toContain(x);
-    const c = read("global/skills/ci-triage/SKILL.md");
-    expect(c).toContain("gh run watch <run-id> --exit-status --interval 60");
-    expect(w).toContain("--interval 60");
-    for (const x of ["gh run watch", "--log-failed", "ikinci kez", "entegrasyon", "100755"]) expect(c, x).toContain(x);
+    for (const x of ["CI izleme", "Boşta bekleme", "visual-proof", "İzin kalıpları", "Ölçüm:"]) expect(w, x).toContain(x);
+    for (const x of ["gh run watch <run-id> --exit-status --interval 60", "--log-failed", "ikinci kez", "entegrasyon", "100755"]) expect(w, x).toContain(x);
+    expect(existsSync(resolve(root, "global/skills/ci-triage"))).toBe(false);
   });
 });
 

@@ -196,7 +196,6 @@
     "test/small/u4c-unmerged-guard.test.ts",
     "test/small/u4d-branch-delete-hardening.test.ts",
     "test/support/**/*.test.ts",
-    "test/tasks/experiment.test.ts",
     "test/tasks/pipeline-cli.test.ts",
     "test/tasks/launch.test.ts",
     "test/tasks/cleanup-merged-cli.test.ts",

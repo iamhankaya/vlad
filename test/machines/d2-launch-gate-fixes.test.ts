@@ -117,17 +117,15 @@ describe("son kapı düzeltmeleri — launch", () => {
     expect(getTask(pipe.data.id).data.machine ?? null).toBeNull();
   });
 
-  it("P2-5: uzak istem rol dosyası ve vendored skill yolunu beynin yolu olarak taşımaz (yer tutucu)", async () => {
+  it("P2-5: uzak istem rol dosyası yolunu beynin yolu olarak taşımaz (yer tutucu)", async () => {
     mkdirSync(join(home, "roles"), { recursive: true });
-    // ponytail is no longer in any shipped role (experiment closed, T20261116-22); a role that still lists a vendored skill must keep the placeholder
     const dev = readFileSync(join(process.cwd(), "roles", "developer.md"), "utf8");
-    writeFileSync(join(home, "roles", "developer.md"), dev.replace("---\n\nSen", "  - ponytail\n---\n\nSen"), "utf8");
+    writeFileSync(join(home, "roles", "developer.md"), dev, "utf8");
     const task = mk({ role: "developer" });
     const f = fakeTransport({ ...ok, launch: () => launched });
     await launchTask(task.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t } });
     const t = f.ops("launch")[0].args.promptTemplate as string;
     expect(t).toContain("{{ROLE_FILE:developer}}");
-    expect(t).toContain("{{VENDOR_SKILL:ponytail}}");
     expect(t).not.toContain(home);
   });
 });

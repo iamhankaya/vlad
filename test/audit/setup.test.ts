@@ -148,16 +148,14 @@ describe("auditSetup", () => {
   it("inventories skills from the four sources and flags the ones never loaded", () => {
     skillDir(".claude/skills", "digest");
     skillDir("global/skills", "vlad-worker");
-    skillDir("vendor/skills", "ponytail");
     mkdirSync(join(home, "roles"), { recursive: true });
     writeFileSync(join(home, "roles", "developer.md"), `---\nslug: developer\ntitle: D\nkind: executor\nsummary: s\nskills:\n  - superpowers:test-driven-development\n---\n`);
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
     const byName = Object.fromEntries(r.skills.inventory.map((s) => [s.name, s]));
     expect(byName.digest.source).toBe("repo");
     expect(byName["vlad-worker"].source).toBe("global");
-    expect(byName.ponytail.source).toBe("vendor");
     expect(byName["superpowers:test-driven-development"].roles).toEqual(["developer"]); // keyed by the name the role uses
-    expect(r.skills.unused).toEqual(expect.arrayContaining(["digest", "ponytail"]));
+    expect(r.skills.unused).toEqual(expect.arrayContaining(["digest"]));
   });
 
   it("counts a skill as loaded even when the worker was not expected to load it", () => {
@@ -352,19 +350,6 @@ describe("auditSetup", () => {
       expect(r.skills.coverage.skipped_before_rule).toBe(1);
       expect(row("other:fresh")).toMatchObject({ since: null, since_unknown: true, expected_tasks: 1 });
       expect(row("superpowers:test-driven-development")).toMatchObject({ since_unknown: false });
-    });
-
-    it("does not expect ponytail from a task that ran on the experiment's off arm", () => {
-      roleFile(["superpowers:test-driven-development", "ponytail"]);
-      const on = task({ at: "2026-10-31", role: "developer" });
-      const off = task({ at: "2026-10-31", role: "developer" });
-      const t = getTask(off); t.data.experiment = { ponytail: "off" }; writeDoc(t.file, t.data, t.body);
-      loadSkill(on, "superpowers:test-driven-development"); loadSkill(on, "ponytail");
-      loadSkill(off, "superpowers:test-driven-development");
-      const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
-      const row = (skill: string) => r.skills.coverage.by_skill.find((c) => c.skill === skill);
-      expect(row("ponytail")).toMatchObject({ expected_tasks: 1, loaded_tasks: 1, rate: 1 });
-      expect(row("superpowers:test-driven-development")).toMatchObject({ expected_tasks: 2 });
     });
 
     it("reports when each role file and CLAUDE.md last changed", () => {

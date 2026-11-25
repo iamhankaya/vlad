@@ -50,9 +50,9 @@ describe("setup sözleşmesi: parça kimlikleri ve envanter", () => {
       expect(i.check.kind, i.id).toBeTruthy();
     }
   });
-  it("global skill'ler (vlad-worker, ci-triage) zorunlu ve dosya yolu ~/.claude/skills altında", () => {
+  it("global skill (vlad-worker) zorunlu ve dosya yolu ~/.claude/skills altında", () => {
     const g = INVENTORY.filter((i) => i.part === "global-skills");
-    expect(g.map((i) => i.id).sort()).toEqual(expect.arrayContaining(["global-skills:ci-triage", "global-skills:vlad-worker"]));
+    expect(g.map((i) => i.id).sort()).toEqual(["global-skills:vlad-worker"]);
     for (const i of g) expect(i.target?.scope).toBe("claude-dir");
   });
 });

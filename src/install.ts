@@ -120,7 +120,7 @@ export function installGlobal(o: InstallOptions): { actions: string[] } {
     }
   }
 
-  // every dir with a SKILL.md is a worker skill (vlad-worker, ci-triage, …)
+  // every dir with a SKILL.md is a worker skill (vlad-worker, …)
   const names = globalSkillNames(o.home);
   for (const name of names) {
     const src = join(skillsSrc, name);
