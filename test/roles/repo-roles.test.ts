@@ -263,6 +263,9 @@ describe("ponytail kalıntısı (deney kapandı T20261116-22; vendor/ kaldırıl
     const { roles } = listRolesWithWarnings(dir);
     expect(roles.filter((r) => r.skills.includes("ponytail")).map((r) => r.slug)).toEqual([]);
   });
+  it("developer roles carry no ponytail rule bullet", () => {
+    for (const r of ["developer", "game-developer"]) expect(readText(resolve(dir, "..", `roles/${r}.md`)), r).not.toContain("ponytail");
+  });
 });
 
 describe("orkestratör model ve bağlam disiplini (T20261026-15)", () => {
