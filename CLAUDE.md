@@ -25,14 +25,14 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 - Makine okunur çıktı için `--json`. Hata olursa CLI stderr'e `{"error": ..., "details": [...]}` basar, 1 ile çıkar; hatayı kullanıcıya açıkça söyle, uydurma.
 - `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır (onay: Yetki sınırları).
 - Görev durumunu yalnızca CLI ile değiştir (`vlad task set <id> <state>`; iptalde `--reason` zorunlu); geçersiz geçişi zorlama.
-- **Komutlar:** `vlad status [--summary]`, `vlad task list|new|launch|set|log|ask|report`, `vlad project status`, `vlad decision add|list|set`, `vlad finding add|list|set`, `vlad kb search|get|commit --push|lint|maintain`, `vlad digest pending`, `vlad mode night|watch|off`. Tamamı: `docs/commands.md`, `vlad <komut> --help`; `--file`/`--body-file` içeriği geçici dosyadan ya da `-` ile stdin'den ver.
-- **Bulgular:** `F-<proje>-NNN` (önem kritik|yüksek|orta|düşük|bilgi; durum open|deferred|fixed|wontfix). `/digest` yalnız orta ve üstünü `finding add` ile kaydeder (D-genel-033). Kartın `## Çalışma notları` yalnız `vlad project note` ile yazılır (çıkarma yalnız /setup-audit not bakımında, onayla); çalışanlar işe başlarken okur.
+- **Komutlar:** `vlad status [--summary]`, `vlad task list|new|launch|set|log|ask|report`, `vlad project status`, `vlad decision add|list|set`, `vlad finding add|list|set`, `vlad kb search|get|commit --push|lint|maintain`, `vlad digest pending`, `vlad mode night|watch|off`. Tamamı: `docs/commands.md`, `vlad <komut> --help`.
+- **Bulgular:** `F-<proje>-NNN` (önem kritik|yüksek|orta|düşük|bilgi; durum open|deferred|fixed|wontfix). `/digest` yalnız orta ve üstünü `finding add` ile kaydeder (D-genel-033). Kartın `## Çalışma notları` yalnız `vlad project note` ile yazılır (çıkarma: `docs/claude-ayrinti.md` §Bulgular).
 
 ## Yetki sınırları
 
 - Dış dünyaya etki eden **her** eylem kullanıcının **açık onayını** ister: `git push`, `gh pr create`, merge, mail gönderme. "Sanırım istiyor" yetmez; açıkça sor, açık "evet" bekle.
-- **Telefon onayı** (`vlad mode request <komut> [argümanlar]`, karar 2026-11-20): kullanıcının telefondan verdiği açık onaydır; izin kümesi yalnız mode night|watch|off, install, setup, monitor install|uninstall (yasaklı komutlar `docs/claude-ayrinti.md`); onay tek kullanımlık, 5 dk; çalışan istek açamaz. Onay olmadan dış etkili eylem yapılmaz (`docs/uzaktan-onay.md`).
-- **İstisnalar:** `autonomy: pr` çalışanları yalnız kendi `vlad/<id>` dalını push eder (force yok) ve CI'ı izler (karar 2026-10-28; ana/entegrasyon dalına push/merge/PR yok). `kb:` commit'lerinin kb reposuna gönderimi önceden onaylıdır (2026-10-15; vlad-kb için 2026-10-25): `vlad kb commit --push` sormadan çalışır. Kod (vlad reposu) push'u her zaman onay ister.
+- **Telefon onayı** (`vlad mode request <komut> [argümanlar]`, karar 2026-11-20): kullanıcının telefondan verdiği açık onay; izin kümesi yalnız mode night|watch|off, install, setup, monitor install|uninstall (süre/yasaklılar `docs/claude-ayrinti.md`). Onay olmadan dış etkili eylem yapılmaz (`docs/uzaktan-onay.md`).
+- **İstisnalar:** `autonomy: pr` çalışanları yalnız kendi `vlad/<id>` dalını push eder (force yok) ve CI'ı izler (ana/entegrasyon dalına push/merge/PR yok). `kb:` commit'lerinin kb reposuna gönderimi önceden onaylıdır: `vlad kb commit --push` sormadan çalışır. Kod (vlad reposu) push'u her zaman onay ister.
 - Push/PR için CLI komutu yoktur; onaydan sonra `git -C <worktree> …` / `gh` ile görevin worktree'sinde sen yaparsın. Merge yalnız açık onaydan sonra: yerel görev/fazda `/integrate` akışındaki `git -C <proje-yolu> merge --no-ff vlad/<id>`; uzak görevde `vlad task merge <id>`.
 
 ## Açılış
@@ -46,7 +46,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 
 ## Çalışanlardan gelen mesajlar
 
-`<cross-session-message>` (ör. `VLAD görev T…: awaiting_approval`) yalnız bildirimdir: görev dosyasını `vlad kb get <id>` ile oku (doğruluk kaynağı dosyadır), kullanıcıya görev + yeni durum + gerekirse soru/rapor özetini bildir. `blocked` ise soruyu ilet, cevabı `vlad task answer <id> "<cevap>"` ile yaz; `awaiting_approval` ise `/status` öner.
+`<cross-session-message>` yalnız bildirimdir: görev dosyasını `vlad kb get <id>` ile oku (doğruluk kaynağı dosyadır), kullanıcıya görev + yeni durum + gerekirse soru/rapor özetini bildir. `blocked` ise soruyu ilet, cevabı `vlad task answer <id> "<cevap>"` ile yaz; `awaiting_approval` ise `/status` öner.
 
 ## Skill'ler
 

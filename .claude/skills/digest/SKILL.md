@@ -141,6 +141,7 @@ Yalnızca başarıyla işlenen raporları:
 vlad inbox done <dosya1> <dosya2> ... --json
 vlad task digested <id1> <id2> ... --json
 ```
+`warnings`'te "özet bu görevi kapsamıyor" varsa 5b atlanmıştır: özeti yaz (ya da `digest pending add`). `task digested` `updated`'ı değiştirmez (done zamanı kalır).
 Bir adım hata verdiyse o raporları inbox'ta, o görevleri işlenmemiş bırak ve kullanıcıya söyle.
 
 **Arşiv (adım 7'den önce):** `vlad kb maintain --days 14 --json` (varsayılan zaten 14 gün; arşiv şeffaftır, silme yok; `digested` boş `done` görev arşivlenmez, adım 6'da işlenmiş işaretlenenler yaşı dolmuşsa taşınır). Hata verirse kullanıcıya söyle, commit'e devam et.

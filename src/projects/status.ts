@@ -4,7 +4,7 @@ import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/st
 import { countOpenIdeas } from "../ideas/store.js";
 import { getSection, isDecisionExpired, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
 import type { DecisionRecord, ProjectCard } from "../kb/index.js";
-import { listTasksWithWarnings } from "../tasks/store.js";
+import { getTask, listTasksWithWarnings } from "../tasks/store.js";
 import type { Task } from "../tasks/store.js";
 import { listProjects } from "./store.js";
 
@@ -103,6 +103,17 @@ export function doneSummaryNote(task: Task): { summaryStale: boolean | null; war
   return { summaryStale: true, warnings: [`${task.data.project} proje özeti bu görevi kapsamıyor (${state === "yok" ? "özet yok" : "özetten sonra kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
 }
 
+/** `task digested` follow-up: the summary of the task's project (the umbrella's for a phase) predates the task's done time (`updated`). `null` = covered, paused/archived project or unreadable card. */
+export function digestSummaryWarning(task: Task): string | null {
+  try {
+    const slug = task.data.parent ? getTask(task.data.parent).data.project : task.data.project;
+    if (cardOf(slug).data.status !== "active") return null;
+    const { as_of } = projectStatus(slug).summary;
+    if (as_of && Date.parse(as_of) >= Date.parse(task.data.updated)) return null;
+    return `özet bu görevi kapsamıyor: ${slug} (${as_of ? `özet ${as_of}` : "özet yok"}): /digest adım 5b (proje özeti) atlanmış; özeti yaz`;
+  } catch { return null; }
+}
+
 /** Opening warning for done tasks that /digest has not processed ("" when none). */
 export function undigestedNote(count: number, oldest: string | undefined | null): string {
   return count > 0 ? `${count} done görev digest edilmedi${oldest ? ` (en eski: ${oldest})` : ""}` : "";
@@ -124,8 +135,8 @@ export function projectStatus(slug: string, now: Date = new Date()): ProjectStat
   const newer: string[] = [];
   const allFindings = listFindingsWithWarnings({ project: slug }).findings;
   if (Number.isFinite(cutoff)) {
-    // `task digested` re-stamps `updated` with the same instant as `digested`: that is /digest finishing, not new work
-    for (const t of tasks) if (Date.parse(t.data.updated) > cutoff && t.data.digested !== t.data.updated) newer.push(t.data.id);
+    // `task digested` keeps `updated` (the done time), so a digested task done after the summary is still listed
+    for (const t of tasks) if (Date.parse(t.data.updated) > cutoff) newer.push(t.data.id);
     for (const f of allFindings) if (Date.parse(f.data.updated) > cutoff) newer.push(f.data.id);
     // shortcut: decisions carry a date only, so one added later the same day as the summary is not seen; /digest writes the summary after the decisions
     for (const d of listDecisions({ project: slug, all: true })) if (d.date > asOf!.slice(0, 10)) newer.push(d.id);
