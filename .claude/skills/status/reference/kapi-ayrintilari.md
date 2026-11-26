@@ -38,7 +38,7 @@ Pipeline'da kural entegrasyon branch'ine uyarlanır: `kabul`/`karakterizasyon` f
 
 ### Görevi digest et (otomatik, D-vlad-061)
 
-Kapanan (`done`) tek görev için `.claude/skills/digest/SKILL.md` akışını **otomatik mod**da yalnız o görev için uygula: `vlad task list --undigested --json` yerine doğrudan `/digest <görev-id>`. Sırayla: günlük, bulgular (`vlad finding add`), kartın Son aktivite/Açık konular, durum özeti (`vlad project summary`), `vlad task digested <id>`, `vlad kb commit "digest <id>" --push`. Çok görevli toplu digest bu adımın işi değildir (kullanıcı `/digest` der).
+Kapanan (`done`) tek görev için `.claude/skills/digest/SKILL.md` akışını **otomatik mod**da yalnız o görev için uygula: `vlad task list --undigested --json` yerine doğrudan `/digest <görev-id>`. Sırayla: günlük, bulgular (`vlad finding add`), kartın Açık konular, durum özeti (`vlad project summary`), `vlad task digested <id>`, `vlad kb commit "digest <id>" --push`. Çok görevli toplu digest bu adımın işi değildir (kullanıcı `/digest` der).
 
 Kullanıcı sorusu yok: emin olunmayan karar ve "kullanıcı kararı bekliyor" maddesi yazılmaz, `vlad digest pending add --text "<madde>" --task <id> --project <slug>` ile onay bekleyen listeye eklenir. Sonunda kullanıcıya tek satır: "digest edildi: <id>; N madde onayını bekliyor" (N = `vlad digest pending list --json`). Digest hata verirse görevi `digested` işaretleme, kullanıcıya söyle; `done` durumu geri alınmaz.
 

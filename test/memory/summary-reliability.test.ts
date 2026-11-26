@@ -25,7 +25,7 @@ describe("(a) summaryStale after task set done", () => {
     const t = doneTask("vlad", now());
     const n = doneSummaryNote(t);
     expect(n.summaryStale).toBe(true);
-    expect(n.warnings).toEqual([expect.stringContaining("özet bayat")]);
+    expect(n.warnings).toEqual([expect.stringContaining("özeti bu görevi kapsamıyor")]);
     expect(n.warnings[0]).toContain("/digest");
   });
   it("is true when the summary predates the done task", () => {

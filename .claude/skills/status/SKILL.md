@@ -126,8 +126,6 @@ Gece/yetki modu kuralları (faz ve son kapı merge'ü, push yetkisi, durdurma ko
 
 **Bekçi** (gece modu açıkken ya da `vlad mode watch on`): kendini 20–30 dk arayla uyandır (`/loop` dinamik ya da `ScheduleWakeup`). Her uyanışta `vlad task idle --minutes 30 --json`; listelenen her görev için `gh run list --branch <branch> --limit 1` ile CI'a bak. CI bitmiş ama rapor yoksa, soru `answer`'lanmış ama çalışan sürmemişse ya da 30 dk değişiklik yoksa çalışanı `SendMessage` ile dürt ve `vlad task log <id> "bekçi: dürtüldü (<neden>)"` yaz. Yeni `awaiting_approval`/`blocked` varsa bu skill'in akışını işlet. Bekçiyi `vlad mode off` ya da pencerenin bitişi kapatır.
 
-**Retro yok (T20261126-08):** çatı başına retro yordamı kaldırıldı; "nerede kalmıştık" sorularında kart/günlük dosyalarını baştan okuma, önce `vlad project status <slug> --json`, gerekirse `vlad kb search "<sorgu>" --project <slug> --json`. Ders çıkarma haftalık `/setup-audit`'in "Çalışma notu adayı" kategorisindedir (seçilenler `vlad project note`).
-
 **Faz `failed`/`cancelled`:** bağımlı fazlar `queued` kalır. Ağaçta göster ve seçenekleri sun:
 - **Fazı yeniden oluştur:** aynı faz/rol/bağımlılıkla yeni görev (`/delegate` adım 4). Eski faza bağlı `queued` fazları iptal etmeden yeni ID'ye bağla: `vlad task deps <bağımlı-id> --set <yeni-id,…>` (yalnız `queued` fazda; doğrulama ve döngü kontrolü CLI'dadır).
 - **Bağımlılığı kaldırarak devam et:** bağımlı fazları `cancelled` yapıp o bağımlılık olmadan yeniden oluştur, sonra `vlad task ready --parent <çatı-id> --json`.

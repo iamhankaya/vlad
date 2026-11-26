@@ -1,6 +1,6 @@
 ---
 name: digest
-description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin kapanış raporlarını okuyup projelere göre gruplar; günlüğü, proje kartlarının Son aktivite ve Açık konular bölümlerini ve karar günlüğünü günceller, raporları işlenmiş olarak işaretler. Açılış özetinde işlenmemiş rapor varsa ya da kullanıcı "neler oldu", "günlüğü işle" dediğinde kullan.
+description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin kapanış raporlarını okuyup projelere göre gruplar; günlüğü, proje kartlarının Açık konular bölümünü ve karar günlüğünü günceller, raporları işlenmiş olarak işaretler. Açılış özetinde işlenmemiş rapor varsa ya da kullanıcı "neler oldu", "günlüğü işle" dediğinde kullan.
 ---
 
 # /digest — session raporlarını hafızaya işle
@@ -76,7 +76,7 @@ Bulunursa madde açılmaz (bulgu varsa doğrudan `fixed`/`wontfix`: `vlad findin
 Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamamını** güncellenmiş hâliyle geçici dosyaya yaz:
 - `## Son aktivite`: **elle yazma.** Tamamen koddan üretilir (`<!-- vlad:derived recent-activity -->` bloğu: son ~10 done görev + geçerli karar); bloğu yalnız açık `vlad project refresh` ekler (ilk eklemede mevcut elle satırlar bloğun altında aynen kalır; hiçbir tazeleme blok dışı metni silmez, kancalar blok yoksa kartı değiştirmez). Bloğa elle yazma; bloğu olduğu gibi bırak, eski elle satırları gerekirse `vlad project write` ile sen temizle.
 - `## Açık konular`: **bulgu listesini elle yazma.** Açık+ertelenen bulgular `<!-- vlad:derived open-findings -->` bloğunda koddan üretilir (önem sırası, `F-…` ID'leri); bloğa dokunma. Yalnız blok dışındaki elle anlatıyı güncelle (kullanıcı kararı bekleyenler, makine/ortam notları): yeni açılanı ekle, kapananı çıkar.
-- `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` yazar; dersleri haftalık `/setup-audit` önerir). Kartı yeniden yazarken bölümü aynen koru.
+- `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` yazar, çıkarma yalnız `/setup-audit` not bakımında kullanıcı onayıyla; dersleri haftalık `/setup-audit` önerir). Kartı yeniden yazarken bölümü aynen koru.
 - `## Durum özeti`'ne **dokunma** (yalnızca `vlad project summary` yazar, adım 5b). Kartı yeniden yazarken bölümü aynen koru.
 - `last_activity`: elle güncelleme; `vlad project status` bu alanı kayıtlardan (en yeni görev/bulgu `updated`) türetir, kart alanı yalnızca kayıt yokken yedektir.
 - Diğer bölümleri ve alanları koru.
@@ -128,7 +128,7 @@ Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?
 ```
 vlad project summary <slug> --file <geçici.md> --json
 ```
-Komut ilk satıra "Güncel: <zaman damgası>" ekler; özet, 24 saatten eskiyse ve ondan sonra 5'ten fazla kayıt eklendiyse `bayat` olur (kayıtlar `newer`'da listelenir; eşik altında `güncel` kalır). Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Doğrulama `bayat`/`yok` dönerse özeti yeniden yaz ya da yukarıdaki `digest pending add` ile onaya taşı; "bayat kalması doğrudur" diye geçme. `vlad task set <id> done` zaten `summaryStale: true` + uyarı verir; bu adım o uyarının kapanışıdır. Eski kayıtlar için gerekirse önce `vlad kb search`.
+Komut ilk satıra "Güncel: <zaman damgası>" ekler; özet, 24 saatten eskiyse ve ondan sonra 5'ten fazla kayıt eklendiyse `bayat` olur (kayıtlar `newer`'da listelenir; eşik altında `güncel` kalır). Doğrula: `vlad project status <slug> --json` → `summary.as_of` bu digest'ten sonra olmalı ve `summary.newer` boş olmalı (`state` eşik altında `güncel` kalabilir, tek başına yetmez). Doğrulama başarısızsa özeti yeniden yaz ya da yukarıdaki `digest pending add` ile onaya taşı; "bayat kalması doğrudur" diye geçme. `vlad task set <id> done` zaten `summaryStale: true` + uyarı verir; bu adım o uyarının kapanışıdır. Eski kayıtlar için gerekirse önce `vlad kb search`.
 
 ### 5c. kb çelişki denetimi (lint)
 

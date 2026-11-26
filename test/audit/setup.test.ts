@@ -450,6 +450,13 @@ describe("auditSetup", () => {
     expect(auditSetup({ since: "2026-10-01", configDir: cfgDir }).suggestions.ideas.length).toBe(3);
   });
 
+  it("suggestions: an implementation task titled 'Kurulum denetimi önerileri: …' is not an audit task (T20261126-14)", () => {
+    const impl = createTask({ project: "alpha", title: "Kurulum denetimi önerileri: skill düzeltmeleri", kind: "dev", body: "" }, new Date("2026-10-30T10:00:00+03:00")).data.id;
+    addIdea({ project: "alpha", title: "uygulama görevinden fikir", source: impl }, new Date("2026-10-30T12:00:00+03:00"));
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") });
+    expect(r.suggestions.ideas).toEqual([]);
+  });
+
   it("rejects an invalid since", () => {
     expect(() => auditSetup({ since: "dün", configDir: cfgDir })).toThrow(/geçersiz --since/);
   });

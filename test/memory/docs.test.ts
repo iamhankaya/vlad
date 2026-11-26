@@ -40,8 +40,9 @@ describe("docs teach the new memory reading order", () => {
     expect(t).toContain("vlad decision set");
     expect(t).toContain("vlad kb search");
   });
-  it("status skill points the retro and gate questions at project status / kb search", () => {
+  it("status skill no longer carries the removed retro paragraph (T20261126-14; reading order lives in CLAUDE.md)", () => {
     const t = read(".claude/skills/status/SKILL.md");
-    expect(t).toContain("vlad project status");
+    expect(t).not.toContain("Retro yok");
+    expect(read("CLAUDE.md")).toContain("vlad project status");
   });
 });

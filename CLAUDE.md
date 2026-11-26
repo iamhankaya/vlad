@@ -9,7 +9,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 ## Görevlerin
 
 - **Proje hafızası:** "X projesinde nerede kalmıştık?" sorularını bu **okuma sırasıyla** cevapla; her adım öncekinin yetmediği yerde:
-  1. `vlad project status <slug> --json` — kartın `## Durum özeti` anlatısı (hangi tarihe kadar güncel yazılı) + sayılar, aktif görevler, açık bulgular. `summary.state` `bayat`/`yok` ise özeti "güncel" diye sunma: `newer`'daki kayıtları oku, `/digest` öner.
+  1. `vlad project status <slug> --json` — kartın `## Durum özeti` anlatısı (hangi tarihe kadar güncel yazılı) + sayılar, aktif görevler, açık bulgular. `summary.state` `yok` ya da `newer` doluysa özet "güncel" değil: `newer`'daki kayıtları oku, `/digest` öner.
   2. `vlad decision list --project <slug> --json` — yalnız **geçerli** kararlar (`D-<proje>-NNN`); geçersizler `--all` ile, asla geçerli diye sunulmaz.
   3. `vlad kb search "<sorgu>" [--project] [--type] --json` — sınırlı arama (arşiv dahil).
   4. Gerekirse `vlad kb get <id> [--section ...]` ile yalnız ilgili kaydı oku. Kart, günlük ya da `decisions/<slug>.md`'yi baştan sona okuma.
@@ -26,7 +26,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 - `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır (onay: Yetki sınırları).
 - Görev durumunu yalnızca CLI ile değiştir (`vlad task set <id> <state>`; iptalde `--reason` zorunlu); geçersiz geçişi zorlama.
 - **Komutlar:** `vlad status [--summary]`, `vlad task list|new|launch|set|log|ask|report`, `vlad project status`, `vlad decision add|list|set`, `vlad finding add|list|set`, `vlad kb search|get|commit --push|lint|maintain`, `vlad digest pending`, `vlad mode night|watch|off`. Tamamı: `docs/commands.md`, `vlad <komut> --help`; `--file`/`--body-file` içeriği geçici dosyadan ya da `-` ile stdin'den ver.
-- **Bulgular:** `F-<proje>-NNN` (önem kritik|yüksek|orta|düşük|bilgi; durum open|deferred|fixed|wontfix). `/digest` yalnız orta ve üstünü `finding add` ile kaydeder (D-genel-033). Kartın `## Çalışma notları` yalnız `vlad project note` ile yazılır; çalışanlar işe başlarken okur.
+- **Bulgular:** `F-<proje>-NNN` (önem kritik|yüksek|orta|düşük|bilgi; durum open|deferred|fixed|wontfix). `/digest` yalnız orta ve üstünü `finding add` ile kaydeder (D-genel-033). Kartın `## Çalışma notları` yalnız `vlad project note` ile yazılır (çıkarma yalnız /setup-audit not bakımında, onayla); çalışanlar işe başlarken okur.
 
 ## Yetki sınırları
 
@@ -58,7 +58,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 | `/digest` | İşlenmemiş raporları günlüğe, kartlara, karar günlüğüne işlemek |
 | `/second-opinion` | Codex 3. göz: plan eleştirisi, son kapı review'u |
 | `/integrate` | Kapı yordamı: ön kontrol, gate, ingest-preview, merge adımları (açık onayla) |
-| `/setup-audit` | Periyodik kurulum denetimi (`vlad audit setup`; onaysız yürür, dosya değiştirmez) |
+| `/setup-audit` | Periyodik kurulum denetimi (`vlad audit setup`; onaysız yürür; kural/rol/skill değiştirmez, kb'ye yalnız denetim görevi ve fikir yazar) |
 | `/release` | Deploy/APK: ayrı kullanıcı onayı (gece modu kapsamaz), `gh workflow run`, run takibi |
 | `/bulgu-tarama` | Biriken düşük/bilgi bulguları kodla karşılaştırıp kör ikinci gözle toplu kapatmak |
 

@@ -34,7 +34,7 @@ Tamamı: `docs/commands.md` (her komutun davranış notları ve işçi/konsol po
 ## Bulgular ve çalışma notları
 
 - **Bulgular:** ertelenen/açık noktalar kaybolmasın diye `kb/findings/<id>.md` altında tutulur (`F-<proje>-NNN`; önem: kritik|yüksek|orta|düşük|bilgi; durum: open|deferred|fixed|wontfix). `/digest` kapanış raporlarının `### Açık noktalar` maddelerinden yalnız orta ve üstünü `vlad finding add` ile kaydeder (düşük/bilgi raporda kalır, dondurulmuş projede bulgu taraması yok: D-genel-033); `vlad status --summary` açık (open+deferred) kritik/yüksek bulgu sayısını da gösterir.
-- **Çalışma notları:** kartın `## Çalışma notları` bölümü projede öğrenilmiş kalıcı derslerdir; yalnızca `vlad project note` yazar (adaylar haftalık `/setup-audit`'ten; çatı başına retro kaldırıldı). Çalışanlar ve roller işe başlarken okur; bulut çalışanın prompt'una satır içi girer. Rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur.
+- **Çalışma notları:** kartın `## Çalışma notları` bölümü projede öğrenilmiş kalıcı derslerdir; yalnızca `vlad project note` yazar; çıkarma yalnız `/setup-audit` not bakımında, kullanıcı onayıyla (adaylar haftalık `/setup-audit`'ten; çatı başına retro kaldırıldı). Çalışanlar ve roller işe başlarken okur; bulut çalışanın prompt'una satır içi girer. Rol düzeyindeki dersler `roles/` değişikliği önerisi olarak kullanıcıya sunulur.
 
 ## Telefon onayı (`vlad mode request`, karar 2026-11-20)
 

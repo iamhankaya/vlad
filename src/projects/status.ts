@@ -100,7 +100,7 @@ export function doneSummaryNote(task: Task): { summaryStale: boolean | null; war
   try { const s = projectStatus(task.data.project).summary; state = s.state; behind = s.newer.length > 0; } catch { return { summaryStale: null, warnings: [] }; }
   // per-task question ("does the summary cover this task?"): no age/count threshold, any newer record counts
   if (state === "güncel" && !behind) return { summaryStale: false, warnings: [] };
-  return { summaryStale: true, warnings: [`${task.data.project} proje özet bayat (${state === "yok" ? "özet yok" : "özetten sonra kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
+  return { summaryStale: true, warnings: [`${task.data.project} proje özeti bu görevi kapsamıyor (${state === "yok" ? "özet yok" : "özetten sonra kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
 }
 
 /** Opening warning for done tasks that /digest has not processed ("" when none). */
