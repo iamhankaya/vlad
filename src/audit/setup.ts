@@ -180,9 +180,12 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     // "İzin reddi", "permission denied", and the workers' real phrasings: "push reddedildi (auto mode classifier, Bash)", "sınıflayıcı tarafından engellendi" (F-vlad-279)
     const denials = countLines(progress, IZIN_REDDI);
     signal(out.signals.izin_reddi, id, denials);
+    // whole key only (`ek_review_bulgusu=` is another key); an Ölçüm line without the key is not in the review-rate denominator
+    const reviewKey = /(?:^|[\s,;])review_bulgusu=(\d+)/i.exec(m?.[1] ?? "")?.[1];
     weeklyTasks.push({
-      at: t.data.updated, role: t.data.role, project: t.data.project, measured: !!m, changes, denials,
-      review: Number(/review_bulgusu=(\d+)/i.exec(m?.[1] ?? "")?.[1] ?? 0),
+      at: t.data.updated, role: t.data.role, project: t.data.project, changes, denials,
+      model: effectiveModel(t.data, roles.find((r) => r.slug === t.data.role)),
+      measured: reviewKey !== undefined, review: Number(reviewKey ?? 0),
     });
 
     const seen = new Set<string>();

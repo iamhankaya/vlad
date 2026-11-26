@@ -70,7 +70,7 @@ export const COMMAND_DOCS: Readonly<Record<string, string>> = {
   "monitor uninstall": "`monitor uninstall`: monitor launchd servisini durdurur ve plist'ini siler (`~/.vlad-monitor/` durum dosyasına dokunmaz). Terminalde, mod yetkisiyle.",
   "mode status": "Mod durumunu gösterir.",
   "audit skills": "`audit skills [--since] [--project]`: beklenen/yüklenen/eksik skill denetimi.",
-  "audit setup": "`audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. Haftalık seri (`weekly`: görev başına review_bulgusu/değişiklik isteği/izin reddi oranı, rol ve proje kırılımı, açılan/kapanan bulgu, o hafta değişen kural dosyaları) ve denetim önerilerinin fikir durumu (`suggestions`). İzin kuralı adayları (`permission_candidates`) reddedilen komutları ret sınıfına göre gruplar (heredoc yazımı, `git push`, `rm`, gizli dosya yolu, ilk komut sözcüğü…; `kb/logs/denials.jsonl` da kaynak). `/setup-audit` kullanır.",
+  "audit setup": "`audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. Haftalık seri (`weekly`: görev başına review_bulgusu/değişiklik isteği/izin reddi oranı, rol, proje ve model kırılımı, açılan/kapanan bulgu, o hafta değişen kural dosyaları) ve denetim önerilerinin fikir durumu (`suggestions`). İzin kuralı adayları (`permission_candidates`) reddedilen komutları ret sınıfına göre gruplar (heredoc yazımı, `git push`, `rm`, gizli dosya yolu, ilk komut sözcüğü…; `kb/logs/denials.jsonl` da kaynak). `/setup-audit` kullanır.",
   "inbox list": "İşlenmemiş session raporlarını listeler.",
   "inbox count": "İşlenmemiş rapor sayısı.",
   "inbox done": "Raporu işlenmiş işaretler.",

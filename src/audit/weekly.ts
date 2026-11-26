@@ -19,9 +19,11 @@ export interface WeekRow extends WeekCounts {
   rules_changed: string[];
   by_role: Record<string, WeekCounts>;
   by_project: Record<string, WeekCounts>;
+  /** by the task's effective model (task model ?? role model; "-" = none), e.g. opus phases vs the default */
+  by_model: Record<string, WeekCounts>;
 }
 
-export interface WeeklyTask { at: string; role: string | null | undefined; project: string; measured: boolean; review: number; changes: number; denials: number }
+export interface WeeklyTask { at: string; model: string | null; role: string | null | undefined; project: string; measured: boolean; review: number; changes: number; denials: number }
 export interface WeeklyFinding { created: string; updated: string; state: string }
 
 /** Monday (UTC) of the week containing the timestamp, `YYYY-MM-DD`; null for an unparsable date. */
@@ -42,7 +44,7 @@ export function buildWeekly(o: { tasks: WeeklyTask[]; findings: WeeklyFinding[];
   const row = (week: string): WeekRow => {
     let r = rows.get(week);
     if (!r) {
-      r = { week, ...zero(), measured: 0, review_bulgusu_per_task: null, degisiklik_istegi_per_task: null, izin_reddi_per_task: null, findings_opened: 0, findings_closed: 0, rules_changed: [], by_role: {}, by_project: {} };
+      r = { week, ...zero(), measured: 0, review_bulgusu_per_task: null, degisiklik_istegi_per_task: null, izin_reddi_per_task: null, findings_opened: 0, findings_closed: 0, rules_changed: [], by_role: {}, by_project: {}, by_model: {} };
       rows.set(week, r);
     }
     return r;
@@ -52,7 +54,7 @@ export function buildWeekly(o: { tasks: WeeklyTask[]; findings: WeeklyFinding[];
     if (!w) continue;
     const r = row(w);
     if (t.measured) r.measured++;
-    for (const c of [r, (r.by_role[t.role || "-"] ??= zero()), (r.by_project[t.project] ??= zero())]) {
+    for (const c of [r, (r.by_role[t.role || "-"] ??= zero()), (r.by_project[t.project] ??= zero()), (r.by_model[t.model || "-"] ??= zero())]) {
       c.tasks++; c.review_bulgusu += t.review; c.degisiklik_istegi += t.changes; c.izin_reddi += t.denials;
     }
   }

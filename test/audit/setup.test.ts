@@ -401,7 +401,7 @@ describe("auditSetup", () => {
   it("weekly series: per-week rates per task with role/project breakdown and findings opened/closed (T20261126-09)", () => {
     role("developer"); role("tester");
     // 2026-10-26 is a Monday: week 10-26 = tasks a, b; week 11-02 = tasks c, d
-    const a = task({ at: "2026-10-27", role: "developer", closing: report("Ölçüm: dosya=2 satır=+5/-1 yeni_test=1 ci_tur=0 review_bulgusu=3"), prior: 2, progress: ["- 2026-10-27T10:00:00+03:00 [İZİN] Bash: git push origin x"] });
+    const a = task({ at: "2026-10-27", role: "developer", model: "opus", closing: report("Ölçüm: dosya=2 satır=+5/-1 yeni_test=1 ci_tur=0 review_bulgusu=3"), prior: 2, progress: ["- 2026-10-27T10:00:00+03:00 [İZİN] Bash: git push origin x"] });
     task({ at: "2026-10-30", role: "tester", closing: report("Ölçüm: dosya=1 satır=+1/-0 yeni_test=0 ci_tur=0 review_bulgusu=1") });
     task({ at: "2026-11-03", role: "developer", closing: report("Ölçüm: dosya=1 satır=+1/-0 yeni_test=0 ci_tur=0 review_bulgusu=0") });
     task({ at: "2026-11-04", role: "developer" }); // no measure: not in the review-rate denominator
@@ -415,6 +415,7 @@ describe("auditSetup", () => {
     expect(w1.by_role.developer).toMatchObject({ tasks: 1, review_bulgusu: 3, degisiklik_istegi: 2, izin_reddi: 1 });
     expect(w1.by_role.tester).toMatchObject({ tasks: 1, review_bulgusu: 1 });
     expect(w1.by_project.alpha).toMatchObject({ tasks: 2, review_bulgusu: 4 });
+    expect(w1.by_model).toMatchObject({ opus: { tasks: 1, review_bulgusu: 3, degisiklik_istegi: 2 }, "-": { tasks: 1, review_bulgusu: 1 } });
     expect(w2).toMatchObject({ tasks: 2, measured: 1, review_bulgusu: 0, review_bulgusu_per_task: 0, findings_opened: 1, findings_closed: 1 });
   });
 

@@ -102,7 +102,7 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 ## audit
 
 - `vlad audit skills` — `audit skills [--since] [--project]`: beklenen/yüklenen/eksik skill denetimi. _(yerel; konsol: okuma; --json)_
-- `vlad audit setup` — `audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. Haftalık seri (`weekly`: görev başına review_bulgusu/değişiklik isteği/izin reddi oranı, rol ve proje kırılımı, açılan/kapanan bulgu, o hafta değişen kural dosyaları) ve denetim önerilerinin fikir durumu (`suggestions`). İzin kuralı adayları (`permission_candidates`) reddedilen komutları ret sınıfına göre gruplar (heredoc yazımı, `git push`, `rm`, gizli dosya yolu, ilk komut sözcüğü…; `kb/logs/denials.jsonl` da kaynak). `/setup-audit` kullanır. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad audit setup` — `audit setup [--since] [--json]`: salt okuma; biten görev ölçümleri, açık noktalar, sürtünme işaretleri, skill envanteri, yaşlı bulgular. Haftalık seri (`weekly`: görev başına review_bulgusu/değişiklik isteği/izin reddi oranı, rol, proje ve model kırılımı, açılan/kapanan bulgu, o hafta değişen kural dosyaları) ve denetim önerilerinin fikir durumu (`suggestions`). İzin kuralı adayları (`permission_candidates`) reddedilen komutları ret sınıfına göre gruplar (heredoc yazımı, `git push`, `rm`, gizli dosya yolu, ilk komut sözcüğü…; `kb/logs/denials.jsonl` da kaynak). `/setup-audit` kullanır. _(işçide reddedilir; konsolda yok; --json)_
 
 ## inbox
 

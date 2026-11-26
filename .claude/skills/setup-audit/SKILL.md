@@ -36,7 +36,7 @@ vlad audit setup --since <tarih> --json
 - `cancelled` (iptal edilenler, gerekçesi yazılı/yazısız ID'ler).
 - `skills.inventory` (ad, kaynak: `repo|global|vendor|user|plugin|role`, anan roller, yüklenme sayısı, ilk eklenme `added`), `skills.unused`, `skills.coverage` (rol×skill oranı: görev yalnız kural yürürlüğe girdikten sonra oluşturulduysa beklentiye girer; `skipped_before_rule` atlananlar), `skills.transcripts`.
 - `rules` (`CLAUDE.md` ve rol dosyalarının son değişiklik tarihi, git geçmişinden).
-- `weekly` (hafta başına [Pazartesi, UTC] görev başına oranlar: `review_bulgusu_per_task` ölçümlü görevlere, `degisiklik_istegi_per_task`/`izin_reddi_per_task` tüm görevlere bölünür; `findings_opened/closed`; `by_role`, `by_project` kırılımı; `rules_changed` = o hafta commit alan kural dosyaları). Değişikliğin etkisini kural haftasından önceki/sonraki haftalarla karşılaştırarak oku; tek haftalık sapmayı kanıt sayma.
+- `weekly` (hafta başına [Pazartesi, UTC] görev başına oranlar: `review_bulgusu_per_task` ölçümlü görevlere, `degisiklik_istegi_per_task`/`izin_reddi_per_task` tüm görevlere bölünür; `findings_opened/closed`; `by_role`, `by_project`, `by_model` (görevin efektif modeli) kırılımı; `rules_changed` = o hafta commit alan kural dosyaları). Değişikliğin etkisini kural haftasından önceki/sonraki haftalarla karşılaştırarak oku; tek haftalık sapmayı kanıt sayma.
 - `suggestions` (önceki denetimlerin fikir olarak açtığı önerilerin durumu: `by_state`, `ideas[]` open/promoted/dropped). Aynı öneriyi yeniden yazma; hâlâ `open` olanı düşen/bekleyen olarak an.
 - `findings` (`unresolved` yaşa göre; `by_severity`, `by_project`, `by_source`, `stale`).
 
