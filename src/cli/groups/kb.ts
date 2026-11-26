@@ -44,7 +44,7 @@ export function registerKb(program: Command, k: Kit): void {
     out(o, { hits }, hits.map((h) => `${h.id}  ${h.type}  ${h.status ?? "-"}  ${h.date ?? "-"}${h.section ? `  ${h.section}` : ""}\n  ${h.snippet}\n  ${h.path}`).join("\n") || "eşleşme yok");
   })
     .option("--project <slug>", "yalnız bu proje")
-    .option("--type <tür>", "task | finding | idea | decision | journal")
+    .option("--type <tür>", "task | finding | idea | decision | journal | project (kart: Çalışma notları, Açık konular, Durum özeti)")
     .option("--limit <n>", "en çok bu kadar sonuç", "8");
   def(kb, "refs <id>", "ID'ye (T…, F-…, I-…, D-…) atıf yapan kayıtları bölüm/durum/tarihle, ilgili commit'leri ve çelişki işaretlerini listeler", (id: string, o: Opts) => {
     const r = refsOf(id);

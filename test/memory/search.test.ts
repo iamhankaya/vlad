@@ -82,6 +82,16 @@ describe("searchKb", () => {
     expect(searchKb({ query: "yavaş liste", project: "watchparty" })).toEqual([]);
     expect(searchKb({ query: "yavaş", limit: 1 })).toHaveLength(1);
   });
+  it("project type: searches only Çalışma notları, Açık konular and Durum özeti of cards; project filter and section are reported (T20261126-09)", () => {
+    writeProject("watchparty", `${card("watchparty")}\n## Mimari notlar\n- kuyruk kilidi burada\n\n## Açık konular\n- kuyruk kilidi yarış\n\n## Çalışma notları\n- test ortamında kuyruk sıfırlanır\n\n## Durum özeti\nson durum: kuyruk temiz\n`);
+    writeProject("vlad", `${card("vlad")}\n## Çalışma notları\n- kuyruk farklı\n`);
+    const r = searchKb({ query: "kuyruk", type: "project" });
+    expect(r.map((h) => `${h.project}${h.section}`).sort()).toEqual(["vlad## Çalışma notları", "watchparty## Açık konular", "watchparty## Durum özeti", "watchparty## Çalışma notları"]);
+    expect(r[0]).toMatchObject({ type: "project", id: expect.stringMatching(/^project:/) });
+    expect(r[0]!.relative).toMatch(/^projects\/.+\.md$/);
+    expect(searchKb({ query: "kuyruk", type: "project", project: "vlad" })).toHaveLength(1);
+    expect(searchKb({ query: "kilidi", type: "project" }).map((h) => h.section)).toEqual(["## Açık konular"]); // Mimari notlar is not searched
+  });
   it("rejects an empty query and an unknown type", () => {
     expect(() => searchKb({ query: "  " })).toThrow(/sorgu/);
     expect(() => searchKb({ query: "x", type: "bozuk" })).toThrow(/tür/);

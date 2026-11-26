@@ -4,7 +4,9 @@ import { scanDecisions } from "./decisions.js";
 import { parseDoc, readText } from "./doc.js";
 import { kbPaths } from "./home.js";
 
-export const SEARCH_TYPES = ["task", "finding", "idea", "decision", "journal"] as const;
+export const SEARCH_TYPES = ["task", "finding", "idea", "decision", "journal", "project"] as const;
+/** Card sections `project` search covers (the rest of a card is derived or static architecture text). */
+const CARD_SECTIONS = ["## Çalışma notları", "## Açık konular", "## Durum özeti"];
 export type SearchType = (typeof SEARCH_TYPES)[number];
 
 export interface SearchHit {
@@ -122,6 +124,19 @@ function* journalUnits(): Generator<Unit> {
   }
 }
 
+function* projectUnits(): Generator<Unit> {
+  for (const path of listMdFiles(kbPaths().projects)) {
+    try {
+      const { data, body } = parseDoc<{ slug?: string; name?: string; last_activity?: string | null }>(readText(path));
+      const slug = data.slug ?? basename(path, ".md");
+      for (const s of sections(body)) {
+        if (!CARD_SECTIONS.includes(s.heading)) continue;
+        yield { id: `project:${slug}`, type: "project", project: slug, status: null, date: data.last_activity ? String(data.last_activity) : null, section: s.heading, title: data.name ?? slug, text: s.text, path };
+      }
+    } catch { /* unreadable cards are reported by `project status` */ }
+  }
+}
+
 /**
  * Bounded keyword search over the kb files (archive included): tasks per `## ` section, decisions per block,
  * findings whole, journal per `## <project>` section. All query words must occur in the unit; one hit per
@@ -140,7 +155,7 @@ export function searchKb(o: { query: string; project?: string; type?: string; li
     if (o.project && normalize(unit.project ?? "") !== normalize(o.project)) return;
     const score = scoreOf(unit, words);
     if (!score) return;
-    const key = `${unit.type}:${unit.id}`;
+    const key = `${unit.type}:${unit.id}${unit.type === "project" ? unit.section : ""}`; // a card hits once per searched section
     if (!best.has(key) || best.get(key)!.score < score) best.set(key, { unit, score });
   };
   if (want("task")) for (const u of taskUnits()) consider(u);
@@ -148,6 +163,7 @@ export function searchKb(o: { query: string; project?: string; type?: string; li
   if (want("idea")) for (const u of ideaUnits()) consider(u);
   if (want("decision")) for (const u of decisionUnits(o.project && o.project !== "genel" ? o.project : undefined)) consider(u);
   if (want("journal")) for (const u of journalUnits()) consider(u);
+  if (want("project")) for (const u of projectUnits()) consider(u);
   return [...best.values()]
     .sort((a, b) => b.score - a.score || String(b.unit.date).localeCompare(String(a.unit.date)))
     .slice(0, limit)
