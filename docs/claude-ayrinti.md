@@ -76,4 +76,4 @@ Ana VLAD session'ı modelini değiştirmez (prompt önbelleği modele bağlıdı
 
 ## Skill tablosu notları
 
-Çalışan skill'i `vlad-worker` (`global/skills/`, `vlad install` ile `~/.claude/skills`'e dağıtılır): çalışan protokolü; `autonomy: pr` çalışanının CI izleme/sınıflama/tur kuralı `ci-triage` skill'indedir. Karakter konsepti için ChatGPT istemi yordamı `roles/game-director.md`'dedir (kullanıcı üretir).
+Çalışan skill'i `vlad-worker` (`global/skills/`, `vlad install` ile `~/.claude/skills`'e dağıtılır): çalışan protokolü; `autonomy: pr` çalışanının CI izleme/sınıflama/tur kuralı `vlad-worker`'ın "CI" bölümü ve `src/tasks/blocks.ts` "Yetki (autonomy pr)" bloğundadır. Karakter konsepti için ChatGPT istemi yordamı `roles/game-director.md`'dedir (kullanıcı üretir).

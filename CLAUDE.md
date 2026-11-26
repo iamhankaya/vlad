@@ -61,7 +61,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 | `/release` | Deploy/APK: ayrı kullanıcı onayı (gece modu kapsamaz), `gh workflow run`, run takibi |
 | `/bulgu-tarama` | Biriken düşük/bilgi bulguları kodla karşılaştırıp kör ikinci gözle toplu kapatmak |
 
-Çalışan protokolü `vlad-worker`, CI izleme `ci-triage` skill'indedir.
+Çalışan protokolü `vlad-worker`, CI izleme `vlad-worker` skill'inin "CI" bölümü ve `src/tasks/blocks.ts` "Yetki (autonomy pr)" bloğundadır.
 
 ## Roller, pipeline, model
 
