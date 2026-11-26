@@ -15,6 +15,9 @@ function gitLog(home: string, args: string[], path: string): string[] {
 /** Committer date (ISO) of the latest commit touching `path`; null if never committed. */
 export const lastChanged = (home: string, path: string): string | null => gitLog(home, ["-1"], path)[0] ?? null;
 
+/** Committer dates (ISO) of every commit touching `path` since the date (inclusive); empty without git history. */
+export const changedSince = (home: string, path: string, since: string): string[] => gitLog(home, [`--since=${since}`], path);
+
 /** Committer date of the commit that added `path`; null if unknown. */
 export const firstAdded = (home: string, path: string): string | null => gitLog(home, ["--reverse", "--diff-filter=A"], path)[0] ?? null;
 
