@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { auditSetup } from "../../src/audit/setup.js";
 import { kbPaths, writeDoc } from "../../src/kb/index.js";
-import { addFinding } from "../../src/findings/store.js";
+import { addFinding, setFindingStates } from "../../src/findings/store.js";
 import { defaultConfig } from "../../src/kb/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { claudeProjectDir } from "../../src/tasks/liveness.js";
@@ -395,6 +395,37 @@ describe("auditSetup", () => {
     writeFileSync(join(kbPaths().logs, "denials.jsonl"), [rec(a), rec(a), rec(b)].join("\n") + "\n");
     const r = auditSetup({ since: "2026-10-01", configDir: cfgDir });
     expect(r.permission_candidates).toMatchObject([{ pattern: "rm", tasks: 2, count: 3 }]);
+  });
+
+  it("weekly series: per-week rates per task with role/project breakdown and findings opened/closed (T20261126-09)", () => {
+    role("developer"); role("tester");
+    // 2026-10-26 is a Monday: week 10-26 = tasks a, b; week 11-02 = tasks c, d
+    const a = task({ at: "2026-10-27", role: "developer", closing: report("Ölçüm: dosya=2 satır=+5/-1 yeni_test=1 ci_tur=0 review_bulgusu=3"), prior: 2, progress: ["- 2026-10-27T10:00:00+03:00 [İZİN] Bash: git push origin x"] });
+    task({ at: "2026-10-30", role: "tester", closing: report("Ölçüm: dosya=1 satır=+1/-0 yeni_test=0 ci_tur=0 review_bulgusu=1") });
+    task({ at: "2026-11-03", role: "developer", closing: report("Ölçüm: dosya=1 satır=+1/-0 yeni_test=0 ci_tur=0 review_bulgusu=0") });
+    task({ at: "2026-11-04", role: "developer" }); // no measure: not in the review-rate denominator
+    const f = addFinding({ project: "alpha", severity: "orta", source: a, title: "x" }, new Date("2026-10-28T10:00:00+03:00"));
+    addFinding({ project: "alpha", severity: "orta", source: a, title: "y" }, new Date("2026-11-03T10:00:00+03:00"));
+    setFindingStates([f.data.id], "fixed", {}, new Date("2026-11-05T10:00:00+03:00"));
+    const r = auditSetup({ since: "2026-10-20", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") });
+    expect(r.weekly.map((w) => w.week)).toEqual(["2026-10-26", "2026-11-02"]);
+    const [w1, w2] = r.weekly;
+    expect(w1).toMatchObject({ tasks: 2, measured: 2, review_bulgusu: 4, review_bulgusu_per_task: 2, degisiklik_istegi: 2, degisiklik_istegi_per_task: 1, izin_reddi: 1, izin_reddi_per_task: 0.5, findings_opened: 1, findings_closed: 0 });
+    expect(w1.by_role.developer).toMatchObject({ tasks: 1, review_bulgusu: 3, degisiklik_istegi: 2, izin_reddi: 1 });
+    expect(w1.by_role.tester).toMatchObject({ tasks: 1, review_bulgusu: 1 });
+    expect(w1.by_project.alpha).toMatchObject({ tasks: 2, review_bulgusu: 4 });
+    expect(w2).toMatchObject({ tasks: 2, measured: 1, review_bulgusu: 0, review_bulgusu_per_task: 0, findings_opened: 1, findings_closed: 1 });
+  });
+
+  it("weekly series: empty range gives an empty series; rules_changed lists rule files committed that week", () => {
+    expect(auditSetup({ since: "2026-10-20", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") }).weekly).toEqual([]);
+    role("developer");
+    task({ at: "2026-10-27", role: "developer" });
+    execFileSync("git", ["-C", home, "init", "-q"]);
+    execFileSync("git", ["-C", home, "add", "roles"]);
+    execFileSync("git", ["-C", home, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "r"], { env: { ...process.env, GIT_COMMITTER_DATE: "2026-10-28T10:00:00+03:00", GIT_AUTHOR_DATE: "2026-10-28T10:00:00+03:00" } });
+    const r = auditSetup({ since: "2026-10-20", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") });
+    expect(r.weekly[0]!.rules_changed).toEqual(["roles/developer.md"]);
   });
 
   it("rejects an invalid since", () => {
