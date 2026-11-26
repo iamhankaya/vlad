@@ -22,6 +22,15 @@ Tamamı: `docs/commands.md` (her komutun davranış notları ve işçi/konsol po
 - **Obsidian:** kb klasörü Obsidian vault'u olarak açılabilir (salt okuma amaçlı); `maintain` ayrı kb reposunun `.gitignore`'ına `.obsidian/` ekler. Yazma yine yalnız `vlad` CLI ile.
 - **kb reposu:** `kb/` ayrı private repoda (`iamhankaya/vlad-kb`; konum `VLAD_KB_DIR` ya da `vlad.config.json` `kbDir`; vlad reposundaki `kb/` artık izlenmez). `inbox/`, `logs/`, `vlad-session.txt`, `.vlad.lock` ve `.obsidian/` kb reposunun `.gitignore`'ındadır. Bulut çalışanına görev metni varsayılan olarak satır içi verilir (`cloudKb` yoksa `inline`, F-vlad-078; add_repo reddi nedeniyle); `cloudKb: "readonly"` yalnız açıkça seçilirse kb salt okuma eklenir; yazma yalnız VLAD'dır ve yabancı commit `vlad kb check` ile izlenir. Eski düzende (kb, vlad reposunun içinde) push edilmemiş commit'ler arasında `kb/` dışı dosya varsa `kb commit --push` push etmez ve uyarı verir; o durumda kod push'u için yine onay iste.
 
+## Eski oturum kayıtları (hafıza olarak, D-vlad-091)
+
+"Daha önce nasıl çözmüştük" sorusunda `vlad kb search` (kart araması dahil, `--type project`) yetmezse 5. adım: **arka plan agent'ı** ilgili görevin çalışan transcript'ini tarar. Ana oturum transcript'i okumaz; agent'ın çıktısı taslaktır, kb'ye yazmaz.
+
+- **Yol:** `<claude config>/projects/<kod>/*.jsonl`; `<claude config>` = `CLAUDE_CONFIG_DIR` ya da `~/.claude`. `<kod>` = görevin worktree yolunda her `[^A-Za-z0-9]` karakterinin `-` yapılmış hali (`claudeProjectDir`, `src/tasks/liveness.ts`; `vlad audit skills` aynı eşlemeyi kullanır). Worktree yolu görev dosyasının `worktree` alanındadır (`vlad kb get <id> --json`); `task cleanup` alanı boşaltmış olabilir, o zaman yol `<worktreeDir>/<id>`'den türetilir. Yol yoksa transcript yoktur; bunu söyle, tahmin yürütme.
+- **Agent'a ver:** soru, görev ID'si, transcript dizini; "yalnız ilgili kararı/çözümü ve kanıtını (dosya yolu, komut, tarih) özetle, alıntı en fazla birkaç satır".
+- **Sır:** token, anahtar, parola, `.env` içeriği, kişisel veri rapora, cevaba ve kb'ye geçmez; gerekirse "sır içeriyor, atlandı" yaz.
+- **Cevapta** kaynağı belirt: görev ID'si + transcript tarihi. Transcript kalıcı değildir (silinmiş olabilir); kalıcı değer çıkarsa `/digest` ile karar/not olarak kb'ye işlenir.
+
 ## Bulgular ve çalışma notları
 
 - **Bulgular:** ertelenen/açık noktalar kaybolmasın diye `kb/findings/<id>.md` altında tutulur (`F-<proje>-NNN`; önem: kritik|yüksek|orta|düşük|bilgi; durum: open|deferred|fixed|wontfix). `/digest` kapanış raporlarının `### Açık noktalar` maddelerinden yalnız orta ve üstünü `vlad finding add` ile kaydeder (düşük/bilgi raporda kalır, dondurulmuş projede bulgu taraması yok: D-genel-033); `vlad status --summary` açık (open+deferred) kritik/yüksek bulgu sayısını da gösterir.

@@ -13,6 +13,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
   2. `vlad decision list --project <slug> --json` — yalnız **geçerli** kararlar (`D-<proje>-NNN`); geçersizler `--all` ile, asla geçerli diye sunulmaz.
   3. `vlad kb search "<sorgu>" [--project] [--type] --json` — sınırlı arama (arşiv dahil).
   4. Gerekirse `vlad kb get <id> [--section ...]` ile yalnız ilgili kaydı oku. Kart, günlük ya da `decisions/<slug>.md`'yi baştan sona okuma.
+  5. "Daha önce nasıl çözmüştük" ve 1–4 yetmediyse: arka plan agent'ı ilgili görevin worktree transcript'ini tarar (ayrıntı: `docs/claude-ayrinti.md` §"Eski oturum kayıtları"); sır içeriği rapora/kb'ye geçmez.
   Cevapta kaynağı (özet tarihi, günlük tarihi, görev/karar ID'si) belirt.
 - **İş devri:** geliştirme işlerini ayrı, görünür `vlad-worker` session'larına devret, takip et, sonucu onaya sun. Kullanıcının projelerinde kod yazmayı kendin yapma; `/delegate` ile devret.
 - Kısa araştırma (repoda değişiklik yok): ayrı session açma; `--kind research` görevi (onaydan sonra), arka plan agent'ı, sonuç `vlad task report <id> --file <md>` ile görev dosyasına; sohbette kalmaz.
