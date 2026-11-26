@@ -424,7 +424,7 @@ describe("auditSetup", () => {
     task({ at: "2026-10-27", role: "developer" });
     execFileSync("git", ["-C", home, "init", "-q"]);
     execFileSync("git", ["-C", home, "add", "roles"]);
-    execFileSync("git", ["-C", home, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "r"], { env: { ...process.env, GIT_COMMITTER_DATE: "2026-10-28T10:00:00+03:00", GIT_AUTHOR_DATE: "2026-10-28T10:00:00+03:00" } });
+    execFileSync("git", ["-C", home, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "r"], { env: { ...isolatedEnv(), GIT_COMMITTER_DATE: "2026-10-28T10:00:00+03:00", GIT_AUTHOR_DATE: "2026-10-28T10:00:00+03:00" } });
     const r = auditSetup({ since: "2026-10-20", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") });
     expect(r.weekly[0]!.rules_changed).toEqual(["roles/developer.md"]);
   });

@@ -5,7 +5,7 @@ import { parseDoc, readText } from "./doc.js";
 import { kbPaths } from "./home.js";
 
 export const SEARCH_TYPES = ["task", "finding", "idea", "decision", "journal", "project"] as const;
-/** Card sections `project` search covers (the rest of a card is derived or static architecture text). */
+/** Card sections `project` search covers; opt-in (`--type project` only), so default results stay unchanged (restructure golden) (the rest of a card is derived or static architecture text). */
 const CARD_SECTIONS = ["## Çalışma notları", "## Açık konular", "## Durum özeti"];
 export type SearchType = (typeof SEARCH_TYPES)[number];
 
@@ -163,7 +163,7 @@ export function searchKb(o: { query: string; project?: string; type?: string; li
   if (want("idea")) for (const u of ideaUnits()) consider(u);
   if (want("decision")) for (const u of decisionUnits(o.project && o.project !== "genel" ? o.project : undefined)) consider(u);
   if (want("journal")) for (const u of journalUnits()) consider(u);
-  if (want("project")) for (const u of projectUnits()) consider(u);
+  if (o.type === "project") for (const u of projectUnits()) consider(u);
   return [...best.values()]
     .sort((a, b) => b.score - a.score || String(b.unit.date).localeCompare(String(a.unit.date)))
     .slice(0, limit)
