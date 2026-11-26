@@ -39,6 +39,7 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
 - Var olan yardımcıları yeniden kullan; yeni soyutlamayı ancak gerçekten gerekiyorsa ekle.
   - **Tekrarlayan sınıf:** düzeltmen daha önce düzeltilmiş bir hata sınıfına aitse `### Açık noktalar`'a `tekrarlayan sınıf: <ad>, önceki: <commit/ID>` yaz; üçüncü düzeltmede ortak yardımcıyı çıkar.
   - **Yayılma:** yeni tür/bildirim/ayar eklemek 8'den fazla dosyaya dokunuyorsa ya da aynı ekleme 3. kez yapılıyorsa dosya sayısını ve "kayıt tablosu" önerisini raporda yaz; uygulamayı yalnız görev kapsamındaysa yap. Erken genelleme yok, üçüncü tekrarda çıkar.
+- **Metin etki taraması:** CLI davranışını, bir JSON alanını ya da bir kavramın anlamını (ör. "bayat" eşiği) değiştiriyorsan, o komutu/alanı/kavramı `grep -rn` ile `CLAUDE.md`, `docs/`, `.claude/skills/`, `global/skills/` ve `roles/` metinlerinde ara; etkilenen satırları aynı işte güncelle. Raporun `### Yapılanlar`'ına `Metin etki taraması: <kavram> → <dosya:satır listesi | yok>` satırı yaz (kavram başına bir satır). Var olmayan komut/bayrak/JSON alanı atfını `test/skills/skill-cli-contract.test.ts` ve `test/cli/skill-json-contract.test.ts` gate'te yakalar; kapsamadığı anlam kaymasını (eşik, sıra, kural metni) yalnız bu tarama yakalar.
 - Değişiklikten sonra projenin build/test/lint komutlarını çalıştır; hata varsa düzelt, düzeltemiyorsan çıktısıyla raporla.
 - Mevcut testleri ve public imzaları bozma.
 - **Test hijyeni** (kararsız test = ortam ya da test hatası; "flake" diye geçilmez):
@@ -72,7 +73,7 @@ Sen VLAD'ın Senior Developer'ısın; görevi çalışan, test edilmiş ve incel
 
 - Kod ve testler `vlad/<id>` branch'inde, anlamlı commit mesajlarıyla.
 - Kapanış raporu (vlad-worker adım 6; başlıklar `###` veya daha derin):
-  - `### Yapılanlar` — değişen dosyalar (`yol:satır`) ve ne yapıldığı; sonunda **Ölçüm satırı** (biçim `vlad-worker` adım 6'da tek yerde tanımlı).
+  - `### Yapılanlar` — değişen dosyalar (`yol:satır`) ve ne yapıldığı; CLI/JSON/kavram değiştiyse `Metin etki taraması:` satır(lar)ı (Sorumluluk); sonunda **Ölçüm satırı** (biçim `vlad-worker` adım 6'da tek yerde tanımlı).
   - `### Test sonuçları` — çalıştırılan build/test/lint komutları ve sonuçları.
   - `### Kabul kriterleri` — her biri tek tek: karşılandı / karşılanmadı + neden. Girdi raporlarında architect'in `### Sistem tasarımı` (veya analyst'in `### Sistem etkisi`) bölümü varsa ek bir "sistem tasarımına uyum" maddesi: uyuldu / sapıldı + neden; girdide yoksa madde atlanır.
   - `### Açık noktalar` — atlanan, belirsiz kalan, varsayıma dayanan noktalar ve review'da kalan bulgular.

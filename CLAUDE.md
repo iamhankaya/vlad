@@ -31,7 +31,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 ## Yetki sınırları
 
 - Dış dünyaya etki eden **her** eylem kullanıcının **açık onayını** ister: `git push`, `gh pr create`, merge, mail gönderme. "Sanırım istiyor" yetmez; açıkça sor, açık "evet" bekle.
-- **Telefon onayı** (`vlad mode request <komut> [argümanlar]`, karar 2026-11-20): kullanıcının telefondan verdiği açık onaydır; izin kümesi yalnız mode night|watch|off, install, setup, monitor install|uninstall; `console: none` komutlar, `remote`, `agent *` istenemez; onay tek kullanımlık, 5 dk; çalışan oturumu istek açamaz. Telefon onayı olmadan dış etkili eylem yapılmaz (`docs/uzaktan-onay.md`).
+- **Telefon onayı** (`vlad mode request <komut> [argümanlar]`, karar 2026-11-20): kullanıcının telefondan verdiği açık onaydır; izin kümesi yalnız mode night|watch|off, install, setup, monitor install|uninstall (yasaklı komutlar `docs/claude-ayrinti.md`); onay tek kullanımlık, 5 dk; çalışan istek açamaz. Onay olmadan dış etkili eylem yapılmaz (`docs/uzaktan-onay.md`).
 - **İstisnalar:** `autonomy: pr` çalışanları yalnız kendi `vlad/<id>` dalını push eder (force yok) ve CI'ı izler (karar 2026-10-28; ana/entegrasyon dalına push/merge/PR yok). `kb:` commit'lerinin kb reposuna gönderimi önceden onaylıdır (2026-10-15; vlad-kb için 2026-10-25): `vlad kb commit --push` sormadan çalışır. Kod (vlad reposu) push'u her zaman onay ister.
 - Push/PR için CLI komutu yoktur; onaydan sonra `git -C <worktree> …` / `gh` ile görevin worktree'sinde sen yaparsın. Merge yalnız açık onaydan sonra: yerel görev/fazda `/integrate` akışındaki `git -C <proje-yolu> merge --no-ff vlad/<id>`; uzak görevde `vlad task merge <id>`.
 

@@ -92,7 +92,7 @@ Değişiklik turunda (VLAD düzeltme isteyip seni sürdürdüyse) rapor yine **t
 Bitince raporu Markdown olarak geçici bir dosyaya yaz. Başlıklar yalnızca `###` veya daha derin olmalı; `## ` ile başlayan satır görev dosyasının bölümünü böler:
 ```markdown
 ### Yapılanlar
-(developer/game-developer: sonuna tek **Ölçüm satırı**: `Ölçüm: dosya=<n> satır=+<a>/-<d> yeni_test=<n> ci_tur=<n> review_bulgusu=<n>`; `/digest` bunları sayar)
+(developer/game-developer: CLI davranışı, JSON alanı ya da kavram anlamı değiştiyse önce `Metin etki taraması: <kavram> → <dosya:satır listesi | yok>` satır(lar)ı, bkz. `roles/developer.md`; sonuna tek **Ölçüm satırı**: `Ölçüm: dosya=<n> satır=+<a>/-<d> yeni_test=<n> ci_tur=<n> review_bulgusu=<n>`; `/digest` bunları sayar)
 ### Test sonuçları
 (çalıştırılan komutlar ve sonuçları; kartta `gate` varsa önce o)
 ### Kabul kriterleri
