@@ -23,14 +23,25 @@ export interface SearchHit {
   relative: string;
 }
 
-/** Per character, so offsets in the folded text are offsets in the original: İ/I/ı -> i, lower case, diacritics dropped (ş->s, ğ->g, ü->u, ö->o, ç->c). */
-export function normalize(s: string): string {
-  let out = "";
-  for (const ch of s) {
-    const c = ch === "İ" || ch === "I" || ch === "ı" ? "i" : ch.toLowerCase();
-    out += c.normalize("NFD")[0];
+/** Folded form of one code point (memoized: the kb uses a few hundred distinct characters). */
+const FOLDED = new Map<string, string>();
+function foldChar(ch: string): string {
+  let c = FOLDED.get(ch);
+  if (c === undefined) {
+    c = (ch === "İ" || ch === "I" || ch === "ı" ? "i" : ch.toLowerCase()).normalize("NFD")[0];
+    FOLDED.set(ch, c);
   }
-  return out;
+  return c;
+}
+/** Characters the fold changes or may change: ASCII upper case and everything outside ASCII (per code point: the `u` flag keeps surrogate pairs whole). */
+const FOLDABLE = /[A-Z]|[^\x00-\x7f]/gu;
+
+/**
+ * Per character, so offsets in the folded text are offsets in the original: İ/I/ı -> i, lower case, diacritics dropped (ş->s, ğ->g, ü->u, ö->o, ç->c).
+ * Lower-case ASCII is kept as is; only the other characters go through the (memoized) fold (T20261126-25: the char-by-char NFD was most of `kb search`).
+ */
+export function normalize(s: string): string {
+  return s.replace(FOLDABLE, foldChar);
 }
 
 const SUFFIXES = ["larin", "lerin", "lari", "leri", "lar", "ler", "dan", "den", "nin", "nun", "yi", "ni", "si"];

@@ -7,6 +7,7 @@ import {
 } from "../git/git.js";
 import { readDoc, kbPaths, withKbLock } from "../kb/index.js";
 import { readSessionFile, SESSION_NAME_RE } from "../kb/session.js";
+import { withReadSnapshot } from "../kb/snapshot.js";
 import type { ProjectCard, TaskState, VladConfig } from "../kb/index.js";
 import { countOpenSevere } from "../findings/store.js";
 import { relatedOpenFindings } from "../findings/similar.js";
@@ -774,6 +775,11 @@ export function statusSummary(
   const mode = modeLine(now);
   if (mark) try { expireMode(now); } catch { /* a locked mode.json must not take the startup summary down */ } // an elapsed window is reported once, then cleared
   const dirty = kbDirtyOnWorker(cfg);
+  // the rest only reads: one listing + one stat per file for the summary, countOpenSevere and every project's status (T20261126-25)
+  return withReadSnapshot(() => summaryReads(newlyStalled, mode, dirty));
+}
+
+function summaryReads(newlyStalled: string[], mode: string | null, dirty: KbDirty | null): ReturnType<typeof statusSummary> {
   const tasks = listTasks();
   const counts = Object.fromEntries(ALL_STATES.map((s) => [s, 0])) as Record<TaskState, number>;
   for (const t of tasks) counts[t.data.state]++;

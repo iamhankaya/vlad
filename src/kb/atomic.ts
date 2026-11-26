@@ -1,4 +1,5 @@
 import { linkSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { invalidateSnapshot } from "./snapshot.js";
 
 const RENAME_RETRIES = 5;
 export const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -23,6 +24,7 @@ export function writeFileAtomic(
   o: { exclusive?: boolean; write?: (path: string, content: string) => void; rename?: (from: string, to: string) => void } = {},
 ): void {
   const tmp = `${file}.${process.pid}-${Math.random().toString(36).slice(2, 8)}.tmp`;
+  invalidateSnapshot();
   try {
     (o.write ?? ((p, c) => writeFileSync(p, c, "utf8")))(tmp, content);
     if (o.exclusive) linkSync(tmp, file); // fails with EEXIST instead of replacing

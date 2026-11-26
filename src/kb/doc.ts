@@ -1,6 +1,7 @@
 import { constants, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { writeFileAtomic } from "./atomic.js";
+import { fastFrontmatter } from "./frontmatter-fast.js";
 import { parse, stringify } from "yaml";
 
 const FRONT = /^---\n(?:([\s\S]*?)\n)?---[ \t]*(?:\n|$)/;
@@ -10,7 +11,7 @@ export function parseDoc<T>(text: string): { data: T; body: string } {
   const src = text.replace(/^﻿/, "").replace(/\r\n/g, "\n");
   const m = FRONT.exec(src);
   if (!m) throw new Error("frontmatter yok");
-  const data = (parse(m[1] ?? "", { schema: "core" }) ?? {}) as T;
+  const data = (fastFrontmatter(m[1] ?? "") ?? parse(m[1] ?? "", { schema: "core" }) ?? {}) as T;
   const body = src.slice(m[0].length).replace(/^\n/, "");
   return { data, body };
 }
