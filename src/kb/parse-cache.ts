@@ -1,4 +1,5 @@
 import { constants, lstatSync, readFileSync, statSync } from "node:fs";
+import { snapshotId } from "./snapshot.js";
 
 /**
  * Parsed files by path, keyed by mtime/size/inode: one CLI call lists the same kb directory several times
@@ -8,7 +9,8 @@ import { constants, lstatSync, readFileSync, statSync } from "node:fs";
  * `get` returns the shared cached value: callers that hand it out clone it first.
  */
 export class ParseCache<T> {
-  private readonly entries = new Map<string, { stamp: string; value?: T; error?: Error }>();
+  /** `checked`: the read snapshot (`withReadSnapshot`) the stamp was last verified in */
+  private readonly entries = new Map<string, { stamp: string; value?: T; error?: Error; checked?: number }>();
 
   constructor(
     private readonly parse: (text: string, file: string) => T,
@@ -17,10 +19,15 @@ export class ParseCache<T> {
   ) {}
 
   get(file: string): T {
+    const snap = snapshotId();
+    let hit = this.entries.get(file);
+    if (snap !== null && hit?.checked === snap) { // already stat'ed in this read snapshot
+      if (hit.error) throw hit.error;
+      return hit.value as T;
+    }
     const st = this.refuseLinks ? lstatSync(file, { bigint: true }) : statSync(file, { bigint: true });
     if (this.refuseLinks && st.isSymbolicLink()) { this.entries.delete(file); throw new Error(`symlink okunmaz: ${file}`); }
     const stamp = `${st.mtimeNs}:${st.size}:${st.ino}`;
-    let hit = this.entries.get(file);
     if (hit?.stamp !== stamp) {
       // an I/O error (EBUSY during a rename) is transient: thrown, never cached
       const text = this.refuseLinks
@@ -33,6 +40,7 @@ export class ParseCache<T> {
       }
       this.entries.set(file, hit);
     }
+    hit.checked = snap ?? undefined;
     if (hit.error) throw hit.error;
     return hit.value as T;
   }

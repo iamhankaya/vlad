@@ -4,7 +4,7 @@ import { fastFrontmatter } from "../../src/kb/frontmatter-fast.js";
 import { parseDoc } from "../../src/kb/index.js";
 
 // T20261126-25: the fast path must give exactly what `yaml` (core schema) gives, or step aside (undefined)
-const viaYaml = (src: string): unknown => parse(src, { schema: "core" }) ?? {};
+const viaYaml = (src: string): unknown => parse(src, { schema: "core", logLevel: "error" }) ?? {}; // fuzz input triggers tag warnings; the fast path steps aside for those anyway
 const same = (src: string): void => {
   const fast = fastFrontmatter(src);
   let ref: unknown;

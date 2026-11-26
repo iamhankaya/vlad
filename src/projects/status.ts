@@ -4,6 +4,7 @@ import { listFindingsWithWarnings, SEVERITIES, UNRESOLVED } from "../findings/st
 import { countOpenIdeas } from "../ideas/store.js";
 import { getSection, isDecisionExpired, kbPaths, listDecisions, nowIso, readDoc, setSection, validate, writeDoc } from "../kb/index.js";
 import type { DecisionRecord, ProjectCard } from "../kb/index.js";
+import { withReadSnapshot } from "../kb/snapshot.js";
 import { getTask, listTasksWithWarnings } from "../tasks/store.js";
 import type { Task } from "../tasks/store.js";
 import { listProjects } from "./store.js";
@@ -122,6 +123,10 @@ export function undigestedNote(count: number, oldest: string | undefined | null)
 
 /** Counts, open records and valid decisions come from the records; only the narrative comes from the card. */
 export function projectStatus(slug: string, now: Date = new Date()): ProjectStatus {
+  return withReadSnapshot(() => projectStatusRead(slug, now)); // lists findings and decisions twice: one stat per file (T20261126-25)
+}
+
+function projectStatusRead(slug: string, now: Date): ProjectStatus {
   const { data, body } = cardOf(slug);
   const { tasks } = listTasksWithWarnings({ project: slug });
   const counts: Record<string, number> = {};
