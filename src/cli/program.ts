@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { createKit } from "./kit.js";
-import { helpOf } from "./ctx.js";
 import type { CliCtx } from "./ctx.js";
+import { rootCommand } from "./root.js";
 import { registerProject } from "./groups/project.js";
 import { registerFinding } from "./groups/finding.js";
 import { registerIdea } from "./groups/idea.js";
@@ -31,18 +31,7 @@ export { KB_WRITES, REFRESH_KEYS } from "./policy.js";
 /** Builds the whole command tree; parses nothing and keeps no module-level state, so two calls are independent. */
 export function buildProgram(ctx: CliCtx): Command {
   const kit = createKit(ctx);
-  // commander writes the help of a bare group ("vlad", "vlad task") to writeErr before throwing
-  // commander.help; keep it so the catch below can show it instead of a bare "(outputHelp)" error.
-  let pendingHelp = "";
-  const program = new Command();
-  helpOf.set(program, () => pendingHelp);
-  program
-    .name("vlad")
-    .description("VLAD: Claude Code orkestratörü")
-    .exitOverride()
-    .enablePositionalOptions()
-    .configureOutput({ writeErr: (str) => { pendingHelp += str; } });
-
+  const program = rootCommand();
   registerProject(program, kit);
   registerFinding(program, kit);
   registerIdea(program, kit);
