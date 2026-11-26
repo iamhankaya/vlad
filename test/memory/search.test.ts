@@ -23,6 +23,30 @@ describe("normalize", () => {
     expect(normalize("İŞLEM Dönüştürme IĞDIR")).toBe("islem donusturme igdir");
     expect(normalize("ÇAĞRI üç")).toHaveLength(8);
   });
+  // T20261126-25: the fast path must stay byte-identical to the original per-character fold
+  const reference = (s: string): string => {
+    let out = "";
+    for (const ch of s) {
+      const c = ch === "İ" || ch === "I" || ch === "ı" ? "i" : ch.toLowerCase();
+      out += c.normalize("NFD")[0];
+    }
+    return out;
+  };
+  it("matches the per-character reference on Turkish, combining, astral and odd input", () => {
+    const samples = [
+      "", "abc XYZ 123 _-./:", "İŞLEM ığdır IĞDIR ıi Iİ", "ŞşĞğÜüÖöÇç Ââ Îî Ûû", "Straße ẞ ǅ ǈ Σς ΣΑΣ", "é Å ñ",
+      "😀 emoji 👍🏽 🇹🇷 ok", "\ud800 lone \udc00 surrogates", "ﬁ ﬀ ŉ ǰ ΐ", "Ⅻ ⅻ Ⓐ ＡＢＣ", "tab\tnew\nline\r\n", "İIı",
+    ];
+    for (const s of samples) expect(normalize(s)).toBe(reference(s));
+    let seed = 42;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let n = 0; n < 300; n++) {
+      let s = "";
+      const len = Math.floor(rnd() * 40);
+      for (let i = 0; i < len; i++) s += String.fromCharCode(rnd() < 0.5 ? Math.floor(rnd() * 128) : Math.floor(rnd() * 0xffff));
+      expect(normalize(s)).toBe(reference(s));
+    }
+  });
 });
 
 describe("searchKb", () => {

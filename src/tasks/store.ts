@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { ParseCache } from "../kb/parse-cache.js";
 import { basename, join } from "node:path";
 import {
   appendToSection, ARCHIVE, autonomyFor, CLOUD_ID_FLOOR, findMdFile, getSection, isCloudEnv, kbPaths, listMdFiles, loadConfig, nowIso, parseDoc, readDoc, serializeDoc,
@@ -313,32 +314,17 @@ export function syncAutonomy(task: Task, cfg: VladConfig): string | null {
 }
 
 /**
- * Parsed + validated task files by path, keyed by mtime/size: one `vlad status` lists the kb several times
- * (markStale, markSilentWorkers, summary, pipeline worktrees) and each pass re-parsed every file (F-vlad-094).
- * A write changes mtime/size, so a stale entry is never served; callers get clones because they mutate and save.
+ * Parsed + validated task files (F-vlad-094, `ParseCache`): one `vlad status` lists the kb several times
+ * (markStale, markSilentWorkers, summary, projectStatus per project). Callers get clones because they mutate and save;
+ * only the records that pass the filter are cloned.
  */
-const parsedTasks = new Map<string, { stamp: string; data: TaskData; body: string; error?: Error }>();
+const parsedTasks = new ParseCache<{ data: TaskData; body: string }>((text) => {
+  const doc = parseDoc<TaskData>(text);
+  validate("task", doc.data);
+  return doc;
+}, false);
 /** Entries held by the parse cache (test seam: listing prunes files that are gone). */
 export const parsedTaskCacheSize = (): number => parsedTasks.size;
-function readTaskFile(file: string): { data: TaskData; body: string } {
-  const st = statSync(file, { bigint: true });
-  // ino: atomic writes rename a new file in, so a rewrite within one mtime tick still changes the key
-  const stamp = `${st.mtimeNs}:${st.size}:${st.ino}`;
-  let hit = parsedTasks.get(file);
-  if (hit?.stamp !== stamp) {
-    const text = readFileSync(file, "utf8"); // an I/O error (EBUSY during a rename) is transient: thrown, never cached
-    try {
-      const { data, body } = parseDoc<TaskData>(text);
-      validate("task", data);
-      hit = { stamp, data, body };
-    } catch (e) {
-      hit = { stamp, data: {} as TaskData, body: "", error: e as Error }; // a broken file is not re-parsed until it changes (F-vlad-101)
-    }
-    parsedTasks.set(file, hit);
-  }
-  if (hit.error) throw hit.error;
-  return { data: structuredClone(hit.data), body: hit.body };
-}
 
 export function listTasksWithWarnings(
   f: { state?: TaskState[]; project?: string; parent?: string } = {},
@@ -346,16 +332,15 @@ export function listTasksWithWarnings(
   const tasks: Task[] = [];
   const warnings: string[] = [];
   const files = listMdFiles(kbPaths().tasks);
-  const present = new Set(files);
-  for (const k of parsedTasks.keys()) if (!present.has(k)) parsedTasks.delete(k); // archived/deleted files must not pile up in a long-lived process
+  parsedTasks.prune(files);
   for (const file of files) {
     const name = basename(file);
     try {
-      const { data, body } = readTaskFile(file);
+      const { data, body } = parsedTasks.get(file);
       if (f.state && !f.state.includes(data.state)) continue;
       if (f.project && data.project !== f.project) continue;
       if (f.parent && data.parent !== f.parent) continue;
-      tasks.push({ data, body, file });
+      tasks.push({ data: structuredClone(data), body, file });
     } catch (e) {
       warnings.push(`${name}: ${(e as Error).message}`);
     }

@@ -58,6 +58,7 @@
     "test/mode/mode-token-vmt2.test.ts",
     "test/mode/mode.test.ts",
     "test/mode/review.test.ts",
+    "test/perf/**/*.test.ts",
     "test/projects/derived.test.ts",
     "test/projects/store.test.ts",
     "test/roles/**/*.test.ts",

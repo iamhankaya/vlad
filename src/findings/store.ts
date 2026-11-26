@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
-import { findMdFile, kbPaths, listMdFiles, nowIso, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
+import { findMdFile, kbPaths, listMdFiles, nowIso, parseDoc, readDoc, serializeDoc, validate, writeDoc, writeFileAtomic } from "../kb/index.js";
+import { ParseCache } from "../kb/parse-cache.js";
 import type { FindingData, FindingSeverity, FindingState } from "../kb/index.js";
 
 export type Finding = { data: FindingData; body: string; file: string };
@@ -80,6 +81,15 @@ export function getFinding(id: string): Finding {
   return { data, body, file };
 }
 
+/** Parsed + validated finding files (`ParseCache`; symlinks refused like `readDoc`): `vlad status` lists them once for countOpenSevere and twice per project. */
+const parsedFindings = new ParseCache<{ data: FindingData; body: string }>((text) => {
+  const doc = parseDoc<FindingData>(text);
+  validate("finding", doc.data);
+  return doc;
+}, true);
+/** Entries held by the parse cache (test seam). */
+export const parsedFindingCacheSize = (): number => parsedFindings.size;
+
 /** Valid findings in id order; unreadable or invalid files are skipped and reported as warnings. */
 export function listFindingsWithWarnings(
   f: { project?: string; state?: FindingState[]; severity?: FindingSeverity[]; olderThanDays?: number; source?: string; now?: Date } = {},
@@ -87,19 +97,20 @@ export function listFindingsWithWarnings(
   const findings: Finding[] = [];
   const warnings: string[] = [];
   const cutoff = (f.now ?? new Date()).getTime() - (f.olderThanDays ?? 0) * 86_400_000;
-  for (const file of listMdFiles(kbPaths().findings)) {
+  const files = listMdFiles(kbPaths().findings);
+  parsedFindings.prune(files);
+  for (const file of files) {
     const name = basename(file);
     // file names are `F-<project>-<n>.md`: other projects' files are skipped unread (a project card refresh must not parse every finding)
     if (f.project && !(name.startsWith(`F-${f.project}-`) && /^\d+\.md$/.test(name.slice(f.project.length + 3)))) continue;
     try {
-      const { data, body } = readDoc<FindingData>(file);
-      validate("finding", data);
+      const { data, body } = parsedFindings.get(file);
       if (f.project && data.project !== f.project) continue;
       if (f.state && !f.state.includes(data.state)) continue;
       if (f.severity && !f.severity.includes(data.severity)) continue;
       if (f.source && data.source_task !== f.source) continue;
       if (f.olderThanDays !== undefined && Date.parse(data.created) > cutoff) continue;
-      findings.push({ data, body, file });
+      findings.push({ data: structuredClone(data), body, file });
     } catch (e) {
       warnings.push(`${name}: ${(e as Error).message}`);
     }
