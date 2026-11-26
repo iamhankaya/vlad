@@ -5,14 +5,14 @@ description: VLAD kurulumunun periyodik denetimi — biten görevlerin ölçüml
 
 # /setup-audit — kurulum denetimi
 
-Kullanıcı `/setup-audit` dediğinde **onay sormadan** yürür (skill çağrısı onaydır). Kendisi hiçbir dosyayı, kuralı, rolü ya da skill'i **değiştirmez**; çıktısı yalnız rapor ve kullanıcının seçtikleri için görev taslağıdır.
+Kullanıcı `/setup-audit` dediğinde **onay sormadan** yürür (skill çağrısı onaydır). Kendisi kural, rol ya da skill dosyalarını **değiştirmez**; kb'ye yalnız denetim görevi ve öneri fikirleri (`vlad idea add`) yazar; çıktısı rapor ve kullanıcının seçtikleri için görev taslağıdır.
 
 **Madde zorunlu değil.** Hiçbir kategoride kanıtlı ve doğrulanmış aday yoksa o kategori için "madde yok" yaz. Kota, doldurma, "en az N öneri" yoktur; zayıf kanıtla madde üretmek, rapor boş kalmasından kötüdür.
 
 ## 1. Aralık
 
 - `--since YYYY-MM-DD` verildiyse onu kullan.
-- Yoksa son denetimin tarihi: `vlad task list --json --fields id,title,state,created --limit 200` çıktısında başlığı `Kurulum denetimi` ile başlayan ve `state` değeri `done` ya da `awaiting_approval` olan (iptal/yarım kalmış sayılmaz) en yeni görevin `created` günü. Hiç yoksa bugünden 14 gün öncesi. Aynı gün biten görevler iki denetimde de görünebilir; çift saydığın kanıtı öneride belirt.
+- Yoksa son denetimin tarihi: `vlad task list --json --fields id,title,state,created --limit 200` çıktısında başlığı `Kurulum denetimi <YYYY>-` (tarihli) ile başlayan ve `state` değeri `done` ya da `awaiting_approval` olan (iptal/yarım kalmış sayılmaz) en yeni görevin `created` günü. Hiç yoksa bugünden 14 gün öncesi. Aynı gün biten görevler iki denetimde de görünebilir; çift saydığın kanıtı öneride belirt.
 - **Pencere kesilmesi:** `--limit` pencereyi kesebilir (en yeni N görev). Aralığın en eski görevi pencerede yoksa limiti yükselt ya da sayfala; `kb search` sayım için kullanılmaz (en fazla 8 sonuç).
 - Aralığı kullanıcıya tek satırda söyle.
 
@@ -69,17 +69,17 @@ Her aday şu kategorilerden birine girer:
 | **Skill adayı** | En az 3 görevde tekrarlanan aynı akış (kanıt: ≥3 görev ID'si) |
 | **Yetki modu adayı (`vlad mode`)** | Tekrarlı yetki/izin pencereleri, aynı onayın sık istenmesi (`vlad mode` ile çözülebilir) |
 | **Claude mod adayı** | VLAD ya da çalışanların tekrar tekrar elle gözlediği ya da yokladığı durumlar; mod ile görünür ya da anlık hale getirilebilir. Örnekler: tmux ekranı okuma, nabız cron'unun yakaladığı gecikmiş kapı, bağlam sıkıştırma ya da `API Error` sonrası boşta kalma, kullanıcıya bildirilmesi gereken olay. Kanıt: görev ID'leri; ilgili `İlerleme` satırları ("bekçi: dürtüldü", "tmux ile dürtüldü", "nabız") ve VLAD oturum davranışı da kanıttır. |
-| **Kural/rol önerisi** | `CLAUDE.md` ya da `roles/` değişikliği; çalışma notu adayı |
+| **Kural/rol önerisi** | `CLAUDE.md` ya da `roles/` değişikliği |
 | **Bulgu hijyeni** | Çok eski (`age_days`), aslında kapanmış ya da artık geçersiz açık/ertelenmiş bulgular; `vlad finding set` önerisi |
 | **Çalışma notu adayı** | Proje başına, aralıkta kapanan çatı/görev raporlarından çıkan somut, tek cümlelik, eyleme dönük ders (retronun yerini alır, D-vlad-090 sadeleştirme) |
 | **Çalışma notu bakımı** | 30 günden eski `## Çalışma notları` maddesi artık geçersiz (kodla karşılaştırıldı) |
 | **Karar gözden geçirme** | Projenin en eski geçerli kararı kodla/skill'le çelişiyor ya da yerini almış |
 
-**Çalışma notu adayı (haftalık ders çıkarma; çatı başına retro kaldırıldı):** aralıkta `done` olan çatıları ve görevleri projeye göre grupla; her proje için kapanış raporlarının `### Açık noktalar`ı, `değişiklik_isteği`/`izin_reddi` sinyalleri, kırmızı gate, geri alınan merge ve tekrarlayan sınıf satırlarından aynı sürtünmeyi gösteren **en az 2 görev ID'si** ve tek cümlelik ders çıkar. Önce `vlad project status <slug> --json` ile kartın mevcut `## Çalışma notları`'na bak; aynı ders varsa yazma. Rol düzeyindeki ders (bir rolün kuralı değişmeli) `Kural/rol önerisi`'dir, çalışma notu adayı değildir. Seçilen adaylar kullanıcı onayıyla `vlad project note <slug> "<ders>"` ile yazılır (kart elle düzenlenmez; ardından `vlad kb commit "<özet>" --push`). Rapordaki tabloda proje, ders, kanıt ID'leri ve önerilen tek komut yer alır.
+**Çalışma notu adayı (haftalık ders çıkarma; çatı başına retro kaldırıldı):** aralıkta `done` olan çatıları ve görevleri projeye göre grupla; her proje için kapanış raporlarının `### Açık noktalar`ı, `değişiklik_isteği`/`izin_reddi` sinyalleri, kırmızı gate, geri alınan merge ve tekrarlayan sınıf satırlarından aynı sürtünmeyi gösteren **en az 2 görev ID'si** ve tek cümlelik ders çıkar. Önce `vlad kb search "<anahtar>" --type project --project <slug>` ile (ya da kart dosyasını okuyarak) kartın mevcut `## Çalışma notları`'na bak; aynı ders varsa yazma. Rol düzeyindeki ders (bir rolün kuralı değişmeli) `Kural/rol önerisi`'dir, çalışma notu adayı değildir. Seçilen adaylar kullanıcı onayıyla `vlad project note <slug> "<ders>"` ile yazılır (kart elle düzenlenmez; ardından `vlad kb commit "<özet>" --push`). Rapordaki tabloda proje, ders, kanıt ID'leri ve önerilen tek komut yer alır.
 
-**Çalışma notu bakımı:** kartın `## Çalışma notları`'ndaki 30 günden eski maddeleri (tarih önekinden) kodla karşılaştır: atıf yapılan dosya/komut/test hâlâ var mı, ders hâlâ doğru mu (`grep`, `vlad kb search`). Yalnız doğrulanmış geçersiz maddeyi aday yaz (kanıt: eksik dosya yolu, değişen komut); yaşı tek başına gerekçe değildir. Onaydan sonra madde `vlad project write <slug> --file <geçici.md>` ile kartın tam yeni hâliyle çıkarılır (başka bölümleri aynen koru).
+**Çalışma notu bakımı:** kartın `## Çalışma notları`'ndaki 30 günden eski maddeleri (tarih önekinden) kodla karşılaştır: atıf yapılan dosya/komut/test hâlâ var mı, ders hâlâ doğru mu (`grep`, `vlad kb search`). Yalnız doğrulanmış geçersiz maddeyi aday yaz (kanıt: eksik dosya yolu, değişen komut); yaşı tek başına gerekçe değildir. Notları yalnız `project note` yazar; bu çıkarma o kuralın tek istisnasıdır (yalnız burada, kullanıcı onayıyla). Onaydan sonra madde `vlad project write <slug> --file <geçici.md>` ile kartın tam yeni hâliyle çıkarılır (başka bölümleri aynen koru).
 
-**Karar gözden geçirme:** projeler arasında dönerek `vlad decision list --project <slug> --json` içinden en eski 10 geçerli kararı al (süresi dolmuş olanlar `expired` ile zaten işaretlidir); her birinin dayandığı dosya/komut/kuralı kodla karşılaştır. Çelişen ya da yerini alan karar `vlad decision set <id> geçersiz` (ya da yeni karar `decision add --supersedes`) adayıdır; kanıt dosya:satır ya da commit. Geçerli kalan kararı raporda sayma, yalnız "N karar gözden geçirildi" yaz.
+**Karar gözden geçirme:** projeler arasında dönerek `vlad decision list --project <slug> --json` içinden en eski 10 geçerli kararı al (süresi dolmuş olanlar `vlad project status <slug> --json` → `decisions.expired`'da işaretlidir); her birinin dayandığı dosya/komut/kuralı kodla karşılaştır. Çelişen ya da yerini alan karar `vlad decision set <id> geçersiz` (ya da yeni karar `decision add --supersedes`) adayıdır; kanıt dosya:satır ya da commit. Geçerli kalan kararı raporda sayma, yalnız "N karar gözden geçirildi" yaz.
 
 Tahmin yürütme: veride dayanağı olmayan aday yazma. ≥3 görev şartını sağlamayan "skill adayı" `Kural/rol önerisi` ya da `Eksik`'e iner.
 

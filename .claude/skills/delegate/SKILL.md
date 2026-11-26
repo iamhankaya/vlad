@@ -17,7 +17,7 @@ description: Bir projede yapılacak işi görev olarak tanımlar, kullanıcı on
 vlad project list --json
 ```
 - Projeyi slug ile eşle; belirsizse kullanıcıya sor. Kart yoksa önce `/scan` öner.
-- `vlad project status <slug> --json` ile projenin durum özetini oku (özet `bayat`/`yok` ise "güncel" diye güvenme; `newer` kayıtlarına bak, kartın `## Çalışma notları` ve mimari notları için gerekirse `kb/projects/<slug>.md`).
+- `vlad project status <slug> --json` ile projenin durum özetini oku (özet `yok` ya da `newer` doluysa "güncel" diye güvenme; `newer` kayıtlarına bak, kartın `## Çalışma notları` ve mimari notları için gerekirse `kb/projects/<slug>.md`).
 - `vlad decision list --project <slug> --json` ile **geçerli** kararları oku (genel kararlar için `--project genel`); göreve yalnız geçerli kararları ID'leriyle yaz. Belirli bir konu için `vlad kb search "<sorgu>" --project <slug> --json`.
 - Aynı konuda açık görev var mı bak:
   ```

@@ -288,7 +288,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
   });
 
   // audit suggestions live in the idea store (`I-<project>-NNN`, source = the audit task); all of them, not only the range: adoption lags the audit
-  const auditTasks = new Set(allTasks.filter((t) => /^Kurulum denetimi/.test(t.data.title)).map((t) => t.data.id));
+  const auditTasks = new Set(allTasks.filter((t) => /^Kurulum denetimi \d{4}-/.test(t.data.title)).map((t) => t.data.id));
   for (const i of listIdeas().ideas) {
     if (!i.data.source || !auditTasks.has(i.data.source)) continue;
     out.suggestions.ideas.push({

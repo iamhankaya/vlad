@@ -87,7 +87,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     expect(r.code, r.err).toBe(0);
     const j = JSON.parse(r.out);
     expect(j).toMatchObject({ id, state: "done", summaryStale: true });
-    expect(j.warnings[0]).toContain("özet bayat");
+    expect(j.warnings[0]).toContain("özeti bu görevi kapsamıyor");
   });
   it("invalid transition exits 1 with JSON error on stderr", () => {
     const id = mkTask();
