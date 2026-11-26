@@ -20,7 +20,7 @@ function openFindingsBlock(slug: string): string {
   return rows.length ? rows.join("\n") : "- (açık bulgu yok)";
 }
 
-/** Latest done tasks and valid decisions. shortcut: decisions carry a date only (sorted as end of that day); `task digested` re-stamps a task's `updated`, which moves its date. */
+/** Latest done tasks and valid decisions. shortcut: decisions carry a date only (sorted as end of that day); `task digested` keeps a task's `updated` (done time), so it does not move the date. */
 /**
  * `previous` (fast path, only valid when a decision was ADDED): the task lines come from the block that is already there instead of a scan of every task file.
  * Exact because an addition can only push entries out of the top list, never bring one in; a task line keeps its order within its day (and a decision sorts above any task of the same day).

@@ -109,7 +109,8 @@ export function digestSummaryWarning(task: Task): string | null {
     const slug = task.data.parent ? getTask(task.data.parent).data.project : task.data.project;
     if (cardOf(slug).data.status !== "active") return null;
     const { as_of } = projectStatus(slug).summary;
-    if (as_of && Date.parse(as_of) >= Date.parse(task.data.updated)) return null;
+    if (as_of && Date.parse(as_of) >= Date.parse(task.data.updated)) return null; // as_of == updated: covered
+    if (as_of && !Number.isFinite(Date.parse(as_of))) return null; // unreadable stamp: cannot tell
     return `özet bu görevi kapsamıyor: ${slug} (${as_of ? `özet ${as_of}` : "özet yok"}): /digest adım 5b (proje özeti) atlanmış; özeti yaz`;
   } catch { return null; }
 }
