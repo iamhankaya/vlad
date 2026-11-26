@@ -106,13 +106,17 @@ describe("work notes (## Çalışma notları) wiring", () => {
     }
     expect(read("global/skills/vlad-worker/SKILL.md")).toContain("## Çalışma notları");
   });
-  it("digest records findings and keeps the notes; status runs the retro", () => {
+  it("digest records findings and keeps the notes; the weekly setup-audit (not a per-pipeline retro) proposes the notes", () => {
     const digest = read(".claude/skills/digest/SKILL.md");
     expect(digest).toContain("vlad finding add");
     expect(digest).toContain("Açık noktalar");
     expect(digest).toContain("`## Çalışma notları`'na **dokunma**");
     const status = read(".claude/skills/status/SKILL.md");
-    for (const w of ["### Retro", "vlad project note", "Ne iyi gitti", "Ne sürtündü", "Ders", "roles/"]) expect(status, w).toContain(w);
+    expect(status).not.toContain("### Retro");
+    expect(status).not.toContain("reference/retro.md");
+    expect(existsSync(resolve(root, ".claude/skills/status/reference/retro.md"))).toBe(false);
+    const audit = read(".claude/skills/setup-audit/SKILL.md");
+    for (const w of ["Çalışma notu adayı", "Çalışma notu bakımı", "Karar gözden geçirme", "vlad project note", "30 günden eski"]) expect(audit, w).toContain(w);
   });
   it("CLAUDE.md, README and specs document the finding and note commands", () => {
     for (const p of ["CLAUDE.md", "README.md", "docs/superpowers/specs/2026-10-15-vlad-core-design.md"]) {

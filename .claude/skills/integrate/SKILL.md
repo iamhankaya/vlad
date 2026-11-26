@@ -42,4 +42,4 @@ Kapı yetkisi VLAD'dadır; çalışan merge etmez. Onay kuralı `CLAUDE.md` "Yet
 
 **K7 — Gece modu.** `vlad mode status` gece modunu gösteriyorsa **`reference/gece-modu.md` K7'yi oku ve uygula**: pencere önceden verilmiş merge onayıdır; durdurma koşulları, `night.push` yetkisi, istisna sınıfları ve yasaklar orada. Etkin değilse her merge açık onay ister. Özet sınırlar (ayrıntı referansta): push yetkisi açık olsa da `--force`/`--no-verify`/silme yasak; `deploy`/`backfill`/`keychain` ve geri alınamaz eylemler her zaman sorulur; kırmızı gate/CI, kritik/yüksek bulgu ve `designer` `tasarım` kapısında dur.
 
-**K8 — Sabah raporu ve bayat özet.** Gece modu bittikten sonraki ilk `/status`'ta, ya da görev `done` sonrası/retrodan önce `staleSummaries` doluysa **`reference/gece-modu.md` K8'i uygula** (`vlad kb lint --json`, sabah raporu, bayat özet kontrolü).
+**K8 — Sabah raporu ve bayat özet.** Gece modu bittikten sonraki ilk `/status`'ta, ya da görev `done` sonrası `staleSummaries` doluysa **`reference/gece-modu.md` K8'i uygula** (`vlad kb lint --json`, sabah raporu, bayat özet kontrolü).

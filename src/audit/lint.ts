@@ -13,7 +13,7 @@ import { fencedLines } from "../kb/sections.js";
 
 export const LINT_CODES = [
   "closed_finding_listed_open", "closed_idea_listed_open", "finished_task_listed_active", "inactive_decision_listed_valid",
-  "expired_decision_valid", "memory_stale_task", "summary_stale",
+  "expired_decision_valid", "memory_stale_task", "summary_stale", "open_item_all_closed",
 ] as const;
 export type LintCode = (typeof LINT_CODES)[number];
 
@@ -164,6 +164,33 @@ function lineFlags(tl: TextLine, ctx: Ctx, states: Map<string, RecordState>, pus
   }
 }
 
+const CLOSED_STATES = new Set(["done", "cancelled", "fixed", "wontfix", "promoted", "dropped"]);
+
+/**
+ * T20261126-08: a hand-written `## Açık konular` bullet whose F-/T- references are all closed is history, not an open item.
+ * Counted references: bare ones only (not in parentheses = a source, not after "/" = a branch name); a bullet naming nothing
+ * judgeable, an unknown id or any still-open record stays quiet; dated and user-pending lines are exempt.
+ */
+function openItemFlag(tl: TextLine, states: Map<string, RecordState>, push: (f: Omit<LintFlag, "file" | "project">) => void): void {
+  if (!/^Açık konular\b/i.test(tl.h2) || !/^\s*[-*]\s/.test(tl.text) || DATE_LED.test(tl.text)) return;
+  const low = positive(tl.text);
+  if (USER_PENDING_CTX.test(low) || CLOSED_CTX.test(low) || FIXED_NOTE_CTX.test(low)) return; // already says it is closed / only a remainder is left
+  const refs: { id: string; st: RecordState }[] = [];
+  for (const m of tl.text.matchAll(ID_G)) {
+    const at = m.index ?? 0;
+    if (!/^[TF]/.test(m[1]) || tl.text[at - 1] === "/" || inParens(tl.text, at)) continue;
+    const st = states.get(m[1]);
+    if (!st) return; // an id the kb does not know: cannot vouch that everything is closed
+    refs.push({ id: m[1], st });
+  }
+  if (!refs.length || !refs.every((r) => CLOSED_STATES.has(r.st.status ?? ""))) return;
+  push({
+    code: "open_item_all_closed", line: tl.n, id: refs[0].id, actual_state: refs[0].st.status ?? "",
+    message: `Açık konular maddesindeki tüm kayıtlar kapalı (${refs.map((r) => r.id).join(", ")})`,
+    suggestion: "maddeyi kaldır ya da geçmişe çevir (özet: /digest; tarihçe günlükte)",
+  });
+}
+
 /** Latest "kadar"-style deadline in a decision block, or null. */
 function latestExpiry(lines: string[], from: number, to: number): { at: Date; line: number } | null {
   const fenced = fencedLines(lines);
@@ -227,7 +254,11 @@ export function lintKb(o: LintOptions = {}): LintResult {
     const lines = linesOf(readFileSync(path, "utf8"));
     scanned.projects++;
     const ctx: Ctx = { file: path, project: slug, kind: "card" };
-    for (const tl of textLines(lines)) lineFlags(tl, ctx, states, mk(ctx, rel(p.kb, path)));
+    for (const tl of textLines(lines)) {
+      const before = flags.length;
+      lineFlags(tl, ctx, states, mk(ctx, rel(p.kb, path)));
+      if (flags.length === before) openItemFlag(tl, states, mk(ctx, rel(p.kb, path)));
+    }
     const active = listProjects().find((x) => x.slug === slug)?.status === "active";
     if (active) {
       try {

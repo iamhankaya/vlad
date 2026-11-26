@@ -13,6 +13,9 @@ const AS_OF = /^_Güncel: (.+)_$/;
 /** ~1000 tokens of Turkish prose; longer summaries defeat the purpose of a short status. */
 const MAX_SUMMARY_CHARS = 6000;
 const CLOSED = ["done", "cancelled"];
+/** The summary counts as `bayat` only when it is older than this many hours AND more than STALE_MIN_NEWER records are newer (T20261126-08: a single update used to flag it at once). */
+const STALE_AFTER_HOURS = 24;
+export const STALE_MIN_NEWER = 5;
 /** Keeps the status near the ~1000 token target on projects with hundreds of records. */
 const LIST_MAX = 15;
 const LISTED_SEVERITIES = ["kritik", "yüksek", "orta"];
@@ -23,7 +26,7 @@ export interface ProjectStatus {
   last_activity: string | null;
   gate: string | null;
   summary: {
-    /** yok: no section; güncel: no record newer than `as_of`; bayat: records newer than `as_of` exist (listed in `newer`) */
+    /** yok: no section; bayat: no timestamp, or older than 24 h with more than 5 records newer than `as_of`; güncel: otherwise (`newer` lists records after `as_of` either way) */
     state: "yok" | "güncel" | "bayat";
     as_of: string | null;
     newer: string[];
@@ -93,8 +96,10 @@ export function staleSummaryText(list: StaleSummary[]): string {
 /** `task set <id> done` follow-up: is the project's `## Durum özeti` stale now that this task closed? `null` = cannot tell (no/unreadable card). */
 export function doneSummaryNote(task: Task): { summaryStale: boolean | null; warnings: string[] } {
   let state: ProjectStatus["summary"]["state"];
-  try { state = projectStatus(task.data.project).summary.state; } catch { return { summaryStale: null, warnings: [] }; }
-  if (state === "güncel") return { summaryStale: false, warnings: [] };
+  let behind: boolean;
+  try { const s = projectStatus(task.data.project).summary; state = s.state; behind = s.newer.length > 0; } catch { return { summaryStale: null, warnings: [] }; }
+  // per-task question ("does the summary cover this task?"): no age/count threshold, any newer record counts
+  if (state === "güncel" && !behind) return { summaryStale: false, warnings: [] };
   return { summaryStale: true, warnings: [`${task.data.project} proje özet bayat (${state === "yok" ? "özet yok" : "özetten sonra kayıt eklendi"}): /digest ${task.data.id} ile özeti güncelle`] };
 }
 
@@ -104,7 +109,7 @@ export function undigestedNote(count: number, oldest: string | undefined | null)
 }
 
 /** Counts, open records and valid decisions come from the records; only the narrative comes from the card. */
-export function projectStatus(slug: string): ProjectStatus {
+export function projectStatus(slug: string, now: Date = new Date()): ProjectStatus {
   const { data, body } = cardOf(slug);
   const { tasks } = listTasksWithWarnings({ project: slug });
   const counts: Record<string, number> = {};
@@ -117,18 +122,24 @@ export function projectStatus(slug: string): ProjectStatus {
   const text = raw ? (asOf ? raw.split("\n").slice(1).join("\n").trim() : raw) : null;
   const cutoff = asOf ? Date.parse(asOf) : NaN;
   const newer: string[] = [];
+  const allFindings = listFindingsWithWarnings({ project: slug }).findings;
   if (Number.isFinite(cutoff)) {
     // `task digested` re-stamps `updated` with the same instant as `digested`: that is /digest finishing, not new work
     for (const t of tasks) if (Date.parse(t.data.updated) > cutoff && t.data.digested !== t.data.updated) newer.push(t.data.id);
-    for (const f of listFindingsWithWarnings({ project: slug }).findings) if (Date.parse(f.data.updated) > cutoff) newer.push(f.data.id);
+    for (const f of allFindings) if (Date.parse(f.data.updated) > cutoff) newer.push(f.data.id);
     // shortcut: decisions carry a date only, so one added later the same day as the summary is not seen; /digest writes the summary after the decisions
     for (const d of listDecisions({ project: slug, all: true })) if (d.date > asOf!.slice(0, 10)) newer.push(d.id);
   }
-  const state = !raw ? "yok" : Number.isFinite(cutoff) && !newer.length ? "güncel" : "bayat"; // no timestamp: cannot vouch for it
+  // `newer` still lists every newer record; only the verdict has a threshold. No timestamp: cannot vouch for it
+  const old = Number.isFinite(cutoff) && now.getTime() - cutoff > STALE_AFTER_HOURS * 3600_000;
+  const state = !raw ? "yok" : !Number.isFinite(cutoff) || (old && newer.length > STALE_MIN_NEWER) ? "bayat" : "güncel";
+  // derived from the records (the card's field is only a scan-time commit date and goes stale); the card value is the fallback when there are none
+  const stamps = [...tasks.map((t) => t.data.updated), ...allFindings.map((f) => f.data.updated)].filter((s) => Number.isFinite(Date.parse(s)));
+  const lastActivity = stamps.length ? stamps.reduce((a, b) => (Date.parse(b) > Date.parse(a) ? b : a)) : data.last_activity;
 
   const done = tasks.filter((t) => t.data.state === "done").sort((a, b) => b.data.updated.localeCompare(a.data.updated))[0];
   return {
-    slug, status: data.status, last_activity: data.last_activity, gate: data.gate ?? null,
+    slug, status: data.status, last_activity: lastActivity, gate: data.gate ?? null,
     summary: { state, as_of: asOf, newer: newer.slice(0, 20), text, chars: text?.length ?? 0 },
     tasks: {
       counts,

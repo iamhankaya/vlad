@@ -11,7 +11,7 @@ description: İşlenmemiş session raporlarını (kb/inbox) ve biten görevlerin
 
 ## Otomatik mod ve tek görev kipi (D-vlad-061)
 
-- **Tek görev kipi:** `/digest <görev-id>` yalnız o görevi işler: adım 1'de inbox ve `task list --undigested` yerine `vlad kb get <id> --json` okunur (inbox'ta `task_id` eşleşen kayıt varsa onu da al); adım 2–7 aynen, yalnız o görev (pipeline fazıysa çatı altına yazılır; çatı `done` ise çatı görevi). `/status` görev `done` olunca bunu çağırır.
+- **Tek görev kipi:** `/digest <görev-id>` yalnız o görevi işler: adım 1'de inbox ve `task list --undigested` yerine `vlad kb get <id> --json` okunur (inbox'ta `task_id` eşleşen kayıt varsa onu da al); adım 2–7 aynen, yalnız o görev (pipeline fazıysa çatı altına yazılır; çatı `done` ise çatı görevi). **Adım 3 (günlük) tek görev kipinde de zorunludur:** görevin tam ID'sini içeren günlük satırını (`vlad journal append <tarih>`) `task digested`'tan önce yaz. Toplu digest bu görevi bir daha görmez (girdisi `--undigested`), günlük satırı yazılmazsa kayıt kaybolur. `vlad task digested` günlükte (görevin bittiği gün ya da bugün) tam ID'yi bulamazsa `warnings` / `UYARI: günlükte yok (tam ID): …` basar; uyarıyı gördüysen satırı yaz. `/status` görev `done` olunca bunu çağırır.
 - **Otomatik mod** (kullanıcıya soru soramadığın her bağlam: `/status`'un otomatik digest adımı, zamanlanmış görev, gece modu): **soru sorma, emin olmadığını yazma, `vlad digest pending add` ile listeye ekle.** Hangi maddelerin kayda geçmediği, onay bekleyen liste komutları ve güvenlik ağı: `reference/otomatik-mod.md` (otomatik modda önce oku).
 
 ## 0. Bulutta kb senkronu (`CLAUDE_CODE_REMOTE=true`)
@@ -76,9 +76,9 @@ Bulunursa madde açılmaz (bulgu varsa doğrudan `fixed`/`wontfix`: `vlad findin
 Etkilenen her proje için `kb/projects/<slug>.md`'yi oku, sonra kartın **tamamını** güncellenmiş hâliyle geçici dosyaya yaz:
 - `## Son aktivite`: **elle yazma.** Tamamen koddan üretilir (`<!-- vlad:derived recent-activity -->` bloğu: son ~10 done görev + geçerli karar); bloğu yalnız açık `vlad project refresh` ekler (ilk eklemede mevcut elle satırlar bloğun altında aynen kalır; hiçbir tazeleme blok dışı metni silmez, kancalar blok yoksa kartı değiştirmez). Bloğa elle yazma; bloğu olduğu gibi bırak, eski elle satırları gerekirse `vlad project write` ile sen temizle.
 - `## Açık konular`: **bulgu listesini elle yazma.** Açık+ertelenen bulgular `<!-- vlad:derived open-findings -->` bloğunda koddan üretilir (önem sırası, `F-…` ID'leri); bloğa dokunma. Yalnız blok dışındaki elle anlatıyı güncelle (kullanıcı kararı bekleyenler, makine/ortam notları): yeni açılanı ekle, kapananı çıkar.
-- `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` ve retro yazar). Kartı yeniden yazarken bölümü aynen koru.
+- `## Çalışma notları`'na **dokunma** (kalıcı dersler; yalnızca `vlad project note` yazar; dersleri haftalık `/setup-audit` önerir). Kartı yeniden yazarken bölümü aynen koru.
 - `## Durum özeti`'ne **dokunma** (yalnızca `vlad project summary` yazar, adım 5b). Kartı yeniden yazarken bölümü aynen koru.
-- `last_activity`: en yeni `ended` (mevcuttan yeniyse).
+- `last_activity`: elle güncelleme; `vlad project status` bu alanı kayıtlardan (en yeni görev/bulgu `updated`) türetir, kart alanı yalnızca kayıt yokken yedektir.
 - Diğer bölümleri ve alanları koru.
 - Yeniden yazmadan önce adım 3b'yi uygula: onaylanmış bir konuyu "kullanıcı kararı bekliyor" diye yazma.
 ```
@@ -124,11 +124,11 @@ Emin olmadığın kararı yazma; kullanıcıya "Bunu karar olarak kaydedeyim mi?
 
 ### 5b. Proje durum özeti (atlanamaz son adım)
 
-**Bu adım atlanamaz:** 6. adımdan (`inbox done`, `task digested`) önce, raporlarla etkilenen her proje için çalışır. Özet yazılmadıkça görev özet borcu açık kalır: özet yazılamıyorsa (emin olunmayan içerik, otomatik mod, hata) borç kaybolmasın diye o proje için `vlad digest pending add --text "<proje> özeti yazılamadı: <neden>" --task <id> --project <slug> --json` ekle ve kullanıcıya söyle (sessizce geçme); bu durumda görev yine `task digested` olabilir, özet borcu pending listesinde izlenir. Paused/archived projede 5b zorunlu değildir (`staleSummaries` yalnız aktif projeleri sayar). Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız şunları içerir: **son doğrulanmış sonuç**, **mevcut hedef**, **engeller**, **sıradaki adım**, **geçerli karar ID'leri** (D-…); her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi).
+**Bu adım atlanamaz:** 6. adımdan (`inbox done`, `task digested`) önce, raporlarla etkilenen her proje için çalışır. Özet yazılmadıkça görev özet borcu açık kalır: özet yazılamıyorsa (emin olunmayan içerik, otomatik mod, hata) borç kaybolmasın diye o proje için `vlad digest pending add --text "<proje> özeti yazılamadı: <neden>" --task <id> --project <slug> --json` ekle ve kullanıcıya söyle (sessizce geçme); bu durumda görev yine `task digested` olabilir, özet borcu pending listesinde izlenir. Paused/archived projede 5b zorunlu değildir (`staleSummaries` yalnız aktif projeleri sayar). Raporlarla etkilenen her proje için (kartlar, bulgular ve kararlar yazıldıktan sonra) kısa, kaynaklı bir durum özeti yaz; amaç ~500–1000 token. Sayıları ve açık kayıt listelerini kendin yazma: `vlad project status <slug> --json` koddan üretir; anlatı yalnız iki başlıktan oluşur: **son doğrulanmış sonuç** ve **engeller**; her iddianın yanında kaynak (görev/bulgu/karar ID'si ya da günlük tarihi). Mevcut hedef ve sıradaki adım yazılmaz (`project status` aktif görevlerden verir), geçerli karar listesi de yazılmaz (`vlad decision list`).
 ```
 vlad project summary <slug> --file <geçici.md> --json
 ```
-Komut ilk satıra "Güncel: <zaman damgası>" ekler; bundan sonra eklenen kayıtlar özeti `bayat` yapar. Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Doğrulama `bayat`/`yok` dönerse özeti yeniden yaz ya da yukarıdaki `digest pending add` ile onaya taşı; "bayat kalması doğrudur" diye geçme. `vlad task set <id> done` zaten `summaryStale: true` + uyarı verir; bu adım o uyarının kapanışıdır. Eski kayıtlar için gerekirse önce `vlad kb search`.
+Komut ilk satıra "Güncel: <zaman damgası>" ekler; özet, 24 saatten eskiyse ve ondan sonra 5'ten fazla kayıt eklendiyse `bayat` olur (kayıtlar `newer`'da listelenir; eşik altında `güncel` kalır). Doğrula: `vlad project status <slug> --json` → `summary.state` `güncel` olmalı. Doğrulama `bayat`/`yok` dönerse özeti yeniden yaz ya da yukarıdaki `digest pending add` ile onaya taşı; "bayat kalması doğrudur" diye geçme. `vlad task set <id> done` zaten `summaryStale: true` + uyarı verir; bu adım o uyarının kapanışıdır. Eski kayıtlar için gerekirse önce `vlad kb search`.
 
 ### 5c. kb çelişki denetimi (lint)
 
@@ -156,6 +156,6 @@ Yalnızca `kb/` commit'lenir (inbox ve loglar `.gitignore`'da). Hata verirse kul
 
 ## Kullanıcıya göster
 
-Skill kullanımı: `vlad audit skills --since <son digest tarihi> --json` çıktısının özet oranını ve eksik olanları tek satırda ekle (ayrıntı `/status` retrosundadır).
+Skill kullanımı: `vlad audit skills --since <son digest tarihi> --json` çıktısının özet oranını ve eksik olanları tek satırda ekle (ayrıntı `/setup-audit` `skills.coverage`'dadır).
 
 Proje başına 1–3 satırlık özet, kaydedilen bulgular (kritik/yüksek vurgulu), eklenen kararlar, açık konulardaki değişiklikler ve işlenen rapor sayısı. `task_id` taşıyan ve görevi hâlâ `running` görünen raporlar varsa `/status` öner.

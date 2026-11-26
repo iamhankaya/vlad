@@ -508,16 +508,32 @@ export function undigestedTasks(f: { project?: string } = {}): Task[] {
   return listTasks({ state: ["done"], project: f.project }).filter((t) => !t.data.digested);
 }
 
-/** Marks done tasks as digested; checks all of them before writing any. */
-export function markDigested(ids: string[], now: Date = new Date()): Task[] {
+/** `YYYY-MM-DD` of an ISO timestamp as written (local offset kept), or of `d` when absent. */
+const dayOf = (iso: string | undefined | null, d: Date): string => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso.slice(0, 10) : nowIso(d).slice(0, 10));
+
+/** Marks done tasks as digested; checks all of them before writing any. `journalMissing`: ids absent (full id) from the journal of the day they finished and of `now` (the single-task digest skipped the journal step). */
+export function markDigested(ids: string[], now: Date = new Date()): Task[] & { journalMissing: string[] } {
   const tasks = ids.map(getTask);
   const bad = tasks.filter((t) => t.data.state !== "done").map((t) => `${t.data.id} (${t.data.state})`);
   if (bad.length) throw new Error(`görev done değil: ${bad.join(", ")}`);
+  const journalText = new Map<string, string>();
+  const journalOf = (day: string): string => {
+    if (!journalText.has(day)) {
+      const f = join(kbPaths().journal, `${day}.md`);
+      journalText.set(day, existsSync(f) ? readFileSync(f, "utf8") : "");
+    }
+    return journalText.get(day)!;
+  };
+  const journalMissing: string[] = [];
+  for (const t of tasks) {
+    const days = [dayOf(t.data.updated, now), dayOf(null, now)];
+    if (!days.some((d) => journalOf(d).includes(t.data.id))) journalMissing.push(t.data.id);
+  }
   for (const t of tasks) {
     t.data.digested = nowIso(now);
     saveTask(t, now); // same instant as `digested`: freshness skips that task (status.ts)
   }
-  return tasks;
+  return Object.assign(tasks, { journalMissing });
 }
 
 export function markStale(now: Date, hours: number): Task[] {

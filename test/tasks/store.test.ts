@@ -366,6 +366,29 @@ describe("digested", () => {
     expect(undigestedTasks().map((t) => t.data.id)).toEqual([b.data.id]);
   });
 
+  it("markDigested warns for tasks whose full id is missing from the journal (today's or the done day's file)", () => {
+    const a = mk("a");
+    const b = mk("b");
+    const c = mk("c");
+    for (const t of [a, b, c]) finish(t.data.id);
+    const now = new Date(2026, 9, 20, 12, 0, 0);
+    const today = "2026-10-20";
+    mkdirSync(kbPaths().journal, { recursive: true });
+    writeFileSync(join(kbPaths().journal, `${today}.md`), `# ${today}\n\n- ${a.data.id} bitti\n- ${b.data.id.slice(-2)} kısa biçim\n`);
+    const r = markDigested([a.data.id, b.data.id, c.data.id], now);
+    expect(r.journalMissing).toEqual([b.data.id, c.data.id]);
+    expect(getTask(a.data.id).data.digested).toBeTruthy();
+  });
+
+  it("an id found in the journal of the day the task finished counts as logged", () => {
+    const a = mk("a");
+    finish(a.data.id);
+    const doneDay = getTask(a.data.id).data.updated.slice(0, 10);
+    mkdirSync(kbPaths().journal, { recursive: true });
+    writeFileSync(join(kbPaths().journal, `${doneDay}.md`), `# ${doneDay}\n\n- ${a.data.id}\n`);
+    expect(markDigested([a.data.id], new Date(2030, 0, 1)).journalMissing).toEqual([]);
+  });
+
   it("refuses to mark a task that is not done, and marks nothing then", () => {
     const a = mk("a");
     const b = mk("b");
