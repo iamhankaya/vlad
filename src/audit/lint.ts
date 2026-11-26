@@ -178,7 +178,8 @@ function openItemFlag(tl: TextLine, states: Map<string, RecordState>, push: (f: 
   const refs: { id: string; st: RecordState }[] = [];
   for (const m of tl.text.matchAll(ID_G)) {
     const at = m.index ?? 0;
-    if (!/^[TF]/.test(m[1]) || tl.text[at - 1] === "/" || inParens(tl.text, at)) continue;
+    if (tl.text[at - 1] === "/" || inParens(tl.text, at)) continue;
+    if (/^[DI]/.test(m[1])) return; // a decision/idea reference means the item is live work, not history
     const st = states.get(m[1]);
     if (!st) return; // an id the kb does not know: cannot vouch that everything is closed
     refs.push({ id: m[1], st });

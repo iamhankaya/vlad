@@ -520,14 +520,18 @@ export function markDigested(ids: string[], now: Date = new Date()): Task[] & { 
   const journalOf = (day: string): string => {
     if (!journalText.has(day)) {
       const f = join(kbPaths().journal, `${day}.md`);
-      journalText.set(day, existsSync(f) ? readFileSync(f, "utf8") : "");
+      let text = "";
+      try { if (existsSync(f)) text = readFileSync(f, "utf8"); } catch { /* unreadable journal: the warning is advisory, marking must still work */ }
+      journalText.set(day, text);
     }
     return journalText.get(day)!;
   };
+  const mentions = (text: string, id: string): boolean => new RegExp(`(?<![A-Za-z0-9-])${id}(?![A-Za-z0-9])`).test(text); // full id, not a prefix of a longer one
   const journalMissing: string[] = [];
   for (const t of tasks) {
     const days = [dayOf(t.data.updated, now), dayOf(null, now)];
-    if (!days.some((d) => journalOf(d).includes(t.data.id))) journalMissing.push(t.data.id);
+    const ids = [t.data.id, ...(t.data.parent ? [t.data.parent] : [])]; // a phase is journaled under its umbrella (digest skill)
+    if (!days.some((d) => ids.some((id) => mentions(journalOf(d), id)))) journalMissing.push(t.data.id);
   }
   for (const t of tasks) {
     t.data.digested = nowIso(now);

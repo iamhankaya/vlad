@@ -380,6 +380,24 @@ describe("digested", () => {
     expect(getTask(a.data.id).data.digested).toBeTruthy();
   });
 
+  it("review: unreadable journal still marks; an id inside a longer id does not count; a pipeline phase counts via its parent id", () => {
+    const a = mk("a");
+    const b = mk("b");
+    finish(a.data.id); finish(b.data.id);
+    const now = new Date(2026, 9, 20, 12, 0, 0);
+    mkdirSync(join(kbPaths().journal, "2026-10-20.md"), { recursive: true }); // a directory: readFileSync throws EISDIR
+    expect(markDigested([a.data.id], now).journalMissing).toEqual([a.data.id]);
+    expect(getTask(a.data.id).data.digested).toBeTruthy();
+    rmSync(join(kbPaths().journal, "2026-10-20.md"), { recursive: true });
+    writeFileSync(join(kbPaths().journal, "2026-10-20.md"), `# x\n\n- ${b.data.id}7 başka\n`);
+    expect(markDigested([b.data.id], now).journalMissing).toEqual([b.data.id]);
+    const umb = createTask({ project: "p", title: "çatı", kind: "pipeline", body: "" }, D);
+    const p = createTask({ project: "p", title: "ph", kind: "dev", body: "", parent: umb.data.id, phase: "uygulama" }, D);
+    finish(p.data.id);
+    writeFileSync(join(kbPaths().journal, "2026-10-20.md"), `# x\n\n- ${umb.data.id} çatı\n`);
+    expect(markDigested([p.data.id], now).journalMissing).toEqual([]);
+  });
+
   it("an id found in the journal of the day the task finished counts as logged", () => {
     const a = mk("a");
     finish(a.data.id);

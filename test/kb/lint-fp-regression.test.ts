@@ -69,6 +69,8 @@ describe("open_item_all_closed (T20261126-08): Açık konular item whose every F
     expect(only("## Açık konular\n- Karar kullanıcıda (F-vlad-001, T20261027-07).\n")).toEqual([]);
     expect(only("## Açık konular\n- Kod yalnız vlad/T20261027-07 dalında.\n")).toEqual([]);
     expect(only("## Son aktivite\n- T20261027-07 işi.\n")).toEqual([]);
+    addDecision({ project: "vlad", title: "K", body: "- **Karar:** k" }, new Date(2026, 9, 25));
+    expect(only("## Açık konular\n- T20261027-07 sonrası D-vlad-001 gereği X yapılacak.\n")).toEqual([]); // a live decision reference: the item is not history
     expect(only("## Açık konular\n- 2026-10-28: T20261027-07 işi.\n")).toEqual([]);
   });
   it("does not double-flag a line another code already flagged", () => {
