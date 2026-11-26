@@ -38,8 +38,13 @@ export interface Call { file: string; line: number; path: string[]; flags: strin
 export function extractCalls(file: string, body: string): Call[] {
   const calls: Call[] = [];
   let fenced = false;
-  body.split("\n").forEach((line, i) => {
-    if (/^\s*```/.test(line)) { fenced = !fenced; return; }
+  let carry = "";
+  body.split("\n").forEach((rawLine, i) => {
+    if (/^\s*(```|~~~)/.test(rawLine)) { fenced = !fenced; carry = ""; return; }
+    // fenced shell blocks: join `\` continuation lines (the call is reported at its last line)
+    if (fenced && /\\\s*$/.test(rawLine)) { carry += rawLine.replace(/\\\s*$/, " "); return; }
+    const line = fenced ? carry + rawLine : rawLine;
+    carry = "";
     const segs = fenced ? [line.replace(/(^|\s)#\s.*$/, "")] : [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
     for (const seg of segs) {
       for (const m of seg.matchAll(/(?:^|[\s($])vlad ([a-z][a-z-]*(?: [a-z][a-z-]*)*)([^|;&)]*)/g)) {
@@ -48,7 +53,10 @@ export function extractCalls(file: string, body: string): Call[] {
         for (const w of words) { const n: Command | undefined = cur.commands.find((x) => x.name() === w); if (!n) break; cur = n; path.push(w); }
         const rest = m[1].split(" ").slice(path.length).join(" ") + " " + m[2];
         const file_ = relative(root, file);
-        const flagsIn = (t: string) => [...t.matchAll(/(?:^|\s)(--[a-z][a-z-]*)/g)].map((x) => x[1]);
+        const flagsIn = (t: string) => [...t.matchAll(/(?:^|\s)(--[A-Za-z][\w-]*)/g)].map((x) => x[1]);
+        // a group node (has subcommands) followed by a lowercase word that is no subcommand = renamed/unknown subcommand (leaf words are arguments)
+        const unknownSub = cur.commands.length > 0 && words[path.length] !== undefined ? words[path.length] : undefined;
+        if (unknownSub) { calls.push({ file: file_, line: i + 1, path: [...path, `?${unknownSub}`], flags: [], text: seg, lineText: line }); }
         if (path.join(" ") === "mode request") {
           // `mode request [--wait ...] <komut> [argümanlar]`: bayraklar komuttan önce isteğe, sonra istenen komuta aittir.
           const toks = rest.trim().split(/\s+/).filter(Boolean);

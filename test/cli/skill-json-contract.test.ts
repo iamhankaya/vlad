@@ -47,7 +47,7 @@ describe("skill/doc text ↔ CLI: JSON alan sözleşmesi", { timeout: 120_000 },
   beforeAll(() => {
     const home = makeHome();
     const run = (args: string[], input?: string) => {
-      const r = spawnVlad({ args: [...args, "--json"], input, cwd: home, env: { VLAD_HOME: home } });
+      const r = spawnVlad({ args: [...args, "--json"], input, cwd: home, timeoutMs: 90_000, env: { VLAD_HOME: home } });
       expect(r.status, `${args.join(" ")}: ${r.stderr}`).toBe(0);
       return JSON.parse(r.stdout);
     };
@@ -86,7 +86,7 @@ describe("skill/doc text ↔ CLI: JSON alan sözleşmesi", { timeout: 120_000 },
         if (!ok && !((`${c.file}|${ref}`) in FIELD_ALLOW)) bad.push(`${c.file}:${c.line} \`${ref}\` (${[...names].join(", ")})`);
       }
     }
-    expect(checked).toBeGreaterThan(3);
+    expect(checked).toBeGreaterThanOrEqual(8);
     expect(bad).toEqual([]);
   });
 
