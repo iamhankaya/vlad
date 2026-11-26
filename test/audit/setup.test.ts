@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { auditSetup } from "../../src/audit/setup.js";
 import { kbPaths, writeDoc } from "../../src/kb/index.js";
 import { addFinding, setFindingStates } from "../../src/findings/store.js";
+import { addIdea, promoteIdea, setIdeaStates } from "../../src/ideas/store.js";
 import { defaultConfig } from "../../src/kb/index.js";
 import { worktreePath } from "../../src/git/git.js";
 import { claudeProjectDir } from "../../src/tasks/liveness.js";
@@ -426,6 +427,26 @@ describe("auditSetup", () => {
     execFileSync("git", ["-C", home, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "r"], { env: { ...process.env, GIT_COMMITTER_DATE: "2026-10-28T10:00:00+03:00", GIT_AUTHOR_DATE: "2026-10-28T10:00:00+03:00" } });
     const r = auditSetup({ since: "2026-10-20", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") });
     expect(r.weekly[0]!.rules_changed).toEqual(["roles/developer.md"]);
+  });
+
+  it("suggestions: ideas sourced from a 'Kurulum denetimi' task are tracked with state; other ideas are not (T20261126-09)", () => {
+    const audit = createTask({ project: "alpha", title: "Kurulum denetimi 2026-10-30", kind: "research", body: "" }, new Date("2026-10-30T10:00:00+03:00")).data.id;
+    const other = createTask({ project: "alpha", title: "başka iş", kind: "dev", body: "" }, new Date("2026-10-30T11:00:00+03:00")).data.id;
+    const impl = createTask({ project: "alpha", title: "uygula", kind: "dev", body: "" }, new Date("2026-10-31T11:00:00+03:00")).data.id;
+    const i1 = addIdea({ project: "alpha", title: "açık öneri", source: audit }, new Date("2026-10-30T12:00:00+03:00"));
+    const i2 = addIdea({ project: "alpha", title: "alınan öneri", source: audit }, new Date("2026-10-30T12:01:00+03:00"));
+    const i3 = addIdea({ project: "alpha", title: "bırakılan öneri", source: audit }, new Date("2026-10-30T12:02:00+03:00"));
+    addIdea({ project: "alpha", title: "alakasız", source: other });
+    promoteIdea(i2.data.id, impl);
+    setIdeaStates([i3.data.id], "dropped", { reason: "gereksiz" });
+    const r = auditSetup({ since: "2026-10-01", configDir: cfgDir, now: new Date("2026-11-08T00:00:00+03:00") });
+    expect(r.suggestions.by_state).toEqual({ open: 1, promoted: 1, dropped: 1 });
+    expect(r.suggestions.ideas).toEqual([
+      expect.objectContaining({ id: i1.data.id, state: "open", source: audit, age_days: 8 }),
+      expect.objectContaining({ id: i2.data.id, state: "promoted", promoted_task: impl }),
+      expect.objectContaining({ id: i3.data.id, state: "dropped" }),
+    ]);
+    expect(auditSetup({ since: "2026-10-01", configDir: cfgDir }).suggestions.ideas.length).toBe(3);
   });
 
   it("rejects an invalid since", () => {

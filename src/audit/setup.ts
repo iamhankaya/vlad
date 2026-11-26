@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { getVladHome } from "../kb/index.js";
 import { getSection } from "../kb/sections.js";
 import { listFindingsWithWarnings, UNRESOLVED } from "../findings/store.js";
+import { listIdeas } from "../ideas/store.js";
 import { listRolesWithWarnings } from "../roles/store.js";
 import { listTasks } from "../tasks/index.js";
 import { effectiveModel } from "../tasks/store.js";
@@ -62,6 +63,8 @@ export interface SetupAudit {
   rules: { claude_md: string | null; roles: Record<string, string | null> };
   /** Weekly (ISO Monday, UTC) per-task rates with role/project breakdown and the rule files changed that week: compare a week before/after a rule date (`weekly.ts`). */
   weekly: WeekRow[];
+  /** Ideas opened from "Kurulum denetimi" tasks (D-vlad-091): which past suggestions are still open, taken on (`promoted_task`) or dropped. */
+  suggestions: { by_state: Record<string, number>; ideas: { id: string; project: string; state: string; title: string; source: string; promoted_task: string | null; age_days: number }[] };
   findings: {
     unresolved: { id: string; project: string; severity: string; state: string; title: string; age_days: number; source_task: string }[];
     stale: number;
@@ -115,6 +118,7 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     skills: { inventory: [], unused: [], transcripts: 0, coverage: { by_skill: [], skipped_before_rule: 0, expected: 0, loaded: 0, rate: null } },
     rules: { claude_md: null, roles: {} },
     weekly: [],
+    suggestions: { by_state: {}, ideas: [] },
     findings: { unresolved: [], stale: 0, by_severity: {}, by_project: {}, by_source: {} },
   };
 
@@ -279,6 +283,17 @@ export function auditSetup(o: { since?: string; configDir?: string; now?: Date }
     findings: listFindingsWithWarnings().findings.map((f) => ({ created: f.data.created, updated: f.data.updated, state: f.data.state })),
     rules: Object.fromEntries(ruleFiles.map((p) => [p, changedSince(home, p, since)])),
   });
+
+  // audit suggestions live in the idea store (`I-<project>-NNN`, source = the audit task); all of them, not only the range: adoption lags the audit
+  const auditTasks = new Set(allTasks.filter((t) => /^Kurulum denetimi/.test(t.data.title)).map((t) => t.data.id));
+  for (const i of listIdeas().ideas) {
+    if (!i.data.source || !auditTasks.has(i.data.source)) continue;
+    out.suggestions.ideas.push({
+      id: i.data.id, project: i.data.project, state: i.data.state, title: i.data.title, source: i.data.source,
+      promoted_task: i.data.promoted_task ?? null, age_days: Math.floor((now.getTime() - Date.parse(i.data.created)) / DAY),
+    });
+    bump(out.suggestions.by_state, i.data.state);
+  }
 
   const fs = listFindingsWithWarnings({ state: [...UNRESOLVED] }).findings;
   out.findings.unresolved = fs
