@@ -118,27 +118,47 @@ describe("installGlobal", () => {
       }
     };
     it("copies each skill dir that has a SKILL.md, with helper files, and skips dirs without one", () => {
-      addSkill("ci-triage", { "SKILL.md": "# ci", "ref/notes.md": "n" });
+      addSkill("demo-skill", { "SKILL.md": "# ci", "ref/notes.md": "n" });
       addSkill("not-a-skill", { "README.md": "x" });
       const r = installGlobal({ home, claudeDir, dryRun: false, now });
-      expect(readFileSync(join(claudeDir, "skills", "ci-triage", "SKILL.md"), "utf8")).toBe("# ci");
-      expect(readFileSync(join(claudeDir, "skills", "ci-triage", "ref", "notes.md"), "utf8")).toBe("n");
+      expect(readFileSync(join(claudeDir, "skills", "demo-skill", "SKILL.md"), "utf8")).toBe("# ci");
+      expect(readFileSync(join(claudeDir, "skills", "demo-skill", "ref", "notes.md"), "utf8")).toBe("n");
       expect(existsSync(join(claudeDir, "skills", "not-a-skill"))).toBe(false);
       expect(r.actions.filter((a) => a.startsWith("Skill kopyala"))).toHaveLength(2);
     });
     it("overwrites a changed installed file and says so; a second run reports no overwrite", () => {
-      addSkill("ci-triage", { "SKILL.md": "# ci" });
+      addSkill("demo-skill", { "SKILL.md": "# ci" });
       installGlobal({ home, claudeDir, dryRun: false, now });
-      writeFileSync(join(claudeDir, "skills", "ci-triage", "SKILL.md"), "# edited", "utf8");
+      writeFileSync(join(claudeDir, "skills", "demo-skill", "SKILL.md"), "# edited", "utf8");
       const r = installGlobal({ home, claudeDir, dryRun: false, now });
-      expect(readFileSync(join(claudeDir, "skills", "ci-triage", "SKILL.md"), "utf8")).toBe("# ci");
-      expect(r.actions.some((a) => a.includes("üzerine yazıldı") && a.includes("ci-triage"))).toBe(true);
+      expect(readFileSync(join(claudeDir, "skills", "demo-skill", "SKILL.md"), "utf8")).toBe("# ci");
+      expect(r.actions.some((a) => a.includes("üzerine yazıldı") && a.includes("demo-skill"))).toBe(true);
       expect(installGlobal({ home, claudeDir, dryRun: false, now }).actions.some((a) => a.includes("üzerine yazıldı"))).toBe(false);
     });
     it("dry run writes no skill", () => {
-      addSkill("ci-triage", { "SKILL.md": "# ci" });
+      addSkill("demo-skill", { "SKILL.md": "# ci" });
       installGlobal({ home, claudeDir, dryRun: true, now });
       expect(existsSync(join(claudeDir, "skills"))).toBe(false);
+    });
+    it("removes retired skills (ci-triage, art-prompt) from the claude dir, leaves other dirs alone; dry run removes nothing", () => {
+      for (const n of ["ci-triage", "art-prompt", "user-own"]) {
+        mkdirSync(join(claudeDir, "skills", n), { recursive: true });
+        writeFileSync(join(claudeDir, "skills", n, "SKILL.md"), "# old", "utf8");
+      }
+      const dry = installGlobal({ home, claudeDir, dryRun: true, now });
+      expect(existsSync(join(claudeDir, "skills", "ci-triage"))).toBe(true);
+      expect(dry.actions.some((a) => a.startsWith("Emekli skill") && a.includes("ci-triage"))).toBe(true);
+      const r = installGlobal({ home, claudeDir, dryRun: false, now });
+      expect(existsSync(join(claudeDir, "skills", "ci-triage"))).toBe(false);
+      expect(existsSync(join(claudeDir, "skills", "art-prompt"))).toBe(false);
+      expect(existsSync(join(claudeDir, "skills", "user-own", "SKILL.md"))).toBe(true);
+      expect(r.actions.filter((a) => a.startsWith("Emekli skill"))).toHaveLength(2);
+      expect(installGlobal({ home, claudeDir, dryRun: false, now }).actions.some((a) => a.startsWith("Emekli skill"))).toBe(false);
+    });
+    it("does not remove a retired name that is shipped again in global/skills", () => {
+      addSkill("ci-triage", { "SKILL.md": "# back" });
+      installGlobal({ home, claudeDir, dryRun: false, now });
+      expect(readFileSync(join(claudeDir, "skills", "ci-triage", "SKILL.md"), "utf8")).toBe("# back");
     });
   });
 

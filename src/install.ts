@@ -1,4 +1,4 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Claude Code's default SessionEnd hook timeout is 1.5 s; our hook can need ~6 s. */
@@ -70,6 +70,9 @@ export function globalSkillNames(home: string): string[] {
   return existsSync(dir) ? readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && existsSync(join(dir, d.name, "SKILL.md"))).map((d) => d.name) : [];
 }
 
+/** Skills removed from `global/skills` (T20261125-46/-50); `vlad install` deletes only these names from `<claudeDir>/skills`. */
+export const RETIRED_SKILLS = ["ci-triage", "art-prompt"] as const;
+
 export interface InstallOptions {
   home: string; // VLAD root (getVladHome())
   claudeDir: string; // usually ~/.claude
@@ -128,6 +131,14 @@ export function installGlobal(o: InstallOptions): { actions: string[] } {
     actions.push(`Skill kopyala: ${src} -> ${dst}`);
     for (const f of changedInstalledFiles(src, dst)) actions.push(`Skill dosyası üzerine yazıldı (${name}): ${f}`);
     if (!o.dryRun) cpSync(src, dst, { recursive: true, force: true });
+  }
+
+  // retired skills (moved into vlad-worker / roles): an installed copy could still load stale text
+  for (const name of RETIRED_SKILLS) {
+    const dst = join(o.claudeDir, "skills", name);
+    if (names.includes(name) || !existsSync(dst)) continue;
+    actions.push(`Emekli skill sil: ${dst}`);
+    if (!o.dryRun) rmSync(dst, { recursive: true, force: true });
   }
 
   return { actions };
