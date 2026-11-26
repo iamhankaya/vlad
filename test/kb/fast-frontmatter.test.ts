@@ -62,6 +62,7 @@ describe("fastFrontmatter", () => {
       "a: @x", "a: `x`", "a: %x", "a: -", "a: ? x", "a: \"unterminated", "a: x\n\nb: y", "a: \"x\" y",
       "a: x\n  b: c", "a: x\n  # c", "a: x\n  - y", "a: 1\n  2", "a: null\n  x", "a: x\n\ty", "a:\n  b: 1\n   c: 2", "a:\n  b: 1\n  b: 2",
       "a:\n  b:\n    c: 1", "a:\n  b: 1\n  - c", "a:\n  __proto__: 1", "a:\n  b: x\n    y",
+      "null: x", "a:\n  null: 1", // yaml resolves a `null` key to "" (review T20261126-25)
     ]) {
       same(src);
       if (src !== "") expect(fastFrontmatter(src), src).toBeUndefined();

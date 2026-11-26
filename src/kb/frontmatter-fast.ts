@@ -69,7 +69,7 @@ function nestedMap(lines: string[], i: number): { value: Record<string, Scalar>;
     const m = /^( +)([a-z_][a-z0-9_]*):(?: (.*))?$/.exec(lines[i + 1]);
     if (!m || m[3] === undefined || (indent !== undefined && m[1] !== indent)) return FAIL;
     indent = m[1];
-    if (m[2] === "__proto__" || Object.prototype.hasOwnProperty.call(out, m[2])) return FAIL;
+    if (m[2] === "__proto__" || m[2] === "null" || Object.prototype.hasOwnProperty.call(out, m[2])) return FAIL; // yaml turns a `null` key into ""
     const v = scalar(m[3]);
     if (v === FAIL) return FAIL;
     out[m[2]] = v;
@@ -86,7 +86,7 @@ export function fastFrontmatter(src: string): Record<string, unknown> | undefine
     const m = KEY_LINE.exec(lines[i]);
     if (!m) return undefined;
     const key = m[1];
-    if (key === "__proto__" || Object.prototype.hasOwnProperty.call(out, key)) return undefined;
+    if (key === "__proto__" || key === "null" || Object.prototype.hasOwnProperty.call(out, key)) return undefined; // yaml turns a `null` key into ""
     const raw = m[2];
     if (raw === undefined && i + 1 < lines.length && /^ +[a-z_][a-z0-9_]*:/.test(lines[i + 1])) {
       const map = nestedMap(lines, i);
