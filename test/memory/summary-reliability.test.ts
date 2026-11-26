@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultConfig } from "../../src/kb/index.js";
-import { doneSummaryNote, setProjectSummary, undigestedNote } from "../../src/projects/status.js";
+import { digestSummaryWarning, doneSummaryNote, setProjectSummary, undigestedNote } from "../../src/projects/status.js";
 import { writeProject } from "../../src/projects/store.js";
 import { statusSummary } from "../../src/tasks/launch.js";
 import { createTask, getTask, markDigested, setState } from "../../src/tasks/store.js";
@@ -65,5 +65,40 @@ describe("(d) undigested done tasks warning", () => {
   it("undigestedNote words the opening warning", () => {
     expect(undigestedNote(2, "2026-11-08")).toBe("2 done görev digest edilmedi (en eski: 2026-11-08)");
     expect(undigestedNote(0, null)).toBe("");
+  });
+});
+
+describe("(e) task digested summary warning", () => {
+  it("warns when the summary predates the task's done time; marking keeps updated (done time)", () => {
+    writeProject("vlad", card("vlad"));
+    setProjectSummary("vlad", "x", ago(3600_000));
+    const t = doneTask("vlad", now());
+    const [d] = markDigested([t.data.id]);
+    expect(d.data.updated).toBe(t.data.updated);
+    expect(digestSummaryWarning(d)).toMatch(/özet bu görevi kapsamıyor: vlad \(özet \d{4}-/);
+  });
+  it("no warning when the summary was written after the task", () => {
+    writeProject("vlad", card("vlad"));
+    const t = doneTask("vlad", ago(3600_000));
+    setProjectSummary("vlad", "x", now());
+    expect(digestSummaryWarning(markDigested([t.data.id])[0])).toBeNull();
+  });
+  it("warns with 'özet yok' when the card has no summary", () => {
+    writeProject("vlad", card("vlad"));
+    expect(digestSummaryWarning(doneTask("vlad", now()))).toContain("özet yok");
+  });
+  it("paused project and unreadable card: no warning", () => {
+    writeProject("vlad", card("vlad").replace("status: active", "status: paused"));
+    expect(digestSummaryWarning(doneTask("vlad", now()))).toBeNull();
+    expect(digestSummaryWarning(doneTask("yok-proje", now()))).toBeNull();
+  });
+  it("a pipeline phase is judged by the umbrella's project", () => {
+    writeProject("vlad", card("vlad"));
+    writeProject("diger", card("diger"));
+    setProjectSummary("vlad", "x", ago(3600_000));
+    const parent = createTask({ project: "vlad", title: "Çatı", kind: "pipeline", body: "" }, now());
+    const ph = createTask({ project: "diger", title: "Faz", kind: "dev", body: "", parent: parent.data.id }, now());
+    for (const s of ["running", "awaiting_approval", "done"] as const) setState(ph.data.id, s, now());
+    expect(digestSummaryWarning(getTask(ph.data.id))).toContain("vlad (özet");
   });
 });

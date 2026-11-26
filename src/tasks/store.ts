@@ -535,7 +535,7 @@ export function markDigested(ids: string[], now: Date = new Date()): Task[] & { 
   }
   for (const t of tasks) {
     t.data.digested = nowIso(now);
-    saveTask(t, now); // same instant as `digested`: freshness skips that task (status.ts)
+    saveTaskQuiet(t); // `updated` keeps the done time: project status `newer` must still see a task done after the summary (status.ts)
   }
   return Object.assign(tasks, { journalMissing });
 }

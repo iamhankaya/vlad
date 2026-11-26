@@ -65,13 +65,20 @@ describe("projectStatus", () => {
     markDigested([t.data.id]);
     expect(projectStatus("vlad").summary.state).toBe("güncel");
   });
-  it("digested stamp equals updated even when the clock differs (no second-boundary race)", () => {
+  it("a task done after the summary stays in newer even once digested (updated keeps the done time)", () => {
+    const t = createTask({ project: "vlad", title: "İş", kind: "dev", body: "" }, T0);
+    setProjectSummary("vlad", "x", new Date(Date.now() - 3600_000));
+    setState(t.data.id, "running"); setState(t.data.id, "awaiting_approval"); setState(t.data.id, "done");
+    const [d] = markDigested([t.data.id], new Date(Date.now() + 5000));
+    expect(d.data.updated).not.toBe(d.data.digested);
+    expect(projectStatus("vlad").summary.newer).toContain(t.data.id);
+  });
+  it("a task digested after the summary that covered it is not newer", () => {
     const t = createTask({ project: "vlad", title: "İş", kind: "dev", body: "" }, T0);
     setState(t.data.id, "running"); setState(t.data.id, "awaiting_approval"); setState(t.data.id, "done");
-    setProjectSummary("vlad", "x", new Date());
-    const [d] = markDigested([t.data.id], new Date(Date.now() + 5000));
-    expect(d.data.digested).toBe(d.data.updated);
-    expect(projectStatus("vlad").summary.state).toBe("güncel");
+    setProjectSummary("vlad", "x", new Date(Date.now() + 1000));
+    markDigested([t.data.id], new Date(Date.now() + 5000));
+    expect(projectStatus("vlad").summary.newer).not.toContain(t.data.id);
   });
   it("setProjectSummary keeps frontmatter and other sections, replaces on rerun, rejects headings and oversize", () => {
     setProjectSummary("vlad", "bir", T0);

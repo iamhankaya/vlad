@@ -33,7 +33,7 @@ export function targetsOf(key: string, args: any[]): { slugs: (string | undefine
       if (p && args[1] !== "geçerli" && !activityListsId(p, id)) return null;
       return { slugs: [p], only: "activity" };
     }
-    // `task digested` re-stamps `updated` (moves the date in Son aktivite); `decision migrate` / `kb maintain` (decisions.md split) change the decision list. A dry run writes nothing.
+    // `task digested` keeps `updated` (the activity refresh is now mostly a no-op, harmless); `decision migrate` / `kb maintain` (decisions.md split) change the decision list. A dry run writes nothing.
     case "task digested": return { slugs: (args[0] as string[]).map((id) => getTask(id).data.project), only: "activity" };
     case "decision migrate":
     case "kb maintain": return o.dryRun ? null : { slugs: allCardSlugs(), only: "activity" };

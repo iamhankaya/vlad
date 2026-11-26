@@ -180,7 +180,7 @@ describe("vlad cli", { timeout: 30_000 }, () => {
     expect(l.tasks.map((t: { id: string }) => t.id)).toEqual([id]);
     const r = vlad(["task", "digested", id, "--json"]);
     expect(r.code, r.err).toBe(0);
-    expect(JSON.parse(r.out)).toEqual({ ids: [id], warnings: [expect.stringContaining(`günlükte yok (tam ID): ${id}`)] });
+    expect(JSON.parse(r.out)).toEqual({ ids: [id], warnings: [expect.stringContaining(`günlükte yok (tam ID): ${id}`)] }); // no project card: no summary warning (digestSummaryWarning)
     expect(JSON.parse(vlad(["task", "list", "--undigested", "--json"]).out).tasks).toEqual([]);
     expect(vlad(["status", "--summary"]).out).toContain("İşlenmemiş 0 rapor");
   });
