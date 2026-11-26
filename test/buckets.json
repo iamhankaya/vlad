@@ -29,6 +29,7 @@
     "test/kb/atomic.test.ts",
     "test/kb/cloud-readonly-contract.test.ts",
     "test/kb/doc.test.ts",
+    "test/kb/fast-frontmatter.test.ts",
     "test/kb/input.test.ts",
     "test/kb/journal.test.ts",
     "test/kb/lint-fp-regression.test.ts",
