@@ -50,6 +50,34 @@ describe("finished_task_listed_active: false-positive classes stay quiet", () =>
   });
 });
 
+describe("open_item_all_closed (T20261126-08): Açık konular item whose every F-/T- reference is closed", () => {
+  beforeEach(() => { task("T20261027-07", "done"); task("T20261027-09", "done"); task("T20261027-08", "running"); finding("F-vlad-001", "fixed"); finding("F-vlad-002", "open"); });
+
+  const only = (s: string) => flagged(s).filter((f) => f.startsWith("open_item_all_closed:"));
+  it("flags a hand-written item whose bare references are all closed (tasks, findings, mixed)", () => {
+    expect(only("## Açık konular\n- Kurulum işi T20261027-07 üzerinden ilerliyor.\n")).toEqual(["open_item_all_closed:T20261027-07"]);
+    expect(only("## Açık konular\n- Kurulum işi T20261027-07 ve T20261027-09 üzerinden ilerliyor.\n")).toEqual(["open_item_all_closed:T20261027-07"]);
+    expect(only("## Açık konular\n- Karar bekleniyor: T20261027-07 ve F-vlad-001 sonrası.\n")).toEqual([]); // the finding is already flagged by closed_finding_listed_open
+  });
+  it("stays quiet when any reference is still open, or none can be judged", () => {
+    expect(only("## Açık konular\n- F-vlad-001 ve F-vlad-002 üzerinde çalışılacak.\n")).toEqual([]);
+    expect(only("## Açık konular\n- T20261027-07 sonrası T20261027-08 ile devam.\n")).toEqual([]);
+    expect(only("## Açık konular\n- Kullanıcı kararı bekleniyor, kayıt yok.\n")).toEqual([]);
+    expect(only("## Açık konular\n- F-vlad-999 bilinmeyen kayıt.\n")).toEqual([]);
+  });
+  it("ignores parenthesised sources, branch names, other sections and dated history", () => {
+    expect(only("## Açık konular\n- Karar kullanıcıda (F-vlad-001, T20261027-07).\n")).toEqual([]);
+    expect(only("## Açık konular\n- Kod yalnız vlad/T20261027-07 dalında.\n")).toEqual([]);
+    expect(only("## Son aktivite\n- T20261027-07 işi.\n")).toEqual([]);
+    addDecision({ project: "vlad", title: "K", body: "- **Karar:** k" }, new Date(2026, 9, 25));
+    expect(only("## Açık konular\n- T20261027-07 sonrası D-vlad-001 gereği X yapılacak.\n")).toEqual([]); // a live decision reference: the item is not history
+    expect(only("## Açık konular\n- 2026-10-28: T20261027-07 işi.\n")).toEqual([]);
+  });
+  it("does not double-flag a line another code already flagged", () => {
+    expect(flagged("## Açık konular\n- T20261027-07 sürüyor\n")).toEqual(["finished_task_listed_active:T20261027-07"]);
+  });
+});
+
 describe("F-vlad-342: inactive/expired decision blocks are exempt from finished_task_listed_active", () => {
   it("a superseded decision naming a done task as running stays quiet; a valid one is still flagged", () => {
     task("T20261027-07", "done");

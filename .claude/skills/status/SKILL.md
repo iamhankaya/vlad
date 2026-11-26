@@ -115,8 +115,7 @@ Seçenekler (açık onay):
 
 1 veya 2 tamamlanınca: `vlad task set <çatı-id> done --json` ve `vlad task cleanup <çatı-id> --json` (çatının `integration_worktrees` listesindeki (`vlad task list --json --full`; kısa çıktıda yok) her projedeki entegrasyon worktree'si kaldırılır; diskte olmayan atlanır, branch'ler kalır).
 
-**Faz kapısı ve son kapı digest'i:** her faz `done` olunca (adım 2'deki gibi) o faz görevi, çatı `done` olunca çatı görevi için "Görevi digest et" bölümünü uygula (çatının kapanış raporu yoktur; `/digest` pipeline kuralıyla fazların açık noktalarını işler). Son kapıda retrodan önce çalıştır.
-
+**Faz kapısı ve son kapı digest'i:** her faz `done` olunca (adım 2'deki gibi) o faz görevi, çatı `done` olunca çatı görevi için "Görevi digest et" bölümünü uygula (çatının kapanış raporu yoktur; `/digest` pipeline kuralıyla fazların açık noktalarını işler).
 ### Görevi digest et (otomatik, D-vlad-061)
 
 Görev `done` olunca `/digest <görev-id>`'yi **otomatik modda yalnız o görev için** uygula (soru yok; emin olunmayanı `vlad digest pending add`'e ekle; hata olursa `digested` işaretleme). Adım sırası ve kullanıcıya tek satır bildirim: `reference/kapi-ayrintilari.md` §Görevi digest et.
@@ -127,9 +126,7 @@ Gece/yetki modu kuralları (faz ve son kapı merge'ü, push yetkisi, durdurma ko
 
 **Bekçi** (gece modu açıkken ya da `vlad mode watch on`): kendini 20–30 dk arayla uyandır (`/loop` dinamik ya da `ScheduleWakeup`). Her uyanışta `vlad task idle --minutes 30 --json`; listelenen her görev için `gh run list --branch <branch> --limit 1` ile CI'a bak. CI bitmiş ama rapor yoksa, soru `answer`'lanmış ama çalışan sürmemişse ya da 30 dk değişiklik yoksa çalışanı `SendMessage` ile dürt ve `vlad task log <id> "bekçi: dürtüldü (<neden>)"` yaz. Yeni `awaiting_approval`/`blocked` varsa bu skill'in akışını işlet. Bekçiyi `vlad mode off` ya da pencerenin bitişi kapatır.
 
-### Retro (son kapıdan sonra)
-
-Çatı `done` olunca kısa retro yap: **önce `reference/retro.md`'yi oku** ve uygula (Ne iyi gitti / Ne sürtündü / Ders; dersler onayla `vlad project note`; rol dersleri öneri; skill kullanımı; bulgular; `kb commit`). `integrate` K8 bayat özet kontrolü retrodan önce.
+**Retro yok (T20261126-08):** çatı başına retro yordamı kaldırıldı; "nerede kalmıştık" sorularında kart/günlük dosyalarını baştan okuma, önce `vlad project status <slug> --json`, gerekirse `vlad kb search "<sorgu>" --project <slug> --json`. Ders çıkarma haftalık `/setup-audit`'in "Çalışma notu adayı" kategorisindedir (seçilenler `vlad project note`).
 
 **Faz `failed`/`cancelled`:** bağımlı fazlar `queued` kalır. Ağaçta göster ve seçenekleri sun:
 - **Fazı yeniden oluştur:** aynı faz/rol/bağımlılıkla yeni görev (`/delegate` adım 4). Eski faza bağlı `queued` fazları iptal etmeden yeni ID'ye bağla: `vlad task deps <bağımlı-id> --set <yeni-id,…>` (yalnız `queued` fazda; doğrulama ve döngü kontrolü CLI'dadır).

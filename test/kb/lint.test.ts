@@ -205,6 +205,7 @@ describe("summary_stale", () => {
   it("shows the freshness signal: bayat and yok flagged, güncel not", () => {
     writeCard("vlad", "## Durum özeti\n_Güncel: 2026-10-30T10:00:00+03:00_\n\nözet\n");
     task("T20261101-01", "running", "2026-11-01T10:00:00+03:00");
+    for (let i = 2; i <= 6; i++) task(`T20261101-0${i}`, "running", "2026-11-01T10:00:00+03:00"); // > 5 newer records AND a summary older than 24 h (T20261126-08 threshold)
     writeCard("beta", "## Özet\nx\n");
     writeCard("gama", FRESH + "özet\n");
     const r = lintKb({ now: NOW });

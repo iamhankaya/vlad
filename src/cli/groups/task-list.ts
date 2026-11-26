@@ -13,8 +13,9 @@ const SHORT_FIELDS = ["id", "project", "title", "kind", "state", "autonomy", "br
 export function registerTaskList(task: Command, k: Kit): void {
   const { ctx, out, def, taskLine, withModel, integrationInfo, TASK_FIELDS, DERIVED_FIELDS } = k;
   def(task, "digested <ids...>", "done görevlerin kapanış raporunu /digest'te işlenmiş olarak işaretler", (ids: string[], o: Opts) => {
-    markDigested(ids);
-    out(o, { ids }, `${ids.length} görev işlendi olarak işaretlendi`);
+    const { journalMissing } = markDigested(ids);
+    const warnings = journalMissing.length ? [`günlükte yok (tam ID): ${journalMissing.join(", ")}: /digest adım 3 (günlük) atlanmış; günlüğe yaz`] : [];
+    out(o, warnings.length ? { ids, warnings } : { ids }, `${ids.length} görev işlendi olarak işaretlendi${warnings.map((w) => `\nUYARI: ${w}`).join("")}`);
   });
   def(task, "session <id> <session_id>", "Görevin session_id alanını yazar (durum değişmez)", (id: string, sessionId: string, o: Opts) => {
     if (!sessionId.trim()) throw new Error("session_id boş olamaz");

@@ -122,15 +122,14 @@ describe("kb refs uçtan uca (gerçek CLI)", { timeout: 60_000 }, () => {
 
 describe("özet tazeliği uçtan uca (gerçek CLI)", { timeout: 60_000 }, () => {
   it("status --summary bayat/eksik özetleri adlandırır, digest pending ile birlikte satır 'yüksek bulgu' ile biter", () => {
-    put(kb("projects", "vlad.md"), card("vlad", "/yok/a"));
+    // T20261126-08: bayat = özet 24 saatten eski VE 5'ten fazla yeni kayıt; eski damgalı özet doğrudan kartta
+    put(kb("projects", "vlad.md"), card("vlad", "/yok/a") + "\n## Durum özeti\n_Güncel: 2026-01-01T00:00:00+03:00_\n\nÖzet metni.\n");
     put(kb("projects", "yeni.md"), card("yeni", "/yok/b"));
     put(kb("projects", "eski.md"), card("eski", "/yok/c", "archived"));
     put(kb("projects", "dur.md"), card("dur", "/yok/d", "paused"));
-    const sumFile = join(home, "ozet.md");
-    writeFileSync(sumFile, "Özet metni.\n");
-    expect(vlad(["project", "summary", "vlad", "--file", sumFile]).code).toBe(0);
     // özetten SONRA kayıtlar → vlad bayat
     task("T29990101-01", "2999-01-01T00:00:00", "## Tanım\nx\n", { state: "running" });
+    for (let i = 2; i <= 5; i++) task(`T29990101-0${i}`, "2999-01-01T00:00:00", "## Tanım\nx\n", { state: "running" });
     finding("F-vlad-200", "open", "2999-01-01T00:00:00");
     expect(vlad(["digest", "pending", "add", "--text", "Belirsiz karar", "--project", "vlad"]).code).toBe(0);
 

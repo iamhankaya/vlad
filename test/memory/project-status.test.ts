@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { addFinding } from "../../src/findings/store.js";
 import { addDecision } from "../../src/kb/decisions.js";
-import { projectStatus, setProjectSummary } from "../../src/projects/status.js";
+import { projectStatus, setProjectSummary, STALE_MIN_NEWER } from "../../src/projects/status.js";
 import { writeProject } from "../../src/projects/store.js";
 import { createTask, markDigested, setState } from "../../src/tasks/store.js";
 import { makeHome } from "../helpers.js";
@@ -34,14 +34,29 @@ describe("projectStatus", () => {
     expect(projectStatus("vlad").decisions.recent.map((d) => d.id)).toEqual(["D-vlad-002"]);
     expect(() => projectStatus("yok")).toThrow(/bulunamadı/);
   });
-  it("summary is güncel until a newer record exists, then bayat with the records named", () => {
+  it("summary is güncel until enough newer records exist on an old summary, then bayat with the records named", () => {
     setProjectSummary("vlad", "Son sonuç: x\nSıradaki: y", T1);
     expect(projectStatus("vlad").summary).toMatchObject({ state: "güncel", newer: [] });
-    const t = createTask({ project: "vlad", title: "Yeni", kind: "dev", body: "" }, new Date(T1.getTime() + 3600_000));
-    const s = projectStatus("vlad").summary;
+    const mkNew = (n: number) => Array.from({ length: n }, (_, i) => createTask({ project: "vlad", title: `Yeni ${i}`, kind: "dev", body: "" }, new Date(T1.getTime() + 3600_000 + i)));
+    const few = mkNew(STALE_MIN_NEWER);
+    const old = new Date(T1.getTime() + 30 * 3600_000);
+    // threshold: more than STALE_MIN_NEWER newer records AND a summary older than 24 h; fewer stay güncel but are still listed
+    expect(projectStatus("vlad", old).summary).toMatchObject({ state: "güncel" });
+    expect(projectStatus("vlad", old).summary.newer).toContain(few[0].data.id);
+    const extra = createTask({ project: "vlad", title: "Bir daha", kind: "dev", body: "" }, new Date(T1.getTime() + 7200_000));
+    const s = projectStatus("vlad", old).summary;
     expect(s.state).toBe("bayat");
-    expect(s.newer).toContain(t.data.id);
+    expect(s.newer).toContain(extra.data.id);
     expect(s.text).toContain("Sıradaki: y");
+    // many records but the summary is under 24 h old: still güncel
+    expect(projectStatus("vlad", new Date(T1.getTime() + 8 * 3600_000)).summary.state).toBe("güncel");
+  });
+  it("last_activity comes from the newest task/finding record, not the card field", () => {
+    expect(projectStatus("vlad").last_activity).toBeNull(); // no records: the card's (null) value
+    const t = createTask({ project: "vlad", title: "İş", kind: "dev", body: "" }, T0);
+    const f = addFinding({ project: "vlad", severity: "orta", source: t.data.id, title: "f" });
+    const want = [t.data.updated, f.data.updated].sort().pop();
+    expect(projectStatus("vlad").last_activity).toBe(want);
   });
   it("digesting a task after the summary does not make the summary bayat", () => {
     const t = createTask({ project: "vlad", title: "İş", kind: "dev", body: "" }, T0);

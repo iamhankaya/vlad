@@ -16,10 +16,11 @@ describe("stale summaries", () => {
     for (const s of ["bayat-p", "yok-p", "taze-p"]) writeProject(s, card(s));
     setProjectSummary("bayat-p", "x", T1);
     setProjectSummary("taze-p", "x", T1);
-    createTask({ project: "bayat-p", title: "Yeni", kind: "dev", body: "" }, later);
+    for (let i = 0; i < 6; i++) createTask({ project: "bayat-p", title: `Yeni ${i}`, kind: "dev", body: "" }, new Date(later.getTime() + i));
+    createTask({ project: "taze-p", title: "Tek", kind: "dev", body: "" }, later); // one newer record: below the threshold
     const list = staleSummaries();
-    expect(list).toEqual([{ slug: "bayat-p", state: "bayat", newer: 1 }, { slug: "yok-p", state: "yok", newer: 0 }]);
-    expect(staleSummaryText(list)).toBe("bayat-p (1 kayıt), yok-p (özet yok)");
+    expect(list).toEqual([{ slug: "bayat-p", state: "bayat", newer: 6 }, { slug: "yok-p", state: "yok", newer: 0 }]);
+    expect(staleSummaryText(list)).toBe("bayat-p (6 kayıt), yok-p (özet yok)");
   });
   it("archived (and paused) projects are not counted", () => {
     writeProject("eski", card("eski", "archived"));

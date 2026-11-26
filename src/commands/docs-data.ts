@@ -41,7 +41,7 @@ export const COMMAND_DOCS: Readonly<Record<string, string>> = {
   "task deny": "`task deny <id> --tool <araç> --pattern \"<komut>\" [--reason]`: çalışanın izin reddini kaydeder (`## İlerleme`'ye `[İZİN]` satırı + `kb/logs/denials.jsonl`); `audit setup` tekrarlayanları izin kuralı adayı olarak listeler.",
   "task merge-preview": "Merge'ün ön izlemesi (çakışma/diff), salt okuma.",
   "task merge": "Uzak (işçideki) görevde merge (`--no-ff`); push etmez, çakışmada işçi geri alır. Yalnız açık onaydan sonra. Uzak görevin dalını beyne getirmez: o iş için `task close` (işçide `branch-push` → beyinde fetch + merge) kullanılır.",
-  "task digested": "Görevin kapanış raporunun `/digest` tarafından işlendiğini işaretler.",
+  "task digested": "Görevin kapanış raporunun `/digest` tarafından işlendiğini işaretler. Görevin tam ID'si günlükte (bittiği gün ya da bugün) yoksa `UYARI: günlükte yok (tam ID): …` basar (`--json`'da `warnings`); işaretleme yine yapılır.",
   "task session": "Görevin Claude `session_id`'sini kaydeder. İşçide beyne iletilir.",
   "task list": "Görevleri listeler. `list --json --fields id,state,title --limit 20` yavaş tam çıktı yerine kısa çıktı verir (`effective_model` kısa kümede de var; `role_model` yalnız `--fields` ya da tam çıktıda).",
   "task idle": "Uzun süredir güncellenmeyen running/blocked görevler (bekçi modu dürtmesi için).",
