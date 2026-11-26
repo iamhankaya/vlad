@@ -10,6 +10,7 @@ import { getVladHome, kbPaths } from "../kb/home.js";
 import { recordStates } from "../kb/refs.js";
 import type { RecordState } from "../kb/refs.js";
 import { fencedLines } from "../kb/sections.js";
+import { withReadSnapshot } from "../kb/snapshot.js";
 
 export const LINT_CODES = [
   "closed_finding_listed_open", "closed_idea_listed_open", "finished_task_listed_active", "inactive_decision_listed_valid",
@@ -240,6 +241,10 @@ export interface LintOptions { project?: string; /** injectable clock (tests) */
 
 /** Read-only contradiction check of the kb's prose against the records it names. */
 export function lintKb(o: LintOptions = {}): LintResult {
+  return withReadSnapshot(() => lintRead(o)); // read-only: projectStatus per card lists the same task/finding dirs (T20261126-25)
+}
+
+function lintRead(o: LintOptions): LintResult {
   const p = kbPaths();
   const now = o.now ?? new Date();
   const warnings: string[] = [];
@@ -248,6 +253,7 @@ export function lintKb(o: LintOptions = {}): LintResult {
   const scanned = { projects: 0, decisions: 0, memory: 0 };
   const cards = existsSync(p.projects) ? readdirSync(p.projects).filter((n) => n.endsWith(".md")).map((n) => n.slice(0, -3)).sort() : [];
   if (o.project && !cards.includes(o.project)) throw new Error(`proje kartı bulunamadı: ${o.project}`);
+  let projects: ReturnType<typeof listProjects> | undefined; // read once, not once per card
   const mk = (ctx: Ctx, file: string) => (f: Omit<LintFlag, "file" | "project">) => { flags.push({ ...f, file, project: ctx.project }); };
 
   for (const slug of o.project ? [o.project] : cards) {
@@ -260,7 +266,7 @@ export function lintKb(o: LintOptions = {}): LintResult {
       lineFlags(tl, ctx, states, mk(ctx, rel(p.kb, path)));
       if (flags.length === before) openItemFlag(tl, states, mk(ctx, rel(p.kb, path)));
     }
-    const active = listProjects().find((x) => x.slug === slug)?.status === "active";
+    const active = (projects ??= listProjects()).find((x) => x.slug === slug)?.status === "active";
     if (active) {
       try {
         const s = projectStatus(slug).summary;
