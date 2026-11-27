@@ -36,6 +36,7 @@ export const GROUP_OF: Record<string, () => Promise<Register>> = {
   approver: async () => (await import("./groups/approver.js")).registerApprover,
   monitor: async () => (await import("./groups/monitor.js")).registerMonitor,
   worktree: async () => (await import("./groups/worktree.js")).registerWorktree,
+  history: async () => (await import("./groups/history.js")).registerHistory,
 };
 
 /**

@@ -5,6 +5,7 @@ import { spawn as nodeSpawn, spawnSync, type ChildProcess, type SpawnOptions } f
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
+import { HistoryError } from "./errors.js";
 
 /** Dizin bu kadar saniyeden eskiyse `history search` uyarı verir. */
 export const STALE_AFTER_S = 24 * 3600;
@@ -16,13 +17,7 @@ export const INSTALL_HINTS = [
   "PATH'te değilse vlad.config.json (ya da vlad.config.local.json) \"hunterPath\": \"<hunter ikilisinin mutlak yolu>\"",
 ];
 
-/** `details` satırlarıyla hata; CLI `{"error", "details"}` olarak basar, çıkış 1. */
-export class HistoryError extends Error {
-  constructor(message: string, public details: string[] = []) {
-    super(message);
-    this.name = "HistoryError";
-  }
-}
+export { HistoryError };
 
 export interface LocateOptions {
   env: NodeJS.ProcessEnv;

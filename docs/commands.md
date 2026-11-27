@@ -145,6 +145,11 @@ Onay bekleyen digest maddeleri.
 - `vlad session register` — `session register <ad>`: VLAD session adını kaydeder (çalışan bildirimleri için). _(işçide reddedilir; konsol: yazma; --json)_
 - `vlad session name` — Kayıtlı VLAD session adını verir. _(yerel; konsol: okuma; --json)_
 
+## history
+
+- `vlad history search` — `history search "<sorgu>" [--project <slug>] [--task <id>] [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--limit <n>] [--all] --json`: eski Claude oturum kayıtlarında (`~/.claude/projects`) arar; hunter'ı (ayrı Rust aracı, `~/dev/hunter`) çağıran ince sarmalayıcıdır, çıktı hunter `--json` şeması v1'dir (`results[]`: `id` = `<dosya>:<satır>`, `snippet`, `project`, `task`, `ts`…; sırlar `[GİZLİ:<tür>]` maskeli). hunter PATH'te, yoksa `vlad.config.json` `hunterPath`'te aranır; bulunamazsa ya da dizin yoksa çıkış 1 + `{"error", "details"}` (kurulum ipucu: `cargo install --path ~/dev/hunter`, `hunter index`). Dizin 24 saatten eskiyse `warnings`'e uyarı eklenir (metin kipinde stderr `uyarı:`). `(geçici)` klasör oturumları yalnız `--all` ile. Dizin SessionEnd hook'unda arka planda tazelenir. _(yerel; konsol: okuma; --json)_
+- `vlad history show` — `history show <id> [--context <n>] --json`: `history search` sonucunun (`<dosya>:<satır>`) çevresindeki mesajlar (hunter `show`; hedeften önce/sonra en çok n, varsayılan 5; metin yalnız dizinden, maskeli). Hata biçimi `history search` ile aynı. _(yerel; konsol: okuma; --json)_
+
 ## worktree
 
 - `vlad worktree prune` — `worktree prune [--dry-run] [--yes] [--json]`: `<repo>-wt/` altında git'te kayıtlı olmayan, adı görev ID'si olan ve görevi done/cancelled olan, içinde yalnız `.remember` bulunan artık klasörleri listeler (başka içerik varsa 'içerik var, atlandı';kayıt `git worktree list --porcelain -z` ile literal yol karşılaştırmasıyla bulunur); varsayılan dry-run, silmek için `--yes`; `--dry-run` ile birlikte verilirse `--dry-run` kazanır (hiçbir şey silinmez). Kayıtlı worktree'ye, running/queued/bilinmeyen göreve ve sembolik bağlantıya dokunmaz; `git worktree list` okunamayan kökte hiçbir şey silmez. _(işçide reddedilir; konsolda yok; --json)_

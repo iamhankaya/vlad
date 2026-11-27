@@ -106,6 +106,8 @@ export const COMMANDS: readonly CommandSpec[] = [
   c(["kb", "check"], { worker: LOCAL, console: { kind: "read" } }),
   c(["session", "register"], { lock: "outer", console: { kind: "write" } }),
   c(["session", "name"], { worker: LOCAL, console: { kind: "read" } }),
+  c(["history", "search"], { worker: LOCAL, console: { kind: "read" } }),
+  c(["history", "show"], { worker: LOCAL, console: { kind: "read" } }),
   c(["worktree", "prune"], { console: none("silme; konsoldan açılmadı, ayrı karar (--yes onayı VLAD/kullanıcıdadır)") }),
   c(["agent", "start"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
   c(["agent", "status"], { worker: LOCAL, console: none("yerel makine yönetimi; konsol kataloğundan hariç") }),
