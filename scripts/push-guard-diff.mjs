@@ -48,6 +48,13 @@ const PLAIN = P("plain"); repo(PLAIN, "main");
 const BRANCHED = P("branched"); repo(BRANCHED, "vlad/T20261127-97");
 const DETACHED = P("detached"); repo(DETACHED, "main", true);
 const NOREPO = P("norepo"); mkdirSync(NOREPO);
+// Rust'taki .git/HEAD hızlı ön kontrolünü zorlayan düzenler (bağlı worktree, alışılmadık HEAD, reftable)
+const LINKED_VLAD = P("linked-vlad"); git(PLAIN, "worktree", "add", "-q", "-b", "vlad/T20261127-94", LINKED_VLAD);
+const LINKED_OTHER = P("linked-other"); git(PLAIN, "worktree", "add", "-q", "-b", "feature", LINKED_OTHER);
+const REMOTE_HEAD = P("remote-head"); repo(REMOTE_HEAD, "main"); writeFileSync(join(REMOTE_HEAD, ".git", "HEAD"), "ref: refs/remotes/vlad/T20261127-93/HEAD\n");
+const TAG_HEAD = P("tag-head"); repo(TAG_HEAD, "main"); writeFileSync(join(TAG_HEAD, ".git", "HEAD"), "ref: refs/tags/vlad/T20261127-92\n");
+const REFTABLE = P("reftable"); mkdirSync(REFTABLE); git(REFTABLE, "init", "-q", "--ref-format=reftable", "-b", "vlad/T20261127-91");
+const BAD_GITFILE = P("bad-gitfile"); mkdirSync(BAD_GITFILE); writeFileSync(join(BAD_GITFILE, ".git"), "gitdir: /yok/yer\n");
 const KB1 = P("kb1"); mkdirSync(join(KB1, "tasks"), { recursive: true }); writeFileSync(join(KB1, "mode.json"), "{}");
 const KB2 = P("kb2"); mkdirSync(KB2);
 const homes = {};
@@ -153,7 +160,8 @@ function toolInput(tool) {
   return { command: pick(pushCmds), file_path: pick(paths) };
 }
 const cwds = [WT, join(WT, "src"), WT_NOGIT, PLAIN, BRANCHED, DETACHED, NOREPO, base, "/", "", "rel", join(base, "yok", "repo-wt", "T20261127-96"), userInfo().homedir, join(WT, "sec-link")];
-const procCwds = [WT, PLAIN, NOREPO, WT_NOGIT, BRANCHED, base];
+cwds.push(LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, join(PLAIN, ".git"));
+const procCwds = [WT, PLAIN, NOREPO, WT_NOGIT, BRANCHED, base, LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE];
 
 function payload() {
   const r = rnd();
@@ -187,6 +195,7 @@ const envs = [
   { VLAD_HOME: homes["h-null"] }, { VLAD_HOME: homes["h-proto"] }, { VLAD_HOME: homes["h-proto-own"] }, { VLAD_HOME: homes["h-arr"] }, { VLAD_HOME: homes["h-none"] },
   { VLAD_HOME: homes["h-empty"] }, { VLAD_HOME: homes["h-num"] }, { VLAD_HOME: homes["h-bom"] }, { VLAD_HOME: "rel-home" }, { VLAD_HOME: "" }, { VLAD_KB_DIR: "" },
   { VLAD_TASK_ID: OWN, HOME: "" }, { VLAD_TASK_ID: OWN, HOME: base }, { VLAD_TASK_ID: OWN, HOME: "/a$&b" }, { VLAD_TASK_ID: OWN, NOGIT: "1" }, { NOGIT: "1" },
+  { GIT_DIR: join(BRANCHED, ".git") }, { GIT_DIR: join(PLAIN, ".git") }, { GIT_CEILING_DIRECTORIES: base },
 ];
 
 const cases = [];
@@ -268,7 +277,8 @@ if (BENCH > 0) {
   const bashIn = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git status && npm test" }, cwd: PLAIN });
   const readIn = JSON.stringify({ tool_name: "Read", tool_input: { file_path: join(WT, "a.ts") }, cwd: WT });
   const scenarios = [
-    ["ana oturum Bash (git dal sorgusu)", bashIn, {}, PLAIN],
+    ["ana oturum Bash", bashIn, {}, PLAIN],
+    ["dal ile çalışan Bash (VLAD_TASK_ID yok, git sorgusu)", JSON.stringify({ tool_name: "Bash", tool_input: { command: "npm test" }, cwd: LINKED_VLAD }), {}, LINKED_VLAD],
     ["ana oturum Read", JSON.stringify({ tool_name: "Read", tool_input: { file_path: "/tmp/x" }, cwd: PLAIN }), {}, PLAIN],
     ["çalışan Bash", JSON.stringify({ tool_name: "Bash", tool_input: { command: "git status && npm test" }, cwd: WT }), { VLAD_TASK_ID: OWN }, WT],
     ["çalışan push", JSON.stringify({ tool_name: "Bash", tool_input: { command: `git push -u origin vlad/${OWN}` }, cwd: WT }), { VLAD_TASK_ID: OWN }, WT],

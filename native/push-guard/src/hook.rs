@@ -33,6 +33,9 @@ pub fn own_id(cwd: &str) -> Option<String> {
             return Some(e);
         }
     }
+    if sys::head_cannot_be_vlad(cwd) {
+        return None; // git çıktısı kalıba uyamaz: süreç başlatmadan aynı sonuç
+    }
     let b = sys::git_symbolic_ref(cwd)?;
     re(&BRANCH, r"^vlad/(T[0-9]{8}-[0-9]+)$").captures(js_trim(&b)).map(|c| c[1].to_string())
 }
