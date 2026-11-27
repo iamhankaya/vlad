@@ -50,6 +50,17 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
     for (const p of ["/work/wt/src/settings.json", `${HOME}/dist/cli.js`, `${HOME}/src/vlad.config.json`, "/work/wt/vlad.config.json"]) expect(edit("Edit", p), p).toBeNull(); // .claude dışı / hooks dışı / vladHome dışı
     for (const c of [`cat ${HOME}/vlad.config.json`, "cat ~/.claude/settings.json", "grep hooks ~/.claude/settings.json", `ls ${HOME}/dist/hooks`, "sed -n 1,40p ~/.claude/settings.json 2>&1"]) expect(bash(c), c).toBeNull();
   });
+  it("F-vlad-406: <vladHome>/vlad.config.local.json de korunur (kbDir'i sığ birleşimle değiştirebilir); vladHome dışındaki aynı ad serbest", () => {
+    const p = `${HOME}/vlad.config.local.json`;
+    for (const t of ["Edit", "Write", "MultiEdit", "NotebookEdit"]) {
+      expect(edit(t, p), t).toMatch(/koruma|mod/);
+      expect(edit(t, `${HOME}/VLAD.CONFIG.LOCAL.JSON`), t).toMatch(/koruma|mod/);
+    }
+    for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`, `sed -i s/a/b/ ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+    expect(checkWorkerMode("Write", { file_path: "vlad.config.local.json" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
+    expect(edit("Write", "/work/wt/vlad.config.local.json")).toBeNull();
+    expect(bash(`cat ${p}`)).toBeNull();
+  });
   it("joker hedefler (mod?.json, m*e.json, mode.jso[n]) ve kb dizini altına yazma reddedilir; *.json / rm * çalışanın kendi dosyaları serbest", () => {
     for (const c of [`rm ${KB}/mod?.json`, `echo x > ${KB}/m*e.json`, `cp x ${KB}/mode.jso[n]`, `truncate -s0 ${KB}/mo?e.json`, `echo x > ${KB}/tasks/T1.md`, `tee ${KB}/findings/F1.md`, `mv a ${KB}/x`]) expect(bash(c), c).not.toBeNull();
     for (const c of ["rm *.json", "rm -rf build/*", `cat ${KB}/tasks/T1.md`, `grep x ${KB}/tasks/T1.md > /tmp/out.txt`]) expect(bash(c), c).toBeNull();

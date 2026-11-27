@@ -48,7 +48,7 @@ const secretHit = (t: string): boolean => { const n = norm(expand(t.replace(/["'
 const SETTINGS = ["settings.json", "settings.local.json"];
 const expand = (t: string): string => t.replace(/^~(?=\/|\\|$)|\$\{?HOME\}?/g, homedir().replace(/\\/g, "/"));
 
-/** Yol (dosya aracı ya da komut parçası) korunan mı: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config.json`. */
+/** Yol (dosya aracı ya da komut parçası) korunan mı: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config(.local).json` (F-vlad-406: local katman kbDir'i değiştirebilir). */
 /** `anyDir`: komut parçalarında yol çözülemez (`$KB/mode.json`); mode.json adı her dizinde korunur. Dosya araçlarında yalnız kb'nin mode.json'u. */
 function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = false): string | null {
   if (secretHit(p)) return "anahtar";
@@ -60,7 +60,7 @@ function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = 
   if (ctx.vladHome) {
     const abs = norm(real(isAbsolute(t) ? t : resolve(ctx.cwd ?? ".", t)));
     const home = norm(real(ctx.vladHome));
-    if (abs === `${home}/vlad.config.json` || abs === `${home}/dist/hooks` || abs.startsWith(`${home}/dist/hooks/`)) return "vlad";
+    if (abs === `${home}/vlad.config.json` || abs === `${home}/vlad.config.local.json` || abs === `${home}/dist/hooks` || abs.startsWith(`${home}/dist/hooks/`)) return "vlad";
   }
   return null;
 }

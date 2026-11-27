@@ -209,10 +209,8 @@ for (const s of [ws, ms]) {
 
 // Bilinçli kırmızı (grup → neden): politikanın açık olduğu ama iki kancanın da (TS ve Rust aynı) uymadığı vakalar; rapor "Kırmızı bırakılan testler".
 // Düzeltme TS+Rust'ta birlikte yapılınca buradan silinir; --strict bunları da çıkış 1 sayar.
-const KNOWN_RED = {
-  "push-büyükharf": "push-guard.ts \\bgit\\b/\\bpush\\b ve ALLOWED büyük/küçük harfe duyarlı; macOS/Windows'ta `GIT push --force origin main` git'i çalıştırır, iki kanca da geçirir",
-  "soru:vlad.config.local.json": "mode-guard.ts protectedPath yalnız <vladHome>/vlad.config.json'u korur; vlad.config.local.json (config-layer.ts sığ birleşim) kbDir'i değiştirebilir",
-};
+// T20261128-01: push-büyükharf (F-vlad-405) ve soru:vlad.config.local.json (F-vlad-406) düzeltildi, listeden çıkarıldı.
+const KNOWN_RED = {};
 const STRICT = process.argv.includes("--strict");
 
 // --- koşu ---

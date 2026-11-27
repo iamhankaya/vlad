@@ -167,7 +167,7 @@ fn catch_part(raw: &str, msg: &str) -> Outcome {
     if as_worker && re(&TOOL, r#""tool_name"⟨s⟩*:⟨s⟩*"(?:Read|Grep|Glob|NotebookEdit|Edit|Write|MultiEdit)""#).is_match(raw) {
         return Outcome::Block(format!("mod-koruma hatası (fail-closed): {}", msg));
     }
-    let mentions_push = re(&PUSH, r"⟨b⟩git⟨b⟩(?s:.)*⟨b⟩push⟨b⟩").is_match(raw);
+    let mentions_push = re(&PUSH, r"⟨b⟩(?i-u:git)⟨b⟩(?s:.)*⟨b⟩(?i-u:push)⟨b⟩").is_match(raw); // F-vlad-405: TS /i
     let fire = mentions_push || {
         words_hit(raw) && {
             if env_set {
@@ -289,5 +289,7 @@ mod tests {
         let o = catch_part("{bozuk", "x");
         assert_eq!(o, Outcome::Allow);
         assert_eq!(catch_part(r#"{"tool_input":{"command":"git push origin main""#, "e"), Outcome::Block("push-guard hatası (fail-closed): e".into()));
+        // F-vlad-405: catch yolu da harf duyarsız (TS mentionsPush /i)
+        assert_eq!(catch_part(r#"{"tool_input":{"command":"GIT PUSH --force origin main""#, "e"), Outcome::Block("push-guard hatası (fail-closed): e".into()));
     }
 }

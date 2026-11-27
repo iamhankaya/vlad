@@ -31,5 +31,7 @@ describe.skipIf(!existsSync(hook))("push-guard hook (PreToolUse)", () => {
   it("bozuk JSON: ham girdi git…push içeriyorsa fail-closed (2), içermiyorsa 0", () => {
     expect(run('{"tool_input":{"command":"git push origin main"').status).toBe(2);
     expect(run("{bozuk").status).toBe(0);
+    expect(run('{"tool_input":{"command":"GIT PUSH --force origin main"').status).toBe(2); // F-vlad-405: catch yolu da harf duyarsız
+    expect(run(payload("GIT push --force origin main")).status).toBe(2);
   });
 });

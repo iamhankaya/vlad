@@ -12,7 +12,7 @@ function ownId(cwd: string): string | null {
 const block = (msg: string) => { process.stderr.write(msg + "\n"); process.exitCode = 2; };
 // catch yolunda import kullanılamaz: <repo>-wt/T… dizini satır içi kalıpla tanınır (F-vlad-287)
 const WT_DIR = /[\\/][^\\/]*-wt[\\/]T\d{8}-\d+(?:[\\/]|$)/i;
-const mentionsPush = (raw: string) => /\bgit\b[\s\S]*\bpush\b/.test(raw);
+const mentionsPush = (raw: string) => /\bgit\b[\s\S]*\bpush\b/i.test(raw); // F-vlad-405: büyük/küçük harf duyarsız (checkWorkerPush ile aynı)
 
 let raw = "";
 process.stdin.setEncoding("utf8");

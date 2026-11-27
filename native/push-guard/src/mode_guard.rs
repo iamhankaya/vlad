@@ -230,7 +230,7 @@ impl<'a> Guard<'a> {
         Ok(n.is_empty() || self.secret_real()?.starts_with(&format!("{}/", n)))
     }
 
-    /// Korunan yol: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config.json`.
+    /// Korunan yol: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config(.local).json` (F-vlad-406).
     fn protected_path(&self, p: &str, any_dir: bool) -> R<Option<&'static str>> {
         static CLAUDE: OnceLock<Regex> = OnceLock::new();
         if self.secret_hit(p)? {
@@ -255,7 +255,7 @@ impl<'a> Guard<'a> {
             let target = if is_absolute(&t) { t.clone() } else { resolve(&[self.cwd(), &t])? };
             let abs = norm(&self.real(&target, 0)?);
             let home = norm(&self.real(home, 0)?);
-            if abs == format!("{}/vlad.config.json", home) || abs == format!("{}/dist/hooks", home) || abs.starts_with(&format!("{}/dist/hooks/", home)) {
+            if abs == format!("{}/vlad.config.json", home) || abs == format!("{}/vlad.config.local.json", home) || abs == format!("{}/dist/hooks", home) || abs.starts_with(&format!("{}/dist/hooks/", home)) {
                 return Ok(Some("vlad"));
             }
         }
@@ -589,6 +589,22 @@ mod tests {
         for c in [format!("cat {HOME}/vlad.config.json"), "cat ~/.claude/settings.json".into(), "grep hooks ~/.claude/settings.json".into(), format!("ls {HOME}/dist/hooks"), "sed -n 1,40p ~/.claude/settings.json 2>&1".into()] {
             assert_eq!(bash(&c), None, "{c:?}");
         }
+    }
+
+    #[test]
+    fn vlad_config_local_protected() {
+        // F-vlad-406: local katman kbDir'i sığ birleşimle değiştirebilir
+        let p = format!("{HOME}/vlad.config.local.json");
+        for t in ["Edit", "Write", "MultiEdit", "NotebookEdit"] {
+            assert!(edit(t, &p).is_some(), "{t}");
+            assert!(edit(t, &format!("{HOME}/VLAD.CONFIG.LOCAL.JSON")).is_some(), "{t} büyük harf");
+        }
+        for c in [format!("echo {{}} > {p}"), format!("tee {p}"), format!("cp x {p}"), format!("sed -i s/a/b/ {p}")] {
+            assert!(bash(&c).is_some(), "{c:?}");
+        }
+        assert!(check_worker_mode("Write", &input(&[("file_path", "vlad.config.local.json")]), Some(KB), Some(HOME), Some(HOME)).unwrap().is_some());
+        assert_eq!(edit("Write", "/work/wt/vlad.config.local.json"), None);
+        assert_eq!(bash(&format!("cat {p}")), None);
     }
 
     #[test]
