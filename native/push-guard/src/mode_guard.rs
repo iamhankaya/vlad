@@ -599,10 +599,11 @@ mod tests {
             assert!(edit(t, &p).is_some(), "{t}");
             assert!(edit(t, &format!("{HOME}/VLAD.CONFIG.LOCAL.JSON")).is_some(), "{t} büyük harf");
         }
-        for c in [format!("echo {{}} > {p}"), format!("tee {p}"), format!("cp x {p}"), format!("sed -i s/a/b/ {p}")] {
+        for c in [format!("echo {{}} > {p}"), format!("echo {{}} >> {p}"), format!("tee {p}"), format!("cp x {p}"), format!("sed -i s/a/b/ {p}"), format!("ln -s /tmp/x {p}")] {
             assert!(bash(&c).is_some(), "{c:?}");
         }
         assert!(check_worker_mode("Write", &input(&[("file_path", "vlad.config.local.json")]), Some(KB), Some(HOME), Some(HOME)).unwrap().is_some());
+        assert!(check_worker_mode("Write", &input(&[("file_path", "../vlad/vlad.config.local.json")]), Some(KB), Some(HOME), Some("/home/u/vlad-kb")).unwrap().is_some());
         assert_eq!(edit("Write", "/work/wt/vlad.config.local.json"), None);
         assert_eq!(bash(&format!("cat {p}")), None);
     }

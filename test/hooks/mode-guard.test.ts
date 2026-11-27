@@ -56,7 +56,8 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
       expect(edit(t, p), t).toMatch(/koruma|mod/);
       expect(edit(t, `${HOME}/VLAD.CONFIG.LOCAL.JSON`), t).toMatch(/koruma|mod/);
     }
-    for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`, `sed -i s/a/b/ ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+    for (const c of [`echo {} > ${p}`, `echo {} >> ${p}`, `tee ${p}`, `cp x ${p}`, `sed -i s/a/b/ ${p}`, `ln -s /tmp/x ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+    expect(checkWorkerMode("Write", { file_path: "../vlad/vlad.config.local.json" }, KB, { vladHome: HOME, cwd: "/home/u/vlad-kb" })).toMatch(/koruma|mod/);
     expect(checkWorkerMode("Write", { file_path: "vlad.config.local.json" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
     expect(edit("Write", "/work/wt/vlad.config.local.json")).toBeNull();
     expect(bash(`cat ${p}`)).toBeNull();
