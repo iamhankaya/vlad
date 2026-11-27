@@ -14,6 +14,27 @@ pub fn js_trim(s: &str) -> &str {
     s.trim_matches(is_js_ws)
 }
 
+/// K1 (T20261128-01): mode-guard.ts `fold` birebir — APFS'te ASCII ada açılan ASCII dışı karakterler (tam kod noktası taraması):
+/// ſ→s, K(U+212A)→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ. ASCII büyük/küçük harf ayrımı mevcut kurallarda kalır.
+pub fn fold(s: &str) -> String {
+    let mut o = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\u{17F}' => o.push('s'),
+            '\u{212A}' => o.push('k'),
+            '\u{DF}' | '\u{1E9E}' => o.push_str("ss"),
+            '\u{FB00}' => o.push_str("ff"),
+            '\u{FB01}' => o.push_str("fi"),
+            '\u{FB02}' => o.push_str("fl"),
+            '\u{FB03}' => o.push_str("ffi"),
+            '\u{FB04}' => o.push_str("ffl"),
+            '\u{FB05}' | '\u{FB06}' => o.push_str("st"),
+            _ => o.push(c),
+        }
+    }
+    o
+}
+
 /// `toLowerCase` (tam Unicode eşlemesi; Rust `to_lowercase` aynı SpecialCasing kurallarını uygular).
 pub fn lower(s: &str) -> String {
     s.to_lowercase()

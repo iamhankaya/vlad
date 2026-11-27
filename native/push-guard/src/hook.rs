@@ -169,7 +169,7 @@ fn catch_part(raw: &str, msg: &str) -> Outcome {
     }
     let mentions_push = re(&PUSH, r"⟨b⟩(?i-u:git)⟨b⟩(?s:.)*⟨b⟩(?i-u:push)⟨b⟩").is_match(raw); // F-vlad-405: TS /i
     let fire = mentions_push || {
-        words_hit(raw) && {
+        words_hit(&crate::text::fold(raw)) && { // K1: TS catch yolu ile aynı katlama
             if env_set {
                 true
             } else {
@@ -289,6 +289,9 @@ mod tests {
         let o = catch_part("{bozuk", "x");
         assert_eq!(o, Outcome::Allow);
         assert_eq!(catch_part(r#"{"tool_input":{"command":"git push origin main""#, "e"), Outcome::Block("push-guard hatası (fail-closed): e".into()));
+        // K1: catch yolu kelime denetimi APFS katlamalı (çalışan oturumu: VLAD_TASK_ID testte tanımlı değilse cwd'ye bağlı; doğrudan words_hit)
+        assert!(words_hit(&crate::text::fold("echo x > ~/.claude/ſettings.json")));
+        assert!(!words_hit("echo x > ~/.claude/ſettings.json"));
         // F-vlad-405: catch yolu da harf duyarsız (TS mentionsPush /i)
         assert_eq!(catch_part(r#"{"tool_input":{"command":"GIT PUSH --force origin main""#, "e"), Outcome::Block("push-guard hatası (fail-closed): e".into()));
     }

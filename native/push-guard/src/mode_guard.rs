@@ -1,11 +1,11 @@
 //! src/hooks/mode-guard.ts `checkWorkerMode` birebir (F-vlad-287). Hata (`Err`) = TS'te fırlatılan istisna:
 //! kanca bunu catch yoluna (fail-closed) götürür.
 
-use crate::json::ToolInput;
+use crate::json::{ToolInput, Val};
 use crate::jsre::{glob_hits, seg_matches};
 use crate::path::{basename, dirname, is_absolute, join, resolve};
 use crate::sys;
-use crate::text::js_re;
+use crate::text::{fold, js_re};
 use regex::Regex;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -40,10 +40,10 @@ fn secret_dir() -> R<String> {
     Ok(join(&[&sys::user_homedir()?, ".vlad-secret"]))
 }
 
-/// Yol karşılaştırması: `\` → `/`, sondaki `/` atılır, küçük harf.
+/// Yol karşılaştırması: `\` → `/`, sondaki `/` atılır, APFS katlaması (K1), küçük harf.
 fn norm(p: &str) -> String {
     let s = p.replace('\\', "/");
-    s.trim_end_matches('/').to_lowercase()
+    fold(s.trim_end_matches('/')).to_lowercase()
 }
 
 fn is_glob(s: &str) -> bool {
@@ -415,6 +415,14 @@ impl<'a> Guard<'a> {
     }
 
     pub fn check(&self, tool: &str, input: &ToolInput) -> R<Option<String>> {
+        // K1: araç girdisindeki her dize girişte katlanır (TS checkWorkerMode ile aynı)
+        let mut folded = input.clone();
+        for f in folded.fields.iter_mut() {
+            if let Val::Str(s) = f {
+                *s = fold(s);
+            }
+        }
+        let input = &folded;
         if tool == "Bash" {
             return self.check_bash(input.get("command").as_str().unwrap_or(""), 0);
         }
@@ -718,6 +726,54 @@ mod tests {
             set_secret_dir_for_tests(None);
             let _ = std::fs::remove_dir_all(&self.root);
         }
+    }
+
+    // K1 (T20261128-01): test/hooks/mode-guard.test.ts APFS ad eşdeğerleri
+    #[test]
+    fn apfs_fold_equivalents() {
+        let prot = ["~/.claude/ſettings.json".to_string(), "/Users/x/.claude/settings.local.jſon".into(), format!("{HOME}/vlad.config.local.jſon"), format!("{HOME}/vlad.conﬁg.json"), format!("{KB}/mode.jſon"), format!("{HOME}/diſt/hoo\u{212A}s/x.js"), "~/.claude/ſettingſ.json".into()];
+        for p in &prot {
+            for t in ["Edit", "Write", "MultiEdit", "NotebookEdit"] {
+                assert!(edit(t, p).is_some(), "{t} {p}");
+            }
+            for c in [format!("echo {{}} > {p}"), format!("tee {p}"), format!("cp x {p}")] {
+                assert!(bash(&c).is_some(), "{c:?}");
+            }
+        }
+        for c in ["cat ~/.vlad-ſecret/mode.key", "cat ~/.VLAD-ſECRET/mode.key"] {
+            assert!(has(&bash(c), "anahtar"), "{c:?}");
+        }
+        assert!(has(&check_worker_mode("Read", &input(&[("file_path", "~/.vlad-ſecret/mode.key")]), Some(KB), Some(HOME), Some("/work/wt")).unwrap(), "anahtar"));
+        assert!(has(&check_worker_mode("Grep", &input(&[("pattern", "x"), ("path", "~/.vlad-ſecret")]), Some(KB), Some(HOME), Some("/work/wt")).unwrap(), "anahtar"));
+        for c in ["ſed -i s/a/b/ ~/.claude/settings.json", "baſh -c 'echo x > ~/.claude/settings.json'", "inſtall x ~/.claude/settings.json", "aw\u{212A} 1 x | ſponge ~/.claude/settings.json", "aw\u{212A} -i inplace 1 ~/.claude/settings.json"] {
+            assert!(bash(c).is_some(), "{c:?}");
+        }
+        for c in ["echo ß ﬁ", "cat ~/.claude/ſettings.json", "ſed -n 1p ~/.claude/settings.json"] {
+            assert_eq!(bash(c), None, "{c:?}");
+        }
+        assert_eq!(edit("Write", "/work/wt/src/ſettings.json"), None);
+    }
+
+    // test/hooks/mode-guard-bypass.test.ts K1
+    #[test]
+    fn apfs_fold_glob_secret() {
+        let t = Tmp::new("fold");
+        let (cwd, root) = (t.cwd(), t.root.clone());
+        for c in [format!("cat {root}/.v*-ſecret/mode.key"), format!("cat {root}/.vlad-ſec*/mode.key"), format!("ls {root}/.vlad-{{ſecret,x}}"), format!("cat {root}/.vlad-ſecret/mode.\u{212A}ey")] {
+            assert!(t.run("Bash", &[("command", &c)], &cwd).is_some(), "{c:?}");
+        }
+        let ev = format!("{root}/straß");
+        std::fs::create_dir_all(format!("{ev}/.vlad-secret")).unwrap();
+        set_secret_dir_for_tests(Some(format!("{ev}/.vlad-secret")));
+        for c in [format!("cat {root}/strass/.v*/mode.key"), format!("cat {root}/straſſ/.vlad-*/mode.key")] {
+            assert!(t.run("Bash", &[("command", &c)], &cwd).is_some(), "{c:?}");
+        }
+        assert!(t.run("Read", &[("file_path", &format!("{root}/strass/.vlad-secret/mode.key"))], &cwd).is_some());
+    }
+
+    #[test]
+    fn fold_table() {
+        assert_eq!(crate::text::fold("ſ \u{212A} ß ẞ ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ ı İ x"), "s k ss ss ff fi fl ffi ffl st st ı İ x");
     }
 
     // test/hooks/mode-guard-read.test.ts

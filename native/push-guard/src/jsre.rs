@@ -183,6 +183,9 @@ pub fn glob_hits(base: &str, name: &str) -> bool {
 
 /// mode-guard.ts `segMatches(globSeg, name)`.
 pub fn seg_matches(glob_seg: &str, name: &str) -> bool {
+    // K1: iki taraf da APFS katlamalı (gizli dizin yolu ß içerebilir)
+    let (g, n) = (crate::text::fold(glob_seg), crate::text::fold(name));
+    let (glob_seg, name) = (g.as_str(), n.as_str());
     if !is_glob(glob_seg) {
         return lower(glob_seg) == lower(name);
     }
@@ -241,8 +244,8 @@ mod tests {
             ("[?]sers", "Users", false), ("[]]sers", "Users", false), ("[", "Users", true), ("Us]ers", "Us]ers", true),
             ("**rs", "Users", true), ("u?ers", "Users", true), ("[A-Z]sers", "users", true),
             ("[Z-a]sers", "_sers", true), ("[Z-a]sers", "zsers", true), ("[[]", "[", true), ("[\\]x", "x", false),
-            ("[^a]", "^", true), ("[!a]", "b", true), ("users", "USERS", true), ("[ſ]sers", "Ssers", false),
-            ("[k]", "\u{212a}", false), ("é*", "Érik", true), ("[é]rik", "Érik", true),
+            ("[^a]", "^", true), ("[!a]", "b", true), ("users", "USERS", true), ("[ſ]sers", "Ssers", true),
+            ("[k]", "\u{212a}", true), // K1: APFS katlaması (fold) — eskiden false (JS non-unicode /i) ("é*", "Érik", true), ("[é]rik", "Érik", true),
         ];
         for (a, b, want) in cases {
             assert_eq!(seg_matches(a, b), *want, "segMatches({a:?}, {b:?})");

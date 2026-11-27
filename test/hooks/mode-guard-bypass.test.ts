@@ -72,7 +72,7 @@ describe("(4) Bash: dot-dizin jokerleri ve ln -s hedefi gizli dizine açılamaz"
       expect(c(cmd), cmd).not.toBeNull();
   });
   it("K1 (T20261128-01): APFS ad eşdeğerli joker (ſ, K) ve ß içeren ev dizini gizli dizine açılamaz", () => {
-    for (const cmd of [`cat ${root}/.v*-ſecret/mode.key`, `cat ${root}/.vlad-ſec*/mode.key`, `ls ${root}/.vlad-{ſecret,x}`, `cat ${root}/.vlad-ſecret/mode.Key`]) expect(c(cmd), cmd).not.toBeNull();
+    for (const cmd of [`cat ${root}/.v*-ſecret/mode.key`, `cat ${root}/.vlad-ſec*/mode.key`, `ls ${root}/.vlad-{ſecret,x}`, `cat ${root}/.vlad-ſecret/mode.Key`]) expect(c(cmd), cmd).not.toBeNull();
     const ev = join(root, "straß"); mkdirSync(join(ev, ".vlad-secret"), { recursive: true }); setSecretDirForTests(join(ev, ".vlad-secret"));
     for (const cmd of [`cat ${root}/strass/.v*/mode.key`, `cat ${root}/straſſ/.vlad-*/mode.key`]) expect(c(cmd), cmd).not.toBeNull();
     expect(run("Read", { file_path: join(root, "strass", ".vlad-secret", "mode.key") })).not.toBeNull();
