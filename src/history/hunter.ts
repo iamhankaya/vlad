@@ -43,7 +43,7 @@ const expandHome = (p: string): string => (p === "~" ? homedir() : p.startsWith(
 /** hunter ikilisini bulur: önce PATH, sonra `hunterPath`. Çalıştırmaz (salt dosya sistemi). */
 export function locateHunter(o: LocateOptions): Located {
   const platform = o.platform ?? process.platform;
-  const names = platform === "win32" ? ["hunter.exe"] : ["hunter"];
+  const names = platform === "win32" ? ["hunter.exe", "hunter.cmd"] : ["hunter"];
   const pathVar = o.env.PATH ?? o.env.Path ?? "";
   for (const dir of pathVar.split(delimiter)) {
     if (!dir) continue;
