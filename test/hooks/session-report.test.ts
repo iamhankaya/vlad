@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import { PassThrough } from "node:stream";
 import { spawnGuarded } from "../support/spawn-vlad.js";
 import { resolve } from "node:path";
 import { afterAll, beforeAll } from "vitest";
-import { buildReport, loadProjects, main, readStdin } from "../../src/hooks/report.js";
+import { buildReport, defaultIndexTrigger, loadProjects, main, readStdin } from "../../src/hooks/report.js";
 import { makeHome } from "../helpers.js";
 import { isolatedEnv } from "../isolate-env.js";
 
@@ -166,6 +166,44 @@ describe("entry process", () => {
     });
     expect(r.status).toBe(0);
     expect(readdirSync(join(home, "kb", "logs"))).toHaveLength(1);
+  });
+});
+
+describe("hunter index tetiği (T20261127-21)", () => {
+  it("geçerli oturumda da, rapor yazılmayan oturumda da tetik bir kez çağrılır", async () => {
+    const tp = join(home, "t.jsonl");
+    writeFileSync(tp, two);
+    let n = 0;
+    await main(JSON.stringify({ session_id: "s1", transcript_path: tp, cwd: home }), undefined, { indexTrigger: () => { n++; } });
+    expect(n).toBe(1);
+    await main(JSON.stringify({ session_id: "s2", transcript_path: join(home, "yok.jsonl"), cwd: home }), undefined, { indexTrigger: () => { n++; } });
+    expect(n).toBe(2);
+  });
+  it("tetik atarsa hook yine 0 ile biter, inbox raporu yazılmış olur", async () => {
+    process.exitCode = undefined;
+    const tp = join(home, "t.jsonl");
+    writeFileSync(tp, two);
+    await main(JSON.stringify({ session_id: "s3", transcript_path: tp, cwd: home }), undefined, { indexTrigger: () => { throw new Error("patladı"); } });
+    expect(readdirSync(join(home, "kb", "inbox")).filter((f) => f.endsWith(".json"))).toHaveLength(1);
+    expect(process.exitCode).toBe(0);
+  });
+  it("varsayılan tetik: VLAD_NO_NATIVE=1 iken hunter'a bakmaz (testler gerçek dizini tazelemez)", () => {
+    let n = 0;
+    expect(defaultIndexTrigger({ env: { VLAD_NO_NATIVE: "1", PATH: "/usr/bin" }, spawn: () => { n++; return { pid: 1, unref() {}, on() {} } as any; } })).toBeNull();
+    expect(n).toBe(0);
+  });
+  it("varsayılan tetik: PATH'te yoksa config hunterPath'teki hunter'ı index --if-exists --quiet ile ayrık başlatır; hiç yoksa sessiz", () => {
+    if (process.platform === "win32") return;
+    const fakeBin = join(home, "bin", "hunter");
+    mkdirSync(join(home, "bin"));
+    writeFileSync(fakeBin, "#!/bin/sh\n");
+    chmodSync(fakeBin, 0o755);
+    const seen: { bin: string; args: string[]; detached?: boolean }[] = [];
+    const spawn = (bin: string, args: string[], o: any) => { seen.push({ bin, args, detached: o.detached }); return { pid: 7, unref() {}, on() {} } as any; };
+    expect(defaultIndexTrigger({ env: { PATH: join(home, "bos") }, spawn })).toBeNull(); // config'te hunterPath yok
+    writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ hunterPath: fakeBin }));
+    expect(defaultIndexTrigger({ env: { PATH: join(home, "bos") }, spawn })).toBe(7);
+    expect(seen).toEqual([{ bin: fakeBin, args: ["index", "--if-exists", "--quiet"], detached: true }]);
   });
 });
 

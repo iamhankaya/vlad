@@ -1,7 +1,7 @@
 // vlad setup parça/orkestrasyon testleri (T20261110-05). Her test geçici HOME/claudeDir/vladHome kullanır; gerçek ~/.claude ve kb'ye dokunulmaz.
 // Gerçek gh/launchctl/schtasks/git-clone yok: komut yürütücü sahte (setRunner).
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -611,5 +611,31 @@ describe("toolInvocation (win32 .cmd sarmalayıcı)", () => {
   });
   it("realRunner artık shell:true kullanmaz", () => {
     expect(readFileSync(join(import.meta.dirname, "..", "..", "src", "setup", "io.ts"), "utf8")).not.toMatch(/shell:\s*viaShell|shell:\s*true/);
+  });
+});
+
+describe("tools:hunter (T20261127-21)", () => {
+  const hunterItem = async () => (await runCheck(ctx(), { only: ["tools"] })).parts[0]!.items!.find((i) => i.id === "tools:hunter")!;
+  const withPath = async <T>(p: string, fn: () => Promise<T>): Promise<T> => {
+    const saved = process.env.PATH;
+    try { process.env.PATH = p; return await fn(); } finally { process.env.PATH = saved; }
+  };
+  it("hunter yoksa uyarı (eksik + warn), hata değil: --check çıkışı 0; ipucu cargo install", async () => {
+    const r = await withPath(join(root, "bos"), () => runCheck(ctx(), { only: ["tools"] }));
+    const it2 = r.parts[0]!.items!.find((i) => i.id === "tools:hunter")!;
+    expect(it2.status).toBe("eksik");
+    expect(it2.fix).toMatch(/cargo install --path/);
+    expect(r.parts[0]!.severity).not.toBe("error");
+    expect(r.exit).toBe(0);
+  });
+  it("PATH'te ya da config hunterPath'te varsa ok ve yolu gösterir", async () => {
+    if (process.platform === "win32") return;
+    const bin = join(root, "hb", "hunter");
+    w(bin, "#!/bin/sh\n"); chmodSync(bin, 0o755);
+    expect((await withPath(join(root, "hb"), hunterItem)).status).toBe("ok");
+    w(join(vladHome, "vlad.config.local.json"), JSON.stringify({ hunterPath: bin }));
+    const viaCfg = await withPath(join(root, "bos"), hunterItem);
+    expect(viaCfg.status).toBe("ok");
+    expect(viaCfg.evidence).toContain(bin);
   });
 });

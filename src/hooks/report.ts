@@ -1,7 +1,9 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { runGitRaw } from "../git/git.js";
-import { kbPaths, nowIso, readDoc, validate, writeFileAtomic, type InboxRecord } from "../kb/index.js";
+import { kbPaths, loadConfig, nowIso, readDoc, validate, writeFileAtomic, type InboxRecord } from "../kb/index.js";
+import { getVladHome } from "../kb/home.js";
+import { locateHunter, triggerHunterIndex } from "../history/hunter.js";
 import { inferProject } from "./project.js";
 import { parseTranscript } from "./transcript.js";
 
@@ -153,8 +155,26 @@ export function logError(err: unknown): void {
   }
 }
 
-/** SessionEnd hook entry. Never throws; always exit code 0. `stdinText` is for tests. */
-export async function main(stdinText?: string, stdin?: NodeJS.ReadableStream): Promise<void> {
+/**
+ * Starts `hunter index --if-exists --quiet` detached so `vlad history search` stays fresh (T20261127-21); never waits.
+ * Silent when hunter is missing (PATH, then config `hunterPath`), the index does not exist or its lock is held.
+ * VLAD_NO_NATIVE=1 (tests) never looks for hunter: a test session must not refresh the user's real index.
+ */
+export function defaultIndexTrigger(o: { env?: NodeJS.ProcessEnv; spawn?: Parameters<typeof triggerHunterIndex>[0]["spawn"] } = {}): number | null {
+  const env = o.env ?? process.env;
+  if (env.VLAD_NO_NATIVE === "1") return null;
+  return triggerHunterIndex({
+    locate: () => {
+      let hunterPath: string | undefined;
+      try { hunterPath = loadConfig().hunterPath; } catch { /* PATH only */ }
+      return locateHunter({ env, hunterPath, vladHome: getVladHome() }).bin;
+    },
+    spawn: o.spawn,
+  });
+}
+
+/** SessionEnd hook entry. Never throws; always exit code 0. `stdinText`/`opts` are for tests. */
+export async function main(stdinText?: string, stdin?: NodeJS.ReadableStream, opts: { indexTrigger?: () => unknown } = {}): Promise<void> {
   try {
     const raw = stdinText ?? (await readStdin(stdin));
     const input = JSON.parse(raw) as ReportInput;
@@ -185,6 +205,11 @@ export async function main(stdinText?: string, stdin?: NodeJS.ReadableStream): P
   } catch (err) {
     logError(err);
   } finally {
+    try {
+      (opts.indexTrigger ?? defaultIndexTrigger)();
+    } catch (err) {
+      logError(err);
+    }
     process.exitCode = 0;
   }
 }
