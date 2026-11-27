@@ -1,7 +1,7 @@
 //! src/hooks/mode-guard.ts `checkWorkerMode` birebir (F-vlad-287). Hata (`Err`) = TS'te fırlatılan istisna:
 //! kanca bunu catch yoluna (fail-closed) götürür.
 
-use crate::json::{ToolInput, Val};
+use crate::json::ToolInput;
 use crate::jsre::{glob_hits, seg_matches};
 use crate::path::{basename, dirname, is_absolute, join, resolve};
 use crate::sys;
@@ -248,7 +248,7 @@ impl<'a> Guard<'a> {
                 || norm(&self.real(&resolve(&[self.cwd(), &t])?, 0)?) == norm(&self.real(&join(&[self.kb.unwrap(), "mode.json"]), 0)?);
             return Ok(if hit { Some("mode.json") } else { None });
         }
-        if re(&CLAUDE, r"(?:^|/)\.(?i-u:claude)/").is_match(&t) && SETTINGS.iter().any(|s| glob_hits(&base, s)) {
+        if re(&CLAUDE, r"(?:^|/)\.(?i-u:claude)/").is_match(&fold(&t)) && SETTINGS.iter().any(|s| glob_hits(&base, s)) {
             return Ok(Some("settings"));
         }
         if let Some(home) = self.vlad_home.filter(|h| !h.is_empty()) {
@@ -273,7 +273,7 @@ impl<'a> Guard<'a> {
         static WS_SPLIT: OnceLock<Regex> = OnceLock::new();
         let shell_c = re(
             &SHELL_C,
-            r#"(?:^|[⟨WS⟩;&|(])(?i-u:ba|z|da)?(?i-u:sh)⟨s⟩+(?:-⟨S⟩+⟨s⟩+)*-[A-Za-z0-9_]*(?i-u:c)⟨s⟩+(?:"((?:[^"\\]|\\[^\n\r\x{2028}\x{2029}])*)"|'([^']*)')|⟨b⟩(?i-u:eval)⟨s⟩+(?:"((?:[^"\\]|\\[^\n\r\x{2028}\x{2029}])*)"|'([^']*)')"#,
+            r#"(?:^|[⟨WS⟩;&|(])(?i-u:ba|z|da)?(?:(?i-u:s)|ſ)(?i-u:h)⟨s⟩+(?:-⟨S⟩+⟨s⟩+)*-[A-Za-z0-9_]*(?i-u:c)⟨s⟩+(?:"((?:[^"\\]|\\[^\n\r\x{2028}\x{2029}])*)"|'([^']*)')|⟨b⟩(?i-u:eval)⟨s⟩+(?:"((?:[^"\\]|\\[^\n\r\x{2028}\x{2029}])*)"|'([^']*)')"#,
         );
         for m in shell_c.captures_iter(cmd) {
             let inner = m.get(1).or(m.get(2)).or(m.get(3)).or(m.get(4)).map(|x| x.as_str());
@@ -294,7 +294,8 @@ impl<'a> Guard<'a> {
             r"^(?:[A-Za-z0-9_.-]+=⟨S⟩*⟨s⟩+|(?i-u:env|command|exec|nohup|time|sudo|npx|tsx|node)⟨b⟩(?:⟨s⟩+-⟨S⟩+(?:⟨s⟩+[A-Za-z_]+)?)*⟨s⟩+)*(?:⟨S⟩*[/\\])?(?i-u:vlad|cli)(?:\.(?i-u:cmd|exe|js|mjs|ts|ps1))?(?:⟨s⟩+-⟨S⟩+)*⟨s⟩+(?i-u:mode)⟨b⟩⟨s⟩*(⟨S⟩*)",
         );
         for seg in segments(cmd) {
-            if let Some(mm) = mode_cmd.captures(&seg) {
+            // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
+            if let Some(mm) = mode_cmd.captures(&fold(&seg)) {
                 if mm[1].to_lowercase() != "status" {
                     return Ok(Some(format!("{}; yalnız `vlad mode status` serbest", WHY)));
                 }
@@ -305,7 +306,7 @@ impl<'a> Guard<'a> {
                 &WRITE_TOOL,
                 r"(?:^|⟨s⟩)(?i-u:tee|cp|mv|rm|truncate|dd|ln|install|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|jq|sponge|patch|awk|ed|curl|wget|rsync|set-content|out-file|remove-item|ni|sc)(?:⟨s⟩|$)|⟨b⟩(?i-u:sed)⟨b⟩[^|;&]*⟨s⟩(?:-[A-Za-z]*(?i-u:i)|--(?i-u:in-place))|⟨b⟩(?i-u:git)⟨s⟩+(?i-u:apply|checkout|restore)⟨b⟩",
             )
-            .is_match(&clean);
+            .is_match(&fold(&clean)); // K1: ſed, baſh, inſtall, aw\u{212A}
             let redirect_targets: Vec<&str> = re(&REDIR, r"(?:>>?)⟨s⟩*([^⟨WS⟩;&|<>()]+)").captures_iter(&clean).map(|c| c.get(1).unwrap().as_str()).collect();
             let ws_toks: Vec<&str> = re(&WS_SPLIT, r"⟨s⟩+").split(&clean).collect();
             for t in ws_toks.iter().chain(raw_toks.iter()) {
@@ -415,14 +416,8 @@ impl<'a> Guard<'a> {
     }
 
     pub fn check(&self, tool: &str, input: &ToolInput) -> R<Option<String>> {
-        // K1: araç girdisindeki her dize girişte katlanır (TS checkWorkerMode ile aynı)
-        let mut folded = input.clone();
-        for f in folded.fields.iter_mut() {
-            if let Val::Str(s) = f {
-                *s = fold(s);
-            }
-        }
-        let input = &folded;
+        // K1: girdi ham kalır (realpath/lstat/readlink ham adla: Linux/NTFS/harf duyarlı APFS'te ſx ≠ sx); APFS katlaması yalnız
+        // karşılaştırmalarda (norm, glob_hits, seg_matches, .claude / WRITE_TOOL / MODE_CMD / SHELL_C) — TS checkWorkerMode ile aynı
         if tool == "Bash" {
             return self.check_bash(input.get("command").as_str().unwrap_or(""), 0);
         }
@@ -769,6 +764,22 @@ mod tests {
             assert!(t.run("Bash", &[("command", &c)], &cwd).is_some(), "{c:?}");
         }
         assert!(t.run("Read", &[("file_path", &format!("{root}/strass/.vlad-secret/mode.key"))], &cwd).is_some());
+        // review K1-1: kabuk `?`/`[ß]` tek karakteri ß'ye açar
+        for c in [format!("cat {root}/stra?/.v*/mode.key"), format!("ls {root}/stra?/.v*"), format!("cat {root}/stra[ß]/.vlad-secre?/mode.key")] {
+            assert!(t.run("Bash", &[("command", &c)], &cwd).is_some(), "{c:?}");
+        }
+    }
+
+    // review K1-2: katlanmış adlı symlink ham adla çözülür (Linux/NTFS/harf duyarlı APFS'te ſx ≠ sx)
+    #[cfg(unix)]
+    #[test]
+    fn apfs_fold_raw_symlink() {
+        let t = Tmp::new("foldln");
+        let cwd = t.cwd();
+        std::os::unix::fs::symlink(t.secret(), format!("{cwd}/ſx")).unwrap();
+        for (tool, k) in [("Read", "file_path"), ("Write", "file_path")] {
+            assert!(t.run(tool, &[(k, "ſx/mode.key")], &cwd).is_some(), "{tool}");
+        }
     }
 
     #[test]

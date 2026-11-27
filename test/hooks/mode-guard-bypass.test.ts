@@ -76,6 +76,13 @@ describe("(4) Bash: dot-dizin jokerleri ve ln -s hedefi gizli dizine açılamaz"
     const ev = join(root, "straß"); mkdirSync(join(ev, ".vlad-secret"), { recursive: true }); setSecretDirForTests(join(ev, ".vlad-secret"));
     for (const cmd of [`cat ${root}/strass/.v*/mode.key`, `cat ${root}/straſſ/.vlad-*/mode.key`]) expect(c(cmd), cmd).not.toBeNull();
     expect(run("Read", { file_path: join(root, "strass", ".vlad-secret", "mode.key") })).not.toBeNull();
+    // review K1-1: kabuk `?`/`[ß]` tek karakteri ß'ye açar; katlama uzunluğu değiştirse de ham biçim eşleşmeli
+    for (const cmd of [`cat ${root}/stra?/.v*/mode.key`, `ls ${root}/stra?/.v*`, `cat ${root}/stra[ß]/.vlad-secre?/mode.key`]) expect(c(cmd), cmd).not.toBeNull();
+  });
+  it.skipIf(IS_WIN)("K1 review-2: katlanmış adlı symlink (ſx → gizli dizin) ham adla çözülür (Linux/NTFS/harf duyarlı APFS'te ſx ≠ sx)", () => {
+    symlinkSync(secret, join(cwd, "ſx"));
+    expect(run("Read", { file_path: "ſx/mode.key" })).not.toBeNull();
+    expect(run("Write", { file_path: "ſx/yeni" })).not.toBeNull();
   });
   it("ilgisiz joker ve normal komutlar serbest", () => {
     for (const cmd of [`ls ${root}/*.txt`, `cat ${root}/.gitignore`, `ls ${root}/wt/*`, "grep -r '.*' src", "ls ~/dev/*"]) expect(c(cmd), cmd).toBeNull();

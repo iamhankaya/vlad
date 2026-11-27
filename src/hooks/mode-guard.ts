@@ -40,7 +40,9 @@ function realUncached(abs: string, depth: number): string {
 }
 const GLOB = /[*?[]/;
 /** `?`, `*`, `[…]` joker içeren yol adı `name`'e açılabiliyor mu (mod?.json, m*e.json, mode.jso[n]); jokersiz ise tam eşitlik. */
-function globHits(base: string, name: string): boolean {
+/** K1: ham ya da APFS katlanmış biçim (ſ→s, ß→ss …) isabet ederse isabet; katlama uzunluğu değiştirdiği için ham biçim de denenir (`?` ß'ye açılır). */
+function globHits(base: string, name: string): boolean { return globHit1(base, name) || globHit1(fold(base), name); }
+function globHit1(base: string, name: string): boolean {
   if (!GLOB.test(base)) return base.toLowerCase() === name;
   if (base.startsWith("*")) return false; // shortcut: `*.json` / `*` (rm *.json) çalışanın kendi dosyalarıdır; baş harfi bilinen joker (mod?.json) denetlenir
   const re = base.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[[^\]]*\]/g, ".").replace(/\*/g, ".*").replace(/\?/g, ".");
@@ -63,7 +65,7 @@ function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = 
   if (!GLOB.test(t) && insideSecret(real(resolve(ctx.cwd ?? ".", t)))) return "anahtar"; // symlink s -> gizli dizin: yazma araçları da tam realpath ile
   const base = basename(t);
   if (globHits(base, "mode.json")) return anyDir || kbDir === null || GLOB.test(base) || norm(real(resolve(ctx.cwd ?? ".", t))) === norm(real(join(kbDir, "mode.json"))) ? "mode.json" : null; // kb dışındaki (jokersiz) mode.json projenin kendi dosyasıdır
-  if (/(^|\/)\.claude\//i.test(t) && SETTINGS.some((s) => globHits(base, s))) return "settings";
+  if (/(^|\/)\.claude\//i.test(fold(t)) && SETTINGS.some((s) => globHits(base, s))) return "settings";
   if (ctx.vladHome) {
     const abs = norm(real(isAbsolute(t) ? t : resolve(ctx.cwd ?? ".", t)));
     const home = norm(real(ctx.vladHome));
@@ -93,7 +95,7 @@ function segments(cmd: string): string[] {
 }
 /** Komut konumundaki `vlad mode <x>`: segment başı, öncesinde yalnız ortam atamaları/sarmalayıcılar (env, sudo, npx, node …) olabilir. */
 const MODE_CMD = /^(?:[\w.-]+=\S*\s+|(?:env|command|exec|nohup|time|sudo|npx|tsx|node)\b(?:\s+-\S+(?:\s+[A-Z_]+)?)*\s+)*(?:\S*[/\\])?(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/i;
-const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?sh\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
+const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?[sſ]h\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
 
 function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: number): string | null {
   for (const m of cmd.matchAll(SHELL_C)) { // `bash -c '…'` / `eval '…'` yükü ayrıca denetlenir
@@ -104,11 +106,11 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
   // Windows: segments() ters eğik çizgiyi kabuk kaçışı sayıp siler (C:\Users → C:Users); sürücü harfli joker yolları kaçmasın diye ham sözcükler de denetlenir (yalnız daha sıkı)
   const rawToks = cmd.split(/[\s;&|()]+/).filter(Boolean);
   for (const seg of segments(cmd)) {
-    const mm = MODE_CMD.exec(seg);
+    const mm = MODE_CMD.exec(fold(seg)); // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;
     const clean = seg.replace(/\d*>&\d+|&?\d*>>?\s*\/dev\/null/g, " "); // 2>&1, >/dev/null yazma değildir
     const toks = clean.split(SEP_TOKEN).filter(Boolean);
-    const tools = WRITE_TOOL.test(clean);
+    const tools = WRITE_TOOL.test(fold(clean)); // K1: ſed, baſh, inſtall, awK
     const redirectTargets = [...clean.matchAll(/>>?\s*([^\s;&|<>()]+)/g)].map((x) => x[1]!);
     for (const t of [...clean.split(/\s+/), ...rawToks]) if (globReachesSecret(t)) return `${WHY} (anahtar: joker gizli dizine açılabilir: ${t})`;
     const kbUnder = (t: string) => kbDir !== null && norm(expand(t)).startsWith(norm(kbDir) + "/");
@@ -168,8 +170,9 @@ const braceExpand = (s: string, n = 0): string[] => {
   }
   return out.slice(0, 64);
 };
-function segMatches(globSeg: string, name: string): boolean {
-  globSeg = fold(globSeg); name = fold(name); // K1: gizli dizin yolu (passwd ev dizini, ör. ß) da katlanır
+/** K1: ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı APFS katlanmış çift (gizli dizin yolu ß içerebilir) eşleşirse isabet. */
+function segMatches(globSeg: string, name: string): boolean { return segMatch1(globSeg, name) || segMatch1(fold(globSeg), fold(name)); }
+function segMatch1(globSeg: string, name: string): boolean {
   if (!/[*?[]/.test(globSeg)) return globSeg.toLowerCase() === name.toLowerCase();
   if (name.startsWith(".") && !globSeg.startsWith(".")) return false;
   const re = globSeg.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[!/g, "[^").replace(/\*+/g, ".*").replace(/\?/g, ".");
@@ -188,9 +191,9 @@ function globReachesSecret(tok: string): boolean {
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
 export function checkWorkerMode(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx = {}): string | null {
   memo = new Map();
-  // K1: araç girdisindeki her dize (komut, yol, desen) girişte katlanır; sonraki tüm ad/yol/komut adı eşleşmeleri katlanmış metni görür
-  const folded = input && typeof input === "object" ? Object.fromEntries(Object.entries(input).map(([k, v]) => [k, typeof v === "string" ? fold(v) : v])) : input;
-  try { return check(tool, folded, kbDir, ctx); } finally { memo = null; }
+  // K1: girdi ham kalır (realpath/lstat/readlink ham adla: Linux/NTFS/harf duyarlı APFS'te ſx ≠ sx); APFS katlaması yalnız
+  // karşılaştırmalarda: norm, globHits, segMatches, `.claude` / WRITE_TOOL / MODE_CMD / SHELL_C eşleşmeleri
+  try { return check(tool, input, kbDir, ctx); } finally { memo = null; }
 }
 function check(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx): string | null {
   if (tool === "Bash") return checkBash(typeof input?.command === "string" ? input.command : "", kbDir, ctx, 0);

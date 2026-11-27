@@ -35,5 +35,8 @@ describe.skipIf(!existsSync(hook))("push-guard hook (PreToolUse)", () => {
     expect(run(payload("GIT push --force origin main")).status).toBe(2);
     expect(run('{"tool_name":"Bash","tool_input":{"command":"echo x > ~/.claude/ſettings.json"').status).toBe(2); // K1: catch yolu kelime denetimi de APFS katlamalı
     expect(run(payload("echo x > ~/.claude/ſettings.json")).status).toBe(2);
+    // review K1-5: catch yolundaki ikinci FOLD tablosu mode-guard.ts fold ile aynı kalmalı (K, ﬁ, ﬆ, ſ kelime eşleşmesi)
+    for (const w of ["x/diſt/hooKs/a", "vlad.conﬁg.json", "diﬆ.hooks/a", "~/.vlad-ſecret/k", "mode.jſon"])
+      expect(run(`{"tool_name":"Bash","tool_input":{"command":"echo x > ${w}"`).status, w).toBe(2);
   });
 });

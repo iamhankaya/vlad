@@ -151,8 +151,12 @@ fn test(re: &str, name: &str) -> bool {
     }
 }
 
-/// mode-guard.ts `globHits(base, name)`.
+/// mode-guard.ts `globHits(base, name)`: K1 — ham ya da APFS katlanmış biçim isabet ederse isabet.
 pub fn glob_hits(base: &str, name: &str) -> bool {
+    glob_hit1(base, name) || glob_hit1(&crate::text::fold(base), name)
+}
+
+fn glob_hit1(base: &str, name: &str) -> bool {
     if !is_glob(base) {
         return lower(base) == name;
     }
@@ -181,11 +185,12 @@ pub fn glob_hits(base: &str, name: &str) -> bool {
     test(&r, name)
 }
 
-/// mode-guard.ts `segMatches(globSeg, name)`.
+/// mode-guard.ts `segMatches(globSeg, name)`: K1 — ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı katlanmış çift.
 pub fn seg_matches(glob_seg: &str, name: &str) -> bool {
-    // K1: iki taraf da APFS katlamalı (gizli dizin yolu ß içerebilir)
-    let (g, n) = (crate::text::fold(glob_seg), crate::text::fold(name));
-    let (glob_seg, name) = (g.as_str(), n.as_str());
+    seg_match1(glob_seg, name) || seg_match1(&crate::text::fold(glob_seg), &crate::text::fold(name))
+}
+
+fn seg_match1(glob_seg: &str, name: &str) -> bool {
     if !is_glob(glob_seg) {
         return lower(glob_seg) == lower(name);
     }
@@ -245,7 +250,8 @@ mod tests {
             ("**rs", "Users", true), ("u?ers", "Users", true), ("[A-Z]sers", "users", true),
             ("[Z-a]sers", "_sers", true), ("[Z-a]sers", "zsers", true), ("[[]", "[", true), ("[\\]x", "x", false),
             ("[^a]", "^", true), ("[!a]", "b", true), ("users", "USERS", true), ("[ſ]sers", "Ssers", true),
-            ("[k]", "\u{212a}", true), // K1: APFS katlaması (fold) — eskiden false (JS non-unicode /i) ("é*", "Érik", true), ("[é]rik", "Érik", true),
+            ("[k]", "\u{212a}", true), ("é*", "Érik", true), ("[é]rik", "Érik", true), // K1: ſ/K satırları APFS katlaması (eskiden false)
+            ("stra?", "straß", true), ("stra[ß]", "straß", true), ("stra??", "straß", true), ("?x", "\u{fb01}x", true),
         ];
         for (a, b, want) in cases {
             assert_eq!(seg_matches(a, b), *want, "segMatches({a:?}, {b:?})");
