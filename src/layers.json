@@ -17,6 +17,7 @@
     "digest": 1,
     "mode": 1,
     "hooks": 1,
+    "history": 1,
     "commands": 1,
     "machines": 2,
     "agent": 2,

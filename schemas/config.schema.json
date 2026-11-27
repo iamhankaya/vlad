@@ -10,6 +10,7 @@
     "staleAfterHours": { "type": "number", "exclusiveMinimum": 0 },
     "workerSilentMinutes": { "type": "number", "exclusiveMinimum": 0 },
     "minFreeDiskGb": { "type": "number", "exclusiveMinimum": 0 },
+    "hunterPath": { "type": "string", "minLength": 1 },
     "maxParallel": { "type": "integer", "minimum": 1 },
     "launcher": { "enum": ["auto", "wt", "powershell", "cloud", "tmux", "terminal"] },
     "worktreeDir": { "type": "string" },

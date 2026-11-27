@@ -75,6 +75,7 @@
         "src/findings/**",
         "src/ideas/**",
         "src/hooks/**",
+        "src/history/**",
         "src/inbox/**",
         "src/mode/**",
         "src/roles/**",

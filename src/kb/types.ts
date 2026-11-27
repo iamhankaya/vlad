@@ -186,6 +186,8 @@ export interface VladConfig {
   machines?: MachineDef[];
   brain?: string;
   consoles?: ConsoleDef[];
+  /** hunter ikilisi (`vlad history`, T20261127-21); PATH'te yoksa kullanılır. Mutlak, `~/` ya da VLAD_HOME'a göre göreli. */
+  hunterPath?: string;
   /** spc köprüsü (`vlad monitor`, çatı T20261119-18): ajan listesi; sır yok (belirteç Keychain'de). */
   monitor?: { servers: { id: string; agent_url: string; project: string; /** Haftalık kapasite işi: spc checkout'undaki capacity.yaml mutlak yolu (yoksa sunucu kapasite işinden atlanır). */ capacity_file?: string }[] };
   /** Kapanan deney (D-vlad-083) için eski config dosyalarını reddetmemek üzere şemada tutulur; hiçbir kod okumaz. */

@@ -934,6 +934,28 @@
   },
   {
    "path": [
+    "history",
+    "search"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "oturum kayıtları (maskeli de olsa) yalnız yerel VLAD oturumunda; hunter yalnız beyin Mac'te; konsoldan açmak ayrı karar"
+   }
+  },
+  {
+   "path": [
+    "history",
+    "show"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "oturum kayıtları (maskeli de olsa) yalnız yerel VLAD oturumunda; hunter yalnız beyin Mac'te; konsoldan açmak ayrı karar"
+   }
+  },
+  {
+   "path": [
     "worktree",
     "prune"
    ],

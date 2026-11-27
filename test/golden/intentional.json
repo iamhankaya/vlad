@@ -194,6 +194,16 @@
         "task (bare)",
         "task cleanup --help"
       ]
+    },
+    {
+      "id": "T20261127-21",
+      "keys": [
+        "(root) --help",
+        "history (bare)",
+        "history --help",
+        "history search --help",
+        "history show --help"
+      ]
     }
   ]
 }
