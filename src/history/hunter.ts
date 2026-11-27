@@ -1,6 +1,6 @@
 // `vlad history` ↔ hunter (oturum kayıtları arama motoru, ayrı Rust reposu) ince sarmalayıcısı (T20261127-21).
 // hunter'ın `--json` şeması v1 sözleşmesi hunter reposunun `docs/json-schema-v1.md`'sindedir; burada yalnız `schema`
-// sürümü denetlenir, alanlar aynen geçirilir. Bulma: PATH, yoksa vlad.config.json `hunterPath`.
+// sürümü denetlenir, alanlar aynen geçirilir. Bulma: PATH → vlad.config.json `hunterPath` → cargo kurulum dizini.
 import { spawn as nodeSpawn, spawnSync, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -13,8 +13,8 @@ const HUNTER_TIMEOUT_MS = 60_000;
 const SCHEMA = 1;
 
 export const INSTALL_HINTS = [
-  "kurulum: cargo install --path ~/dev/hunter (ikili ~/.cargo/bin/hunter)",
-  "PATH'te değilse vlad.config.json (ya da vlad.config.local.json) \"hunterPath\": \"<hunter ikilisinin mutlak yolu>\"",
+  "kurulum: cargo install --path ~/dev/hunter (ikili ~/.cargo/bin/hunter ya da $CARGO_HOME/bin/hunter; PATH'te olmasa da kendiliğinden bulunur)",
+  "başka yere kurulduysa vlad.config.json (ya da vlad.config.local.json) \"hunterPath\": \"<hunter ikilisinin mutlak yolu>\"",
 ];
 
 export { HistoryError };
@@ -38,12 +38,17 @@ function isExecutable(p: string, platform: NodeJS.Platform): boolean {
   }
 }
 
-const expandHome = (p: string): string => (p === "~" ? homedir() : p.startsWith("~/") ? join(homedir(), p.slice(2)) : p);
+const expandHome = (p: string, home: string): string => (p === "~" ? home : p.startsWith("~/") ? join(home, p.slice(2)) : p);
 
-/** hunter ikilisini bulur: önce PATH, sonra `hunterPath`. Çalıştırmaz (salt dosya sistemi). */
+/**
+ * hunter ikilisini bulur; sıra (plan T20261127-17): PATH → `hunterPath` → `$CARGO_HOME/bin` → `~/.cargo/bin`
+ * (`cargo install`'ın yeri; Claude Code hook ortamının PATH'inde çoğu zaman yok). Ev dizini `env.HOME`/`USERPROFILE`'dan
+ * okunur: env'de yoksa cargo varsayılanına bakılmaz (testler gerçek eve düşmesin). Çalıştırmaz (salt dosya sistemi).
+ */
 export function locateHunter(o: LocateOptions): Located {
   const platform = o.platform ?? process.platform;
   const names = platform === "win32" ? ["hunter.exe", "hunter.cmd"] : ["hunter"];
+  const envHome = (platform === "win32" ? o.env.USERPROFILE || o.env.HOME : o.env.HOME) || undefined;
   const pathVar = o.env.PATH ?? o.env.Path ?? "";
   for (const dir of pathVar.split(delimiter)) {
     if (!dir) continue;
@@ -54,10 +59,16 @@ export function locateHunter(o: LocateOptions): Located {
   }
   const tried = ["PATH: hunter yok"];
   if (o.hunterPath) {
-    const p = resolve(o.vladHome, expandHome(o.hunterPath));
+    const p = resolve(o.vladHome, expandHome(o.hunterPath, envHome ?? homedir()));
     if (isExecutable(p, platform)) return { bin: p, tried: [] };
     tried.push(`hunterPath: ${p} bulunamadı ya da çalıştırılamıyor`);
   } else tried.push("hunterPath: tanımsız (vlad.config.json)");
+  const cargoDirs = [o.env.CARGO_HOME ? join(o.env.CARGO_HOME, "bin") : null, envHome ? join(envHome, ".cargo", "bin") : null].filter((d): d is string => !!d);
+  for (const dir of cargoDirs) {
+    const p = join(dir, names[0]!); // cargo yalnız hunter / hunter.exe kurar
+    if (isExecutable(p, platform)) return { bin: p, tried: [] };
+    tried.push(`cargo: ${p} yok`);
+  }
   return { bin: null, tried };
 }
 

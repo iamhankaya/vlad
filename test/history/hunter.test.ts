@@ -52,6 +52,30 @@ describe("locateHunter", () => {
     expect(locateHunter({ env: { PATH: join(root, "bos") }, hunterPath: cfg, vladHome: root }).bin).toBe(cfg);
     expect(locateHunter({ env: { PATH: "" }, hunterPath: "cfg/hunter", vladHome: root }).bin).toBe(cfg);
   });
+  it("PATH'te ve hunterPath'te yoksa sahte HOME altındaki ~/.cargo/bin/hunter bulunur (hook ortamının PATH'inde ~/.cargo/bin yok)", () => {
+    const root = makeFixtureRoot();
+    const home = join(root, "home");
+    const cargo = exe(join(home, ".cargo", "bin"), "hunter");
+    expect(locateHunter({ env: { PATH: join(root, "bos"), HOME: home }, vladHome: root }).bin).toBe(cargo);
+    expect(locateHunter({ env: { PATH: join(root, "bos"), HOME: home }, hunterPath: join(root, "yok", "hunter"), vladHome: root }).bin).toBe(cargo);
+  });
+  it("CARGO_HOME tanımlıysa önce $CARGO_HOME/bin; hunterPath ikisinden de önce gelir", () => {
+    const root = makeFixtureRoot();
+    const home = join(root, "home");
+    exe(join(home, ".cargo", "bin"), "hunter");
+    const ch = exe(join(root, "cargo-home", "bin"), "hunter");
+    const env = { PATH: join(root, "bos"), HOME: home, CARGO_HOME: join(root, "cargo-home") };
+    expect(locateHunter({ env, vladHome: root }).bin).toBe(ch);
+    const cfg = exe(join(root, "cfg"), "hunter");
+    expect(locateHunter({ env, hunterPath: cfg, vladHome: root }).bin).toBe(cfg);
+  });
+  it("hiçbiri yoksa denenenler cargo yollarını da sayar", () => {
+    const root = makeFixtureRoot();
+    const r = locateHunter({ env: { PATH: join(root, "bos"), HOME: join(root, "home"), CARGO_HOME: join(root, "ch") }, vladHome: root });
+    expect(r.bin).toBeNull();
+    expect(r.tried.join("\n")).toContain(join(root, "ch", "bin", "hunter"));
+    expect(r.tried.join("\n")).toContain(join(root, "home", ".cargo", "bin", "hunter"));
+  });
   it("çalıştırılamaz dosya ve dizin sayılmaz; hiçbiri yoksa bin null ve denenenler listelenir", () => {
     if (process.platform === "win32") return; // yürütme biti POSIX'e özgü
     const root = makeFixtureRoot();

@@ -620,6 +620,18 @@ describe("tools:hunter (T20261127-21)", () => {
     const saved = process.env.PATH;
     try { process.env.PATH = p; return await fn(); } finally { process.env.PATH = saved; }
   };
+  beforeEach(() => { vi.stubEnv("CARGO_HOME", ""); }); // geliştiricinin CARGO_HOME'u gerçek hunter'ı göstermesin
+  it("PATH ve hunterPath yoksa kurulum HOME'undaki ~/.cargo/bin/hunter ok sayılır; ipucu cargo yolunu anar", async () => {
+    const miss = await withPath(join(root, "bos"), hunterItem);
+    expect(miss.status).toBe("eksik");
+    expect(miss.fix).toMatch(/~\/\.cargo\/bin.*kendiliğinden/);
+    if (process.platform === "win32") return;
+    const bin = join(home, ".cargo", "bin", "hunter");
+    w(bin, "#!/bin/sh\n"); chmodSync(bin, 0o755);
+    const hit = await withPath(join(root, "bos"), hunterItem);
+    expect(hit.status).toBe("ok");
+    expect(hit.evidence).toContain(bin);
+  });
   it("hunter yoksa uyarı (eksik + warn), hata değil: --check çıkışı 0; ipucu cargo install", async () => {
     const r = await withPath(join(root, "bos"), () => runCheck(ctx(), { only: ["tools"] }));
     const it2 = r.parts[0]!.items!.find((i) => i.id === "tools:hunter")!;

@@ -200,10 +200,22 @@ describe("hunter index tetiği (T20261127-21)", () => {
     chmodSync(fakeBin, 0o755);
     const seen: { bin: string; args: string[]; detached?: boolean }[] = [];
     const spawn = (bin: string, args: string[], o: any) => { seen.push({ bin, args, detached: o.detached }); return { pid: 7, unref() {}, on() {} } as any; };
-    expect(defaultIndexTrigger({ env: { PATH: join(home, "bos") }, spawn })).toBeNull(); // config'te hunterPath yok
+    const env = { PATH: join(home, "bos"), HOME: join(home, "fakehome") }; // sahte HOME: gerçek ~/.cargo/bin'e bakılmaz
+    expect(defaultIndexTrigger({ env, spawn })).toBeNull(); // config'te hunterPath yok, sahte HOME'da cargo yok
     writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ hunterPath: fakeBin }));
-    expect(defaultIndexTrigger({ env: { PATH: join(home, "bos") }, spawn })).toBe(7);
+    expect(defaultIndexTrigger({ env, spawn })).toBe(7);
     expect(seen).toEqual([{ bin: fakeBin, args: ["index", "--if-exists", "--quiet", "--threads", "2"], detached: true }]);
+  });
+  it("varsayılan tetik: hook PATH'inde ~/.cargo/bin olmasa da HOME altındaki cargo ikilisini bulur", () => {
+    if (process.platform === "win32") return;
+    const fh = join(home, "fakehome");
+    mkdirSync(join(fh, ".cargo", "bin"), { recursive: true });
+    const cargoBin = join(fh, ".cargo", "bin", "hunter");
+    writeFileSync(cargoBin, "#!/bin/sh\n");
+    chmodSync(cargoBin, 0o755);
+    const seen: string[] = [];
+    expect(defaultIndexTrigger({ env: { PATH: "/usr/bin:/bin", HOME: fh }, spawn: (b: string) => { seen.push(b); return { pid: 9, unref() {}, on() {} } as any; } })).toBe(9);
+    expect(seen).toEqual([cargoBin]);
   });
 });
 

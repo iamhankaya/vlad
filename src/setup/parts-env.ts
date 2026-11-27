@@ -20,10 +20,10 @@ function cmdVersion(id: string, cmd: string, args: string[], min: string | undef
 }
 
 /** hunter (eski oturum araması): PATH, sonra config `hunterPath`; çalıştırmaz (salt dosya sistemi). */
-function hunterEntry(vladHome: string): Entry {
+function hunterEntry(vladHome: string, home: string): Entry {
   let hunterPath: string | undefined;
   try { hunterPath = loadConfig(vladHome).hunterPath; } catch { /* config parçası ayrıca raporlar */ }
-  const { bin, tried } = locateHunter({ env: process.env, hunterPath, vladHome });
+  const { bin, tried } = locateHunter({ env: { ...process.env, HOME: home, USERPROFILE: home }, hunterPath, vladHome }); // cargo yolu kurulum HOME'una göre (test: geçici)
   return { required: "isteğe bağlı", item: bin ? item("tools:hunter", "ok", `hunter ${bin}`) : item("tools:hunter", "eksik", `hunter yok (vlad history için; ${tried.join("; ")})`, INSTALL_HINTS.join("; ")) };
 }
 
@@ -39,7 +39,7 @@ export const toolsPart: SetupPart = {
     entries.push({ required: "zorunlu", item: !help.ok && !help.stdout ? item("tools:claude", "eksik", "claude CLI bulunamadı", "Claude Code kur") : /--autocompact/.test(help.stdout + help.stderr) ? item("tools:claude", "ok", "claude CLI (--autocompact destekli)") : item("tools:claude", "eski", "claude CLI --autocompact bayrağını tanımıyor", "claude'u güncelle") });
     const hasGh = (process.env.PATH ?? "").split(delimiter).some((d) => d && ["gh", "gh.exe", "gh.cmd"].some((n) => existsSync(join(d, n)))); // --check gh'yi çalıştırmaz (salt okuma; giriş durumu apply'da sınanır)
     entries.push({ required: "bilgi", item: hasGh ? item("tools:gh", "ok", "gh kurulu (giriş durumu GitHub kb işlemlerinde sınanır)") : item("tools:gh", "eksik", "gh yok (yalnız pr/CI/GitHub kb için)", "gh kurup `gh auth login`") });
-    entries.push(hunterEntry(c.vladHome)); // T20261127-21: vlad history için; yoksa uyarı (isteğe bağlı → warn), hata değil
+    entries.push(hunterEntry(c.vladHome, c.home)); // T20261127-21: vlad history için; yoksa uyarı (isteğe bağlı → warn), hata değil
     const codex = run("codex", ["--version"]);
     entries.push({ required: "bilgi", item: codex.ok ? item("tools:codex", "ok", `codex ${codex.stdout.trim()}`) : item("tools:codex", "eksik", "codex yok (3. göz; Fable yedeği)", "isteğe bağlı") });
     return compose("tools", entries);
