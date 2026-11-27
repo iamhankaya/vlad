@@ -41,6 +41,8 @@ process.stdin.on("end", async () => {
     const asWorker = !!process.env.VLAD_TASK_ID || ownId(process.cwd()) !== null || WT_DIR.test(process.cwd());
     // okuma/yazma araçları: hata halinde koşulsuz ret (bozuk JSON'da tool_name regex ile okunur); sadece çalışan oturumunda
     if (asWorker && /"tool_name"\s*:\s*"(?:Read|Grep|Glob|NotebookEdit|Edit|Write|MultiEdit)"/.test(raw)) return block(`mod-koruma hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
-    if (mentionsPush(raw) || (/mode|settings|vlad\.config|dist.hooks|vlad-secret/i.test(raw) && (process.env.VLAD_TASK_ID || ownId(process.cwd()) || WT_DIR.test(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
+    // K1: APFS ad eşdeğerleri (mode-guard.ts fold ile aynı tablo; catch yolunda import yok) kelime denetiminden önce katlanır
+    const folded = raw.replace(/[ſKßẞﬀ-ﬆ]/g, (c) => ({ "ſ": "s", "K": "k", "ß": "ss", "ẞ": "ss", "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st" })[c]!);
+    if (mentionsPush(raw) || (/mode|settings|vlad\.config|dist.hooks|vlad-secret/i.test(folded) && (process.env.VLAD_TASK_ID || ownId(process.cwd()) || WT_DIR.test(process.cwd())))) block(`push-guard hatası (fail-closed): ${e instanceof Error ? e.message : String(e)}`);
   }
 });

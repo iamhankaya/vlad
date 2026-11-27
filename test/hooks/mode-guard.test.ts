@@ -62,6 +62,20 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
     expect(edit("Write", "/work/wt/vlad.config.local.json")).toBeNull();
     expect(bash(`cat ${p}`)).toBeNull();
   });
+  it("K1 (T20261128-01): APFS ad eşdeğerleri (ſ→s, K→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ) katlanır — korunan yol/anahtar/yazıcı komut adı aşılamaz", () => {
+    const prot = ["~/.claude/ſettings.json", "/Users/x/.claude/settings.local.jſon", `${HOME}/vlad.config.local.jſon`, `${HOME}/vlad.conﬁg.json`, `${KB}/mode.jſon`, `${HOME}/diſt/hooKs/x.js`, "~/.claude/ſettingſ.json"];
+    for (const p of prot) {
+      for (const t of ["Edit", "Write", "MultiEdit", "NotebookEdit"]) expect(edit(t, p), `${t} ${p}`).toMatch(/koruma|mod/);
+      for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+    }
+    for (const c of ["cat ~/.vlad-ſecret/mode.key", "cat ~/.VLAD-ſECRET/mode.key"]) expect(bash(c), c).toMatch(/anahtar/);
+    expect(checkWorkerMode("Read", { file_path: "~/.vlad-ſecret/mode.key" }, KB, ctx)).toMatch(/anahtar/);
+    expect(checkWorkerMode("Grep", { pattern: "x", path: "~/.vlad-ſecret" }, KB, ctx)).toMatch(/anahtar/);
+    // yazıcı komut adı PATH'te APFS ile çözülür: ſed = sed, baſh = bash, inſtall = install, awK = awk
+    for (const c of ["ſed -i s/a/b/ ~/.claude/settings.json", "baſh -c 'echo x > ~/.claude/settings.json'", "inſtall x ~/.claude/settings.json", "awK 1 x | ſponge ~/.claude/settings.json"]) expect(bash(c), c).toMatch(/koruma|mod/);
+    for (const c of ["echo ß ﬁ", "cat ~/.claude/ſettings.json", "ſed -n 1p ~/.claude/settings.json"]) expect(bash(c), c).toBeNull();
+    expect(edit("Write", "/work/wt/src/ſettings.json")).toBeNull();
+  });
   it("joker hedefler (mod?.json, m*e.json, mode.jso[n]) ve kb dizini altına yazma reddedilir; *.json / rm * çalışanın kendi dosyaları serbest", () => {
     for (const c of [`rm ${KB}/mod?.json`, `echo x > ${KB}/m*e.json`, `cp x ${KB}/mode.jso[n]`, `truncate -s0 ${KB}/mo?e.json`, `echo x > ${KB}/tasks/T1.md`, `tee ${KB}/findings/F1.md`, `mv a ${KB}/x`]) expect(bash(c), c).not.toBeNull();
     for (const c of ["rm *.json", "rm -rf build/*", `cat ${KB}/tasks/T1.md`, `grep x ${KB}/tasks/T1.md > /tmp/out.txt`]) expect(bash(c), c).toBeNull();

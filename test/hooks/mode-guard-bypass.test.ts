@@ -71,6 +71,12 @@ describe("(4) Bash: dot-dizin jokerleri ve ln -s hedefi gizli dizine açılamaz"
     for (const cmd of [`cat ${root}/.v*/mode.key`, `cat ${root}/.vlad-*/mode.key`, `cat ${root}/.*/mode.key`, `cat ${root}/.[v]lad-secret/mode.key`, `cat ${root}/.vlad-{secret,x}/mode.key`, `ln -s ${root}/.vlad-sec* x`, `cat ${root}/.?lad-secret/mode.key`])
       expect(c(cmd), cmd).not.toBeNull();
   });
+  it("K1 (T20261128-01): APFS ad eşdeğerli joker (ſ, K) ve ß içeren ev dizini gizli dizine açılamaz", () => {
+    for (const cmd of [`cat ${root}/.v*-ſecret/mode.key`, `cat ${root}/.vlad-ſec*/mode.key`, `ls ${root}/.vlad-{ſecret,x}`, `cat ${root}/.vlad-ſecret/mode.Key`]) expect(c(cmd), cmd).not.toBeNull();
+    const ev = join(root, "straß"); mkdirSync(join(ev, ".vlad-secret"), { recursive: true }); setSecretDirForTests(join(ev, ".vlad-secret"));
+    for (const cmd of [`cat ${root}/strass/.v*/mode.key`, `cat ${root}/straſſ/.vlad-*/mode.key`]) expect(c(cmd), cmd).not.toBeNull();
+    expect(run("Read", { file_path: join(root, "strass", ".vlad-secret", "mode.key") })).not.toBeNull();
+  });
   it("ilgisiz joker ve normal komutlar serbest", () => {
     for (const cmd of [`ls ${root}/*.txt`, `cat ${root}/.gitignore`, `ls ${root}/wt/*`, "grep -r '.*' src", "ls ~/dev/*"]) expect(c(cmd), cmd).toBeNull();
   });

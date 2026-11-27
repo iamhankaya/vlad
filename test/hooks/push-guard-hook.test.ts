@@ -33,5 +33,7 @@ describe.skipIf(!existsSync(hook))("push-guard hook (PreToolUse)", () => {
     expect(run("{bozuk").status).toBe(0);
     expect(run('{"tool_input":{"command":"GIT PUSH --force origin main"').status).toBe(2); // F-vlad-405: catch yolu da harf duyarsız
     expect(run(payload("GIT push --force origin main")).status).toBe(2);
+    expect(run('{"tool_name":"Bash","tool_input":{"command":"echo x > ~/.claude/ſettings.json"').status).toBe(2); // K1: catch yolu kelime denetimi de APFS katlamalı
+    expect(run(payload("echo x > ~/.claude/ſettings.json")).status).toBe(2);
   });
 });

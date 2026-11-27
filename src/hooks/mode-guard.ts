@@ -12,8 +12,15 @@ const WHY = `çalışan oturumu mod/koruma yazamaz: gece-bekçi modunu (kb mode.
 
 export interface GuardCtx { vladHome?: string | null; cwd?: string }
 
-// Platform ayrımı: yol karşılaştırması küçük harfe çevrilip `\` → `/` yapılır (macOS/Windows büyük-küçük harf duyarsız).
-const norm = (p: string): string => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+/**
+ * K1 (T20261128-01): APFS ad eşdeğerliği tam Unicode harf katlaması kullanır; ASCII ada açılan ASCII dışı karakterler (bu Mac'te
+ * tüm kod noktaları taranarak bulundu): ſ→s, K(U+212A)→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ. Yalnız bu eşlemeler uygulanır; ASCII büyük/küçük
+ * harf ayrımı mevcut `/i` ve toLowerCase kurallarında kalır. Rust: native/push-guard/src/text.rs `fold` (birebir tablo).
+ */
+const FOLD: Record<string, string> = { "ſ": "s", "K": "k", "ß": "ss", "ẞ": "ss", "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st" };
+export const fold = (s: string): string => s.replace(/[ſKßẞﬀ-ﬆ]/g, (c) => FOLD[c]!);
+// Platform ayrımı: yol karşılaştırması katlanıp küçük harfe çevrilir, `\` → `/` yapılır (macOS/Windows büyük-küçük harf duyarsız).
+const norm = (p: string): string => fold(p.replace(/\\/g, "/").replace(/\/+$/, "")).toLowerCase();
 /** Tam realpath; yok/dangling ise ata dizini çözer, son bileşen symlink ise hedefini izler (yazma araçları symlink üzerinden de gizli dizine inemez). */
 let memo: Map<string, string> | null = null; // yalnız tek checkWorkerMode çağrısı boyunca (dosya sistemi o sürede değişmiş sayılmaz)
 function real(p: string, depth = 0): string {
@@ -162,6 +169,7 @@ const braceExpand = (s: string, n = 0): string[] => {
   return out.slice(0, 64);
 };
 function segMatches(globSeg: string, name: string): boolean {
+  globSeg = fold(globSeg); name = fold(name); // K1: gizli dizin yolu (passwd ev dizini, ör. ß) da katlanır
   if (!/[*?[]/.test(globSeg)) return globSeg.toLowerCase() === name.toLowerCase();
   if (name.startsWith(".") && !globSeg.startsWith(".")) return false;
   const re = globSeg.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[!/g, "[^").replace(/\*+/g, ".*").replace(/\?/g, ".");
@@ -180,7 +188,9 @@ function globReachesSecret(tok: string): boolean {
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
 export function checkWorkerMode(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx = {}): string | null {
   memo = new Map();
-  try { return check(tool, input, kbDir, ctx); } finally { memo = null; }
+  // K1: araç girdisindeki her dize (komut, yol, desen) girişte katlanır; sonraki tüm ad/yol/komut adı eşleşmeleri katlanmış metni görür
+  const folded = input && typeof input === "object" ? Object.fromEntries(Object.entries(input).map(([k, v]) => [k, typeof v === "string" ? fold(v) : v])) : input;
+  try { return check(tool, folded, kbDir, ctx); } finally { memo = null; }
 }
 function check(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx): string | null {
   if (tool === "Bash") return checkBash(typeof input?.command === "string" ? input.command : "", kbDir, ctx, 0);
