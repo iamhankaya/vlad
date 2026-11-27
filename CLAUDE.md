@@ -13,7 +13,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
   2. `vlad decision list --project <slug> --json` — yalnız **geçerli** kararlar (`D-<proje>-NNN`); geçersizler `--all` ile, asla geçerli diye sunulmaz.
   3. `vlad kb search "<sorgu>" [--project] [--type] --json` — sınırlı arama (arşiv dahil).
   4. Gerekirse `vlad kb get <id> [--section ...]` ile yalnız ilgili kaydı oku. Kart, günlük ya da `decisions/<slug>.md`'yi baştan sona okuma.
-  5. "Daha önce nasıl çözmüştük" ve 1–4 yetmediyse: arka plan agent'ı ilgili görevin worktree transcript'ini tarar (ayrıntı: `docs/claude-ayrinti.md` §"Eski oturum kayıtları"); sır içeriği rapora/kb'ye geçmez.
+  5. "Daha önce nasıl çözmüştük" ve 1–4 yetmediyse: `vlad history search "<sorgu>" [--project] [--task] --json` (hunter), gerekirse `vlad history show <id> --json`; tam transcript taraması (arka plan agent'ı) son çare (ayrıntı: `docs/claude-ayrinti.md` §"Eski oturum kayıtları"); sır içeriği rapora/kb'ye geçmez.
   Cevapta kaynağı (özet tarihi, günlük tarihi, görev/karar ID'si) belirt.
 - **İş devri:** geliştirme işlerini ayrı, görünür `vlad-worker` session'larına devret, takip et, sonucu onaya sun. Kullanıcının projelerinde kod yazmayı kendin yapma; `/delegate` ile devret.
 - Kısa araştırma (repoda değişiklik yok): ayrı session açma; `--kind research` görevi (onaydan sonra), arka plan agent'ı, sonuç `vlad task report <id> --file <md>` ile görev dosyasına; sohbette kalmaz.
@@ -25,7 +25,7 @@ Ayrıntılar `docs/claude-ayrinti.md`'de (kurulmamış makine, gömülü kullan�
 - Makine okunur çıktı için `--json`. Hata olursa CLI stderr'e `{"error": ..., "details": [...]}` basar, 1 ile çıkar; hatayı kullanıcıya açıkça söyle, uydurma.
 - `kb/` yazan her akışın sonunda `vlad kb commit "<özet>" --push` çalıştır (onay: Yetki sınırları).
 - Görev durumunu yalnızca CLI ile değiştir (`vlad task set <id> <state>`; iptalde `--reason` zorunlu); geçersiz geçişi zorlama.
-- **Komutlar:** `vlad status [--summary]`, `vlad task list|new|launch|set|log|ask|report`, `vlad project status`, `vlad decision add|list|set`, `vlad finding add|list|set`, `vlad kb search|get|commit --push|lint|maintain`, `vlad digest pending`, `vlad mode night|watch|off`. Tamamı: `docs/commands.md`, `vlad <komut> --help`.
+- **Komutlar:** `vlad status [--summary]`, `vlad task list|new|launch|set|log|ask|report`, `vlad project status`, `vlad decision add|list|set`, `vlad finding add|list|set`, `vlad kb search|get|commit --push|lint|maintain`, `vlad history search|show`, `vlad digest pending`, `vlad mode night|watch|off`. Tamamı: `docs/commands.md`, `vlad <komut> --help`.
 - **Bulgular:** `F-<proje>-NNN` (önem kritik|yüksek|orta|düşük|bilgi; durum open|deferred|fixed|wontfix). `/digest` yalnız orta ve üstünü `finding add` ile kaydeder (D-genel-033). Kartın `## Çalışma notları` yalnız `vlad project note` ile yazılır (çıkarma: `docs/claude-ayrinti.md` §Bulgular).
 
 ## Yetki sınırları

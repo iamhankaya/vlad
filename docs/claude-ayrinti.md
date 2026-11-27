@@ -24,12 +24,18 @@ Tamamı: `docs/commands.md` (her komutun davranış notları ve işçi/konsol po
 
 ## Eski oturum kayıtları (hafıza olarak, D-vlad-091)
 
-"Daha önce nasıl çözmüştük" sorusunda `vlad kb search` (kart araması dahil, `--type project`) yetmezse 5. adım: **arka plan agent'ı** ilgili görevin çalışan transcript'ini tarar. Ana oturum transcript'i okumaz; agent'ın çıktısı taslaktır, kb'ye yazmaz.
+"Daha önce nasıl çözmüştük" sorusunda `vlad kb search` (kart araması dahil, `--type project`) yetmezse 5. adım, bu sırayla:
 
-- **Yol:** `<claude config>/projects/<kod>/*.jsonl`; `<claude config>` = `CLAUDE_CONFIG_DIR` ya da `~/.claude`. `<kod>` = görevin worktree yolunda her `[^A-Za-z0-9]` karakterinin `-` yapılmış hali (`claudeProjectDir`, `src/tasks/liveness.ts`; `vlad audit skills` aynı eşlemeyi kullanır). Worktree yolu görev dosyasının `worktree` alanındadır (`vlad kb get <id> --json`); `task cleanup` alanı boşaltmış olabilir, o zaman yol `<worktreeDir>/<id>`'den türetilir. Yol yoksa transcript yoktur; bunu söyle, tahmin yürütme.
+1. **`vlad history search "<sorgu>" [--project <slug>] [--task <id>] [--since/--until YYYY-MM-DD] [--limit <n>] --json`**: hunter dizininde (tüm `~/.claude/projects` oturumları; enjekte metin temizlenmiş, sırlar `[GİZLİ:<tür>]` maskeli) sıralı arama. Sonuç `id`'si `<dosya>:<satır>`; `snippet` çoğu zaman yeter. `(geçici)` klasör oturumları yalnız `--all` ile.
+2. **`vlad history show <id> [--context <n>] --json`**: yalnız snippet yetmediğinde, o sonucun çevresindeki mesajlar. Dosyayı baştan sona okuma.
+3. **Son çare, tam transcript taraması:** 1–2 sonuç vermediyse ya da hunter yoksa (aşağıda) arka plan agent'ı ilgili görevin çalışan transcript'ini tarar. Ana oturum transcript'i okumaz; agent'ın çıktısı taslaktır, kb'ye yazmaz.
+
+- **hunter yok / dizin yok:** `vlad history` çıkış 1 ve `{"error", "details"}` verir (kurulum ipucu: `cargo install --path ~/dev/hunter`, PATH'te değilse `vlad.config.json` `hunterPath`; dizin yoksa `hunter index`). Sessizce transcript taramasına geçme: hatayı kullanıcıya söyle, kurulum/dizinleme öner; tarama yine son çaredir. `vlad setup --check` hunter yoksa uyarır (hata değil).
+- **Tazelik:** dizin SessionEnd hook'unda arka planda tazelenir (`hunter index --if-exists`; dizin yoksa ya da kilit varsa sessiz, oturum kapanışını bekletmez). Dizin 24 saatten eskiyse `history search` `warnings`'e uyarı ekler: son oturumlar eksik olabilir, cevapta bunu belirt.
+- **Yol (tam tarama):** `<claude config>/projects/<kod>/*.jsonl`; `<claude config>` = `CLAUDE_CONFIG_DIR` ya da `~/.claude`. `<kod>` = görevin worktree yolunda her `[^A-Za-z0-9]` karakterinin `-` yapılmış hali (`claudeProjectDir`, `src/tasks/liveness.ts`; `vlad audit skills` aynı eşlemeyi kullanır). Worktree yolu görev dosyasının `worktree` alanındadır (`vlad kb get <id> --json`); `task cleanup` alanı boşaltmış olabilir, o zaman yol `<worktreeDir>/<id>`'den türetilir. Yol yoksa transcript yoktur; bunu söyle, tahmin yürütme.
 - **Agent'a ver:** soru, görev ID'si, transcript dizini; "yalnız ilgili kararı/çözümü ve kanıtını (dosya yolu, komut, tarih) özetle, alıntı en fazla birkaç satır".
-- **Sır:** token, anahtar, parola, `.env` içeriği, kişisel veri rapora, cevaba ve kb'ye geçmez; gerekirse "sır içeriyor, atlandı" yaz.
-- **Cevapta** kaynağı belirt: görev ID'si + transcript tarihi. Transcript kalıcı değildir (silinmiş olabilir); kalıcı değer çıkarsa `/digest` ile karar/not olarak kb'ye işlenir.
+- **Sır:** token, anahtar, parola, `.env` içeriği, kişisel veri rapora, cevaba ve kb'ye geçmez; gerekirse "sır içeriyor, atlandı" yaz. hunter maskesi kural yerine geçmez: maskeden kaçmış görünen değeri de aktarma.
+- **Cevapta** kaynağı belirt: görev ID'si + transcript tarihi (`history` sonucunda `task`, `ts`, `id`). Transcript kalıcı değildir (silinmiş olabilir); kalıcı değer çıkarsa `/digest` ile karar/not olarak kb'ye işlenir.
 
 ## Bulgular ve çalışma notları
 
