@@ -122,13 +122,9 @@ fn try_part(raw: &str) -> Result<Outcome, String> {
     if !worker {
         return Ok(Outcome::Allow); // ana VLAD / kullanıcı oturumu
     }
-    let (home, kb) = match sys::vlad_home() {
-        Ok(h) => {
-            let kb = resolve_kb_dir(&h).ok();
-            (Some(h), kb)
-        }
-        Err(_) => (None, None),
-    };
+    // TS getVladHome() hiç başarısız olmaz; ikili konumu çözülemezse korumaları sessizce atlamak yerine catch yolu (M3)
+    let h = sys::vlad_home()?;
+    let (home, kb) = (Some(h.clone()), resolve_kb_dir(&h).ok());
     let input = j.tool_input.clone().unwrap_or_default();
     if let Some(why) = check_worker_mode(tool, &input, kb.as_deref(), home.as_deref(), Some(&cwd))? {
         return Ok(Outcome::Block(why));
@@ -193,14 +189,27 @@ fn words_hit(raw: &str) -> bool {
     re(&W, r"(?i-u:mode|settings|vlad\.config|vlad-secret)|(?i-u:dist)[^\n\r\x{2028}\x{2029}\x{10000}-\x{10FFFF}](?i-u:hooks)").is_match(raw)
 }
 
+/// Kanca işinin yığını: `real` en çok MAX_REAL_FRAMES düzey iner; ana iş parçacığının (8 MB, test: 2 MB) yetip
+/// yetmemesine bırakmayız. Yığın taşması süreci yakalanamaz biçimde düşürür (çıkış 134 = Claude Code'da fail-open).
+const STACK: usize = 64 << 20;
+
 pub fn run(raw: &str) -> Outcome {
-    // panik de TS'teki istisna gibi catch yoluna gider (fail-closed korunur)
-    let r = std::panic::catch_unwind(|| try_part(raw)).unwrap_or_else(|p| {
-        Err(p.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| p.downcast_ref::<String>().cloned()).unwrap_or_else(|| "panic".into()))
+    let owned = raw.to_string();
+    let worker = std::thread::Builder::new().stack_size(STACK).spawn(move || {
+        // panik de TS'teki istisna gibi catch yoluna gider (fail-closed korunur)
+        let r = std::panic::catch_unwind(|| try_part(&owned)).unwrap_or_else(|p| {
+            Err(p.downcast_ref::<&str>().map(|s| s.to_string()).or_else(|| p.downcast_ref::<String>().cloned()).unwrap_or_else(|| "panic".into()))
+        });
+        match r {
+            Ok(o) => o,
+            Err(e) => catch_part(&owned, &e),
+        }
     });
-    match r {
-        Ok(o) => o,
-        Err(e) => catch_part(raw, &e),
+    match worker.map(|h| h.join()) {
+        Ok(Ok(o)) => o,
+        // iş parçacığı açılamadı ya da catch yolu da paniğe düştü: yine catch yolu (aynı iş parçacığında, sığ)
+        Ok(Err(_)) => catch_part(raw, "panic"),
+        Err(e) => catch_part(raw, &e.to_string()),
     }
 }
 
@@ -221,6 +230,17 @@ mod tests {
         let real = std::fs::canonicalize(&base).unwrap();
         assert!(real.starts_with(std::fs::canonicalize(std::env::temp_dir()).unwrap()));
         std::fs::remove_dir_all(&real).unwrap();
+    }
+
+    #[test]
+    fn deep_path_end_to_end_blocks() {
+        // C1: derin yönlendirme hedefi + push; TS RangeError → catch → ret. Varsayılan (2 MB) test yığınında bile run() düşmemeli.
+        std::env::set_var("VLAD_TASK_ID", "T20261127-99");
+        let raw = format!(r#"{{"tool_name":"Bash","tool_input":{{"command":"ls > /pg-rs-yok{}; git push -f origin main"}},"cwd":"/"}}"#, "/a".repeat(20000));
+        let o = run(&raw);
+        assert!(matches!(&o, Outcome::Block(m) if m.starts_with("push-guard hatası (fail-closed): ")), "{o:?}");
+        let raw = format!(r#"{{"tool_name":"Read","tool_input":{{"file_path":"/pg-rs-yok{}"}},"cwd":"/"}}"#, "/a".repeat(20000));
+        assert!(matches!(run(&raw), Outcome::Block(m) if m.starts_with("mod-koruma hatası (fail-closed): ")));
     }
 
     #[test]

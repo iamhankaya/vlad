@@ -7,7 +7,7 @@ use crate::path::{basename, dirname, is_absolute, join, resolve};
 use crate::sys;
 use crate::text::js_re;
 use regex::Regex;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -128,11 +128,18 @@ pub struct Guard<'a> {
     cwd: Option<&'a str>,
     memo: RefCell<HashMap<String, String>>,
     sd: RefCell<Option<String>>,
+    /// açık `real` özyineleme derinliği (C1: yığın taşması süreci düşürür, çıkış 134 = fail-open)
+    frames: Cell<u32>,
 }
+
+/// TS'te V8 ~2700 ata düzeyinde `RangeError: Maximum call stack size exceeded` fırlatır ve kanca fail-closed reddeder.
+/// Rust'ta sınırsız özyineleme yığını taşırıp süreci yakalanamaz biçimde düşürürdü; bu yüzden V8 sınırının altında aynı
+/// hatayı bilerek üretiriz (Err → catch yolu). 2000–~2700 bandında Rust TS'ten katıdır (reddeder), asla gevşek değildir.
+pub const MAX_REAL_FRAMES: u32 = 2000;
 
 impl<'a> Guard<'a> {
     pub fn new(kb: Option<&'a str>, vlad_home: Option<&'a str>, cwd: Option<&'a str>) -> Self {
-        Guard { kb, vlad_home, cwd, memo: RefCell::new(HashMap::new()), sd: RefCell::new(None) }
+        Guard { kb, vlad_home, cwd, memo: RefCell::new(HashMap::new()), sd: RefCell::new(None), frames: Cell::new(0) }
     }
 
     fn cwd(&self) -> &str {
@@ -150,6 +157,17 @@ impl<'a> Guard<'a> {
 
     /// Tam realpath; yok/dangling ise ata dizini çözer, son bileşen symlink ise hedefini izler.
     fn real(&self, p: &str, depth: u32) -> R<String> {
+        let n = self.frames.get();
+        if n >= MAX_REAL_FRAMES {
+            return Err("Maximum call stack size exceeded".into());
+        }
+        self.frames.set(n + 1);
+        let r = self.real_frame(p, depth);
+        self.frames.set(n);
+        r
+    }
+
+    fn real_frame(&self, p: &str, depth: u32) -> R<String> {
         let abs = resolve(&[p])?;
         if depth == 0 {
             if let Some(h) = self.memo.borrow().get(&abs) {
@@ -519,6 +537,27 @@ mod tests {
         }
     }
 
+    // C1 (review): çok derin yok-yol TS'te RangeError (fail-closed); Rust yığını taşırmamalı, aynı hatayı üretmeli
+    #[test]
+    fn deep_path_fails_closed() {
+        // hook::run gibi geniş yığınlı iş parçacığında
+        std::thread::Builder::new().stack_size(64 << 20).spawn(deep_path_body).unwrap().join().unwrap();
+    }
+    fn deep_path_body() {
+        let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap();
+        let deep = |n: usize| format!("{}/pg-rs-yok{}", tmp.display(), "/a".repeat(n));
+        let r = |t: &str, k: &str, n: usize| check_worker_mode(t, &input(&[(k, &deep(n))]), Some(KB), Some(HOME), Some("/work/wt"));
+        assert_eq!(r("Read", "file_path", 1000).unwrap(), None);
+        assert_eq!(r("Write", "file_path", 1000).unwrap(), None);
+        for n in [3000, 20000, 60000] {
+            assert!(r("Read", "file_path", n).is_err(), "Read {n}");
+            assert!(r("Write", "file_path", n).is_err(), "Write {n}");
+            assert!(r("Bash", "command", n).is_err() || r("Bash", "command", n).is_ok(), "Bash {n} düşmemeli");
+        }
+        let cmd = format!("ls > {}; vlad task log x", deep(20000));
+        assert!(check_worker_mode("Bash", &input(&[("command", &cmd)]), Some(KB), Some(HOME), Some("/work/wt")).is_err());
+    }
+
     #[test]
     fn file_tools() {
         for t in ["Edit", "Write", "MultiEdit", "NotebookEdit"] {
@@ -594,7 +633,7 @@ mod tests {
         assert_eq!(brace_expand("a{b,c}d", 0), vec!["abd", "acd"]);
         assert_eq!(brace_expand("{a}{b,c}", 0), vec!["{a}{b,c}"]);
         assert_eq!(brace_expand("{a,b}{c,d}", 0), vec!["ac", "ad", "bc", "bd"]);
-        assert_eq!(brace_expand("{a,{b,c}}", 0), vec!["{a,b}", "{a,c}"].iter().flat_map(|s| brace_expand(s, 1)).collect::<Vec<_>>());
+        assert_eq!(brace_expand("{a,{b,c}}", 0), ["{a,b}", "{a,c}"].iter().flat_map(|s| brace_expand(s, 1)).collect::<Vec<_>>());
         let many = "{1,2,3,4,5,6,7,8,9}{1,2,3,4,5,6,7,8,9}";
         assert_eq!(brace_expand(many, 0).len(), 64);
     }

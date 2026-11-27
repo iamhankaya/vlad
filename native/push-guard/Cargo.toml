@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 regex = "1"
 # passwd ev dizini (Node os.userInfo().homedir) için güvenli sarmalayıcı; crate'te `unsafe` yok
-nix = { version = "0.32", default-features = false, features = ["user"] }
+nix = { version = "0.32", default-features = false, features = ["user", "fs"] }
 
 [profile.release]
 opt-level = 3

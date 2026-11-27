@@ -80,6 +80,7 @@ pub fn git_symbolic_ref_timeout(cwd: &str, timeout: Duration) -> Option<String> 
     if cwd.is_empty() || cwd.contains('\0') {
         return None;
     }
+    let start = std::time::Instant::now();
     let mut child = Command::new("git")
         .args(["symbolic-ref", "--short", "HEAD"])
         .current_dir(cwd)
@@ -95,14 +96,22 @@ pub fn git_symbolic_ref_timeout(cwd: &str, timeout: Duration) -> Option<String> 
         let r = out.read_to_end(&mut buf).map(|_| buf);
         let _ = tx.send(r);
     });
-    match rx.recv_timeout(timeout) {
+    match rx.recv_timeout(timeout.saturating_sub(start.elapsed())) {
         Ok(Ok(buf)) => {
-            // stdout kapandı: süreç sonlanıyor; çıkış durumunu kalan sürede bekle
-            let status = child.wait().ok()?;
-            if !status.success() {
-                return None;
+            // stdout kapandı; çıkış durumunu yalnız kalan sürede bekle (M2: stdout'u kapatıp çıkmayan süreç)
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        return status.success().then(|| String::from_utf8_lossy(&buf).into_owned());
+                    }
+                    Ok(None) if start.elapsed() < timeout => std::thread::sleep(Duration::from_micros(200)),
+                    _ => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        return None;
+                    }
+                }
             }
-            Some(String::from_utf8_lossy(&buf).into_owned())
         }
         _ => {
             let _ = child.kill();
@@ -171,8 +180,15 @@ fn head_cannot_be_vlad_with(cwd: &str, git_env: bool) -> bool {
 
 fn gitdir_head_cannot_be_vlad(gitdir: &std::path::Path) -> bool {
     static PAT: OnceLock<regex::Regex> = OnceLock::new();
-    let valid = gitdir.join("commondir").is_file() || (gitdir.join("objects").is_dir() && gitdir.join("refs").is_dir());
-    if !valid || gitdir.join("reftable").exists() {
+    // git `is_git_directory`: geçersiz .git dizininde keşif üst dizine sürer (I1, review). Bağlı worktree (commondir)
+    // ve erişilemeyen objects/refs durumunu taklit etmek yerine git'e bırak: hızlı yol yalnız sade, erişilebilir repoda.
+    use nix::unistd::{access, AccessFlags};
+    let usable = |d: std::path::PathBuf| d.is_dir() && access(&d, AccessFlags::X_OK).is_ok();
+    let valid = gitdir.symlink_metadata().is_ok_and(|m| m.is_dir())
+        && gitdir.join("commondir").symlink_metadata().is_err()
+        && usable(gitdir.join("objects"))
+        && usable(gitdir.join("refs"));
+    if !valid || gitdir.join("reftable").symlink_metadata().is_ok() {
         return false;
     }
     let head = gitdir.join("HEAD");
@@ -268,6 +284,16 @@ mod tests {
         sh_git(&main, &["worktree", "add", "-q", "-b", "other", base.join("wt-other").to_str().unwrap()]);
         std::fs::create_dir_all(main.join("sub/deep")).unwrap();
         std::fs::create_dir_all(base.join("none")).unwrap();
+        // iç .git: HEAD main'i gösterir ama git'e göre geçerli repo değil (commondir yok yere / objects yok)
+        for (sub, common) in [("bad1", true), ("bad2", false)] {
+            let g = vlad.join(sub).join(".git");
+            std::fs::create_dir_all(g.join("refs")).unwrap();
+            std::fs::write(g.join("HEAD"), "ref: refs/heads/main\n").unwrap();
+            if common {
+                std::fs::write(g.join("commondir"), "/nonexistent-pg\n").unwrap();
+                std::fs::create_dir_all(g.join("objects")).unwrap();
+            }
+        }
         let s = |p: &std::path::Path| p.to_str().unwrap().to_string();
         let cases: Vec<(String, bool)> = vec![
             (s(&main), true),
@@ -275,7 +301,9 @@ mod tests {
             (s(&vlad), false),
             (s(&det), true),
             (s(&base.join("wt-vlad")), false),
-            (s(&base.join("wt-other")), true),
+            (s(&base.join("wt-other")), false), // bağlı worktree (commondir): git'e bırakılır
+            (s(&vlad.join("bad1")), false),     // I1: geçersiz iç .git, git üst repoya (vlad/T…) yürür
+            (s(&vlad.join("bad2")), false),
             (s(&main.join(".git")), false), // gitdir'in içi: git'e bırak
             (s(&base.join("yok")), false),
             ("".into(), true),
@@ -287,6 +315,9 @@ mod tests {
                 let b = git_symbolic_ref(cwd).unwrap_or_default();
                 assert!(!b.trim().starts_with("vlad/T"), "{cwd}: {b}");
             }
+        }
+        for sub in ["bad1", "bad2"] {
+            assert_eq!(git_symbolic_ref(&s(&vlad.join(sub))).unwrap_or_default().trim(), "vlad/T20261127-01", "{sub}");
         }
         assert!(!head_cannot_be_vlad_with(&s(&main), true)); // GIT_* ortamı: her zaman git
         std::fs::write(det.join(".git/HEAD"), "ref: refs/remotes/vlad/T20261127-03/HEAD\n").unwrap();

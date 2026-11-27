@@ -13,6 +13,8 @@ mod text;
 use std::io::{Read, Write};
 
 fn main() {
+    // panik catch yoluna gider (hook::run); varsayılan kanca stderr'e "thread 'main' panicked" basmasın (M1)
+    std::panic::set_hook(Box::new(|_| {}));
     let mut buf = Vec::new();
     let _ = std::io::stdin().read_to_end(&mut buf);
     // Node `setEncoding("utf8")`: geçersiz bayt dizileri U+FFFD

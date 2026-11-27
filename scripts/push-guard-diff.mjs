@@ -32,7 +32,9 @@ const pick = (a) => a[Math.floor(rnd() * a.length)];
 
 // --- geçici düzen ---
 const base = realpathSync(mkdtempSync(join(tmpdir(), "pg-diff-")));
-if (!base.startsWith(realpathSync(tmpdir()))) throw new Error(`geçici dizin dışı: ${base}`);
+if (!base.startsWith(realpathSync(tmpdir()) + "/")) throw new Error(`geçici dizin dışı: ${base}`);
+// istisnada da temizle (M5); yalnız doğrulanmış geçici kök silinir
+process.on("exit", () => { try { if (realpathSync(base).startsWith(realpathSync(tmpdir()) + "/")) rmSync(base, { recursive: true, force: true }); } catch {} });
 const P = (...x) => join(base, ...x);
 const git = (cwd, ...a) => spawnSync("git", a, { cwd, stdio: "ignore", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" } });
 function repo(dir, branch, detached = false) {
@@ -54,6 +56,10 @@ const LINKED_OTHER = P("linked-other"); git(PLAIN, "worktree", "add", "-q", "-b"
 const REMOTE_HEAD = P("remote-head"); repo(REMOTE_HEAD, "main"); writeFileSync(join(REMOTE_HEAD, ".git", "HEAD"), "ref: refs/remotes/vlad/T20261127-93/HEAD\n");
 const TAG_HEAD = P("tag-head"); repo(TAG_HEAD, "main"); writeFileSync(join(TAG_HEAD, ".git", "HEAD"), "ref: refs/tags/vlad/T20261127-92\n");
 const REFTABLE = P("reftable"); mkdirSync(REFTABLE); git(REFTABLE, "init", "-q", "--ref-format=reftable", "-b", "vlad/T20261127-91");
+// I1 (review): geçersiz iç .git → git keşfi üst repoya (vlad/T…) yürür
+const BAD_INNER = join(BRANCHED, "bad-inner"); mkdirSync(join(BAD_INNER, ".git", "refs"), { recursive: true }); writeFileSync(join(BAD_INNER, ".git", "HEAD"), "ref: refs/heads/main\n");
+const BAD_COMMON = join(BRANCHED, "bad-common"); mkdirSync(join(BAD_COMMON, ".git", "objects"), { recursive: true }); mkdirSync(join(BAD_COMMON, ".git", "refs"));
+writeFileSync(join(BAD_COMMON, ".git", "HEAD"), "ref: refs/heads/main\n"); writeFileSync(join(BAD_COMMON, ".git", "commondir"), "/nonexistent-pg\n");
 const BAD_GITFILE = P("bad-gitfile"); mkdirSync(BAD_GITFILE); writeFileSync(join(BAD_GITFILE, ".git"), "gitdir: /yok/yer\n");
 const KB1 = P("kb1"); mkdirSync(join(KB1, "tasks"), { recursive: true }); writeFileSync(join(KB1, "mode.json"), "{}");
 const KB2 = P("kb2"); mkdirSync(KB2);
@@ -160,8 +166,8 @@ function toolInput(tool) {
   return { command: pick(pushCmds), file_path: pick(paths) };
 }
 const cwds = [WT, join(WT, "src"), WT_NOGIT, PLAIN, BRANCHED, DETACHED, NOREPO, base, "/", "", "rel", join(base, "yok", "repo-wt", "T20261127-96"), userInfo().homedir, join(WT, "sec-link")];
-cwds.push(LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, join(PLAIN, ".git"));
-const procCwds = [WT, PLAIN, NOREPO, WT_NOGIT, BRANCHED, base, LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE];
+cwds.push(LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, join(PLAIN, ".git"), BAD_INNER, BAD_COMMON);
+const procCwds = [WT, PLAIN, NOREPO, WT_NOGIT, BRANCHED, base, LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, BAD_INNER, BAD_COMMON];
 
 function payload() {
   const r = rnd();
@@ -210,6 +216,21 @@ const fixed = [
   ...["Read", "Grep", "Glob", "Edit", "Write", "NotebookEdit", "MultiEdit"].map((t) => [`{"tool_name":"${t}","tool_input":{"file_path":"x"`, { VLAD_TASK_ID: "T20261116-99" }, NOREPO]),
   [`{"tool_name":"Read","tool_input":{"file_path":"x"`, {}, NOREPO],
 ];
+// C1 (review): çok derin yok-yol. TS ~2700 düzeyde RangeError → fail-closed; Rust 2000'de aynı hatayı bilerek üretir.
+// 2000..~2700 bandı Rust'ta bilerek katıdır (ret); karşılaştırmaya girmez.
+const deep = (n) => `${base}/yok${"/a".repeat(n)}`;
+for (const n of [500, 1500, 3500, 20000]) {
+  for (const env of [{ VLAD_TASK_ID: OWN }, {}]) {
+    for (const cwd of [WT, BAD_INNER, PLAIN]) {
+      fixed.push([JSON.stringify({ tool_name: "Read", tool_input: { file_path: deep(n) }, cwd }), env, cwd]);
+      fixed.push([JSON.stringify({ tool_name: "Write", tool_input: { file_path: deep(n) }, cwd }), env, cwd]);
+      fixed.push([JSON.stringify({ tool_name: "Bash", tool_input: { command: `ls > ${deep(n)}; git push -f origin main` }, cwd }), env, cwd]);
+      fixed.push([JSON.stringify({ tool_name: "Bash", tool_input: { command: `ls > ${deep(n)}; echo ok` }, cwd }), env, cwd]);
+    }
+  }
+}
+// I1: VLAD_TASK_ID yokken dal ile çalışan tespiti geçersiz iç .git altından
+for (const cwd of [BAD_INNER, BAD_COMMON]) for (const command of ["git push -f origin main", "git push origin vlad/T20261127-97", "vlad mode off", "ls"]) fixed.push([JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd }), {}, cwd]);
 for (const [input, env, cwd] of fixed) cases.push({ input, env, cwd });
 while (cases.length < COUNT) {
   const env = pick(envs);
@@ -289,5 +310,4 @@ if (BENCH > 0) {
   console.log(JSON.stringify({ bench_runs: BENCH, ms: out }));
 }
 
-if (realpathSync(base).startsWith(realpathSync(tmpdir()))) rmSync(base, { recursive: true, force: true });
 process.exit(mism.length ? 1 : 0);
