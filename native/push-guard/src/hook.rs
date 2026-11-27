@@ -149,6 +149,10 @@ fn wt_dir(cwd: &str) -> bool {
 fn catch_part(raw: &str, msg: &str) -> Outcome {
     static TOOL: OnceLock<Regex> = OnceLock::new();
     static PUSH: OnceLock<Regex> = OnceLock::new();
+    #[cfg(test)]
+    if tests::PANIC_IN_CATCH.with(|f| f.get()) {
+        panic!("test: catch yolunda panik");
+    }
     let env_set = sys::env_truthy("VLAD_TASK_ID");
     // asWorker = env || ownId(process.cwd()) !== null || WT_DIR.test(process.cwd())
     let as_worker = if env_set {
@@ -208,9 +212,14 @@ pub fn run(raw: &str) -> Outcome {
     match worker.map(|h| h.join()) {
         Ok(Ok(o)) => o,
         // iş parçacığı açılamadı ya da catch yolu da paniğe düştü: yine catch yolu (aynı iş parçacığında, sığ)
-        Ok(Err(_)) => catch_part(raw, "panic"),
-        Err(e) => catch_part(raw, &e.to_string()),
+        Ok(Err(_)) => last_resort(raw, "panic"),
+        Err(e) => last_resort(raw, &e.to_string()),
     }
+}
+
+/// Son çare catch yolu; o da paniğe düşerse koşulsuz ret (K1: panik süreci 101 ile bitirirdi = fail-open).
+fn last_resort(raw: &str, msg: &str) -> Outcome {
+    std::panic::catch_unwind(|| catch_part(raw, msg)).unwrap_or_else(|_| Outcome::Block(format!("push-guard hatası (fail-closed): {}", msg)))
 }
 
 #[cfg(test)]
@@ -230,6 +239,20 @@ mod tests {
         let real = std::fs::canonicalize(&base).unwrap();
         assert!(real.starts_with(std::fs::canonicalize(std::env::temp_dir()).unwrap()));
         std::fs::remove_dir_all(&real).unwrap();
+    }
+
+    thread_local! {
+        pub static PANIC_IN_CATCH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    #[test]
+    fn last_resort_blocks_on_panic() {
+        std::panic::set_hook(Box::new(|_| {}));
+        PANIC_IN_CATCH.with(|f| f.set(true));
+        let o = last_resort("{bozuk", "x");
+        PANIC_IN_CATCH.with(|f| f.set(false));
+        let _ = std::panic::take_hook();
+        assert_eq!(o, Outcome::Block("push-guard hatası (fail-closed): x".into()));
     }
 
     #[test]

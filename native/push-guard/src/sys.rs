@@ -204,7 +204,20 @@ fn gitdir_head_cannot_be_vlad(gitdir: &std::path::Path) -> bool {
             return false;
         }
         let pat = PAT.get_or_init(|| regex::Regex::new(r"vlad/T[0-9]{8}-[0-9]+").expect("statik regex"));
-        return !pat.is_match(target);
+        if pat.is_match(target) || target.split('/').any(|c| c.is_empty() || c == "." || c == "..") {
+            return false;
+        }
+        // Codex P2: hedef ref'in kendisi symbolic ref olabilir (git zinciri izler). Gevşek ref yoksa (doğmamış dal
+        // ya da packed-refs; packed-refs symbolic ref taşımaz) zincir yoktur; düz dosyada `ref:` yoksa sha'dır.
+        let loose = gitdir.join(target);
+        return match loose.symlink_metadata() {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+            Ok(m) if m.is_file() => match std::fs::read(&loose) {
+                Ok(b) => !b.starts_with(b"ref:"),
+                Err(_) => false,
+            },
+            _ => false, // symlink ref, dizin ya da okunamayan: git'e bırak
+        };
     }
     // ayrık HEAD (40/64 hex): symbolic-ref başarısız olur
     (t.len() == 40 || t.len() == 64) && t.bytes().all(|b| b.is_ascii_hexdigit())
@@ -324,6 +337,14 @@ mod tests {
         assert!(!head_cannot_be_vlad_with(&s(&det), false));
         std::fs::write(det.join(".git/HEAD"), "ref: refs/heads/.invalid\n").unwrap();
         assert!(!head_cannot_be_vlad_with(&s(&det), false));
+        // Codex P2: HEAD → refs/heads/alias → refs/heads/vlad/T… (zincirli symbolic ref); git zinciri izler
+        std::fs::write(det.join(".git/refs/heads/alias"), "ref: refs/heads/vlad/T20261127-04\n").unwrap();
+        std::fs::write(det.join(".git/HEAD"), "ref: refs/heads/alias\n").unwrap();
+        assert_eq!(git_symbolic_ref(&s(&det)).unwrap_or_default().trim(), "vlad/T20261127-04");
+        assert!(!head_cannot_be_vlad_with(&s(&det), false));
+        let _ = std::fs::remove_file(det.join(".git/refs/heads/alias"));
+        std::os::unix::fs::symlink("vlad/T20261127-05", det.join(".git/refs/heads/alias")).unwrap();
+        assert!(!head_cannot_be_vlad_with(&s(&det), false)); // symlink ref: git'e bırak
         std::fs::remove_dir_all(&base).unwrap();
     }
 

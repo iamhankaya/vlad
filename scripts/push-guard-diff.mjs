@@ -60,6 +60,9 @@ const REFTABLE = P("reftable"); mkdirSync(REFTABLE); git(REFTABLE, "init", "-q",
 const BAD_INNER = join(BRANCHED, "bad-inner"); mkdirSync(join(BAD_INNER, ".git", "refs"), { recursive: true }); writeFileSync(join(BAD_INNER, ".git", "HEAD"), "ref: refs/heads/main\n");
 const BAD_COMMON = join(BRANCHED, "bad-common"); mkdirSync(join(BAD_COMMON, ".git", "objects"), { recursive: true }); mkdirSync(join(BAD_COMMON, ".git", "refs"));
 writeFileSync(join(BAD_COMMON, ".git", "HEAD"), "ref: refs/heads/main\n"); writeFileSync(join(BAD_COMMON, ".git", "commondir"), "/nonexistent-pg\n");
+// Codex P2: HEAD → refs/heads/alias → refs/heads/vlad/T… (zincirli symbolic ref)
+const SYMREF = P("symref"); repo(SYMREF, "main"); git(SYMREF, "branch", "vlad/T20261127-90");
+writeFileSync(join(SYMREF, ".git", "refs", "heads", "alias"), "ref: refs/heads/vlad/T20261127-90\n"); writeFileSync(join(SYMREF, ".git", "HEAD"), "ref: refs/heads/alias\n");
 const BAD_GITFILE = P("bad-gitfile"); mkdirSync(BAD_GITFILE); writeFileSync(join(BAD_GITFILE, ".git"), "gitdir: /yok/yer\n");
 const KB1 = P("kb1"); mkdirSync(join(KB1, "tasks"), { recursive: true }); writeFileSync(join(KB1, "mode.json"), "{}");
 const KB2 = P("kb2"); mkdirSync(KB2);
@@ -166,8 +169,8 @@ function toolInput(tool) {
   return { command: pick(pushCmds), file_path: pick(paths) };
 }
 const cwds = [WT, join(WT, "src"), WT_NOGIT, PLAIN, BRANCHED, DETACHED, NOREPO, base, "/", "", "rel", join(base, "yok", "repo-wt", "T20261127-96"), userInfo().homedir, join(WT, "sec-link")];
-cwds.push(LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, join(PLAIN, ".git"), BAD_INNER, BAD_COMMON);
-const procCwds = [WT, PLAIN, NOREPO, WT_NOGIT, BRANCHED, base, LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, BAD_INNER, BAD_COMMON];
+cwds.push(LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, join(PLAIN, ".git"), BAD_INNER, BAD_COMMON, SYMREF);
+const procCwds = [WT, PLAIN, NOREPO, WT_NOGIT, BRANCHED, base, LINKED_VLAD, LINKED_OTHER, REMOTE_HEAD, TAG_HEAD, REFTABLE, BAD_GITFILE, BAD_INNER, BAD_COMMON, SYMREF];
 
 function payload() {
   const r = rnd();
@@ -230,7 +233,13 @@ for (const n of [500, 1500, 3500, 20000]) {
   }
 }
 // I1: VLAD_TASK_ID yokken dal ile çalışan tespiti geçersiz iç .git altından
-for (const cwd of [BAD_INNER, BAD_COMMON]) for (const command of ["git push -f origin main", "git push origin vlad/T20261127-97", "vlad mode off", "ls"]) fixed.push([JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd }), {}, cwd]);
+for (const cwd of [BAD_INNER, BAD_COMMON, SYMREF]) for (const command of ["git push -f origin main", "git push origin vlad/T20261127-97", "vlad mode off", "ls"]) fixed.push([JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd }), {}, cwd]);
+// K1: brace patlaması (5×60 grup) + push / zararsız / gizli dizin; erken çıkışla iki taraf da hızlı ve aynı
+{
+  const g = `{${Array.from({ length: 60 }, (_, i) => `a${i}`).join(",")}}`;
+  for (const command of [`ls /${g.repeat(5)}; git push -f origin main`, `ls /${g.repeat(5)}; echo ok`, `rm ~/${g.repeat(4)}/.vlad-secret`, `cat ~/{a,.vlad-secret}${g.repeat(4)}`])
+    for (const env of [{ VLAD_TASK_ID: OWN }, {}]) fixed.push([JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: WT }), env, WT]);
+}
 for (const [input, env, cwd] of fixed) cases.push({ input, env, cwd });
 while (cases.length < COUNT) {
   const env = pick(envs);

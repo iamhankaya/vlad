@@ -132,9 +132,14 @@ pub struct Guard<'a> {
     frames: Cell<u32>,
 }
 
-/// TS'te V8 ~2700 ata düzeyinde `RangeError: Maximum call stack size exceeded` fırlatır ve kanca fail-closed reddeder.
-/// Rust'ta sınırsız özyineleme yığını taşırıp süreci yakalanamaz biçimde düşürürdü; bu yüzden V8 sınırının altında aynı
-/// hatayı bilerek üretiriz (Err → catch yolu). 2000–~2700 bandında Rust TS'ten katıdır (reddeder), asla gevşek değildir.
+/// TS'te V8 ~2700 ata düzeyinde (makineye bağlı) `RangeError: Maximum call stack size exceeded` fırlatır ve kanca catch
+/// yoluna düşer. Rust'ta sınırsız özyineleme yığını taşırıp süreci yakalanamaz biçimde düşürürdü (çıkış 134 = fail-open);
+/// bu yüzden V8 sınırının altında aynı hatayı bilerek üretiriz (Err → catch yolu).
+/// 2000–~2700 bandında iki taraf farklı yoldan karar verir: Rust catch yoluna düşer (ham metin: dosya aracı → ret;
+/// Bash → yalnız git…push ya da mode/settings/vlad.config/dist.hooks/vlad-secret kelimesi varsa ret), TS ise normal
+/// denetimi tamamlar. Yani bantta Rust bazen TS'ten katı (dosya aracı), bazen gevşek olabilir (tetik kelimesi olmayan,
+/// symlink üzerinden korumalı dizine çözülen Bash yolu). Bu derinlikte yol PATH_MAX (1024 bayt) nedeniyle açılamaz.
+/// Fark testi bandı (2000–2700) dışarıda bırakır.
 pub const MAX_REAL_FRAMES: u32 = 2000;
 
 impl<'a> Guard<'a> {
@@ -479,6 +484,9 @@ fn brace_expand(s: &str, n: u32) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for alt in inner.split(',') {
         out.extend(brace_expand(&format!("{}{}{}", &s[..whole.start()], alt, &s[whole.end()..]), n + 1));
+        if out.len() >= 64 {
+            break; // K1: TS ile aynı erken çıkış; ilk 64 sonuç değişmez
+        }
     }
     out.truncate(64);
     out
@@ -636,6 +644,19 @@ mod tests {
         assert_eq!(brace_expand("{a,{b,c}}", 0), ["{a,b}", "{a,c}"].iter().flat_map(|s| brace_expand(s, 1)).collect::<Vec<_>>());
         let many = "{1,2,3,4,5,6,7,8,9}{1,2,3,4,5,6,7,8,9}";
         assert_eq!(brace_expand(many, 0).len(), 64);
+        // erken çıkış ilk 64 sonucu değiştirmez
+        let full: Vec<String> = (1..=9).flat_map(|a| (1..=9).map(move |b| format!("{a}{b}"))).take(64).collect();
+        assert_eq!(brace_expand(many, 0), full);
+    }
+
+    // K1 (T20261127-25): 5×60 grup patlaması (60^5 çağrı) kancayı askıda bırakıyordu (Claude Code'da fail-open)
+    #[test]
+    fn brace_blowup_bounded() {
+        let g = format!("{{{}}}", (0..60).map(|i| format!("a{i}")).collect::<Vec<_>>().join(","));
+        let t0 = std::time::Instant::now();
+        assert_eq!(brace_expand(&format!("/{}", g.repeat(5)), 0).len(), 64);
+        assert!(bash(&format!("ls /{}; echo ok", g.repeat(5))).is_none());
+        assert!(t0.elapsed() < std::time::Duration::from_secs(1), "{:?}", t0.elapsed());
     }
 
     #[test]
