@@ -24,7 +24,8 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const TS = join(root, "dist", "hooks", "push-guard-hook.js");
-const RS = join(root, "dist", "hooks", "push-guard");
+// PG_EDGE_RS: koşucu duyarlılık denemesi için başka ikili (ör. /usr/bin/true → her vakada izin; FARK ve KÂHİN kırmızı olmalı)
+const RS = process.env.PG_EDGE_RS || join(root, "dist", "hooks", "push-guard");
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const BENCH = Number(arg("--bench", "200"));
 const WARMUP = Number(arg("--warmup", "20"));
