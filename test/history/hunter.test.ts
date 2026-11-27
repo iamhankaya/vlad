@@ -69,7 +69,7 @@ describe("historySearch", () => {
   it("hunter'ı search --json ve süzgeç bayraklarıyla çağırır, sorgu `--` sonrasında tek argüman", () => {
     const f = fake({ stdout: JSON.stringify(SEARCH) });
     historySearch({ query: "-x adb", project: "app", task: "T20261126-29", since: "2026-11-01", until: "2026-11-27", limit: "5", all: true }, { bin, run: f.run });
-    expect(f.calls).toEqual([[bin, "search", "--json", "--project", "app", "--task", "T20261126-29", "--since", "2026-11-01", "--until", "2026-11-27", "--limit", "5", "--all", "--", "-x adb"]]);
+    expect(f.calls).toEqual([[bin, "search", "--json", "--project=app", "--task=T20261126-29", "--since=2026-11-01", "--until=2026-11-27", "--limit=5", "--all", "--", "-x adb"]]);
   });
   it("verilmeyen bayraklar geçmez; çıktı hunter JSON'ı aynen (+warnings)", () => {
     const f = fake({ stdout: JSON.stringify(SEARCH) });
@@ -112,6 +112,9 @@ describe("historySearch", () => {
     expect(e).toBeInstanceOf(HistoryError);
     expect(e!.message).toMatch(/invalid value 'dun'/);
   });
+  it("sinyalle öldürülen hunter (status null, error yok) sinyali mesajda verir", () => {
+    expect(() => historySearch({ query: "a" }, { bin, run: fake({ status: null, signal: "SIGKILL" }).run })).toThrow(/SIGKILL/);
+  });
   it("çalıştırılamayan ikili, bozuk JSON ve beklenmeyen şema sürümü hata olur", () => {
     expect(() => historySearch({ query: "a" }, { bin, run: fake({ status: null, error: new Error("spawn EACCES") }).run })).toThrow(/hunter çalıştırılamadı.*EACCES/);
     expect(() => historySearch({ query: "a" }, { bin, run: fake({ stdout: "{yarım" }).run })).toThrow(/hunter çıktısı okunamadı/);
@@ -124,7 +127,7 @@ describe("historyShow", () => {
     const f = fake({ stdout: JSON.stringify(SHOW) });
     expect(historyShow("a.jsonl:3", {}, { bin, run: f.run })).toEqual(SHOW);
     historyShow("a.jsonl:3", { context: "2" }, { bin, run: f.run });
-    expect(f.calls).toEqual([[bin, "show", "--json", "--", "a.jsonl:3"], [bin, "show", "--json", "--context", "2", "--", "a.jsonl:3"]]);
+    expect(f.calls).toEqual([[bin, "show", "--json", "--", "a.jsonl:3"], [bin, "show", "--json", "--context=2", "--", "a.jsonl:3"]]);
   });
   it("hunter not_found → HistoryError", () => {
     const stderr = JSON.stringify({ error: "kayıt yok: a.jsonl:3", code: "not_found", details: [] });
@@ -139,7 +142,7 @@ describe("triggerHunterIndex", () => {
     const pid = triggerHunterIndex({ locate: () => "/x/hunter", spawn: (b, a, o) => { calls.push({ bin: b, args: a, opts: o }); return { pid: 42, unref: () => { unref++; }, on: () => {} } as any; } });
     expect(pid).toBe(42);
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.args).toEqual(["index", "--if-exists", "--quiet"]);
+    expect(calls[0]!.args).toEqual(["index", "--if-exists", "--quiet", "--threads", "2"]);
     expect(calls[0]!.opts).toMatchObject({ detached: true, stdio: "ignore" });
     expect(unref).toBe(1);
   });
@@ -164,7 +167,7 @@ describe("triggerHunterIndex", () => {
     expect(pid).toBeGreaterThan(0);
     expect(existsSync(done)).toBe(false); // çağıran çocuğu beklemedi
     for (let i = 0; i < 100 && !existsSync(marker); i++) await new Promise((r) => setTimeout(r, 50));
-    expect(readFileSync(marker, "utf8")).toBe("index --if-exists --quiet");
+    expect(readFileSync(marker, "utf8")).toBe("index --if-exists --quiet --threads 2");
     try { process.kill(pid!); } catch { /* zaten bitti */ }
   });
 });

@@ -25,10 +25,21 @@ const showText = (r: ShowOutput): string => {
   return [head, ...msgs].join("\n");
 };
 
+/**
+ * hunter kimlikleri `-Users-…/<oturum>.jsonl:<satır>` biçimindedir ve sorgu `-terim` (hariç tutma) içerebilir: komutlar
+ * bilinmeyen tek tireli parçaları işlenen olarak kabul eder (allowUnknownOption). `--` ile başlayan bilinmeyen parça
+ * yazım hatası sayılır (`--limt 5` sorguya karışmasın).
+ */
+function rejectUnknownLong(parts: string[]): void {
+  const bad = parts.find((p) => p.startsWith("--"));
+  if (bad) throw new Error(`bilinmeyen seçenek '${bad}'`);
+}
+
 export function registerHistory(program: Command, k: Kit): void {
   const { out, def, ctx } = k;
   const history = program.command("history").description("eski oturum kayıtlarında arama (hunter)");
-  def(history, "search <sorgu...>", "Eski Claude oturum kayıtlarında arar (hunter dizini; sırlar maskeli)", (parts: string[], o: Opts) => {
+  def(history, "search <sorgu...>", "Eski Claude oturum kayıtlarında arar (hunter dizini; sırlar maskeli; `-terim` hariç tutar)", (parts: string[], o: Opts) => {
+    rejectUnknownLong(parts);
     const r = historySearch({
       query: parts.join(" "),
       project: o.project as string | undefined,
@@ -46,9 +57,12 @@ export function registerHistory(program: Command, k: Kit): void {
     .option("--since <YYYY-MM-DD>", "bu yerel günden (dahil)")
     .option("--until <YYYY-MM-DD>", "bu yerel güne kadar (dahil)")
     .option("--limit <n>", "en çok bu kadar sonuç (hunter varsayılanı 20)")
-    .option("--all", "geçici klasör oturumlarını da içer");
+    .option("--all", "geçici klasör oturumlarını da içer")
+    .allowUnknownOption();
   def(history, "show <id>", "Bir arama sonucunun (`<dosya>:<satır>`) çevresindeki mesajları gösterir", (id: string, o: Opts) => {
+    rejectUnknownLong([id]);
     const r = historyShow(id, { context: o.context as string | undefined }, hunterDeps());
     out(o, r, showText(r));
-  }).option("--context <n>", "hedeften önce/sonra en çok n mesaj (hunter varsayılanı 5)");
+  }).option("--context <n>", "hedeften önce/sonra en çok n mesaj (hunter varsayılanı 5)")
+    .allowUnknownOption();
 }

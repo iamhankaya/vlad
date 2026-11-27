@@ -203,7 +203,7 @@ describe("hunter index tetiği (T20261127-21)", () => {
     expect(defaultIndexTrigger({ env: { PATH: join(home, "bos") }, spawn })).toBeNull(); // config'te hunterPath yok
     writeFileSync(join(home, "vlad.config.json"), JSON.stringify({ hunterPath: fakeBin }));
     expect(defaultIndexTrigger({ env: { PATH: join(home, "bos") }, spawn })).toBe(7);
-    expect(seen).toEqual([{ bin: fakeBin, args: ["index", "--if-exists", "--quiet"], detached: true }]);
+    expect(seen).toEqual([{ bin: fakeBin, args: ["index", "--if-exists", "--quiet", "--threads", "2"], detached: true }]);
   });
 });
 

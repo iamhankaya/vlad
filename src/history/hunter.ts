@@ -61,11 +61,11 @@ export function locateHunter(o: LocateOptions): Located {
   return { bin: null, tried };
 }
 
-export type HunterRun = (bin: string, args: string[]) => { status: number | null; stdout: string; stderr: string; error?: Error };
+export type HunterRun = (bin: string, args: string[]) => { status: number | null; signal?: string | null; stdout: string; stderr: string; error?: Error };
 
 export const defaultRun: HunterRun = (bin, args) => {
   const r = spawnSync(bin, args, { encoding: "utf8", timeout: HUNTER_TIMEOUT_MS, killSignal: "SIGKILL", maxBuffer: 64 * 1024 * 1024, windowsHide: true });
-  return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", ...(r.error ? { error: r.error } : {}) };
+  return { status: r.status, signal: r.signal, stdout: r.stdout ?? "", stderr: r.stderr ?? "", ...(r.error ? { error: r.error } : {}) };
 };
 
 export interface HunterDeps {
@@ -94,8 +94,9 @@ function hunterJson<T extends { schema?: unknown }>(args: string[], deps: Hunter
       const details = [...(code ? [`code: ${code}`] : []), ...(Array.isArray(parsed.details) ? parsed.details.map(String) : []), ...(HINT_BY_CODE[code] ? [HINT_BY_CODE[code]!] : [])];
       throw new HistoryError(`hunter: ${parsed.error}`, details);
     }
-    const text = r.stderr.trim().split(/\r?\n/)[0] || `çıkış kodu ${r.status}`;
-    throw new HistoryError(`hunter: ${text.replace(/^error: /, "")}`, [`çıkış kodu: ${r.status}`]);
+    const how = r.status === null ? `sinyal ${r.signal ?? "?"}` : `çıkış kodu ${r.status}`;
+    const text = r.stderr.trim().split(/\r?\n/)[0] || `süreç bitti (${how})`;
+    throw new HistoryError(`hunter: ${text.replace(/^error: /, "")}`, [how]);
   }
   let out: T;
   try { out = JSON.parse(r.stdout) as T; } catch (e) { throw new HistoryError(`hunter çıktısı okunamadı: ${(e as Error).message}`); }
@@ -132,12 +133,13 @@ export function staleWarning(out: Pick<SearchOutput, "last_indexed" | "index_age
 }
 
 export function historySearch(p: SearchParams, deps: HunterDeps): SearchOutput {
+  // `--opt=değer`: '-' ile başlayan değer hunter'da (clap) bayrak sayılmasın
   const args = ["search", "--json"];
-  if (p.project) args.push("--project", p.project);
-  if (p.task) args.push("--task", p.task);
-  if (p.since) args.push("--since", p.since);
-  if (p.until) args.push("--until", p.until);
-  if (p.limit !== undefined) args.push("--limit", String(p.limit));
+  if (p.project) args.push(`--project=${p.project}`);
+  if (p.task) args.push(`--task=${p.task}`);
+  if (p.since) args.push(`--since=${p.since}`);
+  if (p.until) args.push(`--until=${p.until}`);
+  if (p.limit !== undefined) args.push(`--limit=${p.limit}`);
   if (p.all) args.push("--all");
   args.push("--", p.query);
   const out = hunterJson<SearchOutput>(args, deps);
@@ -161,12 +163,13 @@ export interface ShowOutput {
 
 export function historyShow(id: string, o: { context?: string | number }, deps: HunterDeps): ShowOutput {
   const args = ["show", "--json"];
-  if (o.context !== undefined) args.push("--context", String(o.context));
+  if (o.context !== undefined) args.push(`--context=${o.context}`);
   args.push("--", id);
   return hunterJson<ShowOutput>(args, deps);
 }
 
-type Spawn = (bin: string, args: string[], opts: SpawnOptions) => Pick<ChildProcess, "pid" | "unref" | "on">;
+export const INDEX_ARGS = ["index", "--if-exists", "--quiet", "--threads", "2"];
+type Spawn =(bin: string, args: string[], opts: SpawnOptions) => Pick<ChildProcess, "pid" | "unref" | "on">;
 export interface TriggerOptions {
   locate: () => string | null;
   spawn?: Spawn;
@@ -181,7 +184,8 @@ export function triggerHunterIndex(o: TriggerOptions): number | null {
   try {
     const bin = o.locate();
     if (!bin) return null;
-    const child = (o.spawn ?? nodeSpawn)(bin, ["index", "--if-exists", "--quiet"], { detached: true, stdio: "ignore", windowsHide: true });
+    // --threads 2: her oturum kapanışında koşar; Mac'te paralel çalışan yükü bilinen sorun (4 iş parçacığı hunter varsayılanı)
+    const child = (o.spawn ?? nodeSpawn)(bin, INDEX_ARGS, { detached: true, stdio: "ignore", windowsHide: true });
     child.on("error", () => { /* ENOENT/EACCES async: sessiz */ });
     child.unref();
     return child.pid ?? null;

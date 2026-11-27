@@ -43,7 +43,7 @@ describe.runIf(posix)("vlad history search", () => {
     fakeHunter(join(root, "bin"), { stdout: SEARCH(60) });
     const r = run([join(root, "bin")], "history", "search", "adb", "port", "--project", "app", "--task", "T20261126-29", "--since", "2026-11-01", "--until", "2026-11-27", "--limit", "5", "--all", "--json");
     expect(r.status, r.stderr).toBe(0);
-    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["search", "--json", "--project", "app", "--task", "T20261126-29", "--since", "2026-11-01", "--until", "2026-11-27", "--limit", "5", "--all", "--", "adb port"]);
+    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["search", "--json", "--project=app", "--task=T20261126-29", "--since=2026-11-01", "--until=2026-11-27", "--limit=5", "--all", "--", "adb port"]);
     const out = JSON.parse(r.stdout);
     expect(out.schema).toBe(1);
     expect(out.results[0].id).toBe("-Users-u-dev-app/s.jsonl:412");
@@ -85,6 +85,36 @@ describe.runIf(posix)("vlad history search", () => {
   });
 });
 
+describe.runIf(posix)("tire ile başlayan işlenenler (review K1/Ö2)", () => {
+  const REAL_ID = "-Users-u-dev-app/5b1e0000-0000-4000-8000-0000000000c2.jsonl:412"; // sözleşme örneği: proje klasörü '-' ile başlar
+  it("show: gerçek kimlik (-Users-…) seçenek sanılmaz, --json yine işlenir", () => {
+    fakeHunter(join(root, "bin"), { stdout: { schema: 1, id: REAL_ID, path: "p", session: "s", project: "app", task: null, sidechain: false, source_deleted: false, messages: [] } });
+    const r = run([join(root, "bin")], "history", "show", REAL_ID, "--json");
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["show", "--json", "--", REAL_ID]);
+    expect(JSON.parse(r.stdout).id).toBe(REAL_ID);
+  });
+  it("search: hariç tutma terimi (-bar) sorguya girer, --json yine işlenir", () => {
+    fakeHunter(join(root, "bin"), { stdout: SEARCH(60) });
+    const r = run([join(root, "bin")], "history", "search", "foo", "-bar", "--json");
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["search", "--json", "--", "foo -bar"]);
+    expect(JSON.parse(r.stdout).schema).toBe(1);
+  });
+  it("search: bilinmeyen uzun seçenek (--limt) sorguya karışmaz, hata verir", () => {
+    fakeHunter(join(root, "bin"), { stdout: SEARCH(60) });
+    const r = run([join(root, "bin")], "history", "search", "foo", "--limt", "5", "--json");
+    expect(r.status).toBe(1);
+    expect(JSON.parse(r.stderr.trim()).error).toMatch(/--limt/);
+  });
+  it("seçenek değeri '-' ile başlasa da hunter'a bayrak olarak geçmez (--opt=değer)", () => {
+    fakeHunter(join(root, "bin"), { stdout: SEARCH(60) });
+    const r = run([join(root, "bin")], "history", "search", "foo", "--project=-x", "--json");
+    expect(r.status, r.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["search", "--json", "--project=-x", "--", "foo"]);
+  });
+});
+
 describe.runIf(posix)("vlad history show", () => {
   const SHOW = { schema: 1, id: "a.jsonl:3", path: "a.jsonl", session: "s", project: "app", task: null, sidechain: false, source_deleted: false,
     messages: [{ line: 3, ts: "2026-11-26T14:03:22.120Z", target: true, blocks: [{ block: 0, role: "user", kind: "text", tool: null, text: "merhaba dünya" }] }] };
@@ -92,7 +122,7 @@ describe.runIf(posix)("vlad history show", () => {
     fakeHunter(join(root, "bin"), { stdout: SHOW });
     const r = run([join(root, "bin")], "history", "show", "a.jsonl:3", "--context", "2", "--json");
     expect(r.status, r.stderr).toBe(0);
-    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["show", "--json", "--context", "2", "--", "a.jsonl:3"]);
+    expect(JSON.parse(readFileSync(argsFile, "utf8"))).toEqual(["show", "--json", "--context=2", "--", "a.jsonl:3"]);
     expect(JSON.parse(r.stdout)).toEqual(SHOW);
   });
   it("metin çıktısı hedef satırı işaretler", () => {
