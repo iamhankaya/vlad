@@ -9,8 +9,10 @@ pub enum Val {
     Missing,
     Null,
     Str(String),
-    /// sayı, bool, dizi ya da nesne
+    /// sayı ya da bool
     Other,
+    Obj,
+    Arr,
 }
 
 impl Val {
@@ -53,18 +55,38 @@ pub struct Payload {
 #[derive(Clone, Copy, PartialEq)]
 enum Slot {
     Root,
-    TopName,
-    TopCwd,
-    TopInput,
-    Input(usize),
+    Top(usize),
+    Nested(usize),
     Ignore,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum Role {
     Top,
-    Input,
+    Nested,
     Plain,
+}
+
+/// Ayrıştırma şeması: üst nesnede izlenen anahtarlar; `nested` = (üst anahtar sırası, o nesnede izlenen anahtarlar).
+struct Spec<'k> {
+    top: &'k [&'k str],
+    nested: (usize, &'k [&'k str]),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum Kind {
+    #[default]
+    Scalar,
+    Object,
+    Array,
+}
+
+#[derive(Debug, Default)]
+struct Scan {
+    kind: Kind,
+    top: Vec<Val>,
+    /// izlenen üst anahtarın SON değeri nesneyse onun alanları
+    nested: Option<Vec<Val>>,
 }
 
 struct Frame {
@@ -212,7 +234,7 @@ impl<'a> P<'a> {
         }
     }
     /// Nesne anahtarı (`"` üzerinde) + `:`; anahtarın gideceği yuva.
-    fn key(&mut self, role: Role) -> Result<Slot, String> {
+    fn key(&mut self, role: Role, spec: &Spec) -> Result<Slot, String> {
         if self.peek() != Some(b'"') {
             return err("Expected property name", self.pos);
         }
@@ -223,33 +245,35 @@ impl<'a> P<'a> {
             return err("Expected ':' after property name", self.pos);
         }
         self.pos += 1;
+        let pick = |keys: &[&str], k: &str| keys.iter().position(|x| *x == k);
         Ok(match (role, k.as_deref()) {
-            (Role::Top, Some("tool_name")) => Slot::TopName,
-            (Role::Top, Some("cwd")) => Slot::TopCwd,
-            (Role::Top, Some("tool_input")) => Slot::TopInput,
-            (Role::Input, Some(k)) => INPUT_KEYS.iter().position(|x| *x == k).map_or(Slot::Ignore, Slot::Input),
+            (Role::Top, Some(k)) => pick(spec.top, k).map_or(Slot::Ignore, Slot::Top),
+            (Role::Nested, Some(k)) => pick(spec.nested.1, k).map_or(Slot::Ignore, Slot::Nested),
             _ => Slot::Ignore,
         })
     }
 }
 
-fn assign(out: &mut Payload, slot: Slot, v: Val) {
+fn assign(out: &mut Scan, spec: &Spec, slot: Slot, v: Val) {
     match slot {
-        Slot::TopName => out.tool_name = v,
-        Slot::TopCwd => out.cwd = v,
-        Slot::TopInput => out.tool_input = None, // nesne olmayan tool_input
-        Slot::Input(i) => {
-            if let Some(ti) = out.tool_input.as_mut() {
-                ti.fields[i] = v;
+        Slot::Top(i) => {
+            if i == spec.nested.0 {
+                out.nested = None; // nesne olmayan değer öncekini ezer
+            }
+            out.top[i] = v;
+        }
+        Slot::Nested(i) => {
+            if let Some(n) = out.nested.as_mut() {
+                n[i] = v;
             }
         }
         Slot::Root | Slot::Ignore => {}
     }
 }
 
-pub fn parse(raw: &str) -> Result<Payload, String> {
+fn scan(raw: &str, spec: &Spec) -> Result<Scan, String> {
     let mut p = P { s: raw, b: raw.as_bytes(), pos: 0 };
-    let mut out = Payload::default();
+    let mut out = Scan { top: vec![Val::Missing; spec.top.len()], ..Default::default() };
     let mut stack: Vec<Frame> = Vec::new();
     let mut slot = Slot::Root;
     'value: loop {
@@ -260,15 +284,16 @@ pub fn parse(raw: &str) -> Result<Payload, String> {
                 p.pos += 1;
                 let role = match slot {
                     Slot::Root => {
-                        out.is_object = true;
+                        out.kind = Kind::Object;
                         Role::Top
                     }
-                    Slot::TopInput => {
-                        out.tool_input = Some(ToolInput::default());
-                        Role::Input
+                    Slot::Top(i) if i == spec.nested.0 => {
+                        out.top[i] = Val::Obj;
+                        out.nested = Some(vec![Val::Missing; spec.nested.1.len()]);
+                        Role::Nested
                     }
                     s => {
-                        assign(&mut out, s, Val::Other);
+                        assign(&mut out, spec, s, Val::Obj);
                         Role::Plain
                     }
                 };
@@ -278,13 +303,16 @@ pub fn parse(raw: &str) -> Result<Payload, String> {
                     p.pos += 1;
                     stack.pop();
                 } else {
-                    slot = p.key(role)?;
+                    slot = p.key(role, spec)?;
                     continue 'value;
                 }
             }
             Some(b'[') => {
                 p.pos += 1;
-                assign(&mut out, slot, Val::Other);
+                if slot == Slot::Root {
+                    out.kind = Kind::Array;
+                }
+                assign(&mut out, spec, slot, Val::Arr);
                 stack.push(Frame { is_obj: false, role: Role::Plain });
                 p.ws();
                 if p.peek() == Some(b']') {
@@ -297,25 +325,25 @@ pub fn parse(raw: &str) -> Result<Payload, String> {
             }
             Some(b'"') => {
                 p.pos += 1;
-                let need = !matches!(slot, Slot::Root | Slot::Ignore | Slot::TopInput);
+                let need = matches!(slot, Slot::Top(_) | Slot::Nested(_));
                 let v = p.string(need)?;
-                assign(&mut out, slot, v.map_or(Val::Other, Val::Str));
+                assign(&mut out, spec, slot, v.map_or(Val::Other, Val::Str));
             }
             Some(b't') => {
                 p.lit("true")?;
-                assign(&mut out, slot, Val::Other);
+                assign(&mut out, spec, slot, Val::Other);
             }
             Some(b'f') => {
                 p.lit("false")?;
-                assign(&mut out, slot, Val::Other);
+                assign(&mut out, spec, slot, Val::Other);
             }
             Some(b'n') => {
                 p.lit("null")?;
-                assign(&mut out, slot, Val::Null);
+                assign(&mut out, spec, slot, Val::Null);
             }
             Some(b'-' | b'0'..=b'9') => {
                 p.number()?;
-                assign(&mut out, slot, Val::Other);
+                assign(&mut out, spec, slot, Val::Other);
             }
             Some(_) => return err("Unexpected token", p.pos),
         }
@@ -329,7 +357,7 @@ pub fn parse(raw: &str) -> Result<Payload, String> {
                     p.pos += 1;
                     if is_obj {
                         p.ws();
-                        slot = p.key(role)?;
+                        slot = p.key(role, spec)?;
                     } else {
                         slot = Slot::Ignore;
                     }
@@ -349,6 +377,35 @@ pub fn parse(raw: &str) -> Result<Payload, String> {
         return err("Unexpected non-whitespace character after JSON", p.pos);
     }
     Ok(out)
+}
+
+/// Kanca girdisi (`JSON.parse(raw)`).
+pub fn parse(raw: &str) -> Result<Payload, String> {
+    let s = scan(raw, &Spec { top: &["tool_name", "cwd", "tool_input"], nested: (2, &INPUT_KEYS) })?;
+    let mut top = s.top.into_iter();
+    Ok(Payload {
+        is_object: s.kind == Kind::Object,
+        tool_name: top.next().unwrap(),
+        cwd: top.next().unwrap(),
+        tool_input: s.nested.map(|f| ToolInput { fields: f.try_into().unwrap() }),
+    })
+}
+
+/// Config dosyası (config-layer.ts `readObject`): üst değerin türü, kendi `kbDir`'i, kendi `__proto__`'su ve o
+/// nesneyse onun `kbDir`'i (JS'te `merged.__proto__ = v` prototipi değiştirir; `.kbDir` oradan okunabilir).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConfigObj {
+    pub kind: Kind,
+    pub kb_dir: Val,
+    pub proto: Val,
+    pub proto_kb_dir: Val,
+}
+
+pub fn parse_config(raw: &str) -> Result<ConfigObj, String> {
+    let s = scan(raw, &Spec { top: &["kbDir", "__proto__"], nested: (1, &["kbDir"]) })?;
+    let proto_kb_dir = s.nested.map_or(Val::Missing, |mut n| n.remove(0));
+    let mut top = s.top.into_iter();
+    Ok(ConfigObj { kind: s.kind, kb_dir: top.next().unwrap(), proto: top.next().unwrap(), proto_kb_dir })
 }
 
 #[cfg(test)]
@@ -430,6 +487,19 @@ mod tests {
         for s in ["{}", "[]", " \t\n\r{} \n", "[[[[]]]]", "-0", "0.0e-0", "1E5", "[\"\\u0000\"]", "{\"\":{\"\":[]}}", "\"\u{7f}\""] {
             ok(s);
         }
+    }
+
+    #[test]
+    fn config_fields() {
+        let c = parse_config(r#"{"kbDir":"../kb","__proto__":{"kbDir":"/p","x":1},"y":{"kbDir":"no"}}"#).unwrap();
+        assert_eq!(c.kind, Kind::Object);
+        assert_eq!(c.kb_dir, Val::Str("../kb".into()));
+        assert_eq!(c.proto, Val::Obj);
+        assert_eq!(c.proto_kb_dir, Val::Str("/p".into()));
+        let c = parse_config(r#"{"__proto__":{"kbDir":"/p"},"__proto__":[1]}"#).unwrap();
+        assert_eq!((c.proto, c.proto_kb_dir), (Val::Arr, Val::Missing));
+        assert_eq!(parse_config("[1]").unwrap().kind, Kind::Array);
+        assert_eq!(parse_config("null").unwrap().kind, Kind::Scalar);
     }
 
     #[test]

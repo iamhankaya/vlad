@@ -20,9 +20,10 @@ pub fn lower(s: &str) -> String {
 }
 
 /// Regex kaynağındaki `\s` / `\S` / `\d` / `\w` / `\b` / `.` yer tutucularını JS anlamlı Rust karşılıklarına çevirir:
-/// `⟨s⟩` → `[WS]`, `⟨S⟩` → `[^WS]`, `⟨b⟩` → ASCII sözcük sınırı, `⟨dot⟩` → satır sonu dışı tek karakter.
+/// `⟨WS⟩` → sınıf içeriği, `⟨s⟩` → `[WS]`, `⟨S⟩` → `[^WS]`, `⟨b⟩` → ASCII sözcük sınırı, `⟨dot⟩` → satır sonu dışı tek karakter.
 pub fn js_re(src: &str) -> String {
-    src.replace("⟨s⟩", &format!("[{}]", WS))
+    src.replace("⟨WS⟩", WS)
+        .replace("⟨s⟩", &format!("[{}]", WS))
         .replace("⟨S⟩", &format!("[^{}]", WS))
         .replace("⟨b⟩", r"(?-u:\b)")
         .replace("⟨dot⟩", r"[^\n\r\x{2028}\x{2029}]")

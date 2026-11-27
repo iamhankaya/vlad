@@ -86,14 +86,14 @@ fn normalize_string(path: &str, allow_above_root: bool) -> String {
 pub fn resolve(args: &[&str]) -> Result<String, String> {
     let mut resolved = String::new();
     let mut absolute = false;
-    let mut cwd_holder: Option<String> = None;
+    let mut cwd_holder: Option<String>;
     let mut i = args.len() as isize - 1;
     while i >= -1 && !absolute {
         let p: &str = if i >= 0 {
             args[i as usize]
         } else {
             cwd_holder = Some(sys::process_cwd()?);
-            cwd_holder.as_deref().unwrap()
+            cwd_holder.as_deref().unwrap_or_default()
         };
         i -= 1;
         if p.is_empty() {
