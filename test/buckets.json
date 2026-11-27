@@ -85,6 +85,7 @@
     "test/tasks/nudge-win.test.ts"
   ],
   "process": [
+    "test/history/**/*.test.ts",
     "test/approver/**/*.test.ts",
     "test/acceptance/approver-*.test.ts",
     "test/monitor/**/*.test.ts",

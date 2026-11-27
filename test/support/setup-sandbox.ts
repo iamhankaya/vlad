@@ -16,6 +16,7 @@ const FAKE_TOOLS: Record<string, string> = {
   tmux: 'echo "tmux 3.8"',
   claude: 'case "$1" in --version) echo "2.1.319 (Claude Code)";; --help) echo "  --autocompact <n>  auto compact window";; *) :;; esac',
   codex: 'echo "codex-cli 0.166.0"',
+  hunter: 'echo "hunter 0.1.0"', // T20261127-21: setup --check yalnız varlığına bakar (çalıştırmaz)
   // gh: auth/repo view başarılı (FAKE_GH_VIEW_FAIL=1 ile repo view hata); repo clone, FAKE_GH_BARE'den git clone yapar
   gh: 'case "$1 $2" in "repo view") [ -n "$FAKE_GH_VIEW_FAIL" ] && { echo "not found" >&2; exit 1; }; echo "{}";; "repo clone") git clone -q "$FAKE_GH_BARE" "$4" ;; *) :;; esac',
   launchctl: ":", schtasks: ":", reg: ":", osascript: ":", systemctl: ":",

@@ -1,6 +1,7 @@
 import { Command, CommanderError } from "commander";
 import { join } from "node:path";
 import { ValidationError } from "../kb/index.js";
+import { HistoryError } from "../history/errors.js";
 import { exitCodeFor, remoteErrorDetails } from "../machines/exit.js";
 import { TRANSITIONS, TransitionError } from "../tasks/index.js";
 
@@ -24,7 +25,7 @@ export function failWith(ctx: CliCtx, e: unknown): never {
   if (e instanceof SilentExit) return ctx.exit(e.code);
   let error = e instanceof Error ? e.message : String(e);
   let details: string[] = [];
-  if (e instanceof ValidationError) details = e.details;
+  if (e instanceof ValidationError || e instanceof HistoryError) details = e.details;
   else if (e instanceof TransitionError) details = [`izin verilenler: ${TRANSITIONS[e.from].join(", ") || "(yok)"}`];
   else details = remoteErrorDetails(e);
   if (ctx.argv.includes("--json")) ctx.stderr.write(JSON.stringify({ error, details }) + "\n");
