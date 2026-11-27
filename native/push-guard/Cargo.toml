@@ -1,0 +1,21 @@
+[package]
+name = "push-guard"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "VLAD PreToolUse push-guard kancası (src/hooks/push-guard-hook.ts) — birebir Rust taşıması (D-vlad-093)"
+
+[[bin]]
+name = "push-guard"
+path = "src/main.rs"
+
+[dependencies]
+regex = "1"
+# passwd ev dizini (Node os.userInfo().homedir) için güvenli sarmalayıcı; crate'te `unsafe` yok
+nix = { version = "0.32", default-features = false, features = ["user", "fs"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

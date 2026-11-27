@@ -153,7 +153,13 @@ function checkReadTool(tool: string, input: Record<string, unknown> | undefined,
 const braceExpand = (s: string, n = 0): string[] => {
   const m = /\{([^{}]*)\}/.exec(s);
   if (!m || n > 4 || !m[1]!.includes(",")) return [s];
-  return m[1]!.split(",").flatMap((alt) => braceExpand(s.slice(0, m.index) + alt + s.slice(m.index + m[0].length), n + 1)).slice(0, 64);
+  // K1 (T20261127-25): 64'e ulaşınca dur; tümünü üretip kesmek 5×60 grupta 60^5 çağrıyla kancayı askıda bırakıyordu (fail-open)
+  const out: string[] = [];
+  for (const alt of m[1]!.split(",")) {
+    out.push(...braceExpand(s.slice(0, m.index) + alt + s.slice(m.index + m[0].length), n + 1));
+    if (out.length >= 64) break;
+  }
+  return out.slice(0, 64);
 };
 function segMatches(globSeg: string, name: string): boolean {
   if (!/[*?[]/.test(globSeg)) return globSeg.toLowerCase() === name.toLowerCase();
