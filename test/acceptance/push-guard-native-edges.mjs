@@ -130,6 +130,10 @@ const bashWriters = [
   (t) => `cat > ${t} <<'EOF'\n{}\nEOF`, (t) => `ls && echo x > ${t}`, (t) => `(echo x > ${t})`, (t) => `bash -c 'echo x > ${t}'`, (t) => `env -u VLAD_TASK_ID tee ${t} </dev/null`,
 ];
 const quotedWriters = [(t) => `echo x > "${t}"`, (t) => `cp /tmp/a '${t}'`];
+// K1 (T20261128-01): APFS ad eşdeğerleri — ſ→s, K(U+212A)→k, ß→ss, ﬁ→fi, ﬆ→st aynı dosyayı açar (macOS'ta kod noktası taramasıyla doğrulandı).
+// Korunan her hedefin katlanmış eşdeğeri ve yazıcı komut adının eşdeğeri (ſed, baſh, inſtall) aynı kâhinle reddedilmeli.
+const foldVariants = (t) => [...new Set([t.replace(/s/g, "ſ"), t.replace(/ss/g, "ß").replace(/fi/g, "ﬁ").replace(/st/g, "ﬆ").replace(/k/g, "K")])].filter((x) => x !== t);
+const foldedWriters = [(t) => `ſed -i '' s/a/b/ ${t}`, (t) => `baſh -c 'echo x > ${t}'`, (t) => `inſtall /tmp/a ${t}`];
 
 // --- vakalar ---
 const cases = [];
@@ -153,6 +157,16 @@ for (const s of sessions) {
     for (const w of bashWriters) add(`bash-yazma:${name}`, s, tool("Bash", { command: w(t) }, s), hasBackslash(t) ? undefined : e);
     for (const w of quotedWriters) add(`bash-yazma:${name}`, s, tool("Bash", { command: w(t) }, s), e);
   }
+  for (const [name, t, blocked] of targets) {
+    const e = s.worker ? (blocked ? 2 : 0) : 0;
+    for (const v of foldVariants(t)) {
+      for (const tn of ["Write", "NotebookEdit"]) add(`apfs-katlama:${name}`, s, tool(tn, tn === "Write" ? { file_path: v, content: "x" } : { notebook_path: v }, s), e);
+      for (const w of [...bashWriters.slice(0, 6), ...quotedWriters]) add(`apfs-katlama:${name}`, s, tool("Bash", { command: w(v) }, s), hasBackslash(v) && !quotedWriters.includes(w) ? undefined : e);
+    }
+    for (const w of foldedWriters) add(`apfs-komut:${name}`, s, tool("Bash", { command: w(t) }, s), hasBackslash(t) ? undefined : e);
+  }
+  for (const [inp, e] of [[{ file_path: "~/.vlad-ſecret/mode.key" }, 2], [{ file_path: join(SECRET, "mode.Key") }, 2], [{ file_path: join(WT, "src", "ſettings.json") }, 0]])
+    add("apfs-okuma", s, tool("Read", inp, s), s.worker ? e : 0);
   for (const [name, t, bashBlocked] of benignTargets) {
     for (const tn of ["Write", "Edit"]) add(`zararsız:${name}`, s, tool(tn, { file_path: t, content: "x" }, s), 0);
     for (const w of bashWriters.slice(0, 6)) add(`zararsız:${name}`, s, tool("Bash", { command: w(t) }, s), s.worker && bashBlocked ? 2 : 0);
@@ -180,6 +194,7 @@ const seeds = [
   [tool("Bash", { command: "git push --force origin main" }, ws), "push"], [tool("Bash", { command: `git push origin vlad/${OWN}` }, ws), "push"],
   [tool("Write", { file_path: join(KB, "mode.json"), content: "{}" }, ws), "mode"], [tool("Read", { file_path: join(WT, "a.ts") }, ws), "read"],
   [tool("Bash", { command: "ls -la" }, ws), "plain"], [tool("Edit", { file_path: join(homedir(), ".claude", "settings.json") }, ws), "settings"],
+  [tool("Bash", { command: "echo x > ~/.claude/ſettings.json" }, ws), "apfs"],
 ];
 for (const s of [ws, ms, ds]) {
   for (const [full, kind] of seeds) {
