@@ -62,6 +62,23 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
     expect(edit("Write", "/work/wt/vlad.config.local.json")).toBeNull();
     expect(bash(`cat ${p}`)).toBeNull();
   });
+  it("F-vlad-408: .claude/settings(.local).json dizin jokeri ve * ile başlayan adla aşılamaz", () => {
+    const prot = ["~/.cla*/settings.json", "~/.?laude/settings.json", "~/.c[l]aude/settings.json", "~/.claude/*ettings.json", "~/.claude/*", "~/.claude/settings.*", "~/.*/settings.local.json", "~/.{claude,x}/settings.json", "/Users/x/.cla*/*.local.json", ".c?aude/settings.json", "~/.c*/ſett*.json"];
+    for (const p of prot) {
+      for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`, `sed -i s/a/b/ ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+      expect(edit("Write", p), p).toMatch(/koruma|mod/);
+    }
+    for (const c of ["cat ~/.cla*/settings.json", "ls ~/.claude/*", "echo x > ~/*/settings.json", "cp x ~/.claude/*.md", "cp x src/*.json", "echo x > ~/.cla*/other.json"]) expect(bash(c), c).toBeNull();
+  });
+  it("F-vlad-409: vlad.config(.local).json, dist/hooks/** ve kb mode.json jokerle aşılamaz", () => {
+    const prot = [`${HOME}/vlad.config.local.js?n`, `${HOME}/vlad.config.local.*`, `${HOME}/vlad.conf?g.json`, `${HOME}/di?t/hooks/push-guard`, `${HOME}/dist/*/push-guard`, `${HOME}/*.json`, `${HOME}/dist/*`, `${HOME}/dist/hoo[k]s/x.js`, `${HOME}/{dist,x}/hooks/a`, `${KB}/mod?.json`, `${KB}/*.json`, `/home/u/v*/vlad.config.json`];
+    for (const p of prot) {
+      for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+      expect(edit("Write", p), p).toMatch(/koruma|mod/);
+    }
+    expect(checkWorkerMode("Bash", { command: "cp x di?t/*/push-guard" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
+    for (const c of [`cat ${HOME}/*.json`, `cp x ${HOME}/src/*.ts`, `echo x > ${HOME}/dist/*.js`, "cp x /work/wt/*.json", `cp x ${HOME}/vlad.config.*.bak`]) expect(bash(c), c).toBeNull();
+  });
   it("K1 (T20261128-01): APFS ad eşdeğerleri (ſ→s, K→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ) katlanır — korunan yol/anahtar/yazıcı komut adı aşılamaz", () => {
     const prot = ["~/.claude/ſettings.json", "/Users/x/.claude/settings.local.jſon", `${HOME}/vlad.config.local.jſon`, `${HOME}/vlad.conﬁg.json`, `${KB}/mode.jſon`, `${HOME}/diſt/hooKs/x.js`, "~/.claude/ſettingſ.json"];
     for (const p of prot) {

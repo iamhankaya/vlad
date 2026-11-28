@@ -84,6 +84,15 @@ describe("(4) Bash: dot-dizin jokerleri ve ln -s hedefi gizli dizine açılamaz"
     expect(run("Read", { file_path: "ſx/mode.key" })).not.toBeNull();
     expect(run("Write", { file_path: "ſx/yeni" })).not.toBeNull();
   });
+  it.skipIf(IS_WIN)("F-vlad-408/409: jokersiz önek realpath'lenir (symlink l → .claude / vladHome)", () => {
+    const cl = join(root, ".claude"), vh = join(root, "vh");
+    mkdirSync(cl); mkdirSync(join(vh, "dist", "hooks"), { recursive: true });
+    symlinkSync(cl, join(cwd, "l")); symlinkSync(vh, join(cwd, "v"));
+    const r = (tool: string, input: Record<string, unknown>) => checkWorkerMode(tool, input, null, { vladHome: vh, cwd });
+    for (const cmd of ["echo x > l/*ettings.json", "cp x l/settings.loc?l.json", "echo x > l/settings.json", "cp x v/vlad.config.*", "cp x v/di?t/hooks/a", "tee v/*.json"]) expect(r("Bash", { command: cmd }), cmd).not.toBeNull();
+    for (const p of ["l/settings.json", "l/*ettings.json", "v/vlad.config.local.js?n"]) expect(r("Write", { file_path: p }), p).not.toBeNull();
+    for (const cmd of ["echo x > l/other.json", "cp x v/src/*.ts"]) expect(r("Bash", { command: cmd }), cmd).toBeNull();
+  });
   it("ilgisiz joker ve normal komutlar serbest", () => {
     for (const cmd of [`ls ${root}/*.txt`, `cat ${root}/.gitignore`, `ls ${root}/wt/*`, "grep -r '.*' src", "ls ~/dev/*"]) expect(c(cmd), cmd).toBeNull();
   });

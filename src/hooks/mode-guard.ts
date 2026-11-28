@@ -66,6 +66,7 @@ function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = 
   const base = basename(t);
   if (globHits(base, "mode.json")) return anyDir || kbDir === null || GLOB.test(base) || norm(real(resolve(ctx.cwd ?? ".", t))) === norm(real(join(kbDir, "mode.json"))) ? "mode.json" : null; // kb dışındaki (jokersiz) mode.json projenin kendi dosyasıdır
   if (/(^|\/)\.claude\//i.test(fold(t)) && SETTINGS.some((s) => globHits(base, s))) return "settings";
+  const g = globProtected(t, kbDir, ctx); if (g) return g; // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
   if (ctx.vladHome) {
     const abs = norm(real(isAbsolute(t) ? t : resolve(ctx.cwd ?? ".", t)));
     const home = norm(real(ctx.vladHome));
@@ -114,7 +115,8 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
     const redirectTargets = [...clean.matchAll(/>>?\s*([^\s;&|<>()]+)/g)].map((x) => x[1]!);
     for (const t of [...clean.split(/\s+/), ...rawToks]) if (globReachesSecret(t)) return `${WHY} (anahtar: joker gizli dizine açılabilir: ${t})`;
     const kbUnder = (t: string) => kbDir !== null && norm(expand(t)).startsWith(norm(kbDir) + "/");
-    for (const t of tools ? toks : redirectTargets) {
+    // F-vlad-408/409: SEP_TOKEN virgülde böler; `{a,b}` süslü sözcükler boşlukla bölünmüş haliyle de denetlenir
+    for (const t of tools ? [...toks, ...clean.split(/\s+/).filter((x) => x.includes("{"))] : redirectTargets) {
       const hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null);
       if (hit) return `${WHY} (${hit}: ${t})`;
     }
@@ -186,6 +188,38 @@ function globReachesSecret(tok: string): boolean {
     if (forms.some((sd) => gs.every((g, i) => i >= sd.length || segMatches(g, sd[i]!)))) return true;
   }
   return false;
+}
+
+const segsOf = (p: string): string[] => p.replace(/\\/g, "/").split("/").filter(Boolean);
+/**
+ * F-vlad-408/409: jokerli (`*?[` / `{a,b}`) yol korunan bir yola açılabiliyor mu. Yol mutlaklaştırılır, bileşenlere ayrılır;
+ * jokerli her bileşen segMatches (ham + APFS katlı, baştaki nokta kuralı) ile korunan ada sınanır; `*` kestirmesi yok.
+ * Jokersiz önek ayrıca realpath'lenir (symlink → ~/.claude). Hedefler: herhangi bir dizindeki `.claude/settings(.local).json`,
+ * `<vladHome>/vlad.config(.local).json`, `<vladHome>/dist/hooks/**`, `<kb>/mode.json`.
+ */
+function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string | null {
+  const forms: string[][] = [];
+  for (const alt of braceExpand(t)) {
+    const abs = resolve(ctx.cwd ?? ".", alt).replace(/\\/g, "/");
+    forms.push(segsOf(abs));
+    const parts = abs.split("/");
+    const k = parts.findIndex((s) => /[*?[]/.test(s));
+    if (k > 0) forms.push([...segsOf(real(parts.slice(0, k).join("/") + "/")), ...parts.slice(k).filter(Boolean)]);
+    else if (k < 0) forms.push(segsOf(real(abs)));
+  }
+  const roots = (d: string): string[][] => [segsOf(d), segsOf(real(d))];
+  const hits = (gs: string[], target: string[], prefix: boolean): boolean => (prefix ? gs.length >= target.length : gs.length === target.length) && target.every((s, i) => segMatches(gs[i]!, s));
+  for (const gs of forms) {
+    const n = gs.length;
+    if (n >= 2 && segMatches(gs[n - 2]!, ".claude") && SETTINGS.some((s) => segMatches(gs[n - 1]!, s))) return "settings";
+    if (kbDir !== null && roots(kbDir).some((r) => hits(gs, [...r, "mode.json"], false))) return "mode.json";
+    if (ctx.vladHome) {
+      for (const r of roots(ctx.vladHome)) {
+        if (hits(gs, [...r, "vlad.config.json"], false) || hits(gs, [...r, "vlad.config.local.json"], false) || hits(gs, [...r, "dist", "hooks"], true)) return "vlad";
+      }
+    }
+  }
+  return null;
 }
 
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
