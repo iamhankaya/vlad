@@ -137,7 +137,9 @@ const foldVariants = (t) => [...new Set([t.replace(/s/g, "ſ"), t.replace(/ss/g,
 const jokerVariants = (t) => {
   if (hasBackslash(t)) return [];
   const sg = t.split("/"), last = sg.at(-1), par = sg.at(-2), up = (x) => [...sg.slice(0, -1), x].join("/");
-  const out = [up(last.slice(0, 1) + "?" + last.slice(2)), up(`{${last},zz}`)];
+  const c = last.at(-1), body = last.slice(0, -1);
+  // review tur 2: {x..y} dizisi, `]` ile başlayan sınıf, POSIX sınıfı, sözcük başında brace (tilde/kök brace içinde)
+  const out = [up(last.slice(0, 1) + "?" + last.slice(2)), up(`{${last},zz}`), up(`${body}{${c}..${c}}`), up(`${body}[]${c}]`), up(`${body}[[:alnum:]]`), `{${t},/dev/null}`];
   if (!last.startsWith(".")) out.push(up("*" + last.slice(1)));
   if (par && par !== ".." && par !== "~" && par.length > 1) out.push([...sg.slice(0, -2), par.slice(0, -1) + "*", last].join("/"));
   return out;

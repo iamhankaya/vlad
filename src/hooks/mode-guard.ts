@@ -172,8 +172,14 @@ const braceExpand = (s: string, n = 0): string[] => {
   }
   return out.slice(0, 64);
 };
+/** Kabuk `{x..y}` dizisi (virgülsüz brace) → `*` (fail-closed üst küme; braceExpand yalnız virgüllü grubu açar). */
+const seqLoose = (s: string): string => s.replace(/\{[^{},]*\.\.[^{},]*\}/g, "*");
+/** POSIX sınıfı (`[[:lower:]]`) ya da `]` ile başlayan sınıf (`[]n]`, `[!]x]`) JS regex'te yanlış okunur → `?` (fail-closed). */
+const bracketLoose = (s: string): string => s.replace(/\[(?:[!^]?\][^\]]*|[^\]]*\[:[a-z]+:\][^\]]*)\]/g, "?");
+/** Açılım sınırı (64 alternatif / 4 derinlik) aşıldı mı: kalan virgüllü grup ya da tam 64 açılım → fail-closed. */
+const braceCapped = (alts: string[]): boolean => alts.length >= 64 || alts.some((a) => /\{[^{}]*,[^{}]*\}/.test(a));
 /** K1: ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı APFS katlanmış çift (gizli dizin yolu ß içerebilir) eşleşirse isabet. */
-function segMatches(globSeg: string, name: string): boolean { return segMatch1(globSeg, name) || segMatch1(fold(globSeg), fold(name)); }
+function segMatches(globSeg: string, name: string): boolean { globSeg = bracketLoose(globSeg); return segMatch1(globSeg, name) || segMatch1(fold(globSeg), fold(name)); }
 function segMatch1(globSeg: string, name: string): boolean {
   if (!/[*?[]/.test(globSeg)) return globSeg.toLowerCase() === name.toLowerCase();
   if (name.startsWith(".") && !globSeg.startsWith(".")) return false;
@@ -181,10 +187,12 @@ function segMatch1(globSeg: string, name: string): boolean {
   try { return new RegExp(`^${re}$`, "i").test(name); } catch { return true; }
 }
 function globReachesSecret(tok: string): boolean {
-  if (!/[*?[{]/.test(tok) || !/^(~|\$\{?HOME\}?|\/|[A-Za-z]:[\\/])/.test(tok)) return false; // Windows sürücü harfli mutlak yol da (C:\… / C:/…)
+  if (!/[*?[{]/.test(tok) || !/^\{?(~|\$\{?HOME\}?|\/|[A-Za-z]:[\\/])/.test(tok)) return false; // Windows sürücü harfli mutlak yol da (C:\… / C:/…); review tur 2: `{~/…,x}`
   const forms = [sdir(), real(sdir())].map((d) => d.replace(/\\/g, "/").split("/").filter(Boolean));
-  for (const alt of braceExpand(expand(tok.replace(/\\/g, "/")))) {
-    const gs = alt.split("/").filter(Boolean);
+  const alts = braceExpand(seqLoose(expand(tok.replace(/\\/g, "/"))));
+  if (braceCapped(alts)) return true; // açılım sınırı: fail-closed
+  for (const alt of alts) {
+    const gs = expand(alt).split("/").filter(Boolean);
     if (forms.some((sd) => gs.every((g, i) => i >= sd.length || segMatches(g, sd[i]!)))) return true;
   }
   return false;
@@ -199,7 +207,10 @@ const segsOf = (p: string): string[] => p.replace(/\\/g, "/").split("/").filter(
  */
 function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string | null {
   const forms: string[][] = [];
-  for (const alt of braceExpand(t)) {
+  const alts = braceExpand(seqLoose(t));
+  if (braceCapped(alts)) return "joker-sınırı"; // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
+  for (const raw of alts) {
+    const alt = expand(raw); // kabuk sırası: önce brace, sonra her sözcükte tilde (`{~/.claude/settings.json,x}`)
     const abs = resolve(ctx.cwd ?? ".", alt).replace(/\\/g, "/");
     forms.push(segsOf(abs));
     const parts = abs.split("/");

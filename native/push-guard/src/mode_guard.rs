@@ -406,7 +406,12 @@ impl<'a> Guard<'a> {
     fn glob_protected(&self, t: &str) -> R<Option<&'static str>> {
         let segs = |p: &str| -> Vec<String> { p.replace('\\', "/").split('/').filter(|s| !s.is_empty()).map(String::from).collect() };
         let mut forms: Vec<Vec<String>> = Vec::new();
-        for alt in brace_expand(t, 0) {
+        let alts = brace_expand(&seq_loose(t), 0);
+        if brace_capped(&alts) {
+            return Ok(Some("joker-sınırı")); // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
+        }
+        for raw in alts {
+            let alt = expand(&raw)?; // kabuk sırası: önce brace, sonra her sözcükte tilde
             let abs = resolve(&[self.cwd(), &alt])?.replace('\\', "/");
             forms.push(segs(&abs));
             let parts: Vec<&str> = abs.split('/').collect();
@@ -455,7 +460,7 @@ impl<'a> Guard<'a> {
 
     fn glob_reaches_secret(&self, tok: &str) -> R<bool> {
         static ROOTED: OnceLock<Regex> = OnceLock::new();
-        if !tok.contains(['*', '?', '[', '{']) || !re(&ROOTED, r"^(?:~|\$\{?HOME\}?|/|[A-Za-z]:[\\/])").is_match(tok) {
+        if !tok.contains(['*', '?', '[', '{']) || !re(&ROOTED, r"^\{?(?:~|\$\{?HOME\}?|/|[A-Za-z]:[\\/])").is_match(tok) {
             return Ok(false);
         }
         let sd = self.sdir()?;
@@ -463,7 +468,12 @@ impl<'a> Guard<'a> {
             .iter()
             .map(|d| d.replace('\\', "/").split('/').filter(|s| !s.is_empty()).map(String::from).collect())
             .collect();
-        for alt in brace_expand(&expand(&tok.replace('\\', "/"))?, 0) {
+        let alts = brace_expand(&seq_loose(&expand(&tok.replace('\\', "/"))?), 0);
+        if brace_capped(&alts) {
+            return Ok(true); // açılım sınırı: fail-closed
+        }
+        for alt in alts {
+            let alt = expand(&alt)?;
             let gs: Vec<&str> = alt.split('/').filter(|s| !s.is_empty()).collect();
             if forms.iter().any(|sd| gs.iter().enumerate().all(|(i, g)| i >= sd.len() || seg_matches(g, &sd[i]))) {
                 return Ok(true);
@@ -531,6 +541,18 @@ fn segments(cmd: &str) -> Vec<String> {
     }
     out.push(cur);
     out.into_iter().map(|s| crate::text::js_trim(&s).to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+/// mode-guard.ts `seqLoose`: kabuk `{x..y}` dizisi → `*` (fail-closed üst küme).
+fn seq_loose(s: &str) -> String {
+    static SEQ: OnceLock<Regex> = OnceLock::new();
+    re(&SEQ, r"\{[^{},]*\.\.[^{},]*\}").replace_all(s, "*").into_owned()
+}
+
+/// mode-guard.ts `braceCapped`: 64 alternatif ya da kalan virgüllü grup → fail-closed.
+fn brace_capped(alts: &[String]) -> bool {
+    static GRP: OnceLock<Regex> = OnceLock::new();
+    alts.len() >= 64 || alts.iter().any(|a| re(&GRP, r"\{[^{}]*,[^{}]*\}").is_match(a))
 }
 
 fn brace_expand(s: &str, n: u32) -> Vec<String> {
@@ -695,6 +717,14 @@ mod tests {
         for p in ["/home/u/vlad-k*/mode.json", "/home/u/vlad-?b/MODE.JSON"] {
             assert!(edit("Write", p).is_some(), "{p}"); // kb dizin jokeri (mode.json dalından önce)
         }
+        // review tur 2: {x..y} dizisi, POSIX sınıfı / `]` ile başlayan sınıf, brace içi `~`, açılım sınırı fail-closed
+        let many = (0..70).map(|i| format!("a{i}")).collect::<Vec<_>>().join(",");
+        for p in ["~/.claud{a..f}/settings.json".to_string(), format!("{HOME}/dist/hoo{{j..l}}s/a"), format!("{HOME}/vlad.config.js{{m..o}}"), "~/.claude/settings.jso[[:lower:]]".into(), "~/.claude/settings.jso[]n]".into(), format!("{HOME}/vlad.config.jso[[:alpha:]]"), "{~/.claude/settings.json,/dev/null}".into(), "{~/.claude/settings.js?n,/dev/null}".into(), format!("~/{{{many},.claude}}/settings.json"), "~/{a,b}{a,b}{a,b}{a,b}{a,b}{.claude,x}/settings.json".into()] {
+            assert!(bash(&format!("tee {p}")).is_some(), "{p}");
+        }
+        for c in ["tee src/{1..3}.txt", "cp x src/[[:digit:]].ts", "tee {a,b}.log"] {
+            assert_eq!(bash(c), None, "{c:?}");
+        }
         for c in [format!("cat {HOME}/*.json"), format!("cp x {HOME}/src/*.ts"), format!("echo x > {HOME}/dist/*.js"), "cp x /work/wt/*.json".to_string(), format!("cp x {HOME}/vlad.config.*.bak")] {
             assert_eq!(bash(&c), None, "{c:?}");
         }
@@ -726,6 +756,10 @@ mod tests {
             assert!(t.run("Write", &[("file_path", &p)], &cwd).is_some(), "{p}");
         }
         assert!(t.run("Bash", &[("command", &format!("printf x>{root}/.vlad-secre*/mode.key"))], &cwd).is_some());
+        // review tur 2: okuma — {x..y} dizisi, POSIX sınıfı, brace içi kök
+        for c in [format!("cat {root}/.vlad-secre{{s..u}}/mode.key"), format!("cat {root}/.vlad-secre[[:lower:]]/mode.key"), format!("cat {{{root}/.vlad-secre?/mode.key,/dev/null}}")] {
+            assert!(t.run("Bash", &[("command", &c)], &cwd).is_some(), "{c:?}");
+        }
     }
 
     #[test]
@@ -792,7 +826,8 @@ mod tests {
         let g = format!("{{{}}}", (0..60).map(|i| format!("a{i}")).collect::<Vec<_>>().join(","));
         let t0 = std::time::Instant::now();
         assert_eq!(brace_expand(&format!("/{}", g.repeat(5)), 0).len(), 64);
-        assert!(bash(&format!("ls /{}; echo ok", g.repeat(5))).is_none());
+        // T20261128-01 review tur 2: açılım sınırı aşan köklü joker artık fail-closed (eskiden serbest; 65. alternatif denetlenmiyordu)
+        assert!(bash(&format!("ls /{}; echo ok", g.repeat(5))).is_some());
         assert!(t0.elapsed() < std::time::Duration::from_secs(1), "{:?}", t0.elapsed());
     }
 

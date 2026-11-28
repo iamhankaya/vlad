@@ -95,6 +95,8 @@ describe("(4) Bash: dot-dizin jokerleri ve ln -s hedefi gizli dizine açılamaz"
     // jokerle gizli dizine yazma (Write ve bitişik yönlendirme)
     for (const p of [`${root}/.vlad-secre*/mode.key`, `${root}/.?lad-secret`]) expect(run("Write", { file_path: p }), p).not.toBeNull();
     expect(c(`printf x>${root}/.vlad-secre*/mode.key`)).not.toBeNull();
+    // review tur 2: okuma — {x..y} dizisi, POSIX sınıfı, brace içi kök
+    for (const cmd of [`cat ${root}/.vlad-secre{s..u}/mode.key`, `cat ${root}/.vlad-secre[[:lower:]]/mode.key`, `cat {${root}/.vlad-secre?/mode.key,/dev/null}`]) expect(c(cmd), cmd).not.toBeNull();
   });
   it("ilgisiz joker ve normal komutlar serbest", () => {
     for (const cmd of [`ls ${root}/*.txt`, `cat ${root}/.gitignore`, `ls ${root}/wt/*`, "grep -r '.*' src", "ls ~/dev/*"]) expect(c(cmd), cmd).toBeNull();

@@ -78,6 +78,11 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
     }
     expect(checkWorkerMode("Bash", { command: "cp x di?t/*/push-guard" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
     for (const p of ["/home/u/vlad-k*/mode.json", "/home/u/vlad-?b/MODE.JSON"]) expect(edit("Write", p), p).toMatch(/koruma|mod/); // kb dizin jokeri (mode.json dalından önce)
+    // review (F-vlad-408/409 tur 2): {x..y} dizisi, POSIX sınıfı / `]` ile başlayan sınıf, brace içi `~`, açılım sınırı fail-closed
+    const many = Array.from({ length: 70 }, (_, i) => `a${i}`).join(",");
+    for (const p of ["~/.claud{a..f}/settings.json", `${HOME}/dist/hoo{j..l}s/a`, `${HOME}/vlad.config.js{m..o}`, "~/.claude/settings.jso[[:lower:]]", "~/.claude/settings.jso[]n]", `${HOME}/vlad.config.jso[[:alpha:]]`, `{~/.claude/settings.json,/dev/null}`, `{~/.claude/settings.js?n,/dev/null}`, `~/{${many},.claude}/settings.json`, "~/{a,b}{a,b}{a,b}{a,b}{a,b}{.claude,x}/settings.json"])
+      expect(bash(`tee ${p}`), p).toMatch(/koruma|mod/);
+    for (const c of ["tee src/{1..3}.txt", "cp x src/[[:digit:]].ts", "tee {a,b}.log"]) expect(bash(c), c).toBeNull();
     for (const c of [`cat ${HOME}/*.json`, `cp x ${HOME}/src/*.ts`, `echo x > ${HOME}/dist/*.js`, "cp x /work/wt/*.json", `cp x ${HOME}/vlad.config.*.bak`]) expect(bash(c), c).toBeNull();
   });
   it("K1 (T20261128-01): APFS ad eşdeğerleri (ſ→s, K→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ) katlanır — korunan yol/anahtar/yazıcı komut adı aşılamaz", () => {

@@ -187,6 +187,10 @@ fn glob_hit1(base: &str, name: &str) -> bool {
 
 /// mode-guard.ts `segMatches(globSeg, name)`: K1 — ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı katlanmış çift.
 pub fn seg_matches(glob_seg: &str, name: &str) -> bool {
+    // review tur 2: POSIX sınıfı (`[[:lower:]]`) / `]` ile başlayan sınıf (`[]n]`) → `?` (mode-guard.ts bracketLoose)
+    static BR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let g = BR.get_or_init(|| regex::Regex::new(r"\[(?:[!^]?\][^\]]*|[^\]]*\[:[a-z]+:\][^\]]*)\]").unwrap()).replace_all(glob_seg, "?");
+    let glob_seg = g.as_ref();
     seg_match1(glob_seg, name) || seg_match1(&crate::text::fold(glob_seg), &crate::text::fold(name))
 }
 
@@ -246,7 +250,7 @@ mod tests {
             ("[!x]sers", "Users", true), ("[]sers", "Users", false), ("[^]sers", "Users", false),
             ("[!]sers", "Users", true), ("[z-a]sers", "Users", true), ("[a-]sers", "Users", false),
             ("[-u]sers", "Users", true), ("[.-z]sers", "Users", true), ("[*]sers", "Users", false),
-            ("[?]sers", "Users", false), ("[]]sers", "Users", false), ("[", "Users", true), ("Us]ers", "Us]ers", true),
+            ("[?]sers", "Users", false), ("[]]sers", "Users", true), /* review tur 2: `]` ile başlayan sınıf fail-closed `?` */ ("[", "Users", true), ("Us]ers", "Us]ers", true),
             ("**rs", "Users", true), ("u?ers", "Users", true), ("[A-Z]sers", "users", true),
             ("[Z-a]sers", "_sers", true), ("[Z-a]sers", "zsers", true), ("[[]", "[", true), ("[\\]x", "x", false),
             ("[^a]", "^", true), ("[!a]", "b", true), ("users", "USERS", true), ("[ſ]sers", "Ssers", true),
