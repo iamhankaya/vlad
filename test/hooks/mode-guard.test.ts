@@ -77,6 +77,7 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
       expect(edit("Write", p), p).toMatch(/koruma|mod/);
     }
     expect(checkWorkerMode("Bash", { command: "cp x di?t/*/push-guard" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
+    for (const p of ["/home/u/vlad-k*/mode.json", "/home/u/vlad-?b/MODE.JSON"]) expect(edit("Write", p), p).toMatch(/koruma|mod/); // kb dizin jokeri (mode.json dalından önce)
     for (const c of [`cat ${HOME}/*.json`, `cp x ${HOME}/src/*.ts`, `echo x > ${HOME}/dist/*.js`, "cp x /work/wt/*.json", `cp x ${HOME}/vlad.config.*.bak`]) expect(bash(c), c).toBeNull();
   });
   it("K1 (T20261128-01): APFS ad eşdeğerleri (ſ→s, K→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ) katlanır — korunan yol/anahtar/yazıcı komut adı aşılamaz", () => {

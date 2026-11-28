@@ -133,6 +133,16 @@ const quotedWriters = [(t) => `echo x > "${t}"`, (t) => `cp /tmp/a '${t}'`];
 // K1 (T20261128-01): APFS ad eşdeğerleri — ſ→s, K(U+212A)→k, ß→ss, ﬁ→fi, ﬆ→st aynı dosyayı açar (macOS'ta kod noktası taramasıyla doğrulandı).
 // Korunan her hedefin katlanmış eşdeğeri ve yazıcı komut adının eşdeğeri (ſed, baſh, inſtall) aynı kâhinle reddedilmeli.
 const foldVariants = (t) => [...new Set([t.replace(/s/g, "ſ"), t.replace(/ss/g, "ß").replace(/fi/g, "ﬁ").replace(/st/g, "ﬆ").replace(/k/g, "K")])].filter((x) => x !== t);
+// F-vlad-408/409 (T20261128-01): korunan hedefin jokerli biçimleri (son bileşende `?` / baştaki `*` / süslü; dizin bileşeninde `*`) kabukta aynı dosyaya açılır → ret
+const jokerVariants = (t) => {
+  if (hasBackslash(t)) return [];
+  const sg = t.split("/"), last = sg.at(-1), par = sg.at(-2), up = (x) => [...sg.slice(0, -1), x].join("/");
+  const out = [up(last.slice(0, 1) + "?" + last.slice(2)), up(`{${last},zz}`)];
+  if (!last.startsWith(".")) out.push(up("*" + last.slice(1)));
+  if (par && par !== ".." && par !== "~" && par.length > 1) out.push([...sg.slice(0, -2), par.slice(0, -1) + "*", last].join("/"));
+  return out;
+};
+const jokerBenign = [join(WT, "src", "*.ts"), join(VH, "src", "*.ts"), join(homedir(), ".claude", "*.md"), join(VH, "dist", "*.js"), join(WT, "*.json")];
 const foldedWriters = [(t) => `ſed -i '' s/a/b/ ${t}`, (t) => `baſh -c 'echo x > ${t}'`, (t) => `inſtall /tmp/a ${t}`];
 
 // --- vakalar ---
@@ -165,6 +175,14 @@ for (const s of sessions) {
     }
     for (const w of foldedWriters) add(`apfs-komut:${name}`, s, tool("Bash", { command: w(t) }, s), hasBackslash(t) ? undefined : e);
   }
+  for (const [name, t, blocked] of targets) {
+    const e = s.worker ? (blocked ? 2 : 0) : 0;
+    for (const v of jokerVariants(t)) {
+      add(`joker-korunan:${name}`, s, tool("Write", { file_path: v, content: "x" }, s), e);
+      for (const w of [...bashWriters.slice(0, 6), quotedWriters[0]]) add(`joker-korunan:${name}`, s, tool("Bash", { command: w(v) }, s), e);
+    }
+  }
+  for (const v of jokerBenign) for (const w of bashWriters.slice(0, 6)) add("joker-zararsız", s, tool("Bash", { command: w(v) }, s), 0);
   for (const [inp, e] of [[{ file_path: "~/.vlad-ſecret/mode.key" }, 2], [{ file_path: join(SECRET, "mode.Key") }, 2], [{ file_path: join(WT, "src", "ſettings.json") }, 0]])
     add("apfs-okuma", s, tool("Read", inp, s), s.worker ? e : 0);
   for (const [name, t, bashBlocked] of benignTargets) {

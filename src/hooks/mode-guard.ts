@@ -63,10 +63,10 @@ function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = 
   if (secretHit(p)) return "anahtar";
   const t = expand(p.replace(/\\/g, "/"));
   if (!GLOB.test(t) && insideSecret(real(resolve(ctx.cwd ?? ".", t)))) return "anahtar"; // symlink s -> gizli dizin: yazma araçları da tam realpath ile
+  const g = globProtected(t, kbDir, ctx); if (g) return g; // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
   const base = basename(t);
   if (globHits(base, "mode.json")) return anyDir || kbDir === null || GLOB.test(base) || norm(real(resolve(ctx.cwd ?? ".", t))) === norm(real(join(kbDir, "mode.json"))) ? "mode.json" : null; // kb dışındaki (jokersiz) mode.json projenin kendi dosyasıdır
   if (/(^|\/)\.claude\//i.test(fold(t)) && SETTINGS.some((s) => globHits(base, s))) return "settings";
-  const g = globProtected(t, kbDir, ctx); if (g) return g; // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
   if (ctx.vladHome) {
     const abs = norm(real(isAbsolute(t) ? t : resolve(ctx.cwd ?? ".", t)));
     const home = norm(real(ctx.vladHome));
@@ -194,7 +194,7 @@ const segsOf = (p: string): string[] => p.replace(/\\/g, "/").split("/").filter(
 /**
  * F-vlad-408/409: jokerli (`*?[` / `{a,b}`) yol korunan bir yola açılabiliyor mu. Yol mutlaklaştırılır, bileşenlere ayrılır;
  * jokerli her bileşen segMatches (ham + APFS katlı, baştaki nokta kuralı) ile korunan ada sınanır; `*` kestirmesi yok.
- * Jokersiz önek ayrıca realpath'lenir (symlink → ~/.claude). Hedefler: herhangi bir dizindeki `.claude/settings(.local).json`,
+ * Jokersiz önek ayrıca realpath'lenir (symlink → ~/.claude). Hedefler: gizli dizin (ve altı), herhangi bir dizindeki `.claude/settings(.local).json`,
  * `<vladHome>/vlad.config(.local).json`, `<vladHome>/dist/hooks/**`, `<kb>/mode.json`.
  */
 function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string | null {
@@ -211,6 +211,7 @@ function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string |
   const hits = (gs: string[], target: string[], prefix: boolean): boolean => (prefix ? gs.length >= target.length : gs.length === target.length) && target.every((s, i) => segMatches(gs[i]!, s));
   for (const gs of forms) {
     const n = gs.length;
+    if (roots(sdir()).some((r) => hits(gs, r, true))) return "anahtar"; // jokerle gizli dizine yazma (`> ~/.vlad-secre*/mode.key`)
     if (n >= 2 && segMatches(gs[n - 2]!, ".claude") && SETTINGS.some((s) => segMatches(gs[n - 1]!, s))) return "settings";
     if (kbDir !== null && roots(kbDir).some((r) => hits(gs, [...r, "mode.json"], false))) return "mode.json";
     if (ctx.vladHome) {

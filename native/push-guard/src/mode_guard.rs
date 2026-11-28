@@ -240,6 +240,9 @@ impl<'a> Guard<'a> {
         if !is_glob(&t) && self.inside_secret(&self.real(&resolve(&[self.cwd(), &t])?, 0)?)? {
             return Ok(Some("anahtar"));
         }
+        if let Some(g) = self.glob_protected(&t)? {
+            return Ok(Some(g)); // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
+        }
         let base = basename(&t);
         if glob_hits(&base, "mode.json") {
             let hit = any_dir
@@ -250,9 +253,6 @@ impl<'a> Guard<'a> {
         }
         if re(&CLAUDE, r"(?:^|/)\.(?i-u:claude)/").is_match(&fold(&t)) && SETTINGS.iter().any(|s| glob_hits(&base, s)) {
             return Ok(Some("settings"));
-        }
-        if let Some(g) = self.glob_protected(&t)? {
-            return Ok(Some(g)); // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
         }
         if let Some(home) = self.vlad_home.filter(|h| !h.is_empty()) {
             let target = if is_absolute(&t) { t.clone() } else { resolve(&[self.cwd(), &t])? };
@@ -426,6 +426,12 @@ impl<'a> Guard<'a> {
         let with = |r: &[String], tail: &[&str]| -> Vec<String> { r.iter().cloned().chain(tail.iter().map(|s| s.to_string())).collect() };
         for gs in &forms {
             let n = gs.len();
+            let sd = self.sdir()?;
+            for r in [segs(&sd), segs(&self.real(&sd, 0)?)] {
+                if hits(gs, &r, true) {
+                    return Ok(Some("anahtar")); // jokerle gizli dizine yazma (`> ~/.vlad-secre*/mode.key`)
+                }
+            }
             if n >= 2 && seg_matches(&gs[n - 2], ".claude") && SETTINGS.iter().any(|s| seg_matches(&gs[n - 1], s)) {
                 return Ok(Some("settings"));
             }
@@ -686,6 +692,9 @@ mod tests {
             assert!(edit("Write", &p).is_some(), "{p}");
         }
         assert!(check_worker_mode("Bash", &input(&[("command", "cp x di?t/*/push-guard")]), Some(KB), Some(HOME), Some(HOME)).unwrap().is_some());
+        for p in ["/home/u/vlad-k*/mode.json", "/home/u/vlad-?b/MODE.JSON"] {
+            assert!(edit("Write", p).is_some(), "{p}"); // kb dizin jokeri (mode.json dalından önce)
+        }
         for c in [format!("cat {HOME}/*.json"), format!("cp x {HOME}/src/*.ts"), format!("echo x > {HOME}/dist/*.js"), "cp x /work/wt/*.json".to_string(), format!("cp x {HOME}/vlad.config.*.bak")] {
             assert_eq!(bash(&c), None, "{c:?}");
         }
@@ -712,6 +721,11 @@ mod tests {
         for c in ["echo x > l/other.json", "cp x v/src/*.ts"] {
             assert_eq!(r("Bash", "command", c), None, "{c:?}");
         }
+        // jokerle gizli dizine yazma (Write ve bitişik yönlendirme)
+        for p in [format!("{root}/.vlad-secre*/mode.key"), format!("{root}/.?lad-secret")] {
+            assert!(t.run("Write", &[("file_path", &p)], &cwd).is_some(), "{p}");
+        }
+        assert!(t.run("Bash", &[("command", &format!("printf x>{root}/.vlad-secre*/mode.key"))], &cwd).is_some());
     }
 
     #[test]
