@@ -251,6 +251,9 @@ impl<'a> Guard<'a> {
         if re(&CLAUDE, r"(?:^|/)\.(?i-u:claude)/").is_match(&fold(&t)) && SETTINGS.iter().any(|s| glob_hits(&base, s)) {
             return Ok(Some("settings"));
         }
+        if let Some(g) = self.glob_protected(&t)? {
+            return Ok(Some(g)); // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
+        }
         if let Some(home) = self.vlad_home.filter(|h| !h.is_empty()) {
             let target = if is_absolute(&t) { t.clone() } else { resolve(&[self.cwd(), &t])? };
             let abs = norm(&self.real(&target, 0)?);
@@ -314,7 +317,9 @@ impl<'a> Guard<'a> {
                     return Ok(Some(format!("{} (anahtar: joker gizli dizine açılabilir: {})", WHY, t)));
                 }
             }
-            let list: &Vec<&str> = if tools { &toks } else { &redirect_targets };
+            // F-vlad-408/409: SEP_TOKEN virgülde böler; `{a,b}` süslü sözcükler boşlukla bölünmüş haliyle de denetlenir
+            let braced: Vec<&str> = if tools { toks.iter().copied().chain(ws_toks.iter().copied().filter(|x| !x.is_empty() && x.contains('{'))).collect() } else { Vec::new() };
+            let list: &Vec<&str> = if tools { &braced } else { &redirect_targets };
             for t in list {
                 let hit = match self.protected_path(t, true)? {
                     Some(h) => Some(h),
@@ -390,6 +395,52 @@ impl<'a> Guard<'a> {
             for b in &bases {
                 if self.reads_secret(&v, b, true)? {
                     return Ok(Some(hint(k, &v)));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    /// mode-guard.ts `globProtected`: F-vlad-408/409 — jokerli (ya da symlink önekli) yol korunan bir yola açılabiliyor mu.
+    /// Bileşen bileşen seg_matches (ham + APFS katlı, baştaki nokta kuralı); `*` kestirmesi yok; jokersiz önek realpath'lenir.
+    fn glob_protected(&self, t: &str) -> R<Option<&'static str>> {
+        let segs = |p: &str| -> Vec<String> { p.replace('\\', "/").split('/').filter(|s| !s.is_empty()).map(String::from).collect() };
+        let mut forms: Vec<Vec<String>> = Vec::new();
+        for alt in brace_expand(t, 0) {
+            let abs = resolve(&[self.cwd(), &alt])?.replace('\\', "/");
+            forms.push(segs(&abs));
+            let parts: Vec<&str> = abs.split('/').collect();
+            match parts.iter().position(|s| is_glob(s)) {
+                Some(k) if k > 0 => {
+                    let mut f = segs(&self.real(&format!("{}/", parts[..k].join("/")), 0)?);
+                    f.extend(parts[k..].iter().filter(|s| !s.is_empty()).map(|s| s.to_string()));
+                    forms.push(f);
+                }
+                None => forms.push(segs(&self.real(&abs, 0)?)),
+                _ => {}
+            }
+        }
+        let hits = |gs: &[String], target: &[String], prefix: bool| -> bool {
+            (if prefix { gs.len() >= target.len() } else { gs.len() == target.len() }) && target.iter().enumerate().all(|(i, s)| seg_matches(&gs[i], s))
+        };
+        let with = |r: &[String], tail: &[&str]| -> Vec<String> { r.iter().cloned().chain(tail.iter().map(|s| s.to_string())).collect() };
+        for gs in &forms {
+            let n = gs.len();
+            if n >= 2 && seg_matches(&gs[n - 2], ".claude") && SETTINGS.iter().any(|s| seg_matches(&gs[n - 1], s)) {
+                return Ok(Some("settings"));
+            }
+            if let Some(kb) = self.kb {
+                for r in [segs(kb), segs(&self.real(kb, 0)?)] {
+                    if hits(gs, &with(&r, &["mode.json"]), false) {
+                        return Ok(Some("mode.json"));
+                    }
+                }
+            }
+            if let Some(home) = self.vlad_home.filter(|h| !h.is_empty()) {
+                for r in [segs(home), segs(&self.real(home, 0)?)] {
+                    if hits(gs, &with(&r, &["vlad.config.json"]), false) || hits(gs, &with(&r, &["vlad.config.local.json"]), false) || hits(gs, &with(&r, &["dist", "hooks"]), true) {
+                        return Ok(Some("vlad"));
+                    }
                 }
             }
         }
@@ -609,6 +660,58 @@ mod tests {
         assert!(check_worker_mode("Write", &input(&[("file_path", "../vlad/vlad.config.local.json")]), Some(KB), Some(HOME), Some("/home/u/vlad-kb")).unwrap().is_some());
         assert_eq!(edit("Write", "/work/wt/vlad.config.local.json"), None);
         assert_eq!(bash(&format!("cat {p}")), None);
+    }
+
+    #[test]
+    fn glob_protected_settings() {
+        // F-vlad-408 (test/hooks/mode-guard.test.ts ile aynı vakalar)
+        for p in ["~/.cla*/settings.json", "~/.?laude/settings.json", "~/.c[l]aude/settings.json", "~/.claude/*ettings.json", "~/.claude/*", "~/.claude/settings.*", "~/.*/settings.local.json", "~/.{claude,x}/settings.json", "/Users/x/.cla*/*.local.json", ".c?aude/settings.json", "~/.c*/\u{17F}ett*.json"] {
+            for c in [format!("echo {{}} > {p}"), format!("tee {p}"), format!("cp x {p}"), format!("sed -i s/a/b/ {p}")] {
+                assert!(bash(&c).is_some(), "{c:?}");
+            }
+            assert!(edit("Write", p).is_some(), "{p}");
+        }
+        for c in ["cat ~/.cla*/settings.json", "ls ~/.claude/*", "echo x > ~/*/settings.json", "cp x ~/.claude/*.md", "cp x src/*.json", "echo x > ~/.cla*/other.json"] {
+            assert_eq!(bash(c), None, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn glob_protected_vlad() {
+        // F-vlad-409
+        for p in [format!("{HOME}/vlad.config.local.js?n"), format!("{HOME}/vlad.config.local.*"), format!("{HOME}/vlad.conf?g.json"), format!("{HOME}/di?t/hooks/push-guard"), format!("{HOME}/dist/*/push-guard"), format!("{HOME}/*.json"), format!("{HOME}/dist/*"), format!("{HOME}/dist/hoo[k]s/x.js"), format!("{HOME}/{{dist,x}}/hooks/a"), format!("{KB}/mod?.json"), format!("{KB}/*.json"), "/home/u/v*/vlad.config.json".to_string()] {
+            for c in [format!("echo {{}} > {p}"), format!("tee {p}"), format!("cp x {p}")] {
+                assert!(bash(&c).is_some(), "{c:?}");
+            }
+            assert!(edit("Write", &p).is_some(), "{p}");
+        }
+        assert!(check_worker_mode("Bash", &input(&[("command", "cp x di?t/*/push-guard")]), Some(KB), Some(HOME), Some(HOME)).unwrap().is_some());
+        for c in [format!("cat {HOME}/*.json"), format!("cp x {HOME}/src/*.ts"), format!("echo x > {HOME}/dist/*.js"), "cp x /work/wt/*.json".to_string(), format!("cp x {HOME}/vlad.config.*.bak")] {
+            assert_eq!(bash(&c), None, "{c:?}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn glob_protected_symlink_prefix() {
+        // F-vlad-408/409: jokersiz önek realpath'lenir (test/hooks/mode-guard-bypass.test.ts ile aynı)
+        let t = Tmp::new("globln");
+        let (cwd, root) = (t.cwd(), t.root.clone());
+        let (cl, vh) = (format!("{root}/.claude"), format!("{root}/vh"));
+        std::fs::create_dir_all(&cl).unwrap();
+        std::fs::create_dir_all(format!("{vh}/dist/hooks")).unwrap();
+        std::os::unix::fs::symlink(&cl, format!("{cwd}/l")).unwrap();
+        std::os::unix::fs::symlink(&vh, format!("{cwd}/v")).unwrap();
+        let r = |tool: &str, k: &str, v: &str| check_worker_mode(tool, &input(&[(k, v)]), None, Some(&vh), Some(&cwd)).unwrap();
+        for c in ["echo x > l/*ettings.json", "cp x l/settings.loc?l.json", "echo x > l/settings.json", "cp x v/vlad.config.*", "cp x v/di?t/hooks/a", "tee v/*.json"] {
+            assert!(r("Bash", "command", c).is_some(), "{c:?}");
+        }
+        for p in ["l/settings.json", "l/*ettings.json", "v/vlad.config.local.js?n"] {
+            assert!(r("Write", "file_path", p).is_some(), "{p}");
+        }
+        for c in ["echo x > l/other.json", "cp x v/src/*.ts"] {
+            assert_eq!(r("Bash", "command", c), None, "{c:?}");
+        }
     }
 
     #[test]
