@@ -24,6 +24,7 @@ import { registerApprover } from "./groups/approver.js";
 import { registerMonitor } from "./groups/monitor.js";
 import { registerWorktree } from "./groups/worktree.js";
 import { registerHistory } from "./groups/history.js";
+import { registerMemwatch } from "./groups/memwatch.js";
 
 export { failWith, handleParseError, pendingHelpOf } from "./ctx.js";
 export type { CliCtx } from "./ctx.js";
@@ -55,5 +56,6 @@ export function buildProgram(ctx: CliCtx): Command {
   registerMonitor(program, kit);
   registerWorktree(program, kit);
   registerHistory(program, kit);
+  registerMemwatch(program, kit);
   return program;
 }

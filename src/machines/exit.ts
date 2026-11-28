@@ -1,9 +1,10 @@
 import { KbLockTimeout } from "../kb/lock.js";
 import { RemoteError } from "../fleet/types.js";
+import { MemoryGateError } from "../memwatch/gate.js";
 
-/** CLI çıkış kodu: geçici uzak hata ve kb kilidi zaman aşımı → 75 (EX_TEMPFAIL); diğerleri 1. */
+/** CLI çıkış kodu: geçici uzak hata, kb kilidi zaman aşımı ve bellek kapısı reddi → 75 (EX_TEMPFAIL); diğerleri 1. */
 export function exitCodeFor(e: unknown): number {
-  return (e instanceof RemoteError && e.transient) || e instanceof KbLockTimeout ? 75 : 1;
+  return (e instanceof RemoteError && e.transient) || e instanceof KbLockTimeout || e instanceof MemoryGateError ? 75 : 1;
 }
 
 /** `--json` hatasının `details` satırları. */

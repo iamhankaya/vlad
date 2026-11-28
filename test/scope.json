@@ -82,7 +82,8 @@
         "src/scan/**",
         "src/stdout.ts",
         "src/approver/**",
-        "src/monitor/**"
+        "src/monitor/**",
+        "src/memwatch/**"
       ],
       "buckets": [
         "process"

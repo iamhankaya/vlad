@@ -99,6 +99,16 @@ Bayrakların tamamı için `vlad <komut> --help`. Her satırın sonunda manifest
 - `vlad monitor install` — `monitor install`: 5 dakikada bir `vlad monitor pull` çalıştıran launchd servisini (`com.vlad.monitor`) ve haftalık (pazartesi 09:00) `vlad monitor capacity` işini (`com.vlad.monitor-capacity`) kurar; ortamda sır yok, belirteç Keychain'den okunur. Terminalde, mod yetkisiyle; çalışan reddedilir; yalnız macOS. `vlad install` monitor yapılandırması varsa bunu da kurar. _(işçide reddedilir; konsolda yok; --json)_
 - `vlad monitor uninstall` — `monitor uninstall`: monitor launchd servisini durdurur ve plist'ini siler (`~/.vlad-monitor/` durum dosyasına dokunmaz). Terminalde, mod yetkisiyle. _(işçide reddedilir; konsolda yok; --json)_
 
+## top
+
+- `vlad top` — `top [--json] [--once] [--interval <sn>]`: bellek bekçisi (`dist/bin/memwatch top`, Rust) ile canlı tablo (2 sn): her `vlad-<görev>` tmux oturumunun süreç ağacı footprint toplamı (claude + cargo/rustc/node/docker CLI) ve en büyük alt süreci, ana `vlad` oturumu, colima/Virtualization VM, Terminal; sistem boş % (`memory_pressure` ile aynı kaynak), baskı, swap. `--json` tek atımlık çıktı. İkili yoksa `npm run build:native -- memwatch` ile derlenir. Salt okuma; çalışanda da çalışır. _(yerel; konsolda yok; --json)_
+
+## memwatch
+
+- `vlad memwatch status` — `memwatch status [--json]`: launchd durumu ve daemon'un son örneği (seviye, özet, daemon RSS; durum dosyası 60 sn'den eskiyse bayat). Salt okuma. _(yerel; konsol: okuma; --json)_
+- `vlad memwatch install` — `memwatch install`: `memwatch daemon`'u launchd'ye kurar (`com.vlad.memwatch`, KeepAlive, Background; 10 sn'de bir örnek, `~/.vlad-monitor/memwatch.json` = son örnek + 1 saatlik halka tampon, günlük `memwatch.log`). Eşik: warn = baskı warn ya da boş < %20; critical = baskı critical, boş < %10 ya da 5 dk'da +1 GiB swap. Eşikte ntfy bildirimi (approver `channel.json` kanalı; aynı seviye 15 dk tekrarlanmaz). Terminalde, mod yetkisiyle; çalışan reddedilir; yalnız macOS; ikili önce derlenmeli. _(işçide reddedilir; konsolda yok; --json)_
+- `vlad memwatch uninstall` — `memwatch uninstall`: memwatch launchd işini durdurur ve plist'ini siler (`~/.vlad-monitor/` durum dosyasına dokunmaz). Terminalde, mod yetkisiyle. _(işçide reddedilir; konsolda yok; --json)_
+
 ## audit
 
 - `vlad audit skills` — `audit skills [--since] [--project]`: beklenen/yüklenen/eksik skill denetimi. _(yerel; konsol: okuma; --json)_
