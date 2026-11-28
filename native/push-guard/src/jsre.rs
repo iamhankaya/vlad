@@ -151,8 +151,12 @@ fn test(re: &str, name: &str) -> bool {
     }
 }
 
-/// mode-guard.ts `globHits(base, name)`.
+/// mode-guard.ts `globHits(base, name)`: K1 — ham ya da APFS katlanmış biçim isabet ederse isabet.
 pub fn glob_hits(base: &str, name: &str) -> bool {
+    glob_hit1(base, name) || glob_hit1(&crate::text::fold(base), name)
+}
+
+fn glob_hit1(base: &str, name: &str) -> bool {
     if !is_glob(base) {
         return lower(base) == name;
     }
@@ -181,8 +185,16 @@ pub fn glob_hits(base: &str, name: &str) -> bool {
     test(&r, name)
 }
 
-/// mode-guard.ts `segMatches(globSeg, name)`.
+/// mode-guard.ts `segMatches(globSeg, name)`: K1 — ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı katlanmış çift.
 pub fn seg_matches(glob_seg: &str, name: &str) -> bool {
+    // review tur 2: POSIX sınıfı (`[[:lower:]]`) / `]` ile başlayan sınıf (`[]n]`) → `?` (mode-guard.ts bracketLoose)
+    static BR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let g = BR.get_or_init(|| regex::Regex::new(r"\[(?:[!^]?\][^\]]*|[^\]]*\[:[a-z]+:\][^\]]*)\]").unwrap()).replace_all(glob_seg, "?");
+    let glob_seg = g.as_ref();
+    seg_match1(glob_seg, name) || seg_match1(&crate::text::fold(glob_seg), &crate::text::fold(name))
+}
+
+fn seg_match1(glob_seg: &str, name: &str) -> bool {
     if !is_glob(glob_seg) {
         return lower(glob_seg) == lower(name);
     }
@@ -238,11 +250,12 @@ mod tests {
             ("[!x]sers", "Users", true), ("[]sers", "Users", false), ("[^]sers", "Users", false),
             ("[!]sers", "Users", true), ("[z-a]sers", "Users", true), ("[a-]sers", "Users", false),
             ("[-u]sers", "Users", true), ("[.-z]sers", "Users", true), ("[*]sers", "Users", false),
-            ("[?]sers", "Users", false), ("[]]sers", "Users", false), ("[", "Users", true), ("Us]ers", "Us]ers", true),
+            ("[?]sers", "Users", false), ("[]]sers", "Users", true), /* review tur 2: `]` ile başlayan sınıf fail-closed `?` */ ("[", "Users", true), ("Us]ers", "Us]ers", true),
             ("**rs", "Users", true), ("u?ers", "Users", true), ("[A-Z]sers", "users", true),
             ("[Z-a]sers", "_sers", true), ("[Z-a]sers", "zsers", true), ("[[]", "[", true), ("[\\]x", "x", false),
-            ("[^a]", "^", true), ("[!a]", "b", true), ("users", "USERS", true), ("[ſ]sers", "Ssers", false),
-            ("[k]", "\u{212a}", false), ("é*", "Érik", true), ("[é]rik", "Érik", true),
+            ("[^a]", "^", true), ("[!a]", "b", true), ("users", "USERS", true), ("[ſ]sers", "Ssers", true),
+            ("[k]", "\u{212a}", true), ("é*", "Érik", true), ("[é]rik", "Érik", true), // K1: ſ/K satırları APFS katlaması (eskiden false)
+            ("stra?", "straß", true), ("stra[ß]", "straß", true), ("stra??", "straß", true), ("?x", "\u{fb01}x", true),
         ];
         for (a, b, want) in cases {
             assert_eq!(seg_matches(a, b), *want, "segMatches({a:?}, {b:?})");

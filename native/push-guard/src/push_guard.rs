@@ -20,7 +20,8 @@ pub fn check_worker_push(command: &str, own_id: Option<&str>) -> Option<&'static
     let joined = re(&CONT, r"\\\r?\n").replace_all(command, ""); // satır devamı: bash birleştirir
     let c = js_trim(&joined);
     let bare: String = c.chars().filter(|ch| !matches!(ch, '"' | '\'' | '\\')).collect();
-    if !re(&GIT, "⟨b⟩git⟨b⟩").is_match(&bare) || !re(&PUSH, "⟨b⟩push⟨b⟩").is_match(&bare) {
+    // F-vlad-405: TS `/\bgit\b/i` (non-unicode /i yalnız ASCII katlar = `(?i-u:…)`)
+    if !re(&GIT, "⟨b⟩(?i-u:git)⟨b⟩").is_match(&bare) || !re(&PUSH, "⟨b⟩(?i-u:push)⟨b⟩").is_match(&bare) {
         return None;
     }
     let allowed = re(
@@ -81,6 +82,18 @@ mod tests {
         ] {
             assert!(check_worker_push(&cmd, Some(ID)).is_some(), "{cmd:?}");
         }
+    }
+
+    #[test]
+    fn case_insensitive_trigger() {
+        // F-vlad-405: macOS/Windows'ta `GIT push` git'i çalıştırır; tetik harf duyarsız, ALLOWED küçük harf kalır → ret
+        for cmd in ["GIT push --force origin main", &format!("Git push origin vlad/{ID}"), "git PUSH origin main", "gIt Push -f origin main", &format!("GIT -C /w PUSH origin vlad/{ID}"), "G\"I\"T push origin main"] {
+            assert_eq!(check_worker_push(cmd, Some(ID)), Some(NOT_PATTERN), "{cmd:?}");
+        }
+        assert_eq!(check_worker_push("GIT status", Some(ID)), None);
+        // JS /i (non-unicode) ASCII dışını ASCII'ye katlamaz: ı/İ/ſ eşleşmez
+        assert_eq!(check_worker_push("gıt push", Some(ID)), None);
+        assert_eq!(check_worker_push("git puſh", Some(ID)), None);
     }
 
     #[test]
