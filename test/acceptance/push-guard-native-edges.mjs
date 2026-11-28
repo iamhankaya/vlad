@@ -153,6 +153,7 @@ const failclosedDeny = [
   `rm -rf ${VH}/dist`, `rm -rf ${VH}/di*`, `cp -r hooks ${VH}/di?t`, "cp settings.json ~/.claude/", "cp -t ~/.claude settings.json", "rm -rf ~/.claude", "mv ~/.cla* ~/old", `rm -rf ${KB}`, `rm -rf ${VH}`, `mv ${VH}/dist ${VH}/x`, `install -t ${VH}/dist/hooks x`,
   "cd ~/.claude 2>&1 && tee settings.json", "{ cd ~/.claude; tee settings.json; }", "builtin cd ~/.claude && tee settings.json", "cd $SOMEWHERE && tee settings.json", "tee ~/(.claude|x)/settings.json", "tee ~/(.claude/settings.json|x)", `tee ${VH}/(dist/hooks|x)/a.js`,
   "tar -xf x.tar -C ~/.claude", "unzip x.zip -d ~/.claude",
+  "(cd ~/.claude); tee settings.json", "cd ~/.claude | cat; tee settings.json", "cd ~/.claude & tee settings.json", "cd ~/.claude || true; tee settings.json",
   "cd ~/.claude && echo x > settings.json", `cd ${VH} && echo x > vlad.config.json`, `cd ${VH}/dist/hooks && cp x push-guard-hook.js`, `cd ${KB}; echo x > mode.json`, "pushd ~/.claude; tee settings.local.json",
 ];
 const failclosedAllow = ["echo x >| out.txt", "echo x | tee out.txt", "echo x >| /dev/null", "echo $(date) > out.txt", "rm -rf build", "cp -r a b", "cp x src/", "cd src && echo x > a.json", `cd ${VH} && cat vlad.config.json`, "cd ~/.claude && ls", "cd $X && make > log.txt", "cd src 2>&1 && tee a.json", "tar -xf x.tar -C out",

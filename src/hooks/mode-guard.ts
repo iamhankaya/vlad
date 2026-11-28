@@ -80,8 +80,10 @@ const WRITE_TOOL = /(?:^|\s)(?:tee|cp|mv|rm|truncate|dd|ln|install|tar|unzip|per
 const SEP_TOKEN = /[\s;&|<>(),='"]+/;
 
 /** Komutu tırnak dışındaki ayraçlarda (`;`, `&&`, `||`, `|`, `(`, `$(`, backtick, satır sonu) parçalara böler; tırnak içeriği kalır, tırnak/ters bölü karakterleri atılır. */
-function segments(cmd: string): string[] {
-  const out: string[] = []; let cur = ""; let q: string | null = null;
+function segments(cmd: string): string[] { return segmentsEx(cmd).map((x) => x.s); }
+/** `pre`/`post`: parçayı açan/kapatan ayraç (`&&`/`||` birleşik); cd'nin kapsamını (alt kabuk/boru/arka plan) anlamak için. */
+function segmentsEx(cmd: string): { s: string; pre: string; post: string }[] {
+  const raw: { s: string; pre: string; post: string }[] = []; let cur = "", pre = ""; let q: string | null = null;
   const c = cmd.replace(/\\\r?\n/g, "");
   for (let i = 0; i < c.length; i++) {
     const ch = c[i]!;
@@ -89,11 +91,11 @@ function segments(cmd: string): string[] {
     if (ch === '"' || ch === "'") { q = ch; continue; }
     if (ch === "\\") { cur += c[++i] ?? ""; continue; }
     if (ch === "|" && c[i - 1] === ">") { cur += ch; continue; } // F-vlad-412: `>|` noclobber yönlendirmesi bölünmez
-    if (";&|(`\n".includes(ch)) { out.push(cur); cur = ""; continue; }
+    if (";&|(`\n".includes(ch)) { raw.push({ s: cur, pre, post: (ch === "&" || ch === "|") && c[i + 1] === ch ? ch + ch : ch }); cur = ""; pre = ch; continue; }
     cur += ch;
   }
-  out.push(cur);
-  return out.map((s) => s.trim()).filter(Boolean);
+  raw.push({ s: cur, pre, post: "" });
+  return raw.map((x) => ({ ...x, s: x.s.trim() })).filter((x) => x.s);
 }
 /** Komut konumundaki `vlad mode <x>`: segment başı, öncesinde yalnız ortam atamaları/sarmalayıcılar (env, sudo, npx, node …) olabilir. */
 const MODE_CMD = /^(?:[\w.-]+=\S*\s+|(?:env|command|exec|nohup|time|sudo|npx|tsx|node)\b(?:\s+-\S+(?:\s+[A-Z_]+)?)*\s+)*(?:\S*[/\\])?(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/i;
@@ -130,7 +132,7 @@ function cdOf(seg: string): { target?: string } | null {
   let k = i + 1;
   while (k < w.length && /^(?:--|-[LPe@]+)$/.test(w[k]!)) k++;
   const t = w[k];
-  return t === undefined || /^\d*[<>]/.test(t) ? {} : { target: t.replace(/;+$/, "") };
+  return t === undefined || /^\d*[<>]/.test(t) ? {} : { target: t.replace(/[;)]+$/, "") };
 }
 const RELATIVE_PROTECTED_NAME = ["settings.json", "settings.local.json", "vlad.config.json", "vlad.config.local.json"];
 
@@ -141,20 +143,13 @@ function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: num
   }
   cmd = altLoose(cmd);
   let cwdUnknown = false;
-  let ctx = ctx0; // `cd <dizin>` sonrası göreli yollar o dizine göre çözülür (bilgi maddesi: cwd izleme)
+  let ctxs: GuardCtx[] = [ctx0]; // olası cwd'ler: `cd` kesin kapsamdaysa değiştirir, alt kabuk/boru/arka plan/`||` ise eskisi de kalır (fail-closed)
   if (secretHit(cmd)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
   // Windows: segments() ters eğik çizgiyi kabuk kaçışı sayıp siler (C:\Users → C:Users); sürücü harfli joker yolları kaçmasın diye ham sözcükler de denetlenir (yalnız daha sıkı)
   const rawToks = cmd.split(/[\s;&|()]+/).filter(Boolean);
-  for (const seg of segments(cmd)) {
+  for (const { s: seg, pre, post } of segmentsEx(cmd)) {
     const mm = MODE_CMD.exec(fold(seg)); // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;
-    const cd = cdOf(seg);
-    if (cd) { // sanal cwd; çözülemeyen hedef (`$VAR`, `-`, joker) → cwdUnknown: sonraki göreli settings/vlad.config adlı yazma reddedilir (fail-closed)
-      const t = cd.target;
-      if (t === undefined) ctx = { ...ctx, cwd: homedir() };
-      else if (t !== "-" && !/[$*?[{~`]/.test(expand(t))) ctx = { ...ctx, cwd: resolve(ctx.cwd ?? ".", expand(t.replace(/\\/g, "/"))) };
-      else cwdUnknown = true;
-    }
     const clean = seg.replace(/\d*>&\d+|&?\d*>>?\s*\/dev\/null/g, " "); // 2>&1, >/dev/null yazma değildir
     const toks = clean.split(SEP_TOKEN).filter(Boolean);
     const tools = WRITE_TOOL.test(fold(clean)); // K1: ſed, baſh, inſtall, awK
@@ -164,11 +159,27 @@ function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: num
     const kbUnder = (t: string) => kbDir !== null && norm(expand(t)).startsWith(norm(kbDir) + "/");
     // F-vlad-408/409: SEP_TOKEN virgülde böler; `{a,b}` süslü sözcükler boşlukla bölünmüş haliyle de denetlenir
     for (const t of tools ? [...toks, ...clean.split(/\s+/).filter((x) => x.includes("{"))] : redirectTargets) {
-      const hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null) ?? (tools && (destroy || copyish) ? dirProtected(t, kbDir, ctx, destroy) : null);
+      let hit: string | null = null;
+      for (const ctx of ctxs) { // segmentin kendi yönlendirmeleri cd'den ÖNCEKİ cwd'ye göre (kabuk yönlendirmeyi cd'den önce açar)
+        hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null) ?? (tools && (destroy || copyish) ? dirProtected(t, kbDir, ctx, destroy) : null);
+        if (hit) break;
+      }
       if (hit) return `${WHY} (${hit}: ${t})`;
       if (cwdUnknown && !isAbsolute(t) && !/^[~$]/.test(t)) { // çözülemeyen cd sonrası göreli yol: korunan dosya adı her dizinde reddedilir
         const nb = basename(t.replace(/\\/g, "/"));
         if (RELATIVE_PROTECTED_NAME.some((s) => globHits(nb, s))) return `${WHY} (cd çözülemedi: göreli ${t})`;
+      }
+    }
+    const cd = cdOf(seg); // cd en sonda uygulanır: aynı segmentin yönlendirmeleri eski cwd'ye göre denetlendi
+    if (cd) { // çözülemeyen hedef (`$VAR`, `-`, joker) → cwdUnknown: sonraki göreli settings/vlad.config adlı yazma reddedilir (fail-closed)
+      const t = cd.target;
+      let next: string | null = null;
+      if (t === undefined) next = homedir();
+      else if (t !== "-" && !/[$*?[{~`]/.test(expand(t))) next = resolve(ctxs[ctxs.length - 1]!.cwd ?? ".", expand(t.replace(/\\/g, "/")));
+      else cwdUnknown = true;
+      if (next !== null) {
+        const certain = (post === ";" || post === "\n" || post === "&&") && !"(`|".includes(pre || " ") && !seg.includes(")");
+        ctxs = certain ? [{ ...ctxs[ctxs.length - 1]!, cwd: next }] : [...ctxs, { ...ctxs[ctxs.length - 1]!, cwd: next }];
       }
     }
   }

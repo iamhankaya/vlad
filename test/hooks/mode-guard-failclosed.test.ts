@@ -79,6 +79,13 @@ describe("review turu: cd çözümleyici, grup/nokta, doğrusal tarama, tar/unzi
       expect(b(c), c).not.toBeNull();
     for (const c of ["cd $SOMEWHERE && tee out.txt", "cd src 2>&1 && tee a.json", "cd $X && make > log.txt"]) expect(b(c), c).toBeNull();
   });
+  it("Codex turu: cd'li segmentin yönlendirmesi eski cwd'ye göre; alt kabuk/boru/arka plan cd'si taşınmaz ama eski cwd de kalır", () => {
+    for (const c of ["cd /tmp > vlad.config.json", "cd /tmp >| vlad.config.json", "(cd /tmp); echo x > vlad.config.json", "cd /tmp | cat; echo x > vlad.config.json", "cd /tmp & echo x > vlad.config.json", "cd /tmp || true; echo x > vlad.config.json", "$(cd /tmp); echo x > vlad.config.json"])
+      expect(b(c, vh), c).not.toBeNull();
+    for (const c of ["cd /tmp && echo x > vlad.config.json", "cd /tmp; echo x > vlad.config.json", "cd /tmp\necho x > vlad.config.json"]) expect(b(c, vh), c).toBeNull();
+    expect(b("(cd ~/.claude); tee settings.json")).not.toBeNull();
+    expect(b("cd ~/.claude | cat; tee settings.json")).not.toBeNull();
+  });
   it("grup: noktalı ad ve içinde / olan alternatif", () => {
     for (const c of ["tee ~/(.claude|x)/settings.json", "tee ~/(.claude)/settings.json", "tee ~/(.claude/settings.json|x)", `tee ${vh}/(dist/hooks|x)/a.js`]) expect(b(c), c).not.toBeNull();
   });

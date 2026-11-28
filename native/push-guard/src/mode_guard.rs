@@ -316,26 +316,13 @@ impl<'a> Guard<'a> {
             &MODE_CMD,
             r"^(?:[A-Za-z0-9_.-]+=⟨S⟩*⟨s⟩+|(?i-u:env|command|exec|nohup|time|sudo|npx|tsx|node)⟨b⟩(?:⟨s⟩+-⟨S⟩+(?:⟨s⟩+[A-Za-z_]+)?)*⟨s⟩+)*(?:⟨S⟩*[/\\])?(?i-u:vlad|cli)(?:\.(?i-u:cmd|exe|js|mjs|ts|ps1))?(?:⟨s⟩+-⟨S⟩+)*⟨s⟩+(?i-u:mode)⟨b⟩⟨s⟩*(⟨S⟩*)",
         );
-        for seg in segments(cmd) {
+        // olası cwd'ler (TS ctxs): kesin kapsamlı cd değiştirir; alt kabuk/boru/arka plan/`||` ise eskisi de kalır (fail-closed)
+        let mut cands: Vec<Option<String>> = vec![self.vcwd.borrow().clone()];
+        for (seg, pre, post) in segments_ex(cmd) {
             // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
             if let Some(mm) = mode_cmd.captures(&fold(&seg)) {
                 if mm[1].to_lowercase() != "status" {
                     return Ok(Some(format!("{}; yalnız `vlad mode status` serbest", WHY)));
-                }
-            }
-            if let Some(cd) = cd_of(&seg, re(&WS_SPLIT, r"⟨s⟩+"), re(&CD_WORD, r"^(?i-u:cd|pushd|chdir)$"), re(&CD_OPT, r"^(?:--|-[LPe@]+)$"), re(&CD_REDIR, r"^[0-9]*[<>]")) {
-                // sanal cwd; çözülemeyen hedef (`$VAR`, `-`, joker) → cwd_unknown: sonraki göreli settings/vlad.config adlı yazma reddedilir (fail-closed)
-                match cd {
-                    None => *self.vcwd.borrow_mut() = Some(sys::homedir()?),
-                    Some(t) => {
-                        let e = expand(&t)?;
-                        if t != "-" && !e.contains(['$', '*', '?', '[', '{', '~', '`']) {
-                            let r = resolve(&[&self.cwd(), &expand(&t.replace('\\', "/"))?])?;
-                            *self.vcwd.borrow_mut() = Some(r);
-                        } else {
-                            cwd_unknown = true;
-                        }
-                    }
                 }
             }
             let clean = re(&CLEAN, r"[0-9]*>&[0-9]+|&?[0-9]*>>?⟨s⟩*/dev/null").replace_all(&seg, " ").into_owned();
@@ -359,15 +346,22 @@ impl<'a> Guard<'a> {
             let destroy = re(&DESTROY, r"(?:^|⟨s⟩)(?i-u:rm|mv|rmdir|unlink|shred|trash(?:-put)?)(?:⟨s⟩|$)").is_match(&folded);
             let copyish = re(&COPYISH, r"(?:^|⟨s⟩)(?i-u:cp|install|rsync|ln|scp|tar|unzip)(?:⟨s⟩|$)").is_match(&folded);
             for t in list {
-                let mut hit = match self.protected_path(t, true)? {
-                    Some(h) => Some(h),
-                    None => match self.kb {
-                        Some(kb) if norm(&expand(t)?).starts_with(&format!("{}/", norm(kb))) => Some("kb"),
-                        _ => None,
-                    },
-                };
-                if hit.is_none() && tools && (destroy || copyish) {
-                    hit = self.dir_protected(t, destroy)?; // F-vlad-413: korunan kökün kendisi/atası
+                let mut hit = None;
+                for cand in &cands { // segmentin kendi yönlendirmeleri cd'den ÖNCEKİ cwd'ye göre (kabuk yönlendirmeyi cd'den önce açar)
+                    *self.vcwd.borrow_mut() = cand.clone();
+                    hit = match self.protected_path(t, true)? {
+                        Some(h) => Some(h),
+                        None => match self.kb {
+                            Some(kb) if norm(&expand(t)?).starts_with(&format!("{}/", norm(kb))) => Some("kb"),
+                            _ => None,
+                        },
+                    };
+                    if hit.is_none() && tools && (destroy || copyish) {
+                        hit = self.dir_protected(t, destroy)?; // F-vlad-413: korunan kökün kendisi/atası
+                    }
+                    if hit.is_some() {
+                        break;
+                    }
                 }
                 if let Some(h) = hit {
                     return Ok(Some(format!("{} ({}: {})", WHY, h, t)));
@@ -377,6 +371,30 @@ impl<'a> Guard<'a> {
                     let nb = basename(&t.replace('\\', "/"));
                     if ["settings.json", "settings.local.json", "vlad.config.json", "vlad.config.local.json"].iter().any(|s| glob_hits(&nb, s)) {
                         return Ok(Some(format!("{} (cd çözülemedi: göreli {})", WHY, t)));
+                    }
+                }
+            }
+            // cd en sonda uygulanır: aynı segmentin yönlendirmeleri eski cwd'ye göre denetlendi
+            if let Some(cd) = cd_of(&seg, re(&WS_SPLIT, r"⟨s⟩+"), re(&CD_WORD, r"^(?i-u:cd|pushd|chdir)$"), re(&CD_OPT, r"^(?:--|-[LPe@]+)$"), re(&CD_REDIR, r"^[0-9]*[<>]")) {
+                let next: Option<String> = match cd {
+                    None => Some(sys::homedir()?),
+                    Some(t) => {
+                        let e = expand(&t)?;
+                        if t != "-" && !e.contains(['$', '*', '?', '[', '{', '~', '`']) {
+                            *self.vcwd.borrow_mut() = cands.last().cloned().flatten();
+                            Some(resolve(&[&self.cwd(), &expand(&t.replace('\\', "/"))?])?)
+                        } else {
+                            cwd_unknown = true;
+                            None
+                        }
+                    }
+                };
+                if let Some(n) = next {
+                    let certain = (post == ";" || post == "\n" || post == "&&") && !(pre == "(" || pre == "`" || pre == "|") && !seg.contains(')');
+                    if certain {
+                        cands = vec![Some(n)];
+                    } else {
+                        cands.push(Some(n));
                     }
                 }
             }
@@ -601,15 +619,25 @@ pub fn check_worker_mode(tool: &str, input: &ToolInput, kb: Option<&str>, vlad_h
 }
 
 /// Komutu tırnak dışındaki ayraçlarda (`;`, `&`, `|`, `(`, backtick, satır sonu) böler; tırnak/ters bölü atılır.
+#[cfg(test)]
 fn segments(cmd: &str) -> Vec<String> {
+    segments_ex(cmd).into_iter().map(|x| x.0).collect()
+}
+
+/// TS `segmentsEx`: (parça, açan ayraç, kapatan ayraç; `&&`/`||` birleşik) — cd kapsamı (alt kabuk/boru/arka plan) için.
+fn segments_ex(cmd: &str) -> Vec<(String, String, String)> {
     static CONT: OnceLock<Regex> = OnceLock::new();
     let c = re(&CONT, r"\\\r?\n").replace_all(cmd, "");
-    let mut out: Vec<String> = Vec::new();
+    let chars: Vec<char> = c.chars().collect();
+    let mut out: Vec<(String, String, String)> = Vec::new();
     let mut cur = String::new();
+    let mut pre = String::new();
     let mut q: Option<char> = None;
-    let mut it = c.chars();
+    let mut idx = 0usize;
     let mut prev: Option<char> = None; // TS `c[i - 1]`: son tüketilen ham karakter
-    while let Some(ch) = it.next() {
+    while idx < chars.len() {
+        let ch = chars[idx];
+        idx += 1;
         let p = prev;
         prev = Some(ch);
         if let Some(qc) = q {
@@ -625,7 +653,9 @@ fn segments(cmd: &str) -> Vec<String> {
             continue;
         }
         if ch == '\\' {
-            if let Some(n) = it.next() {
+            if idx < chars.len() {
+                let n = chars[idx];
+                idx += 1;
                 cur.push(n);
                 prev = Some(n);
             }
@@ -636,13 +666,15 @@ fn segments(cmd: &str) -> Vec<String> {
             continue;
         }
         if ";&|(`\n".contains(ch) {
-            out.push(std::mem::take(&mut cur));
+            let post = if (ch == '&' || ch == '|') && chars.get(idx) == Some(&ch) { format!("{ch}{ch}") } else { ch.to_string() };
+            out.push((std::mem::take(&mut cur), pre.clone(), post));
+            pre = ch.to_string();
             continue;
         }
         cur.push(ch);
     }
-    out.push(cur);
-    out.into_iter().map(|s| crate::text::js_trim(&s).to_string()).filter(|s| !s.is_empty()).collect()
+    out.push((cur, pre, String::new()));
+    out.into_iter().map(|(s, a, b)| (crate::text::js_trim(&s).to_string(), a, b)).filter(|x| !x.0.is_empty()).collect()
 }
 
 /// mode-guard.ts `cdOf`: segmentte `cd`/`pushd`/`chdir` (başta ya da `{`/`then`/`builtin` … sonrası). `None` = cd yok; `Some(None)` = HOME; `Some(Some(t))` = hedef.
@@ -657,7 +689,7 @@ fn cd_of(seg: &str, ws: &Regex, word: &Regex, opt: &Regex, redir: &Regex) -> Opt
     match w.get(k) {
         None => Some(None),
         Some(t) if redir.is_match(t) => Some(None),
-        Some(t) => Some(Some(t.trim_end_matches(';').to_string())),
+        Some(t) => Some(Some(t.trim_end_matches([';', ')']).to_string())),
     }
 }
 
@@ -988,6 +1020,19 @@ mod tests {
             "echo x > *.json", "cp x src/*", "tee out-?.txt", "echo x > {a,b}.ts", "echo '*.json' > notes.txt", "grep -r x ~/.claude/projects", "rm src/a.ts", "echo x > src/a.json"] {
             assert_eq!(bash(c), None, "{c:?}");
         }
+    }
+
+    #[test]
+    fn failclosed_codex_cd_scope() {
+        let at = |c: &str| check_worker_mode("Bash", &input(&[("command", c)]), Some(KB), Some(HOME), Some(HOME)).unwrap();
+        for c in ["cd /tmp > vlad.config.json", "cd /tmp >| vlad.config.json", "(cd /tmp); echo x > vlad.config.json", "cd /tmp | cat; echo x > vlad.config.json", "cd /tmp & echo x > vlad.config.json", "cd /tmp || true; echo x > vlad.config.json", "$(cd /tmp); echo x > vlad.config.json"] {
+            assert!(at(c).is_some(), "{c:?}");
+        }
+        for c in ["cd /tmp && echo x > vlad.config.json", "cd /tmp; echo x > vlad.config.json", "cd /tmp\necho x > vlad.config.json"] {
+            assert_eq!(at(c), None, "{c:?}");
+        }
+        assert!(bash("(cd ~/.claude); tee settings.json").is_some());
+        assert!(bash("cd ~/.claude | cat; tee settings.json").is_some());
     }
 
     // inceleme turu (T20261128-04): TS mode-guard-failclosed.test.ts "review turu" ile aynı vakalar
