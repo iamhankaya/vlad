@@ -21,6 +21,7 @@ import { doneSummaryNote } from "../../projects/status.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 import { denyLogHint } from "../../tasks/denials.js";
+import { launchMemoryDeps, memoryGate, readMemory } from "../../memwatch/gate.js";
 
 export function registerTask(program: Command, k: Kit): void {
   const { ctx, out, def } = k;
@@ -108,6 +109,12 @@ export function registerTask(program: Command, k: Kit): void {
         r.warnings.map((w) => `\nuyarı: ${w}`).join(""));
       return;
     }
+    const warnings: string[] = [];
+    // T20261128-06 bellek kapısı: yerleşimden sonra, yalnız bu makinede çalışan açılacaksa (dry-run pencere açmaz; uzak makineye yerleşen görev o makinenin belleğini kullanır)
+    const memDeps = o.dryRun ? null : launchMemoryDeps(ctx.env, ctx.cliPath);
+    const beforeLocal = memDeps
+      ? () => memoryGate(readMemory(memDeps), { force: !!o.force, warn: (l) => { warnings.push(l); ctx.stderr.write(`uyarı: ${l}\n`); } })
+      : undefined;
     let last: LaunchResult | undefined;
     // --external (vlad-desktop): only writes the script; the caller opens it, so no terminal and no noop guard
     // VLAD_DESKTOP_QUEUE (vlad-desktop main tab): same preparation as --external plus a queue file the app picks up; explicit --external keeps the old behavior
@@ -121,7 +128,6 @@ export function registerTask(program: Command, k: Kit): void {
     const real: Launcher = o.external
       ? new TerminalLauncher({ mode: "auto", external: true })
       : q.dir ? queueLauncher(q.dir, "launch", normal) : normal;
-    const warnings: string[] = [];
     // F-vlad-261: the trust record written before the window opens can be dropped by a live Claude; check after, repair or warn
     const launcher: Launcher = { launch: async (req) => {
       last = await real.launch(req);
@@ -137,7 +143,7 @@ export function registerTask(program: Command, k: Kit): void {
     } };
     // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
     if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
-    const t = await launchTask(id, { launcher, cfg, closeWorker: closeWorkerWindow, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
+    const t = await launchTask(id, { launcher, cfg, closeWorker: closeWorkerWindow, ...(beforeLocal ? { beforeLocal } : {}), ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
     // --- /machines:C1 ---
     out(
       o,
@@ -145,6 +151,7 @@ export function registerTask(program: Command, k: Kit): void {
       `${id} başlatıldı (${last?.method}) -> ${t.data.worktree}${o.dryRun ? "\n(dry-run) " + (last?.detail ?? "") : ""}${o.external ? `\ncommand: ${last?.command}` : ""}${last?.queued ? `\nkuyruk: ${last.queued}` : ""}`,
     );
   }).option("--dry-run", "terminal açmadan komutu göster")
+    .option("--force", "bellek kapısını geç: memwatch kritik baskı bildirse de çalışanı başlat (uyarı yine basılır)")
     .option("--machine <ad>", "görevi kartın makinelerinden birine sabitle (yalnız config'te machines varken)")
     .option("--external", "terminal açma; betiği yaz, script/command/cwd döndür (gömülü kullanım)");
 

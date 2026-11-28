@@ -1,0 +1,25 @@
+[package]
+name = "memwatch"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "VLAD bellek bekçisi: sistem baskısı + vlad-<görev> tmux ağaçlarının footprint'i (top, check, daemon)"
+
+[[bin]]
+name = "memwatch"
+path = "src/main.rs"
+
+[dependencies]
+# macOS sistem çağrıları (proc_pid_rusage ri_phys_footprint, proc_listallpids, sysctlbyname); `sysinfo` footprint vermiyor
+# ve tüm süreç tablosu için ağır yapılar tutuyor (daemon < 10 MB RSS hedefi). Güvensiz FFI yalnız src/sys.rs'te.
+libc = "0.2"
+# durum dosyası ve --json çıktısı; vlad TS tarafıyla aynı şema
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

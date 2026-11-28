@@ -162,6 +162,7 @@ Sonra çalışanı başlat. Bu komutu **PowerShell aracıyla** çalıştır, Bas
 vlad task launch <id> --json
 ```
 - **Çok makine** (`machines` tanımlıyken): `launch` makineyi kartın `machines` sırasına, kapasiteye ve ulaşılabilirliğe göre seçer (`--machine <ad>`); çıkış kodu **75** = geçici hata, görev `queued` kalır. Ayrıntı: `reference/launch-ayrintilari.md` §Çok makine.
+- **Bellek kapısı** (yerel çalışan): memwatch kritik baskı bildiriyorsa `launch` çalışan açmaz, çıkış **75**, hata `bellek: …` (görev `queued`, `error` yazılmaz). Kullanıcıya özeti göster; bir çalışan bitince ya da bellek açılınca tekrar dene, kullanıcı açıkça isterse `--force`. Uyarı seviyesinde launch geçer, `warnings`'teki `bellek: uyarı …` satırını kullanıcıya ilet. Durum: `vlad top --json`.
 - Başarılı: görev `running`; yeni terminal sekmesi/penceresinde çalışan açılır. Kullanıcıya branch (`vlad/<id>`) ve worktree yolunu göster.
 - Pipeline fazı (`parent` dolu): ilk fazda entegrasyon branch'i `vlad/<çatı-id>` ve worktree'si (`<worktreeDir>/<çatı-id>`) açılır, çatı `running` olur; fazın branch'i entegrasyon branch'inden açılır. Kullanıcıya ikisini de göster.
 - Hata (ör. worktree/branch zaten var, launcher başarısız): görev `queued` kalır, `error` doludur. Hatayı göster; üzerine yazma, ne yapılacağını kullanıcıya sor.

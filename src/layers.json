@@ -31,7 +31,8 @@
     "fleet": 0,
     "setup": 2,
     "approver": 2,
-    "monitor": 2
+    "monitor": 2,
+    "memwatch": 2
   },
   "pure": [
     "commands"

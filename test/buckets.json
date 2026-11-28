@@ -89,6 +89,7 @@
     "test/approver/**/*.test.ts",
     "test/acceptance/approver-*.test.ts",
     "test/monitor/**/*.test.ts",
+    "test/memwatch/**/*.test.ts",
     "test/acceptance/monitor-*.test.ts",
     "test/machines/branch-push-op.test.ts",
     "test/machines/branch-push-verify.test.ts",

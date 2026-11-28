@@ -192,6 +192,8 @@ export interface LaunchOpts {
   external?: boolean; dryRun?: boolean;
   /** test seam: closes the worker window when a launch is rolled back after the launcher ran (callers inject launcher closeWorkerWindow; tasks must not import the launcher layer) */
   closeWorker?: (taskId: string) => number[] | void;
+  /** T20261128-06: yerel çalışan açılmadan hemen önce (yerleşimden sonra, worktree/kb yazımından önce); fırlatırsa launch hiçbir şey yazmadan durur. Uzak makineye yerleşen görevde çağrılmaz. */
+  beforeLocal?: () => void;
 }
 
 /**
@@ -289,6 +291,7 @@ function pinPipeline(parentId: string | null | undefined, machine: string): void
 }
 
 async function launchLocal(task: Task, o: LaunchOpts, patch: { machine?: string }): Promise<Task> {
+  o.beforeLocal?.();
   const { cfg } = o;
   const id = task.data.id;
   const branch = `vlad/${id}`;

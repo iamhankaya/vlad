@@ -78,6 +78,7 @@
   "machine list",
   "machine ping",
   "machine probe-window",
+  "memwatch status",
   "monitor status",
   "notices count",
   "notices list",
@@ -97,7 +98,8 @@
   "vlad scan",
   "vlad send",
   "vlad setup",
-  "vlad status"
+  "vlad status",
+  "vlad top"
  ],
  "FORWARD": {
   "task ask": "task.ask",
@@ -663,6 +665,13 @@
     "done"
    ],
    "kind": "write"
+  },
+  {
+   "path": [
+    "memwatch",
+    "status"
+   ],
+   "kind": "read"
   }
  ]
 }

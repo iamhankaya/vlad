@@ -82,6 +82,7 @@ const BRAIN_ONLY = new Set([
   "mode night", "mode watch", "mode off", "mode status", "mode token", "mode request",
   "approver install", "approver uninstall", "approver rotate", "approver unlock", "approver status", "approver requests", "approver show", "approver run",
   "monitor pull", "monitor capacity", "notices done", "monitor install", "monitor uninstall",
+  "memwatch install", "memwatch uninstall",
   "history search", "history show",
   "audit setup",
   "inbox done", "pending add", "pending done", "decision add", "decision set", "decision migrate", "journal append",

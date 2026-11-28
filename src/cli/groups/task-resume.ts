@@ -14,6 +14,7 @@ import { nudgeWorker } from "../../tasks/nudge.js";
 import { cleanupMerged, humanBytes, type MergedResult } from "../../tasks/cleanup-merged.js";
 import { emuLabel, type EmuAction } from "../../tasks/emulators.js";
 import { cleanupTask, closeTaskWindow, logTask, remoteMachineOf, modelInfo, getTask, resumeLocalCheck, resumePrepare } from "../../tasks/index.js";
+import { launchMemoryDeps, memoryGate, readMemory } from "../../memwatch/gate.js";
 import type { Kit } from "../kit.js";
 import type { Opts } from "../ctx.js";
 
@@ -22,6 +23,11 @@ export function registerTaskResume(task: Command, k: Kit): void {
   def(task, "resume <id>", "running/stalled görev için devam bilgisi (yerel: worktree kontrolü + prompt; bulut: send_message argümanları)", async (id: string, o: Opts) => {
     // --- machines:C1 --- hazırlık kilitli (kb yazar), worktree denetimi kilitsiz; uzak makinedeki görev C2'de
     const cfg0 = loadConfig();
+    // T20261128-06 bellek kapısı: yerel sürdürme yeni çalışan açar; resumePrepare kb'ye yazmadan önce (uzak görev ve bulut kipi o makinenin/bulutun belleğini kullanır)
+    if (!remoteMachineOf(getTask(id), cfg0) && resolveLaunchMode(cfg0.launcher) !== "cloud") {
+      const memDeps = launchMemoryDeps(ctx.env, ctx.cliPath);
+      if (memDeps) memoryGate(readMemory(memDeps), { force: !!o.force, warn: (l) => ctx.stderr.write(`uyarı: ${l}\n`) });
+    }
     const { plan, remote } = await withKbLock(() => ({ remote: remoteMachineOf(getTask(id), cfg0), plan: resumePrepare(id) }));
     if (remote) {
       // uzak görev: worktree denetimi ve yeniden başlatma işçide (Agent), kb kilidi dışında
@@ -91,7 +97,8 @@ export function registerTaskResume(task: Command, k: Kit): void {
     out(o, r, r.mode === "local"
       ? `${r.prompt}${r.dirty.length ? `\nkaydedilmemiş: ${r.dirty.join(", ")}` : ""}`
       : `send_message session_id=${r.session_id}\n${r.message}`);
-  }).option("--external", "yerel çalışan için betik yaz (terminal açma); script/command/cwd döner");
+  }).option("--external", "yerel çalışan için betik yaz (terminal açma); script/command/cwd döner")
+    .option("--force", "bellek kapısını geç: memwatch kritik baskı bildirse de yerel çalışanı sürdür (uyarı yine basılır)");
   def(task, "close-window <id>", "Görevin çalışan penceresini/süreç ağacını kapatır; durum ve worktree değişmez", async (id: string, o: Opts) => {
     const cfg0 = loadConfig();
     const remote = remoteMachineOf(getTask(id), cfg0, workerContext()?.self); // işçide kendi görevi yerel kapanır (F-vlad-149)

@@ -37,6 +37,8 @@ export const GROUP_OF: Record<string, () => Promise<Register>> = {
   monitor: async () => (await import("./groups/monitor.js")).registerMonitor,
   worktree: async () => (await import("./groups/worktree.js")).registerWorktree,
   history: async () => (await import("./groups/history.js")).registerHistory,
+  top: async () => (await import("./groups/memwatch.js")).registerMemwatch,
+  memwatch: async () => (await import("./groups/memwatch.js")).registerMemwatch,
 };
 
 /**

@@ -9,6 +9,7 @@ dist-old/
 /vlad.local.json
 /.vlad-agent/
 node_modules-old/
+native/*/target/
 .vlad-npm-ci-running
 /vlad.config.local.json*
 /.claude/settings.local.json
