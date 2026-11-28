@@ -126,6 +126,7 @@ pub struct Guard<'a> {
     kb: Option<&'a str>,
     vlad_home: Option<&'a str>,
     cwd: Option<&'a str>,
+    vcwd: RefCell<Option<String>>,
     memo: RefCell<HashMap<String, String>>,
     sd: RefCell<Option<String>>,
     /// açık `real` özyineleme derinliği (C1: yığın taşması süreci düşürür, çıkış 134 = fail-open)
@@ -144,11 +145,15 @@ pub const MAX_REAL_FRAMES: u32 = 2000;
 
 impl<'a> Guard<'a> {
     pub fn new(kb: Option<&'a str>, vlad_home: Option<&'a str>, cwd: Option<&'a str>) -> Self {
-        Guard { kb, vlad_home, cwd, memo: RefCell::new(HashMap::new()), sd: RefCell::new(None), frames: Cell::new(0) }
+        Guard { kb, vlad_home, cwd, vcwd: RefCell::new(None), memo: RefCell::new(HashMap::new()), sd: RefCell::new(None), frames: Cell::new(0) }
     }
 
-    fn cwd(&self) -> &str {
-        self.cwd.unwrap_or(".")
+    /// Etkin cwd: Bash içinde `cd <dizin>` sonrası sanal cwd (TS: `ctx.cwd` yerel geçersiz kılma), yoksa araç cwd'si.
+    fn cwd(&self) -> String {
+        if let Some(v) = self.vcwd.borrow().as_ref() {
+            return v.clone();
+        }
+        self.cwd.unwrap_or(".").to_string()
     }
 
     fn sdir(&self) -> R<String> {
@@ -237,7 +242,7 @@ impl<'a> Guard<'a> {
             return Ok(Some("anahtar"));
         }
         let t = expand(&p.replace('\\', "/"))?;
-        if !is_glob(&t) && self.inside_secret(&self.real(&resolve(&[self.cwd(), &t])?, 0)?)? {
+        if !is_glob(&t) && self.inside_secret(&self.real(&resolve(&[&self.cwd(), &t])?, 0)?)? {
             return Ok(Some("anahtar"));
         }
         if let Some(g) = self.glob_protected(&t)? {
@@ -248,14 +253,14 @@ impl<'a> Guard<'a> {
             let hit = any_dir
                 || self.kb.is_none()
                 || is_glob(&base)
-                || norm(&self.real(&resolve(&[self.cwd(), &t])?, 0)?) == norm(&self.real(&join(&[self.kb.unwrap(), "mode.json"]), 0)?);
+                || norm(&self.real(&resolve(&[&self.cwd(), &t])?, 0)?) == norm(&self.real(&join(&[self.kb.unwrap(), "mode.json"]), 0)?);
             return Ok(if hit { Some("mode.json") } else { None });
         }
         if re(&CLAUDE, r"(?:^|/)\.(?i-u:claude)/").is_match(&fold(&t)) && SETTINGS.iter().any(|s| glob_hits(&base, s)) {
             return Ok(Some("settings"));
         }
         if let Some(home) = self.vlad_home.filter(|h| !h.is_empty()) {
-            let target = if is_absolute(&t) { t.clone() } else { resolve(&[self.cwd(), &t])? };
+            let target = if is_absolute(&t) { t.clone() } else { resolve(&[&self.cwd(), &t])? };
             let abs = norm(&self.real(&target, 0)?);
             let home = norm(&self.real(home, 0)?);
             if abs == format!("{}/vlad.config.json", home) || abs == format!("{}/vlad.config.local.json", home) || abs == format!("{}/dist/hooks", home) || abs.starts_with(&format!("{}/dist/hooks/", home)) {
@@ -266,7 +271,17 @@ impl<'a> Guard<'a> {
     }
 
     fn check_bash(&self, cmd: &str, depth: u32) -> R<Option<String>> {
+        let saved = self.vcwd.borrow().clone(); // `cd` ile değişen sanal cwd bu çağrıyla sınırlı (TS: yerel ctx)
+        let r = self.check_bash_body(cmd, depth);
+        *self.vcwd.borrow_mut() = saved;
+        r
+    }
+
+    fn check_bash_body(&self, cmd: &str, depth: u32) -> R<Option<String>> {
         static SHELL_C: OnceLock<Regex> = OnceLock::new();
+        static DESTROY: OnceLock<Regex> = OnceLock::new();
+        static COPYISH: OnceLock<Regex> = OnceLock::new();
+        static CD_CMD: OnceLock<Regex> = OnceLock::new();
         static RAW_SPLIT: OnceLock<Regex> = OnceLock::new();
         static MODE_CMD: OnceLock<Regex> = OnceLock::new();
         static CLEAN: OnceLock<Regex> = OnceLock::new();
@@ -288,6 +303,8 @@ impl<'a> Guard<'a> {
                 }
             }
         }
+        let cmd_owned = alt_loose(cmd); // F-vlad-411: zsh `(a|b)` → `*`
+        let cmd = cmd_owned.as_str();
         if self.secret_hit(cmd)? {
             return Ok(Some(format!("{} (anahtar: gizli mod anahtarına dokunulamaz)", WHY)));
         }
@@ -303,6 +320,20 @@ impl<'a> Guard<'a> {
                     return Ok(Some(format!("{}; yalnız `vlad mode status` serbest", WHY)));
                 }
             }
+            if let Some(cd) = re(&CD_CMD, r"^(?i-u:cd|pushd|chdir)(?:⟨s⟩+(?:--|(?i-u:-[LPe@]+)))*(?:⟨s⟩+(⟨S⟩+))?⟨s⟩*$").captures(&seg) {
+                // sanal cwd: yalnız çözülebilir hedef (`$VAR`, `-`, joker yok); çözülemeyen cd cwd'yi değiştirmez (kestirme)
+                match cd.get(1).map(|m| m.as_str()) {
+                    None => *self.vcwd.borrow_mut() = Some(sys::homedir()?),
+                    Some(t) if t != "-" => {
+                        let e = expand(t)?;
+                        if !e.contains(['$', '*', '?', '[', '{', '~']) {
+                            let r = resolve(&[&self.cwd(), &expand(&t.replace('\\', "/"))?])?;
+                            *self.vcwd.borrow_mut() = Some(r);
+                        }
+                    }
+                    _ => {}
+                }
+            }
             let clean = re(&CLEAN, r"[0-9]*>&[0-9]+|&?[0-9]*>>?⟨s⟩*/dev/null").replace_all(&seg, " ").into_owned();
             let toks: Vec<&str> = re(&SEP_TOKEN, r#"[⟨WS⟩;&|<>(),='"]+"#).split(&clean).filter(|s| !s.is_empty()).collect();
             let tools = re(
@@ -310,7 +341,7 @@ impl<'a> Guard<'a> {
                 r"(?:^|⟨s⟩)(?i-u:tee|cp|mv|rm|truncate|dd|ln|install|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|jq|sponge|patch|awk|ed|curl|wget|rsync|set-content|out-file|remove-item|ni|sc)(?:⟨s⟩|$)|⟨b⟩(?i-u:sed)⟨b⟩[^|;&]*⟨s⟩(?:-[A-Za-z]*(?i-u:i)|--(?i-u:in-place))|⟨b⟩(?i-u:git)⟨s⟩+(?i-u:apply|checkout|restore)⟨b⟩",
             )
             .is_match(&fold(&clean)); // K1: ſed, baſh, inſtall, aw\u{212A}
-            let redirect_targets: Vec<&str> = re(&REDIR, r"(?:>>?)⟨s⟩*([^⟨WS⟩;&|<>()]+)").captures_iter(&clean).map(|c| c.get(1).unwrap().as_str()).collect();
+            let redirect_targets: Vec<&str> = re(&REDIR, r"(?:>[>|]?)⟨s⟩*([^⟨WS⟩;&|<>()]+)").captures_iter(&clean).map(|c| c.get(1).unwrap().as_str()).collect();
             let ws_toks: Vec<&str> = re(&WS_SPLIT, r"⟨s⟩+").split(&clean).collect();
             for t in ws_toks.iter().chain(raw_toks.iter()) {
                 if self.glob_reaches_secret(t)? {
@@ -320,14 +351,20 @@ impl<'a> Guard<'a> {
             // F-vlad-408/409: SEP_TOKEN virgülde böler; `{a,b}` süslü sözcükler boşlukla bölünmüş haliyle de denetlenir
             let braced: Vec<&str> = if tools { toks.iter().copied().chain(ws_toks.iter().copied().filter(|x| !x.is_empty() && x.contains('{'))).collect() } else { Vec::new() };
             let list: &Vec<&str> = if tools { &braced } else { &redirect_targets };
+            let folded = fold(&clean);
+            let destroy = re(&DESTROY, r"(?:^|⟨s⟩)(?i-u:rm|mv|rmdir|unlink|shred|trash(?:-put)?)(?:⟨s⟩|$)").is_match(&folded);
+            let copyish = re(&COPYISH, r"(?:^|⟨s⟩)(?i-u:cp|install|rsync|ln|scp)(?:⟨s⟩|$)").is_match(&folded);
             for t in list {
-                let hit = match self.protected_path(t, true)? {
+                let mut hit = match self.protected_path(t, true)? {
                     Some(h) => Some(h),
                     None => match self.kb {
                         Some(kb) if norm(&expand(t)?).starts_with(&format!("{}/", norm(kb))) => Some("kb"),
                         _ => None,
                     },
                 };
+                if hit.is_none() && tools && (destroy || copyish) {
+                    hit = self.dir_protected(t, destroy)?; // F-vlad-413: korunan kökün kendisi/atası
+                }
                 if let Some(h) = hit {
                     return Ok(Some(format!("{} ({}: {})", WHY, h, t)));
                 }
@@ -363,7 +400,7 @@ impl<'a> Guard<'a> {
 
     fn check_read_tool(&self, tool: &str, input: &ToolInput) -> R<Option<String>> {
         static DOTDOT: OnceLock<Regex> = OnceLock::new();
-        let cwd = self.cwd().to_string();
+        let cwd = self.cwd();
         let s = |k: &str| input.get(k).as_str().map(|x| x.to_string());
         let hint = |k: &str, v: &str| format!("{} (okuma: gizli mod anahtarı/approver dizini {}: {})", WHY, k, v);
         if let Some(file) = s("file_path") {
@@ -403,28 +440,74 @@ impl<'a> Guard<'a> {
 
     /// mode-guard.ts `globProtected`: F-vlad-408/409 — jokerli (ya da symlink önekli) yol korunan bir yola açılabiliyor mu.
     /// Bileşen bileşen seg_matches (ham + APFS katlı, baştaki nokta kuralı); `*` kestirmesi yok; jokersiz önek realpath'lenir.
-    fn glob_protected(&self, t: &str) -> R<Option<&'static str>> {
-        let segs = |p: &str| -> Vec<String> { p.replace('\\', "/").split('/').filter(|s| !s.is_empty()).map(String::from).collect() };
+    /// mode-guard.ts `pathForms`: yol → mutlak bileşen biçimleri (brace açılımı, tilde, cwd, jokersiz önek realpath'i); açılım sınırı aşılırsa None.
+    fn path_forms(&self, t: &str) -> R<Option<Vec<Vec<String>>>> {
         let mut forms: Vec<Vec<String>> = Vec::new();
         let alts = brace_expand(&seq_loose(t), 0);
         if brace_capped(&alts) {
-            return Ok(Some("joker-sınırı")); // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
+            return Ok(None);
         }
         for raw in alts {
             let alt = expand(&raw)?; // kabuk sırası: önce brace, sonra her sözcükte tilde
-            let abs = resolve(&[self.cwd(), &alt])?.replace('\\', "/");
-            forms.push(segs(&abs));
+            let abs = resolve(&[&self.cwd(), &alt])?.replace('\\', "/");
+            forms.push(segs_of(&abs));
             let parts: Vec<&str> = abs.split('/').collect();
             match parts.iter().position(|s| is_glob(s)) {
                 Some(k) if k > 0 => {
-                    let mut f = segs(&self.real(&format!("{}/", parts[..k].join("/")), 0)?);
+                    let mut f = segs_of(&self.real(&format!("{}/", parts[..k].join("/")), 0)?);
                     f.extend(parts[k..].iter().filter(|s| !s.is_empty()).map(|s| s.to_string()));
                     forms.push(f);
                 }
-                None => forms.push(segs(&self.real(&abs, 0)?)),
+                None => forms.push(segs_of(&self.real(&abs, 0)?)),
                 _ => {}
             }
         }
+        Ok(Some(forms))
+    }
+
+    /// mode-guard.ts `dirProtected` (F-vlad-413): silme/taşıma (`destroy`) hedefi korunan dizinlerin eşi ya da atası mı; kopyalama hedefi tam eşi mı.
+    fn dir_protected(&self, t: &str, destroy: bool) -> R<Option<&'static str>> {
+        let Some(forms) = self.path_forms(&expand(t)?)? else { return Ok(None) };
+        let home = segs_of(&sys::homedir()?);
+        let mut dirs: Vec<(Vec<String>, &'static str)> = Vec::new();
+        let sd = self.sdir()?;
+        for r in [segs_of(&sd), segs_of(&self.real(&sd, 0)?)] {
+            dirs.push((r, "anahtar"));
+        }
+        dirs.push((home.iter().cloned().chain(std::iter::once(".claude".to_string())).collect(), "settings"));
+        if let Some(kb) = self.kb {
+            for r in [segs_of(kb), segs_of(&self.real(kb, 0)?)] {
+                dirs.push((r, "kb"));
+            }
+        }
+        if let Some(vh) = self.vlad_home.filter(|h| !h.is_empty()) {
+            let tails: Vec<&[&str]> = if destroy { vec![&["dist", "hooks"]] } else { vec![&["dist", "hooks"], &["dist"], &[]] };
+            for tail in tails {
+                for r in [segs_of(vh), segs_of(&self.real(vh, 0)?)] {
+                    dirs.push((r.into_iter().chain(tail.iter().map(|s| s.to_string())).collect(), "vlad"));
+                }
+            }
+        }
+        let eq = |gs: &[String], target: &[String]| -> bool { gs.len() == target.len() && target.iter().enumerate().all(|(i, s)| seg_matches(&gs[i], s)) };
+        let anc = |gs: &[String], target: &[String]| -> bool { gs.len() <= target.len() && gs.iter().enumerate().all(|(i, g)| seg_matches(g, &target[i])) };
+        for gs in &forms {
+            if !gs.is_empty() && seg_matches(&gs[gs.len() - 1], ".claude") {
+                return Ok(Some("settings")); // herhangi bir dizindeki `.claude` (settings kuralıyla aynı kapsam)
+            }
+            for (d, kind) in &dirs {
+                if if destroy { anc(gs, d) } else { eq(gs, d) } {
+                    return Ok(Some(kind));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    fn glob_protected(&self, t: &str) -> R<Option<&'static str>> {
+        let segs = |p: &str| -> Vec<String> { segs_of(p) };
+        let Some(forms) = self.path_forms(t)? else {
+            return Ok(Some("joker-sınırı")); // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
+        };
         let hits = |gs: &[String], target: &[String], prefix: bool| -> bool {
             (if prefix { gs.len() >= target.len() } else { gs.len() == target.len() }) && target.iter().enumerate().all(|(i, s)| seg_matches(&gs[i], s))
         };
@@ -514,7 +597,10 @@ fn segments(cmd: &str) -> Vec<String> {
     let mut cur = String::new();
     let mut q: Option<char> = None;
     let mut it = c.chars();
+    let mut prev: Option<char> = None; // TS `c[i - 1]`: son tüketilen ham karakter
     while let Some(ch) = it.next() {
+        let p = prev;
+        prev = Some(ch);
         if let Some(qc) = q {
             if ch == qc {
                 q = None;
@@ -530,7 +616,12 @@ fn segments(cmd: &str) -> Vec<String> {
         if ch == '\\' {
             if let Some(n) = it.next() {
                 cur.push(n);
+                prev = Some(n);
             }
+            continue;
+        }
+        if ch == '|' && p == Some('>') {
+            cur.push(ch); // F-vlad-412: `>|` noclobber yönlendirmesi bölünmez
             continue;
         }
         if ";&|(`\n".contains(ch) {
@@ -541,6 +632,55 @@ fn segments(cmd: &str) -> Vec<String> {
     }
     out.push(cur);
     out.into_iter().map(|s| crate::text::js_trim(&s).to_string()).filter(|s| !s.is_empty()).collect()
+}
+
+fn segs_of(p: &str) -> Vec<String> {
+    p.replace('\\', "/").split('/').filter(|s| !s.is_empty()).map(String::from).collect()
+}
+
+/// mode-guard.ts `altLoose` (F-vlad-411): zsh alternasyon/grup jokeri `(a|b)` / `(a)` (öncesi `$` değil, içinde boşluk/parantez yok, tırnak dışı) → `*`.
+fn alt_loose(cmd: &str) -> String {
+    let c: Vec<char> = cmd.chars().collect();
+    let mut out = String::new();
+    let mut q: Option<char> = None;
+    let mut i = 0usize;
+    while i < c.len() {
+        let ch = c[i];
+        if let Some(qc) = q {
+            if ch == qc {
+                q = None;
+            }
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+        if ch == '"' || ch == '\'' {
+            q = Some(ch);
+            out.push(ch);
+            i += 1;
+            continue;
+        }
+        if ch == '\\' {
+            out.push(ch);
+            if let Some(&n) = c.get(i + 1) {
+                out.push(n);
+            }
+            i += 2;
+            continue;
+        }
+        if ch == '(' && (i == 0 || c[i - 1] != '$') {
+            if let Some(off) = c[i + 1..].iter().position(|&x| x == '(' || x == ')' || crate::text::is_js_ws(x)) {
+                if c[i + 1 + off] == ')' {
+                    out.push('*');
+                    i += off + 2;
+                    continue;
+                }
+            }
+        }
+        out.push(ch);
+        i += 1;
+    }
+    out
 }
 
 /// mode-guard.ts `seqLoose`: kabuk `{x..y}` dizisi → `*` (fail-closed üst küme).
@@ -779,6 +919,50 @@ mod tests {
         assert!(has(&bash("vlad mode off"), "ana VLAD'san ana repo dizininden"));
         assert!(has(&edit("Write", &format!("{KB}/mode.json")), "vlad task ask"));
         assert!(has(&check_worker_mode("Write", &input(&[("file_path", "/herhangi/mode.json")]), None, None, None).unwrap(), "mode.json"));
+    }
+
+    // T20261128-04: test/hooks/mode-guard-failclosed.test.ts ile aynı vakalar (F-vlad-410..413 + cd izleme + yanlış pozitifler)
+    #[test]
+    fn failclosed_410_411_412() {
+        let mut deny: Vec<String> = vec![
+            "echo x > ~/.claude/settings.js[[:alpha:][:digit:]]n".into(), format!("tee {HOME}/vlad.config.js[[:alpha:][:digit:]]n"), format!("tee {HOME}/dist/hook[[:alpha:][:digit:]]/push-guard"),
+            "bash -c 'tee ~/.claude/settings.js[[.o.]]n'".into(), "echo x > ~/.claude/settings.js[[=o=]]n".into(), format!("cp x {HOME}/vlad.config.local.js[a[:alpha:]]n"), format!("tee {KB}/mode.js[[.o.][:alpha:]]n"),
+            "echo x > ~/.cl(a|x)ude/settings.json".into(), "tee ~/.claude/settings.(json|x)".into(), format!("tee {HOME}/vlad.config.(json|x)"), format!("tee {HOME}/dist/(hooks|x)/push-guard"), "tee ~/.claude/settings.(json)".into(),
+            format!("tee {KB}/mode.(json|x)"), "bash -c 'echo x > ~/.cl(a|x)ude/settings.json'".into(), format!("cp x {HOME}/(dist|x)/hooks/a.js"),
+            "echo x >| ~/.claude/settings.json".into(), format!("echo x >| {HOME}/vlad.config.json"), format!("echo x >|{KB}/mode.json"), format!("echo x 1>| {HOME}/dist/hooks/a.js"), format!("echo x >| {HOME}/vlad.config.js?n"),
+        ];
+        deny.push("echo x > ~/.claude/settings.js[[:alpha:][:digit:]]n".into());
+        for c in &deny {
+            assert!(bash(c).is_some(), "{c:?}");
+        }
+        assert!(edit("Write", "~/.claude/settings.js[[:alpha:][:digit:]]n").is_some());
+        for c in ["echo x > out-[[:digit:]].txt", "tee src/[[:alpha:][:digit:]]x.ts", "cp x src/[a-c].ts", "(cd src && ls)", "echo $(date) > out.txt", "echo $(a|b) > out.txt", "tee src/(a|b).ts", "ls | wc -l > n.txt", "f() { :; }; tee out.txt",
+            "echo x >| out.txt", "echo x | tee out.txt", "echo x >| /dev/null", "cat ~/.claude/settings.json | wc -l", "python3 -c \"open('x','w')\""] {
+            assert_eq!(bash(c), None, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn failclosed_413_and_cd() {
+        for c in [format!("rm -rf {HOME}/dist"), format!("rm -rf {HOME}/di*"), format!("cp -r hooks {HOME}/di?t"), "cp settings.json ~/.claude/".into(), "cp -t ~/.claude settings.json".into(), "rm -rf ~/.claude".into(), "mv ~/.cla* ~/old".into(), format!("rm -rf {KB}"),
+            format!("rm -rf {HOME}"), "rm -rf ~".into(), format!("mv {HOME}/dist {HOME}/x"), format!("mv {HOME}/dist/hooks /tmp/x"), "rm -rf /home".into(), format!("cp -r x {KB}"), format!("cp -r x {HOME}/dist/hooks"), "rm -r ~/.cl{a,x}ude".into(),
+            format!("install -t {HOME}/dist/hooks x"), "rsync -a x/ ~/.claude/".into(),
+            "cd ~/.claude && echo x > settings.json".into(), format!("cd {HOME} && echo x > vlad.config.json"), format!("cd {HOME}/dist/hooks && cp x push-guard-hook.js"), "pushd ~/.claude; tee settings.local.json".into(), format!("cd {KB}; echo x > mode.json"),
+            format!("cd {HOME} && cd dist && tee hooks/a.js"), "cd ~/.claude && tee settings.js*".into()] {
+            assert!(bash(&c).is_some(), "{c:?}");
+        }
+        for c in ["rm -rf build", "rm -rf /work/wt/dist", "rm -rf node_modules", "cp -r a b", "cp x src/", "mv a b", "rm -rf /work/wt/*", &format!("cp x {HOME}/src"), &format!("rm -f {HOME}/src/a.ts"), "ls ~/.claude", "cat ~/.claude/settings.json",
+            &format!("cp {HOME}/dist/x.js out.js"), "cp x ~/.claude/../out.txt", "cd src && echo x > a.json", &format!("cd {HOME} && cat vlad.config.json"), &format!("cd {HOME}/src && tee a.ts"), "cd ~/.claude && ls", "cd /work/wt && echo x > out.txt",
+            "echo x > *.json", "cp x src/*", "tee out-?.txt", "echo x > {a,b}.ts", "echo '*.json' > notes.txt", "grep -r x ~/.claude/projects", "rm src/a.ts", "echo x > src/a.json"] {
+            assert_eq!(bash(c), None, "{c:?}");
+        }
+    }
+
+    #[test]
+    fn bracket_loose_cases() {
+        for (a, b) in [("[[:alpha:][:digit:]]", "?"), ("a[[.o.]]n", "a?n"), ("[[=o=]]", "?"), ("[]n]", "?"), ("[!]x]", "?"), ("[a-c]", "[a-c]"), ("mode[", "mode["), ("m[]ode", "m[]ode"), ("[a[:alpha:]]x[b]", "?x[b]")] {
+            assert_eq!(crate::jsre::bracket_loose(a), b, "{a:?}");
+        }
     }
 
     #[test]

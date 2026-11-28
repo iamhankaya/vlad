@@ -145,6 +145,16 @@ const jokerVariants = (t) => {
   return out;
 };
 const jokerBenign = [join(WT, "src", "*.ts"), join(VH, "src", "*.ts"), join(homedir(), ".claude", "*.md"), join(VH, "dist", "*.js"), join(WT, "*.json")];
+// T20261128-04 (F-vlad-410..413): fail-closed — çoklu POSIX/collating/eşdeğerlik sınıfı, zsh alternasyonu, `>|`, ata/dizin hedefli silme-taşıma-kopyalama, `cd <korunan kök>` sonrası göreli yazma
+const failclosedDeny = [
+  "echo x > ~/.claude/settings.js[[:alpha:][:digit:]]n", `tee ${VH}/vlad.config.js[[:alpha:][:digit:]]n`, `tee ${VH}/dist/hook[[:alpha:][:digit:]]/push-guard`, "bash -c 'tee ~/.claude/settings.js[[.o.]]n'", "echo x > ~/.claude/settings.js[[=o=]]n",
+  "echo x > ~/.cl(a|x)ude/settings.json", "tee ~/.claude/settings.(json|x)", `tee ${VH}/vlad.config.(json|x)`, `tee ${VH}/dist/(hooks|x)/push-guard`, "bash -c 'echo x > ~/.cl(a|x)ude/settings.json'",
+  "echo x >| ~/.claude/settings.json", `echo x >| ${VH}/vlad.config.json`, `echo x >|${KB}/mode.json`, `echo x 1>| ${VH}/dist/hooks/a.js`,
+  `rm -rf ${VH}/dist`, `rm -rf ${VH}/di*`, `cp -r hooks ${VH}/di?t`, "cp settings.json ~/.claude/", "cp -t ~/.claude settings.json", "rm -rf ~/.claude", "mv ~/.cla* ~/old", `rm -rf ${KB}`, `rm -rf ${VH}`, `mv ${VH}/dist ${VH}/x`, `install -t ${VH}/dist/hooks x`,
+  "cd ~/.claude && echo x > settings.json", `cd ${VH} && echo x > vlad.config.json`, `cd ${VH}/dist/hooks && cp x push-guard-hook.js`, `cd ${KB}; echo x > mode.json`, "pushd ~/.claude; tee settings.local.json",
+];
+const failclosedAllow = ["echo x >| out.txt", "echo x | tee out.txt", "echo x >| /dev/null", "echo $(date) > out.txt", "rm -rf build", "cp -r a b", "cp x src/", "cd src && echo x > a.json", `cd ${VH} && cat vlad.config.json`, "cd ~/.claude && ls",
+  "ls ~/.claude", "tee src/[[:alpha:][:digit:]]x.ts", "(cd src && ls)", "tee src/(a|b).ts", `cp x ${VH}/src`, "echo x > *.json", "tee out-?.txt", "echo x > {a,b}.ts", "echo '*.json' > notes.txt"];
 const foldedWriters = [(t) => `ſed -i '' s/a/b/ ${t}`, (t) => `baſh -c 'echo x > ${t}'`, (t) => `inſtall /tmp/a ${t}`];
 
 // --- vakalar ---
@@ -185,6 +195,8 @@ for (const s of sessions) {
     }
   }
   for (const v of jokerBenign) for (const w of bashWriters.slice(0, 6)) add("joker-zararsız", s, tool("Bash", { command: w(v) }, s), 0);
+  for (const cmd of failclosedDeny) add("failclosed-ret", s, tool("Bash", { command: cmd }, s), s.worker ? 2 : 0);
+  for (const cmd of failclosedAllow) add("failclosed-izin", s, tool("Bash", { command: cmd }, s), 0);
   for (const [inp, e] of [[{ file_path: "~/.vlad-ſecret/mode.key" }, 2], [{ file_path: join(SECRET, "mode.Key") }, 2], [{ file_path: join(WT, "src", "ſettings.json") }, 0]])
     add("apfs-okuma", s, tool("Read", inp, s), s.worker ? e : 0);
   for (const [name, t, bashBlocked] of benignTargets) {
