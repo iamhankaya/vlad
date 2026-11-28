@@ -92,6 +92,8 @@ Push, PR ve merge her zaman açık onayınla yapılır.
 
 **Dağıtım provası:** iş dağıtım betiğine/CI'a/altyapıya dokunuyorsa `/delegate` `prova` fazı (`devops` rolü) önerir; devops betiği temiz ortamda (umask 077, `bash -s < script`, pipefail, boş volume, yedek+geri yükleme, ikinci koşu, yetkisiz kullanıcı) prova eder ve `### Prova matrisi` / `### Prova edilemeyenler` raporlar. Kırmızı provada `/status` canlıya almayı önermez.
 
+**Bellek bekçisi (macOS):** `npm run build:native -- memwatch` Rust ikilisini `dist/bin/memwatch`'a derler. `vlad top` her `vlad-<görev>` tmux oturumunun süreç ağacı footprint'ini, VM'i, Terminal'i ve sistem baskısını/swap'ı canlı gösterir (`--json` tek atım). `vlad memwatch install` (terminalde, mod yetkisiyle) launchd daemon'unu kurar (`com.vlad.memwatch`, 10 sn'de bir `~/.vlad-monitor/memwatch.json`; eşikte ntfy, 15 dk tekrar bastırma). `vlad task launch` kritik bellek baskısında çalışan açmaz (çıkış 75, `bellek: …`; `--force` geçer), uyarıda uyarı basar.
+
 **Çalışma notları:** haftalık `/setup-audit` proje başına "çalışma notu adayı" üretir (eski bayat notları da ayıklar); seçilen dersler `vlad project note <slug> "<ders>"` ile kartın `## Çalışma notları` bölümüne yazılır. Çalışanlar ve roller bu bölümü işe başlarken okur.
 
 ## kb deposu (ayrı private repo)
