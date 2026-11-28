@@ -163,7 +163,7 @@ fn glob_hit1(base: &str, name: &str) -> bool {
     if base.starts_with('*') {
         return false;
     }
-    let e = escape_meta(base);
+    let e = escape_meta(&bracket_loose(base));
     // .replace(/\[[^\]]*\]/g, ".")
     let mut r = String::new();
     let mut rest = e.as_str();
@@ -187,11 +187,80 @@ fn glob_hit1(base: &str, name: &str) -> bool {
 
 /// mode-guard.ts `segMatches(globSeg, name)`: K1 — ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı katlanmış çift.
 pub fn seg_matches(glob_seg: &str, name: &str) -> bool {
-    // review tur 2: POSIX sınıfı (`[[:lower:]]`) / `]` ile başlayan sınıf (`[]n]`) → `?` (mode-guard.ts bracketLoose)
-    static BR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let g = BR.get_or_init(|| regex::Regex::new(r"\[(?:[!^]?\][^\]]*|[^\]]*\[:[a-z]+:\][^\]]*)\]").unwrap()).replace_all(glob_seg, "?");
-    let glob_seg = g.as_ref();
+    // review tur 2 + F-vlad-410: POSIX sınıfı / collating / eşdeğerlik / `]` ile başlayan sınıf → `?` (mode-guard.ts bracketLoose)
+    let g = bracket_loose(glob_seg);
+    let glob_seg = g.as_str();
     seg_match1(glob_seg, name) || seg_match1(&crate::text::fold(glob_seg), &crate::text::fold(name))
+}
+
+/// mode-guard.ts `bracketLoose`: köşeli parantez ifadesi JS regex'te yanlış okunur → `?` (fail-closed). POSIX sınıfı (çoklu dahil:
+/// `[[:alpha:][:digit:]]`), collating (`[[.o.]]`), eşdeğerlik (`[[=o=]]`) ya da `]` ile başlayan (`[]n]`, `[!]x]`) sınıf; kapanmamış `[` düz karakter.
+pub fn bracket_loose(s: &str) -> String {
+    let c: Vec<char> = s.chars().collect();
+    let mut out = String::new();
+    let mut i = 0usize;
+    let mut no_close: Vec<char> = Vec::new();
+    while i < c.len() {
+        if c[i] != '[' {
+            out.push(c[i]);
+            i += 1;
+            continue;
+        }
+        let mut j = i + 1;
+        let mut odd = false;
+        if j < c.len() && (c[j] == '!' || c[j] == '^') {
+            j += 1;
+        }
+        if j < c.len() && c[j] == ']' {
+            odd = true;
+            j += 1;
+        }
+        let mut end: Option<usize> = None;
+        while j < c.len() {
+            let ch = c[j];
+            if ch == '[' {
+                if let Some(&n) = c.get(j + 1) {
+                    if ":.=".contains(n) && !no_close.contains(&n) {
+                        let mut k = j + 2;
+                        let mut close = None;
+                        while k + 1 < c.len() {
+                            if c[k] == n && c[k + 1] == ']' {
+                                close = Some(k);
+                                break;
+                            }
+                            k += 1;
+                        }
+                        if let Some(cl) = close {
+                            odd = true;
+                            j = cl + 2; // JS: j = close + 1; continue (for'un j++'ı)
+                            continue;
+                        }
+                        no_close.push(n); // kapanış bir kez bulunamadıysa sonrası da yok (doğrusal tarama)
+                    }
+                }
+            }
+            if ch == ']' {
+                end = Some(j);
+                break;
+            }
+            j += 1;
+        }
+        match end {
+            None => {
+                out.extend(&c[i..]); // kapanış yok: kalanı düz metin (TS ile aynı)
+                break;
+            }
+            Some(e) => {
+                if odd {
+                    out.push('?');
+                } else {
+                    out.extend(&c[i..=e]);
+                }
+                i = e + 1;
+            }
+        }
+    }
+    out
 }
 
 fn seg_match1(glob_seg: &str, name: &str) -> bool {

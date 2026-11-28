@@ -123,11 +123,13 @@ const paths = [
   ".VLAD-SECRET/x", "sec-link/mode.key", "sec-link", "mode-link", "dangling", "chain1", "kb-link/mode.json", "loop1", join(WT, "a.ts"), "a.ts", "", "/", ".", "..", "../..",
   "C:\\Users\\x\\.claude\\settings.json", "a\\b\\mode.json", "~", "~x/mode.json", "/tmp/a\u0000b", "çğü/mode.json", "/tmp/😀/x", "mo\"de.j\"son", "x/m'o'de.json", "x/mode.json/",
   join(base, "*", ".vlad-secret"), join(userInfo().homedir, ".v*"), join(userInfo().homedir, ".vlad-{secret,x}", "k"), join(userInfo().homedir, ".?lad-secret"), join(userInfo().homedir, "*"),
+  "~/.claude/settings.js[[:alpha:][:digit:]]n", "~/.claude/settings.js[[.o.]]n", "~/.cl(a|x)ude/settings.json", "~/.claude/settings.(json|x)", join(root, "dist", "(hooks|x)", "a.js"), join(root, "vlad.config.(json)"),
+  "~/.claude", "~/.cla*", "~", join(root, "dist"), join(root, "di?t"), root, KB1, "~/.claude/", "..", "../..", join(root, "dist", "hooks", ""), "~/.cl{a,x}ude",
   "~/.v*/k", "$HOME/.[v]lad-secret", "/U*/*/.vlad-secret", "/Users/*", "/*", "~/{a,b}/c", "/x/{a,{b,c}}/{d,e}", "/[z-a]/x", "/[!x]sers/*",
 ];
 const benign = ["ls -la", "npm test", "cat README.md", "grep -r mode.json src", "git diff -- src/mode/mode.json", "echo hi > /tmp/out.txt", "sed -n 1,40p ~/.claude/settings.json 2>&1",
   "rm *.json", "rm -rf build/*", "cat x 2>/dev/null", "jq . a.json", "python3 x.py", "git checkout -b x", "sed -i '' s/a/b/ f", "ls ~/dev/*", "grep -r '.*' src", "echo [", "node -e 'x[0]'"];
-const writers = ["echo x >", "echo x >>", "tee", "cp x", "mv a", "rm", "sed -i s/a/b/", "truncate -s0", "ln -s x", "python3 -c \"open('$P','w')\" #", "cat", "grep x", "ls", "jq . a | sponge", "git checkout --"];
+const writers = ["echo x >", "echo x >>", "echo x >|", "rm -rf", "cp -t", "cd", "cd $P && echo x > settings.json #", "install -t", "tee", "cp x", "mv a", "rm", "sed -i s/a/b/", "truncate -s0", "ln -s x", "python3 -c \"open('$P','w')\" #", "cat", "grep x", "ls", "jq . a | sponge", "git checkout --"];
 
 function bashCommand() {
   const r = rnd();

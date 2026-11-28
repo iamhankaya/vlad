@@ -45,7 +45,7 @@ function globHits(base: string, name: string): boolean { return globHit1(base, n
 function globHit1(base: string, name: string): boolean {
   if (!GLOB.test(base)) return base.toLowerCase() === name;
   if (base.startsWith("*")) return false; // shortcut: `*.json` / `*` (rm *.json) çalışanın kendi dosyalarıdır; baş harfi bilinen joker (mod?.json) denetlenir
-  const re = base.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[[^\]]*\]/g, ".").replace(/\*/g, ".*").replace(/\?/g, ".");
+  const re = bracketLoose(base).replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[[^\]]*\]/g, ".").replace(/\*/g, ".*").replace(/\?/g, ".");
   try { return new RegExp(`^${re}$`, "i").test(name); } catch { return true; }
 }
 /** F-vlad-287: imzalı mod belirtecinin anahtarı (gizli dizin); hook en iyi çaba katmanı, gerçek sınır CLI'daki belirteç doğrulaması. */
@@ -76,49 +76,111 @@ function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = 
 }
 
 // shortcut: bilinmeyen yazan araç, değişkenle kurulan yol/komut adı ve `node -e` içindeki birleştirilmiş yol kaçar; kesin sınır imzalı token (ayrı iş).
-const WRITE_TOOL = /(?:^|\s)(?:tee|cp|mv|rm|truncate|dd|ln|install|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|jq|sponge|patch|awk|ed|curl|wget|rsync|set-content|out-file|remove-item|ni|sc)(?=\s|$)|\bsed\b[^|;&]*\s(?:-[a-z]*i|--in-place)|\bgit\s+(?:apply|checkout|restore)\b/i;
+const WRITE_TOOL = /(?:^|\s)(?:tee|cp|mv|rm|truncate|dd|ln|install|tar|unzip|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|jq|sponge|patch|awk|ed|curl|wget|rsync|set-content|out-file|remove-item|ni|sc)(?=\s|$)|\bsed\b[^|;&]*\s(?:-[a-z]*i|--in-place)|\bgit\s+(?:apply|checkout|restore)\b/i;
 const SEP_TOKEN = /[\s;&|<>(),='"]+/;
 
 /** Komutu tırnak dışındaki ayraçlarda (`;`, `&&`, `||`, `|`, `(`, `$(`, backtick, satır sonu) parçalara böler; tırnak içeriği kalır, tırnak/ters bölü karakterleri atılır. */
-function segments(cmd: string): string[] {
-  const out: string[] = []; let cur = ""; let q: string | null = null;
+function segments(cmd: string): string[] { return segmentsEx(cmd).map((x) => x.s); }
+/** `pre`/`post`: parçayı açan/kapatan ayraç (`&&`/`||` birleşik); cd'nin kapsamını (alt kabuk/boru/arka plan) anlamak için. */
+function segmentsEx(cmd: string): { s: string; pre: string; post: string }[] {
+  const raw: { s: string; pre: string; post: string }[] = []; let cur = "", pre = ""; let q: string | null = null;
   const c = cmd.replace(/\\\r?\n/g, "");
   for (let i = 0; i < c.length; i++) {
     const ch = c[i]!;
     if (q) { if (ch === q) q = null; else cur += ch; continue; }
     if (ch === '"' || ch === "'") { q = ch; continue; }
     if (ch === "\\") { cur += c[++i] ?? ""; continue; }
-    if (";&|(`\n".includes(ch)) { out.push(cur); cur = ""; continue; }
+    if (ch === "|" && c[i - 1] === ">") { cur += ch; continue; } // F-vlad-412: `>|` noclobber yönlendirmesi bölünmez
+    if (";&|(`\n".includes(ch)) { raw.push({ s: cur, pre, post: (ch === "&" || ch === "|") && c[i + 1] === ch ? ch + ch : ch }); cur = ""; pre = ch; continue; }
     cur += ch;
   }
-  out.push(cur);
-  return out.map((s) => s.trim()).filter(Boolean);
+  raw.push({ s: cur, pre, post: "" });
+  return raw.map((x) => ({ ...x, s: x.s.trim() })).filter((x) => x.s);
 }
 /** Komut konumundaki `vlad mode <x>`: segment başı, öncesinde yalnız ortam atamaları/sarmalayıcılar (env, sudo, npx, node …) olabilir. */
 const MODE_CMD = /^(?:[\w.-]+=\S*\s+|(?:env|command|exec|nohup|time|sudo|npx|tsx|node)\b(?:\s+-\S+(?:\s+[A-Z_]+)?)*\s+)*(?:\S*[/\\])?(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/i;
 const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?[sſ]h\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
 
-function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: number): string | null {
+/** F-vlad-411: zsh alternasyon/grup jokeri `(a|b)` ya da `(a)` (öncesi `$` değil, içinde boşluk/parantez yok, tırnak dışı) → brace `{a,b}` (`segments` `(` ve `|`'da böldüğü için önceden çevrilir). */
+function altLoose(cmd: string): string {
+  let out = "", q: string | null = null; // tırnak içi (`python3 -c "open('x','w')"`) kabuk jokeri değildir
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i]!;
+    if (q) { if (ch === q) q = null; out += ch; continue; }
+    if (ch === '"' || ch === "'") { q = ch; out += ch; continue; }
+    if (ch === "\\") { out += ch + (cmd[++i] ?? ""); continue; }
+    if (ch === "(" && cmd[i - 1] !== "$") {
+      const close = cmd.slice(i + 1).search(/[()\s]/);
+      if (close >= 0 && cmd[i + 1 + close] === ")") { // `(a|b)` → `{a,b}` (brace kolu: noktalı ad ve `/` içeren alternatif tam doğru açılır); tek alternatifli `(a)` → `{a,a}`
+        const body = cmd.slice(i + 1, i + 1 + close);
+        out += body.includes("|") ? `{${body.replace(/\|/g, ",")}}` : `{${body},${body}}`;
+        i += close + 1; continue;
+      }
+    }
+    out += ch;
+  }
+  return out;
+}
+const DESTROY = /(?:^|\s)(?:rm|mv|rmdir|unlink|shred|trash(?:-put)?)(?=\s|$)/i;
+const COPYISH = /(?:^|\s)(?:cp|install|rsync|ln|scp|tar|unzip)(?=\s|$)/i;
+const CD_PRE = new Set(["{", "then", "do", "else", "!", "builtin", "command", "if", "elif", "while", "until", "time"]);
+/** Segmentte `cd`/`pushd`/`chdir` (başta ya da `{`/`then`/`builtin` … sonrası); seçenekler atlanır, yönlendirme hedef sayılmaz. target yoksa HOME. */
+function cdOf(seg: string): { target?: string } | null {
+  const w = seg.split(/\s+/).filter(Boolean);
+  const i = w.findIndex((x, k) => /^(?:cd|pushd|chdir)$/i.test(x) && (k === 0 || CD_PRE.has(w[k - 1]!.toLowerCase())));
+  if (i < 0) return null;
+  let k = i + 1;
+  while (k < w.length && /^(?:--|-[LPe@]+)$/.test(w[k]!)) k++;
+  const t = w[k];
+  return t === undefined || /^\d*[<>]/.test(t) ? {} : { target: t.replace(/[;)]+$/, "") };
+}
+const RELATIVE_PROTECTED_NAME = ["settings.json", "settings.local.json", "vlad.config.json", "vlad.config.local.json"];
+
+function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: number): string | null {
   for (const m of cmd.matchAll(SHELL_C)) { // `bash -c '…'` / `eval '…'` yükü ayrıca denetlenir
     const inner = m[1] ?? m[2] ?? m[3] ?? m[4];
-    if (inner && depth < 3) { const r = checkBash(inner, kbDir, ctx, depth + 1); if (r) return r; }
+    if (inner && depth < 3) { const r = checkBash(inner, kbDir, ctx0, depth + 1); if (r) return r; }
   }
+  cmd = altLoose(cmd);
+  let cwdUnknown = false;
+  let ctxs: GuardCtx[] = [ctx0]; // olası cwd'ler: `cd` kesin kapsamdaysa değiştirir, alt kabuk/boru/arka plan/`||` ise eskisi de kalır (fail-closed)
   if (secretHit(cmd)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
   // Windows: segments() ters eğik çizgiyi kabuk kaçışı sayıp siler (C:\Users → C:Users); sürücü harfli joker yolları kaçmasın diye ham sözcükler de denetlenir (yalnız daha sıkı)
   const rawToks = cmd.split(/[\s;&|()]+/).filter(Boolean);
-  for (const seg of segments(cmd)) {
+  for (const { s: seg, pre, post } of segmentsEx(cmd)) {
     const mm = MODE_CMD.exec(fold(seg)); // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;
     const clean = seg.replace(/\d*>&\d+|&?\d*>>?\s*\/dev\/null/g, " "); // 2>&1, >/dev/null yazma değildir
     const toks = clean.split(SEP_TOKEN).filter(Boolean);
     const tools = WRITE_TOOL.test(fold(clean)); // K1: ſed, baſh, inſtall, awK
-    const redirectTargets = [...clean.matchAll(/>>?\s*([^\s;&|<>()]+)/g)].map((x) => x[1]!);
+    const redirectTargets = [...clean.matchAll(/>[>|]?\s*([^\s;&|<>()]+)/g)].map((x) => x[1]!); // `>|` noclobber (F-vlad-412)
     for (const t of [...clean.split(/\s+/), ...rawToks]) if (globReachesSecret(t)) return `${WHY} (anahtar: joker gizli dizine açılabilir: ${t})`;
+    const destroy = DESTROY.test(fold(clean)), copyish = COPYISH.test(fold(clean));
     const kbUnder = (t: string) => kbDir !== null && norm(expand(t)).startsWith(norm(kbDir) + "/");
     // F-vlad-408/409: SEP_TOKEN virgülde böler; `{a,b}` süslü sözcükler boşlukla bölünmüş haliyle de denetlenir
     for (const t of tools ? [...toks, ...clean.split(/\s+/).filter((x) => x.includes("{"))] : redirectTargets) {
-      const hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null);
+      let hit: string | null = null;
+      for (const ctx of ctxs) { // segmentin kendi yönlendirmeleri cd'den ÖNCEKİ cwd'ye göre (kabuk yönlendirmeyi cd'den önce açar)
+        hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null) ?? (tools && (destroy || copyish) ? dirProtected(t, kbDir, ctx, destroy) : null);
+        if (hit) break;
+      }
       if (hit) return `${WHY} (${hit}: ${t})`;
+      if (cwdUnknown && !isAbsolute(t) && !/^[~$]/.test(t)) { // çözülemeyen cd sonrası göreli yol: korunan dosya adı her dizinde reddedilir
+        const nb = basename(t.replace(/\\/g, "/"));
+        if (RELATIVE_PROTECTED_NAME.some((s) => globHits(nb, s))) return `${WHY} (cd çözülemedi: göreli ${t})`;
+      }
+    }
+    const cd = cdOf(seg); // cd en sonda uygulanır: aynı segmentin yönlendirmeleri eski cwd'ye göre denetlendi
+    if (cd) { // çözülemeyen hedef (`$VAR`, `-`, joker) → cwdUnknown: sonraki göreli settings/vlad.config adlı yazma reddedilir (fail-closed)
+      const t = cd.target;
+      let next: string | null = null;
+      if (t === undefined) next = homedir();
+      else if (t !== "-" && !/[$*?[{~`]/.test(expand(t))) next = resolve(ctxs[ctxs.length - 1]!.cwd ?? ".", expand(t.replace(/\\/g, "/")));
+      else cwdUnknown = true;
+      if (next !== null) {
+        const certain = (post === ";" || post === "\n" || post === "&&") && !"(`|".includes(pre || " ") && !seg.includes(")");
+        ctxs = certain ? [{ ...ctxs[ctxs.length - 1]!, cwd: next }] : [...ctxs, { ...ctxs[ctxs.length - 1]!, cwd: next }];
+      }
     }
   }
   return null;
@@ -174,8 +236,34 @@ const braceExpand = (s: string, n = 0): string[] => {
 };
 /** Kabuk `{x..y}` dizisi (virgülsüz brace) → `*` (fail-closed üst küme; braceExpand yalnız virgüllü grubu açar). */
 const seqLoose = (s: string): string => s.replace(/\{[^{},]*\.\.[^{},]*\}/g, "*");
-/** POSIX sınıfı (`[[:lower:]]`) ya da `]` ile başlayan sınıf (`[]n]`, `[!]x]`) JS regex'te yanlış okunur → `?` (fail-closed). */
-const bracketLoose = (s: string): string => s.replace(/\[(?:[!^]?\][^\]]*|[^\]]*\[:[a-z]+:\][^\]]*)\]/g, "?");
+/**
+ * Köşeli parantez ifadesi JS regex'te yanlış okunur → `?` (fail-closed): POSIX sınıfı (`[[:lower:]]`, birden çok: `[[:alpha:][:digit:]]`),
+ * collating (`[[.o.]]`), eşdeğerlik (`[[=o=]]`) ya da `]` ile başlayan (`[]n]`, `[!]x]`) sınıf. F-vlad-410: tek sınıf regex'i çoklu sınıfı kaçırıyordu; tarayıcı.
+ */
+function bracketLoose(s: string): string {
+  let out = "", i = 0;
+  const noClose = new Set<string>(); // review: `[:`/`[.`/`[=` kapanışı bir kez bulunamadıysa sonrası da yok (doğrusal tarama; kübik DoS → hook zaman aşımı fail-open'dı)
+  while (i < s.length) {
+    if (s[i] !== "[") { out += s[i++]; continue; }
+    let j = i + 1, odd = false;
+    if (s[j] === "!" || s[j] === "^") j++;
+    if (s[j] === "]") { odd = true; j++; }
+    let end = -1;
+    for (; j < s.length; j++) {
+      const c = s[j]!, n = s[j + 1];
+      if (c === "[" && n !== undefined && ":.=".includes(n) && !noClose.has(n)) {
+        const close = s.indexOf(n + "]", j + 2);
+        if (close >= 0) { odd = true; j = close + 1; continue; }
+        noClose.add(n);
+      }
+      if (c === "]") { end = j; break; }
+    }
+    if (end < 0) { out += s.slice(i); break; } // kapanış yok: sonraki hiçbir `[` de kapanamaz (aksi `]` bu taramada bulunurdu) → kalanı düz metin
+    out += odd ? "?" : s.slice(i, end + 1);
+    i = end + 1;
+  }
+  return out;
+}
 /** Açılım sınırı (64 alternatif / 4 derinlik) aşıldı mı: kalan virgüllü grup ya da tam 64 açılım → fail-closed. */
 const braceCapped = (alts: string[]): boolean => alts.length >= 64 || alts.some((a) => /\{[^{}]*,[^{}]*\}/.test(a));
 /** K1: ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı APFS katlanmış çift (gizli dizin yolu ß içerebilir) eşleşirse isabet. */
@@ -206,18 +294,8 @@ const segsOf = (p: string): string[] => p.replace(/\\/g, "/").split("/").filter(
  * `<vladHome>/vlad.config(.local).json`, `<vladHome>/dist/hooks/**`, `<kb>/mode.json`.
  */
 function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string | null {
-  const forms: string[][] = [];
-  const alts = braceExpand(seqLoose(t));
-  if (braceCapped(alts)) return "joker-sınırı"; // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
-  for (const raw of alts) {
-    const alt = expand(raw); // kabuk sırası: önce brace, sonra her sözcükte tilde (`{~/.claude/settings.json,x}`)
-    const abs = resolve(ctx.cwd ?? ".", alt).replace(/\\/g, "/");
-    forms.push(segsOf(abs));
-    const parts = abs.split("/");
-    const k = parts.findIndex((s) => /[*?[]/.test(s));
-    if (k > 0) forms.push([...segsOf(real(parts.slice(0, k).join("/") + "/")), ...parts.slice(k).filter(Boolean)]);
-    else if (k < 0) forms.push(segsOf(real(abs)));
-  }
+  const forms = pathForms(t, ctx);
+  if (forms === null) return "joker-sınırı"; // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
   const roots = (d: string): string[][] => [segsOf(d), segsOf(real(d))];
   const hits = (gs: string[], target: string[], prefix: boolean): boolean => (prefix ? gs.length >= target.length : gs.length === target.length) && target.every((s, i) => segMatches(gs[i]!, s));
   for (const gs of forms) {
@@ -232,6 +310,47 @@ function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string |
     }
   }
   return null;
+}
+
+/**
+ * F-vlad-413: silme/taşıma (`destroy`) ya da kopyalama hedefi korunan KÖKÜN kendisi ya da atası mı (jokerle açılabilen dahil).
+ * destroy: hedef, korunan dizinlerin (gizli dizin, `~/.claude`, kb, `<vladHome>/dist/hooks`) eşi ya da atasıdır (`rm -rf ~/.claude`, `rm -rf $VH/di*`, `mv ~/.cla* x`;
+ * `<vladHome>` ve `dist` zincirde olduğundan dahil); herhangi bir dizinde adı `.claude` olan hedef de.
+ * kopyalama: hedef bu dizinlerden birinin (+ `<vladHome>`, `<vladHome>/dist`) tam eşi (`cp x ~/.claude/`, `cp -t ~/.claude`, `cp -r hooks $VH/di?t`); ata dizine kopyalama serbest (dosya adı korunan olamaz).
+ */
+function dirProtected(t: string, kbDir: string | null, ctx: GuardCtx, destroy: boolean): string | null {
+  const forms = pathForms(expand(t), ctx);
+  if (forms === null) return null; // sınır aşımı protectedPath'te zaten reddedildi
+  const home = segsOf(homedir());
+  const dirs: Array<[string[], string]> = [];
+  const add = (d: string, kind: string, tail: string[] = []): void => { for (const r of [segsOf(d), segsOf(real(d))]) dirs.push([[...r, ...tail], kind]); };
+  add(sdir(), "anahtar"); dirs.push([[...home, ".claude"], "settings"]);
+  if (kbDir !== null) add(kbDir, "kb");
+  if (ctx.vladHome) { add(ctx.vladHome, "vlad", ["dist", "hooks"]); if (!destroy) { add(ctx.vladHome, "vlad", ["dist"]); add(ctx.vladHome, "vlad"); } }
+  const eq = (gs: string[], target: string[]): boolean => gs.length === target.length && target.every((s, i) => segMatches(gs[i]!, s));
+  const anc = (gs: string[], target: string[]): boolean => gs.length <= target.length && gs.every((g, i) => segMatches(g, target[i]!));
+  for (const gs of forms) {
+    if (gs.length > 0 && segMatches(gs[gs.length - 1]!, ".claude")) return "settings"; // herhangi bir dizindeki `.claude` (settings kuralıyla aynı kapsam)
+    for (const [d, kind] of dirs) if (destroy ? anc(gs, d) : eq(gs, d)) return kind;
+  }
+  return null;
+}
+
+/** Yol → mutlak bileşen biçimleri (brace açılımı, tilde, cwd, jokersiz önek realpath'i); açılım sınırı aşılırsa null. */
+function pathForms(t: string, ctx: GuardCtx): string[][] | null {
+  const forms: string[][] = [];
+  const alts = braceExpand(seqLoose(t));
+  if (braceCapped(alts)) return null;
+  for (const raw of alts) {
+    const alt = expand(raw); // kabuk sırası: önce brace, sonra her sözcükte tilde (`{~/.claude/settings.json,x}`)
+    const abs = resolve(ctx.cwd ?? ".", alt).replace(/\\/g, "/");
+    forms.push(segsOf(abs));
+    const parts = abs.split("/");
+    const k = parts.findIndex((s) => /[*?[]/.test(s));
+    if (k > 0) forms.push([...segsOf(real(parts.slice(0, k).join("/") + "/")), ...parts.slice(k).filter(Boolean)]);
+    else if (k < 0) forms.push(segsOf(real(abs)));
+  }
+  return forms;
 }
 
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
