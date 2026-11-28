@@ -50,6 +50,55 @@ describe("F-vlad-287: çalışan mod koruması (PreToolUse, env/cwd'den bağıms
     for (const p of ["/work/wt/src/settings.json", `${HOME}/dist/cli.js`, `${HOME}/src/vlad.config.json`, "/work/wt/vlad.config.json"]) expect(edit("Edit", p), p).toBeNull(); // .claude dışı / hooks dışı / vladHome dışı
     for (const c of [`cat ${HOME}/vlad.config.json`, "cat ~/.claude/settings.json", "grep hooks ~/.claude/settings.json", `ls ${HOME}/dist/hooks`, "sed -n 1,40p ~/.claude/settings.json 2>&1"]) expect(bash(c), c).toBeNull();
   });
+  it("F-vlad-406: <vladHome>/vlad.config.local.json de korunur (kbDir'i sığ birleşimle değiştirebilir); vladHome dışındaki aynı ad serbest", () => {
+    const p = `${HOME}/vlad.config.local.json`;
+    for (const t of ["Edit", "Write", "MultiEdit", "NotebookEdit"]) {
+      expect(edit(t, p), t).toMatch(/koruma|mod/);
+      expect(edit(t, `${HOME}/VLAD.CONFIG.LOCAL.JSON`), t).toMatch(/koruma|mod/);
+    }
+    for (const c of [`echo {} > ${p}`, `echo {} >> ${p}`, `tee ${p}`, `cp x ${p}`, `sed -i s/a/b/ ${p}`, `ln -s /tmp/x ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+    expect(checkWorkerMode("Write", { file_path: "../vlad/vlad.config.local.json" }, KB, { vladHome: HOME, cwd: "/home/u/vlad-kb" })).toMatch(/koruma|mod/);
+    expect(checkWorkerMode("Write", { file_path: "vlad.config.local.json" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
+    expect(edit("Write", "/work/wt/vlad.config.local.json")).toBeNull();
+    expect(bash(`cat ${p}`)).toBeNull();
+  });
+  it("F-vlad-408: .claude/settings(.local).json dizin jokeri ve * ile başlayan adla aşılamaz", () => {
+    const prot = ["~/.cla*/settings.json", "~/.?laude/settings.json", "~/.c[l]aude/settings.json", "~/.claude/*ettings.json", "~/.claude/*", "~/.claude/settings.*", "~/.*/settings.local.json", "~/.{claude,x}/settings.json", "/Users/x/.cla*/*.local.json", ".c?aude/settings.json", "~/.c*/ſett*.json"];
+    for (const p of prot) {
+      for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`, `sed -i s/a/b/ ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+      expect(edit("Write", p), p).toMatch(/koruma|mod/);
+    }
+    for (const c of ["cat ~/.cla*/settings.json", "ls ~/.claude/*", "echo x > ~/*/settings.json", "cp x ~/.claude/*.md", "cp x src/*.json", "echo x > ~/.cla*/other.json"]) expect(bash(c), c).toBeNull();
+  });
+  it("F-vlad-409: vlad.config(.local).json, dist/hooks/** ve kb mode.json jokerle aşılamaz", () => {
+    const prot = [`${HOME}/vlad.config.local.js?n`, `${HOME}/vlad.config.local.*`, `${HOME}/vlad.conf?g.json`, `${HOME}/di?t/hooks/push-guard`, `${HOME}/dist/*/push-guard`, `${HOME}/*.json`, `${HOME}/dist/*`, `${HOME}/dist/hoo[k]s/x.js`, `${HOME}/{dist,x}/hooks/a`, `${KB}/mod?.json`, `${KB}/*.json`, `/home/u/v*/vlad.config.json`];
+    for (const p of prot) {
+      for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+      expect(edit("Write", p), p).toMatch(/koruma|mod/);
+    }
+    expect(checkWorkerMode("Bash", { command: "cp x di?t/*/push-guard" }, KB, { vladHome: HOME, cwd: HOME })).toMatch(/koruma|mod/);
+    for (const p of ["/home/u/vlad-k*/mode.json", "/home/u/vlad-?b/MODE.JSON"]) expect(edit("Write", p), p).toMatch(/koruma|mod/); // kb dizin jokeri (mode.json dalından önce)
+    // review (F-vlad-408/409 tur 2): {x..y} dizisi, POSIX sınıfı / `]` ile başlayan sınıf, brace içi `~`, açılım sınırı fail-closed
+    const many = Array.from({ length: 70 }, (_, i) => `a${i}`).join(",");
+    for (const p of ["~/.claud{a..f}/settings.json", `${HOME}/dist/hoo{j..l}s/a`, `${HOME}/vlad.config.js{m..o}`, "~/.claude/settings.jso[[:lower:]]", "~/.claude/settings.jso[]n]", `${HOME}/vlad.config.jso[[:alpha:]]`, `{~/.claude/settings.json,/dev/null}`, `{~/.claude/settings.js?n,/dev/null}`, `~/{${many},.claude}/settings.json`, "~/{a,b}{a,b}{a,b}{a,b}{a,b}{.claude,x}/settings.json"])
+      expect(bash(`tee ${p}`), p).toMatch(/koruma|mod/);
+    for (const c of ["tee src/{1..3}.txt", "cp x src/[[:digit:]].ts", "tee {a,b}.log"]) expect(bash(c), c).toBeNull();
+    for (const c of [`cat ${HOME}/*.json`, `cp x ${HOME}/src/*.ts`, `echo x > ${HOME}/dist/*.js`, "cp x /work/wt/*.json", `cp x ${HOME}/vlad.config.*.bak`]) expect(bash(c), c).toBeNull();
+  });
+  it("K1 (T20261128-01): APFS ad eşdeğerleri (ſ→s, K→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ) katlanır — korunan yol/anahtar/yazıcı komut adı aşılamaz", () => {
+    const prot = ["~/.claude/ſettings.json", "/Users/x/.claude/settings.local.jſon", `${HOME}/vlad.config.local.jſon`, `${HOME}/vlad.conﬁg.json`, `${KB}/mode.jſon`, `${HOME}/diſt/hooKs/x.js`, "~/.claude/ſettingſ.json"];
+    for (const p of prot) {
+      for (const t of ["Edit", "Write", "MultiEdit", "NotebookEdit"]) expect(edit(t, p), `${t} ${p}`).toMatch(/koruma|mod/);
+      for (const c of [`echo {} > ${p}`, `tee ${p}`, `cp x ${p}`]) expect(bash(c), c).toMatch(/koruma|mod/);
+    }
+    for (const c of ["cat ~/.vlad-ſecret/mode.key", "cat ~/.VLAD-ſECRET/mode.key"]) expect(bash(c), c).toMatch(/anahtar/);
+    expect(checkWorkerMode("Read", { file_path: "~/.vlad-ſecret/mode.key" }, KB, ctx)).toMatch(/anahtar/);
+    expect(checkWorkerMode("Grep", { pattern: "x", path: "~/.vlad-ſecret" }, KB, ctx)).toMatch(/anahtar/);
+    // yazıcı komut adı PATH'te APFS ile çözülür: ſed = sed, baſh = bash, inſtall = install, awK = awk
+    for (const c of ["ſed -i s/a/b/ ~/.claude/settings.json", "baſh -c 'echo x > ~/.claude/settings.json'", "inſtall x ~/.claude/settings.json", "awK 1 x | ſponge ~/.claude/settings.json", "awK -i inplace 1 ~/.claude/settings.json"]) expect(bash(c), c).toMatch(/koruma|mod/);
+    for (const c of ["echo ß ﬁ", "cat ~/.claude/ſettings.json", "ſed -n 1p ~/.claude/settings.json"]) expect(bash(c), c).toBeNull();
+    expect(edit("Write", "/work/wt/src/ſettings.json")).toBeNull();
+  });
   it("joker hedefler (mod?.json, m*e.json, mode.jso[n]) ve kb dizini altına yazma reddedilir; *.json / rm * çalışanın kendi dosyaları serbest", () => {
     for (const c of [`rm ${KB}/mod?.json`, `echo x > ${KB}/m*e.json`, `cp x ${KB}/mode.jso[n]`, `truncate -s0 ${KB}/mo?e.json`, `echo x > ${KB}/tasks/T1.md`, `tee ${KB}/findings/F1.md`, `mv a ${KB}/x`]) expect(bash(c), c).not.toBeNull();
     for (const c of ["rm *.json", "rm -rf build/*", `cat ${KB}/tasks/T1.md`, `grep x ${KB}/tasks/T1.md > /tmp/out.txt`]) expect(bash(c), c).toBeNull();

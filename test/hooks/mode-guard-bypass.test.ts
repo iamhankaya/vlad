@@ -71,6 +71,33 @@ describe("(4) Bash: dot-dizin jokerleri ve ln -s hedefi gizli dizine açılamaz"
     for (const cmd of [`cat ${root}/.v*/mode.key`, `cat ${root}/.vlad-*/mode.key`, `cat ${root}/.*/mode.key`, `cat ${root}/.[v]lad-secret/mode.key`, `cat ${root}/.vlad-{secret,x}/mode.key`, `ln -s ${root}/.vlad-sec* x`, `cat ${root}/.?lad-secret/mode.key`])
       expect(c(cmd), cmd).not.toBeNull();
   });
+  it("K1 (T20261128-01): APFS ad eşdeğerli joker (ſ, K) ve ß içeren ev dizini gizli dizine açılamaz", () => {
+    for (const cmd of [`cat ${root}/.v*-ſecret/mode.key`, `cat ${root}/.vlad-ſec*/mode.key`, `ls ${root}/.vlad-{ſecret,x}`, `cat ${root}/.vlad-ſecret/mode.Key`]) expect(c(cmd), cmd).not.toBeNull();
+    const ev = join(root, "straß"); mkdirSync(join(ev, ".vlad-secret"), { recursive: true }); setSecretDirForTests(join(ev, ".vlad-secret"));
+    for (const cmd of [`cat ${root}/strass/.v*/mode.key`, `cat ${root}/straſſ/.vlad-*/mode.key`]) expect(c(cmd), cmd).not.toBeNull();
+    expect(run("Read", { file_path: join(root, "strass", ".vlad-secret", "mode.key") })).not.toBeNull();
+    // review K1-1: kabuk `?`/`[ß]` tek karakteri ß'ye açar; katlama uzunluğu değiştirse de ham biçim eşleşmeli
+    for (const cmd of [`cat ${root}/stra?/.v*/mode.key`, `ls ${root}/stra?/.v*`, `cat ${root}/stra[ß]/.vlad-secre?/mode.key`]) expect(c(cmd), cmd).not.toBeNull();
+  });
+  it.skipIf(IS_WIN)("K1 review-2: katlanmış adlı symlink (ſx → gizli dizin) ham adla çözülür (Linux/NTFS/harf duyarlı APFS'te ſx ≠ sx)", () => {
+    symlinkSync(secret, join(cwd, "ſx"));
+    expect(run("Read", { file_path: "ſx/mode.key" })).not.toBeNull();
+    expect(run("Write", { file_path: "ſx/yeni" })).not.toBeNull();
+  });
+  it.skipIf(IS_WIN)("F-vlad-408/409: jokersiz önek realpath'lenir (symlink l → .claude / vladHome)", () => {
+    const cl = join(root, ".claude"), vh = join(root, "vh");
+    mkdirSync(cl); mkdirSync(join(vh, "dist", "hooks"), { recursive: true });
+    symlinkSync(cl, join(cwd, "l")); symlinkSync(vh, join(cwd, "v"));
+    const r = (tool: string, input: Record<string, unknown>) => checkWorkerMode(tool, input, null, { vladHome: vh, cwd });
+    for (const cmd of ["echo x > l/*ettings.json", "cp x l/settings.loc?l.json", "echo x > l/settings.json", "cp x v/vlad.config.*", "cp x v/di?t/hooks/a", "tee v/*.json"]) expect(r("Bash", { command: cmd }), cmd).not.toBeNull();
+    for (const p of ["l/settings.json", "l/*ettings.json", "v/vlad.config.local.js?n"]) expect(r("Write", { file_path: p }), p).not.toBeNull();
+    for (const cmd of ["echo x > l/other.json", "cp x v/src/*.ts"]) expect(r("Bash", { command: cmd }), cmd).toBeNull();
+    // jokerle gizli dizine yazma (Write ve bitişik yönlendirme)
+    for (const p of [`${root}/.vlad-secre*/mode.key`, `${root}/.?lad-secret`]) expect(run("Write", { file_path: p }), p).not.toBeNull();
+    expect(c(`printf x>${root}/.vlad-secre*/mode.key`)).not.toBeNull();
+    // review tur 2: okuma — {x..y} dizisi, POSIX sınıfı, brace içi kök
+    for (const cmd of [`cat ${root}/.vlad-secre{s..u}/mode.key`, `cat ${root}/.vlad-secre[[:lower:]]/mode.key`, `cat {${root}/.vlad-secre?/mode.key,/dev/null}`]) expect(c(cmd), cmd).not.toBeNull();
+  });
   it("ilgisiz joker ve normal komutlar serbest", () => {
     for (const cmd of [`ls ${root}/*.txt`, `cat ${root}/.gitignore`, `ls ${root}/wt/*`, "grep -r '.*' src", "ls ~/dev/*"]) expect(c(cmd), cmd).toBeNull();
   });

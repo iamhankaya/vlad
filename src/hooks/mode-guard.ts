@@ -12,8 +12,15 @@ const WHY = `çalışan oturumu mod/koruma yazamaz: gece-bekçi modunu (kb mode.
 
 export interface GuardCtx { vladHome?: string | null; cwd?: string }
 
-// Platform ayrımı: yol karşılaştırması küçük harfe çevrilip `\` → `/` yapılır (macOS/Windows büyük-küçük harf duyarsız).
-const norm = (p: string): string => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+/**
+ * K1 (T20261128-01): APFS ad eşdeğerliği tam Unicode harf katlaması kullanır; ASCII ada açılan ASCII dışı karakterler (bu Mac'te
+ * tüm kod noktaları taranarak bulundu): ſ→s, K(U+212A)→k, ß/ẞ→ss, ﬀ ﬁ ﬂ ﬃ ﬄ ﬅ ﬆ. Yalnız bu eşlemeler uygulanır; ASCII büyük/küçük
+ * harf ayrımı mevcut `/i` ve toLowerCase kurallarında kalır. Rust: native/push-guard/src/text.rs `fold` (birebir tablo).
+ */
+const FOLD: Record<string, string> = { "ſ": "s", "K": "k", "ß": "ss", "ẞ": "ss", "ﬀ": "ff", "ﬁ": "fi", "ﬂ": "fl", "ﬃ": "ffi", "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st" };
+export const fold = (s: string): string => s.replace(/[ſKßẞﬀ-ﬆ]/g, (c) => FOLD[c]!);
+// Platform ayrımı: yol karşılaştırması katlanıp küçük harfe çevrilir, `\` → `/` yapılır (macOS/Windows büyük-küçük harf duyarsız).
+const norm = (p: string): string => fold(p.replace(/\\/g, "/").replace(/\/+$/, "")).toLowerCase();
 /** Tam realpath; yok/dangling ise ata dizini çözer, son bileşen symlink ise hedefini izler (yazma araçları symlink üzerinden de gizli dizine inemez). */
 let memo: Map<string, string> | null = null; // yalnız tek checkWorkerMode çağrısı boyunca (dosya sistemi o sürede değişmiş sayılmaz)
 function real(p: string, depth = 0): string {
@@ -33,7 +40,9 @@ function realUncached(abs: string, depth: number): string {
 }
 const GLOB = /[*?[]/;
 /** `?`, `*`, `[…]` joker içeren yol adı `name`'e açılabiliyor mu (mod?.json, m*e.json, mode.jso[n]); jokersiz ise tam eşitlik. */
-function globHits(base: string, name: string): boolean {
+/** K1: ham ya da APFS katlanmış biçim (ſ→s, ß→ss …) isabet ederse isabet; katlama uzunluğu değiştirdiği için ham biçim de denenir (`?` ß'ye açılır). */
+function globHits(base: string, name: string): boolean { return globHit1(base, name) || globHit1(fold(base), name); }
+function globHit1(base: string, name: string): boolean {
   if (!GLOB.test(base)) return base.toLowerCase() === name;
   if (base.startsWith("*")) return false; // shortcut: `*.json` / `*` (rm *.json) çalışanın kendi dosyalarıdır; baş harfi bilinen joker (mod?.json) denetlenir
   const re = base.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[[^\]]*\]/g, ".").replace(/\*/g, ".*").replace(/\?/g, ".");
@@ -48,19 +57,20 @@ const secretHit = (t: string): boolean => { const n = norm(expand(t.replace(/["'
 const SETTINGS = ["settings.json", "settings.local.json"];
 const expand = (t: string): string => t.replace(/^~(?=\/|\\|$)|\$\{?HOME\}?/g, homedir().replace(/\\/g, "/"));
 
-/** Yol (dosya aracı ya da komut parçası) korunan mı: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config.json`. */
+/** Yol (dosya aracı ya da komut parçası) korunan mı: kb mode.json, `.claude/settings(.local).json`, `<vladHome>/dist/hooks/**`, `<vladHome>/vlad.config(.local).json` (F-vlad-406: local katman kbDir'i değiştirebilir). */
 /** `anyDir`: komut parçalarında yol çözülemez (`$KB/mode.json`); mode.json adı her dizinde korunur. Dosya araçlarında yalnız kb'nin mode.json'u. */
 function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = false): string | null {
   if (secretHit(p)) return "anahtar";
   const t = expand(p.replace(/\\/g, "/"));
   if (!GLOB.test(t) && insideSecret(real(resolve(ctx.cwd ?? ".", t)))) return "anahtar"; // symlink s -> gizli dizin: yazma araçları da tam realpath ile
+  const g = globProtected(t, kbDir, ctx); if (g) return g; // F-vlad-408/409 (jokersiz yolda da realpath biçimi: symlink → .claude)
   const base = basename(t);
   if (globHits(base, "mode.json")) return anyDir || kbDir === null || GLOB.test(base) || norm(real(resolve(ctx.cwd ?? ".", t))) === norm(real(join(kbDir, "mode.json"))) ? "mode.json" : null; // kb dışındaki (jokersiz) mode.json projenin kendi dosyasıdır
-  if (/(^|\/)\.claude\//i.test(t) && SETTINGS.some((s) => globHits(base, s))) return "settings";
+  if (/(^|\/)\.claude\//i.test(fold(t)) && SETTINGS.some((s) => globHits(base, s))) return "settings";
   if (ctx.vladHome) {
     const abs = norm(real(isAbsolute(t) ? t : resolve(ctx.cwd ?? ".", t)));
     const home = norm(real(ctx.vladHome));
-    if (abs === `${home}/vlad.config.json` || abs === `${home}/dist/hooks` || abs.startsWith(`${home}/dist/hooks/`)) return "vlad";
+    if (abs === `${home}/vlad.config.json` || abs === `${home}/vlad.config.local.json` || abs === `${home}/dist/hooks` || abs.startsWith(`${home}/dist/hooks/`)) return "vlad";
   }
   return null;
 }
@@ -86,7 +96,7 @@ function segments(cmd: string): string[] {
 }
 /** Komut konumundaki `vlad mode <x>`: segment başı, öncesinde yalnız ortam atamaları/sarmalayıcılar (env, sudo, npx, node …) olabilir. */
 const MODE_CMD = /^(?:[\w.-]+=\S*\s+|(?:env|command|exec|nohup|time|sudo|npx|tsx|node)\b(?:\s+-\S+(?:\s+[A-Z_]+)?)*\s+)*(?:\S*[/\\])?(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/i;
-const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?sh\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
+const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?[sſ]h\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
 
 function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: number): string | null {
   for (const m of cmd.matchAll(SHELL_C)) { // `bash -c '…'` / `eval '…'` yükü ayrıca denetlenir
@@ -97,15 +107,16 @@ function checkBash(cmd: string, kbDir: string | null, ctx: GuardCtx, depth: numb
   // Windows: segments() ters eğik çizgiyi kabuk kaçışı sayıp siler (C:\Users → C:Users); sürücü harfli joker yolları kaçmasın diye ham sözcükler de denetlenir (yalnız daha sıkı)
   const rawToks = cmd.split(/[\s;&|()]+/).filter(Boolean);
   for (const seg of segments(cmd)) {
-    const mm = MODE_CMD.exec(seg);
+    const mm = MODE_CMD.exec(fold(seg)); // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;
     const clean = seg.replace(/\d*>&\d+|&?\d*>>?\s*\/dev\/null/g, " "); // 2>&1, >/dev/null yazma değildir
     const toks = clean.split(SEP_TOKEN).filter(Boolean);
-    const tools = WRITE_TOOL.test(clean);
+    const tools = WRITE_TOOL.test(fold(clean)); // K1: ſed, baſh, inſtall, awK
     const redirectTargets = [...clean.matchAll(/>>?\s*([^\s;&|<>()]+)/g)].map((x) => x[1]!);
     for (const t of [...clean.split(/\s+/), ...rawToks]) if (globReachesSecret(t)) return `${WHY} (anahtar: joker gizli dizine açılabilir: ${t})`;
     const kbUnder = (t: string) => kbDir !== null && norm(expand(t)).startsWith(norm(kbDir) + "/");
-    for (const t of tools ? toks : redirectTargets) {
+    // F-vlad-408/409: SEP_TOKEN virgülde böler; `{a,b}` süslü sözcükler boşlukla bölünmüş haliyle de denetlenir
+    for (const t of tools ? [...toks, ...clean.split(/\s+/).filter((x) => x.includes("{"))] : redirectTargets) {
       const hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null);
       if (hit) return `${WHY} (${hit}: ${t})`;
     }
@@ -153,27 +164,81 @@ function checkReadTool(tool: string, input: Record<string, unknown> | undefined,
 const braceExpand = (s: string, n = 0): string[] => {
   const m = /\{([^{}]*)\}/.exec(s);
   if (!m || n > 4 || !m[1]!.includes(",")) return [s];
-  return m[1]!.split(",").flatMap((alt) => braceExpand(s.slice(0, m.index) + alt + s.slice(m.index + m[0].length), n + 1)).slice(0, 64);
+  // K1 (T20261127-25): 64'e ulaşınca dur; tümünü üretip kesmek 5×60 grupta 60^5 çağrıyla kancayı askıda bırakıyordu (fail-open)
+  const out: string[] = [];
+  for (const alt of m[1]!.split(",")) {
+    out.push(...braceExpand(s.slice(0, m.index) + alt + s.slice(m.index + m[0].length), n + 1));
+    if (out.length >= 64) break;
+  }
+  return out.slice(0, 64);
 };
-function segMatches(globSeg: string, name: string): boolean {
+/** Kabuk `{x..y}` dizisi (virgülsüz brace) → `*` (fail-closed üst küme; braceExpand yalnız virgüllü grubu açar). */
+const seqLoose = (s: string): string => s.replace(/\{[^{},]*\.\.[^{},]*\}/g, "*");
+/** POSIX sınıfı (`[[:lower:]]`) ya da `]` ile başlayan sınıf (`[]n]`, `[!]x]`) JS regex'te yanlış okunur → `?` (fail-closed). */
+const bracketLoose = (s: string): string => s.replace(/\[(?:[!^]?\][^\]]*|[^\]]*\[:[a-z]+:\][^\]]*)\]/g, "?");
+/** Açılım sınırı (64 alternatif / 4 derinlik) aşıldı mı: kalan virgüllü grup ya da tam 64 açılım → fail-closed. */
+const braceCapped = (alts: string[]): boolean => alts.length >= 64 || alts.some((a) => /\{[^{}]*,[^{}]*\}/.test(a));
+/** K1: ham çift (kabuk `?` ß'ye açılır) ya da iki tarafı APFS katlanmış çift (gizli dizin yolu ß içerebilir) eşleşirse isabet. */
+function segMatches(globSeg: string, name: string): boolean { globSeg = bracketLoose(globSeg); return segMatch1(globSeg, name) || segMatch1(fold(globSeg), fold(name)); }
+function segMatch1(globSeg: string, name: string): boolean {
   if (!/[*?[]/.test(globSeg)) return globSeg.toLowerCase() === name.toLowerCase();
   if (name.startsWith(".") && !globSeg.startsWith(".")) return false;
   const re = globSeg.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\[!/g, "[^").replace(/\*+/g, ".*").replace(/\?/g, ".");
   try { return new RegExp(`^${re}$`, "i").test(name); } catch { return true; }
 }
 function globReachesSecret(tok: string): boolean {
-  if (!/[*?[{]/.test(tok) || !/^(~|\$\{?HOME\}?|\/|[A-Za-z]:[\\/])/.test(tok)) return false; // Windows sürücü harfli mutlak yol da (C:\… / C:/…)
+  if (!/[*?[{]/.test(tok) || !/^\{?(~|\$\{?HOME\}?|\/|[A-Za-z]:[\\/])/.test(tok)) return false; // Windows sürücü harfli mutlak yol da (C:\… / C:/…); review tur 2: `{~/…,x}`
   const forms = [sdir(), real(sdir())].map((d) => d.replace(/\\/g, "/").split("/").filter(Boolean));
-  for (const alt of braceExpand(expand(tok.replace(/\\/g, "/")))) {
-    const gs = alt.split("/").filter(Boolean);
+  const alts = braceExpand(seqLoose(expand(tok.replace(/\\/g, "/"))));
+  if (braceCapped(alts)) return true; // açılım sınırı: fail-closed
+  for (const alt of alts) {
+    const gs = expand(alt).split("/").filter(Boolean);
     if (forms.some((sd) => gs.every((g, i) => i >= sd.length || segMatches(g, sd[i]!)))) return true;
   }
   return false;
 }
 
+const segsOf = (p: string): string[] => p.replace(/\\/g, "/").split("/").filter(Boolean);
+/**
+ * F-vlad-408/409: jokerli (`*?[` / `{a,b}`) yol korunan bir yola açılabiliyor mu. Yol mutlaklaştırılır, bileşenlere ayrılır;
+ * jokerli her bileşen segMatches (ham + APFS katlı, baştaki nokta kuralı) ile korunan ada sınanır; `*` kestirmesi yok.
+ * Jokersiz önek ayrıca realpath'lenir (symlink → ~/.claude). Hedefler: gizli dizin (ve altı), herhangi bir dizindeki `.claude/settings(.local).json`,
+ * `<vladHome>/vlad.config(.local).json`, `<vladHome>/dist/hooks/**`, `<kb>/mode.json`.
+ */
+function globProtected(t: string, kbDir: string | null, ctx: GuardCtx): string | null {
+  const forms: string[][] = [];
+  const alts = braceExpand(seqLoose(t));
+  if (braceCapped(alts)) return "joker-sınırı"; // review tur 2: 64+ alternatif / 5+ grup sessizce kesilmesin
+  for (const raw of alts) {
+    const alt = expand(raw); // kabuk sırası: önce brace, sonra her sözcükte tilde (`{~/.claude/settings.json,x}`)
+    const abs = resolve(ctx.cwd ?? ".", alt).replace(/\\/g, "/");
+    forms.push(segsOf(abs));
+    const parts = abs.split("/");
+    const k = parts.findIndex((s) => /[*?[]/.test(s));
+    if (k > 0) forms.push([...segsOf(real(parts.slice(0, k).join("/") + "/")), ...parts.slice(k).filter(Boolean)]);
+    else if (k < 0) forms.push(segsOf(real(abs)));
+  }
+  const roots = (d: string): string[][] => [segsOf(d), segsOf(real(d))];
+  const hits = (gs: string[], target: string[], prefix: boolean): boolean => (prefix ? gs.length >= target.length : gs.length === target.length) && target.every((s, i) => segMatches(gs[i]!, s));
+  for (const gs of forms) {
+    const n = gs.length;
+    if (roots(sdir()).some((r) => hits(gs, r, true))) return "anahtar"; // jokerle gizli dizine yazma (`> ~/.vlad-secre*/mode.key`)
+    if (n >= 2 && segMatches(gs[n - 2]!, ".claude") && SETTINGS.some((s) => segMatches(gs[n - 1]!, s))) return "settings";
+    if (kbDir !== null && roots(kbDir).some((r) => hits(gs, [...r, "mode.json"], false))) return "mode.json";
+    if (ctx.vladHome) {
+      for (const r of roots(ctx.vladHome)) {
+        if (hits(gs, [...r, "vlad.config.json"], false) || hits(gs, [...r, "vlad.config.local.json"], false) || hits(gs, [...r, "dist", "hooks"], true)) return "vlad";
+      }
+    }
+  }
+  return null;
+}
+
 /** null = serbest, string = ret nedeni. `kbDir` null ise (çözülemedi) `mode.json` adlı her yazma reddedilir. */
 export function checkWorkerMode(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx = {}): string | null {
   memo = new Map();
+  // K1: girdi ham kalır (realpath/lstat/readlink ham adla: Linux/NTFS/harf duyarlı APFS'te ſx ≠ sx); APFS katlaması yalnız
+  // karşılaştırmalarda: norm, globHits, segMatches, `.claude` / WRITE_TOOL / MODE_CMD / SHELL_C eşleşmeleri
   try { return check(tool, input, kbDir, ctx); } finally { memo = null; }
 }
 function check(tool: string, input: Record<string, unknown> | undefined, kbDir: string | null, ctx: GuardCtx): string | null {

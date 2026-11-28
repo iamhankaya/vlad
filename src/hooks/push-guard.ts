@@ -5,7 +5,7 @@ const ALLOWED = /^(?:cd [^\s;&|$`"'()<>*?{}\\]+ && )?git push(?: -u| --set-upstr
 export function checkWorkerPush(command: string, ownId: string | null): string | null {
   const c = command.replace(/\\\r?\n/g, "").trim(); // satır devamı: bash birleştirir
   const bare = c.replace(/["'\\]/g, ""); // `p\ush`, `pu""sh`, `g'it'` kelime olarak aranır
-  if (!/\bgit\b/.test(bare) || !/\bpush\b/.test(bare)) return null; // shortcut: değişken/ikame ile kurulan "push" (git $(echo pu)sh) kelime olarak görünmez; hook yanında glob deny katmanı kalır
+  if (!/\bgit\b/i.test(bare) || !/\bpush\b/i.test(bare)) return null; // F-vlad-405: büyük/küçük harf duyarsız (macOS/Windows'ta `GIT push` git'i çalıştırır; ALLOWED küçük harf kalır → ret). shortcut: değişken/ikame ile kurulan "push" (git $(echo pu)sh) kelime olarak görünmez; hook yanında glob deny katmanı kalır
   const m = ALLOWED.exec(c);
   if (!m) return "çalışan push reddedildi: komut tam kalıba uymuyor (izinli: [cd <dizin> && ]git push [-u] origin vlad/<kendi-id> [2>&1]; commit mesajında git+push geçiyorsa `git commit -F <dosya>`)";
   if (ownId !== null && m[1] !== ownId) return "çalışan push reddedildi: yalnız kendi vlad/<id> dalı";

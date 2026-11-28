@@ -31,6 +31,12 @@ describe("F-vlad-324: çalışan git push — katı tam-komut kalıbı", () => {
       expect(checkWorkerPush(cmd, ID), cmd).toBeNull();
     for (const cmd of [`git commit -m "fix; git push guard"`, `git log --grep='git push'`]) expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
   });
+  it("F-vlad-405: büyük/küçük harf duyarsız tetik — GIT/Git/PUSH biçimleri (macOS/Windows'ta git'i çalıştırır) kalıp dışı kalır ve reddedilir", () => {
+    for (const cmd of ["GIT push --force origin main", `Git push origin vlad/${ID}`, "git PUSH origin main", "gIt Push -f origin main", `GIT -C /w PUSH origin vlad/${ID}`, `G"I"T push origin main`])
+      expect(checkWorkerPush(cmd, ID), cmd).not.toBeNull();
+    expect(checkWorkerPush("GIT status", ID)).toBeNull();
+    for (const cmd of ["gıt push", "git puſh"]) expect(checkWorkerPush(cmd, ID), cmd).toBeNull(); // non-unicode /i ASCII dışını katlamaz (Rust (?i-u) ile aynı)
+  });
   it("kimlik bilinmiyorsa yalnız vlad/T… biçimi aranır", () => {
     expect(checkWorkerPush("git push origin vlad/T20261112-10", null)).toBeNull();
     expect(checkWorkerPush("git push origin vlad/main", null)).not.toBeNull();
