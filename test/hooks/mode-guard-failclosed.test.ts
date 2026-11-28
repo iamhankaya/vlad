@@ -71,6 +71,28 @@ describe("bilgi maddesi: cd <korunan kök> sonrası göreli yazma", () => {
   });
 });
 
+describe("review turu: cd çözümleyici, grup/nokta, doğrusal tarama, tar/unzip", () => {
+  it("cd yönlendirmeli / öneklı / bloklu / çözülemeyen hedefli göreli yazma reddedilir", () => {
+    for (const c of ["cd ~/.claude 2>&1 && tee settings.json", "cd ~/.claude >/dev/null && tee settings.json", "{ cd ~/.claude; tee settings.json; }", "builtin cd ~/.claude && tee settings.json", "command cd ~/.claude && tee settings.json",
+      "if true; then cd ~/.claude; echo x > settings.json; fi", "bash -c 'cd ~/.claude 2>/dev/null && echo x > settings.json'", `cd ${vh}/dist/hooks 2>&1 && echo x > a.js`,
+      "cd $SOMEWHERE && tee settings.json", "cd - && tee settings.local.json", `cd "$X"/y && echo x > vlad.config.json`])
+      expect(b(c), c).not.toBeNull();
+    for (const c of ["cd $SOMEWHERE && tee out.txt", "cd src 2>&1 && tee a.json", "cd $X && make > log.txt"]) expect(b(c), c).toBeNull();
+  });
+  it("grup: noktalı ad ve içinde / olan alternatif", () => {
+    for (const c of ["tee ~/(.claude|x)/settings.json", "tee ~/(.claude)/settings.json", "tee ~/(.claude/settings.json|x)", `tee ${vh}/(dist/hooks|x)/a.js`]) expect(b(c), c).not.toBeNull();
+  });
+  it("kapanmayan [ / [: yığını doğrusal sürede biter", () => {
+    const t0 = Date.now();
+    for (const c of [`tee ${"[[:".repeat(8000)}`, `tee ${"[x".repeat(20000)}`, `tee ${"[.".repeat(10000)}`]) b(c);
+    expect(Date.now() - t0).toBeLessThan(5000);
+  });
+  it("tar/unzip hedefi korunan dizin", () => {
+    for (const c of ["tar -xf x.tar -C ~/.claude", "unzip x.zip -d ~/.claude", `tar -xf x.tar -C ${vh}/dist/hooks`]) expect(b(c), c).not.toBeNull();
+    expect(b("tar -xf x.tar -C out")).toBeNull();
+  });
+});
+
 describe("yanlış pozitif listesi (çalışanın kendi worktree'si)", () => {
   it("izinli", () => {
     for (const c of ["echo x > *.json", "cp x src/*", "tee out-?.txt", "echo x > {a,b}.ts", "echo '*.json' > notes.txt", "cat ~/.claude/settings.json", "ls ~/.claude", "grep -r x ~/.claude/projects", "rm src/a.ts", "echo x > src/a.json"]) expect(b(c), c).toBeNull();

@@ -76,7 +76,7 @@ function protectedPath(p: string, kbDir: string | null, ctx: GuardCtx, anyDir = 
 }
 
 // shortcut: bilinmeyen yazan araç, değişkenle kurulan yol/komut adı ve `node -e` içindeki birleştirilmiş yol kaçar; kesin sınır imzalı token (ayrı iş).
-const WRITE_TOOL = /(?:^|\s)(?:tee|cp|mv|rm|truncate|dd|ln|install|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|jq|sponge|patch|awk|ed|curl|wget|rsync|set-content|out-file|remove-item|ni|sc)(?=\s|$)|\bsed\b[^|;&]*\s(?:-[a-z]*i|--in-place)|\bgit\s+(?:apply|checkout|restore)\b/i;
+const WRITE_TOOL = /(?:^|\s)(?:tee|cp|mv|rm|truncate|dd|ln|install|tar|unzip|perl|python3?|node|ruby|sh|bash|zsh|pwsh|powershell|jq|sponge|patch|awk|ed|curl|wget|rsync|set-content|out-file|remove-item|ni|sc)(?=\s|$)|\bsed\b[^|;&]*\s(?:-[a-z]*i|--in-place)|\bgit\s+(?:apply|checkout|restore)\b/i;
 const SEP_TOKEN = /[\s;&|<>(),='"]+/;
 
 /** Komutu tırnak dışındaki ayraçlarda (`;`, `&&`, `||`, `|`, `(`, `$(`, backtick, satır sonu) parçalara böler; tırnak içeriği kalır, tırnak/ters bölü karakterleri atılır. */
@@ -99,7 +99,7 @@ function segments(cmd: string): string[] {
 const MODE_CMD = /^(?:[\w.-]+=\S*\s+|(?:env|command|exec|nohup|time|sudo|npx|tsx|node)\b(?:\s+-\S+(?:\s+[A-Z_]+)?)*\s+)*(?:\S*[/\\])?(?:vlad|cli)(?:\.(?:cmd|exe|js|mjs|ts|ps1))?(?:\s+-\S+)*\s+mode\b\s*(\S*)/i;
 const SHELL_C = /(?:^|[\s;&|(])(?:ba|z|da)?[sſ]h\s+(?:-\S+\s+)*-\w*c\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')|\beval\s+(?:"((?:[^"\\]|\\.)*)"|'([^']*)')/gi;
 
-/** F-vlad-411: zsh alternasyon/grup jokeri `(a|b)` ya da `(a)` (öncesi `$` değil, içinde boşluk/parantez yok) → `*` (fail-closed üst küme; `segments` `(` ve `|`'da böldüğü için). */
+/** F-vlad-411: zsh alternasyon/grup jokeri `(a|b)` ya da `(a)` (öncesi `$` değil, içinde boşluk/parantez yok, tırnak dışı) → brace `{a,b}` (`segments` `(` ve `|`'da böldüğü için önceden çevrilir). */
 function altLoose(cmd: string): string {
   let out = "", q: string | null = null; // tırnak içi (`python3 -c "open('x','w')"`) kabuk jokeri değildir
   for (let i = 0; i < cmd.length; i++) {
@@ -109,15 +109,30 @@ function altLoose(cmd: string): string {
     if (ch === "\\") { out += ch + (cmd[++i] ?? ""); continue; }
     if (ch === "(" && cmd[i - 1] !== "$") {
       const close = cmd.slice(i + 1).search(/[()\s]/);
-      if (close >= 0 && cmd[i + 1 + close] === ")") { out += "*"; i += close + 1; continue; }
+      if (close >= 0 && cmd[i + 1 + close] === ")") { // `(a|b)` → `{a,b}` (brace kolu: noktalı ad ve `/` içeren alternatif tam doğru açılır); tek alternatifli `(a)` → `{a,a}`
+        const body = cmd.slice(i + 1, i + 1 + close);
+        out += body.includes("|") ? `{${body.replace(/\|/g, ",")}}` : `{${body},${body}}`;
+        i += close + 1; continue;
+      }
     }
     out += ch;
   }
   return out;
 }
 const DESTROY = /(?:^|\s)(?:rm|mv|rmdir|unlink|shred|trash(?:-put)?)(?=\s|$)/i;
-const COPYISH = /(?:^|\s)(?:cp|install|rsync|ln|scp)(?=\s|$)/i;
-const CD_CMD = /^(?:cd|pushd|chdir)(?:\s+(?:--|-[LPe@]+))*(?:\s+(\S+))?\s*$/i;
+const COPYISH = /(?:^|\s)(?:cp|install|rsync|ln|scp|tar|unzip)(?=\s|$)/i;
+const CD_PRE = new Set(["{", "then", "do", "else", "!", "builtin", "command", "if", "elif", "while", "until", "time"]);
+/** Segmentte `cd`/`pushd`/`chdir` (başta ya da `{`/`then`/`builtin` … sonrası); seçenekler atlanır, yönlendirme hedef sayılmaz. target yoksa HOME. */
+function cdOf(seg: string): { target?: string } | null {
+  const w = seg.split(/\s+/).filter(Boolean);
+  const i = w.findIndex((x, k) => /^(?:cd|pushd|chdir)$/i.test(x) && (k === 0 || CD_PRE.has(w[k - 1]!.toLowerCase())));
+  if (i < 0) return null;
+  let k = i + 1;
+  while (k < w.length && /^(?:--|-[LPe@]+)$/.test(w[k]!)) k++;
+  const t = w[k];
+  return t === undefined || /^\d*[<>]/.test(t) ? {} : { target: t.replace(/;+$/, "") };
+}
+const RELATIVE_PROTECTED_NAME = ["settings.json", "settings.local.json", "vlad.config.json", "vlad.config.local.json"];
 
 function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: number): string | null {
   for (const m of cmd.matchAll(SHELL_C)) { // `bash -c '…'` / `eval '…'` yükü ayrıca denetlenir
@@ -125,6 +140,7 @@ function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: num
     if (inner && depth < 3) { const r = checkBash(inner, kbDir, ctx0, depth + 1); if (r) return r; }
   }
   cmd = altLoose(cmd);
+  let cwdUnknown = false;
   let ctx = ctx0; // `cd <dizin>` sonrası göreli yollar o dizine göre çözülür (bilgi maddesi: cwd izleme)
   if (secretHit(cmd)) return `${WHY} (anahtar: gizli mod anahtarına dokunulamaz)`; // okuma bağlamı dahil: anahtarı sızdırmak da yetki sayılır
   // Windows: segments() ters eğik çizgiyi kabuk kaçışı sayıp siler (C:\Users → C:Users); sürücü harfli joker yolları kaçmasın diye ham sözcükler de denetlenir (yalnız daha sıkı)
@@ -132,11 +148,12 @@ function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: num
   for (const seg of segments(cmd)) {
     const mm = MODE_CMD.exec(fold(seg)); // K1: komut adı PATH'te APFS ile çözülür (katlama yalnız eşleşmede; yollar ham kalır)
     if (mm && mm[1]!.toLowerCase() !== "status") return `${WHY}; yalnız \`vlad mode status\` serbest`;
-    const cd = CD_CMD.exec(seg);
-    if (cd) { // sanal cwd: yalnız çözülebilir hedef (`$VAR`, `-`, joker yok); çözülemeyen cd cwd'yi değiştirmez (kestirme)
-      const t = cd[1];
+    const cd = cdOf(seg);
+    if (cd) { // sanal cwd; çözülemeyen hedef (`$VAR`, `-`, joker) → cwdUnknown: sonraki göreli settings/vlad.config adlı yazma reddedilir (fail-closed)
+      const t = cd.target;
       if (t === undefined) ctx = { ...ctx, cwd: homedir() };
-      else if (t !== "-" && !/[$*?[{~]/.test(expand(t))) ctx = { ...ctx, cwd: resolve(ctx.cwd ?? ".", expand(t.replace(/\\/g, "/"))) };
+      else if (t !== "-" && !/[$*?[{~`]/.test(expand(t))) ctx = { ...ctx, cwd: resolve(ctx.cwd ?? ".", expand(t.replace(/\\/g, "/"))) };
+      else cwdUnknown = true;
     }
     const clean = seg.replace(/\d*>&\d+|&?\d*>>?\s*\/dev\/null/g, " "); // 2>&1, >/dev/null yazma değildir
     const toks = clean.split(SEP_TOKEN).filter(Boolean);
@@ -149,6 +166,10 @@ function checkBash(cmd: string, kbDir: string | null, ctx0: GuardCtx, depth: num
     for (const t of tools ? [...toks, ...clean.split(/\s+/).filter((x) => x.includes("{"))] : redirectTargets) {
       const hit = protectedPath(t, kbDir, ctx, true) ?? (kbUnder(t) ? "kb" : null) ?? (tools && (destroy || copyish) ? dirProtected(t, kbDir, ctx, destroy) : null);
       if (hit) return `${WHY} (${hit}: ${t})`;
+      if (cwdUnknown && !isAbsolute(t) && !/^[~$]/.test(t)) { // çözülemeyen cd sonrası göreli yol: korunan dosya adı her dizinde reddedilir
+        const nb = basename(t.replace(/\\/g, "/"));
+        if (RELATIVE_PROTECTED_NAME.some((s) => globHits(nb, s))) return `${WHY} (cd çözülemedi: göreli ${t})`;
+      }
     }
   }
   return null;
@@ -210,6 +231,7 @@ const seqLoose = (s: string): string => s.replace(/\{[^{},]*\.\.[^{},]*\}/g, "*"
  */
 function bracketLoose(s: string): string {
   let out = "", i = 0;
+  const noClose = new Set<string>(); // review: `[:`/`[.`/`[=` kapanışı bir kez bulunamadıysa sonrası da yok (doğrusal tarama; kübik DoS → hook zaman aşımı fail-open'dı)
   while (i < s.length) {
     if (s[i] !== "[") { out += s[i++]; continue; }
     let j = i + 1, odd = false;
@@ -218,10 +240,14 @@ function bracketLoose(s: string): string {
     let end = -1;
     for (; j < s.length; j++) {
       const c = s[j]!, n = s[j + 1];
-      if (c === "[" && n !== undefined && ":.=".includes(n)) { const close = s.indexOf(n + "]", j + 2); if (close >= 0) { odd = true; j = close + 1; continue; } }
+      if (c === "[" && n !== undefined && ":.=".includes(n) && !noClose.has(n)) {
+        const close = s.indexOf(n + "]", j + 2);
+        if (close >= 0) { odd = true; j = close + 1; continue; }
+        noClose.add(n);
+      }
       if (c === "]") { end = j; break; }
     }
-    if (end < 0) { out += s[i++]; continue; } // kapanmamış `[` düz karakter
+    if (end < 0) { out += s.slice(i); break; } // kapanış yok: sonraki hiçbir `[` de kapanamaz (aksi `]` bu taramada bulunurdu) → kalanı düz metin
     out += odd ? "?" : s.slice(i, end + 1);
     i = end + 1;
   }

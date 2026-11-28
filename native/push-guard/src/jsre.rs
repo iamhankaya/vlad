@@ -199,6 +199,7 @@ pub fn bracket_loose(s: &str) -> String {
     let c: Vec<char> = s.chars().collect();
     let mut out = String::new();
     let mut i = 0usize;
+    let mut no_close: Vec<char> = Vec::new();
     while i < c.len() {
         if c[i] != '[' {
             out.push(c[i]);
@@ -219,7 +220,7 @@ pub fn bracket_loose(s: &str) -> String {
             let ch = c[j];
             if ch == '[' {
                 if let Some(&n) = c.get(j + 1) {
-                    if ":.=".contains(n) {
+                    if ":.=".contains(n) && !no_close.contains(&n) {
                         let mut k = j + 2;
                         let mut close = None;
                         while k + 1 < c.len() {
@@ -234,6 +235,7 @@ pub fn bracket_loose(s: &str) -> String {
                             j = cl + 2; // JS: j = close + 1; continue (for'un j++'ı)
                             continue;
                         }
+                        no_close.push(n); // kapanış bir kez bulunamadıysa sonrası da yok (doğrusal tarama)
                     }
                 }
             }
@@ -245,8 +247,8 @@ pub fn bracket_loose(s: &str) -> String {
         }
         match end {
             None => {
-                out.push('[');
-                i += 1;
+                out.extend(&c[i..]); // kapanış yok: kalanı düz metin (TS ile aynı)
+                break;
             }
             Some(e) => {
                 if odd {
