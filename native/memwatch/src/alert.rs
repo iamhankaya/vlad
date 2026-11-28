@@ -20,13 +20,19 @@ pub struct AlertMemo {
 pub const RETRY_SECS: u64 = 60;
 
 fn recent(at: Option<u64>, now: u64) -> bool {
-    // saat geri giderse (at > now) yakın sayılır: kuşkuda tekrar gönderme
-    at.is_some_and(|t| now.saturating_sub(t) < SUPPRESS_SECS)
+    // saat pencere içinde geri giderse (at > now) yakın sayılır: kuşkuda tekrar gönderme. Damga pencereden de
+    // ilerideyse (saat bir ara çok ileri atlamış) geçersizdir: yoksa düzeltilen saatle uyarılar uzun süre susardı.
+    at.is_some_and(|t| {
+        t <= now.saturating_add(SUPPRESS_SECS) && now.saturating_sub(t) < SUPPRESS_SECS
+    })
 }
 
 impl AlertMemo {
     pub fn should_send(&self, level: Level, now: u64) -> bool {
-        if self.retry_at.is_some_and(|t| now < t) {
+        if self
+            .retry_at
+            .is_some_and(|t| now < t && t <= now.saturating_add(RETRY_SECS))
+        {
             return false;
         }
         match level {
@@ -35,10 +41,11 @@ impl AlertMemo {
             Level::Critical => !recent(self.critical, now),
         }
     }
-    /// Yalnız gönderim başarılı olduktan sonra çağrılır (başarısız gönderim bastırmayı başlatmaz).
+    /// Başarısız gönderim: bastırmayı başlatmaz, yalnız RETRY_SECS boyunca yeniden denemeyi erteler.
     pub fn record_failure(&mut self, now: u64) {
         self.retry_at = Some(now + RETRY_SECS);
     }
+    /// Yalnız gönderim başarılı olduktan sonra çağrılır.
     pub fn record(&mut self, level: Level, now: u64) {
         self.retry_at = None;
         match level {
@@ -87,7 +94,18 @@ mod tests {
     fn clock_going_backwards_suppresses() {
         let mut m = AlertMemo::default();
         m.record(Level::Critical, 5000);
-        assert!(!m.should_send(Level::Critical, 4000));
+        assert!(!m.should_send(Level::Critical, 4500));
+    }
+
+    #[test]
+    fn far_future_stamp_from_a_wrong_clock_is_ignored() {
+        // saat bir kez çok ileri atlayıp düzeltildi: kaydedilmiş damga pencereden de ileride → geçersiz, uyarı susmaz
+        let mut m = AlertMemo::default();
+        m.record(Level::Critical, 1_000_000);
+        m.record_failure(1_000_000);
+        assert!(m.should_send(Level::Critical, 1_000_000 - SUPPRESS_SECS - 1));
+        // pencere içindeki küçük geri gidiş hâlâ bastırır
+        assert!(!m.should_send(Level::Critical, 1_000_000 - SUPPRESS_SECS + 1));
     }
 
     #[test]

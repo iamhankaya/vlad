@@ -90,6 +90,20 @@ describe("task launch memory gate", { timeout: 60_000 }, () => {
     expect(r.code, r.err).toBe(0);
   });
 
+  it("task resume is gated too (it opens a local worker): critical → 75 before any kb write; --force passes", () => {
+    const id = mkTask();
+    expect(vlad(["task", "launch", id, "--dry-run", "--json"]).code).toBe(0);
+    const before = vlad(["kb", "get", id, "--json"]).out;
+    const crit = { VLAD_MEMWATCH_STATE: fakeState("critical", ["boş %7 < %10"], 7) };
+    const r = vlad(["task", "resume", id, "--json"], crit);
+    expect(r.code, r.err).toBe(75);
+    expect(r.err).toContain("bellek: kritik baskı");
+    expect(vlad(["kb", "get", id, "--json"]).out).toBe(before);
+    const f = vlad(["task", "resume", id, "--force", "--json"], crit);
+    expect(f.code, f.err).toBe(0);
+    expect(f.err).toContain("--force ile geçildi");
+  });
+
   it("--dry-run is not gated", () => {
     const r = vlad(["task", "launch", mkTask(), "--dry-run", "--json"], { VLAD_MEMWATCH_STATE: fakeState("critical", ["boş %7 < %10"], 7) });
     expect(r.code, r.err).toBe(0);

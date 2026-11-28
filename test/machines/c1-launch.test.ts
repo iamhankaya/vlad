@@ -97,6 +97,24 @@ describe("machines:C1 launchTask — yerleştirme + uzak yol", () => {
     expect(a.promptTemplate).not.toContain(home);
   });
 
+  it("T20261128-06 bellek kapısı (beforeLocal) yalnız yerel yolda: uzak yerleşimde çağrılmaz; yerelde fırlatırsa hiçbir şey yazılmaz", async () => {
+    const remote = mk();
+    let gateCalls = 0;
+    const f = fakeTransport({ ...ok, launch: (a) => ({ ...launched, branch: a.branch }) });
+    const r = await launchTask(remote.data.id, { launcher: fakeLauncher(), cfg, remote: { transport: f.t }, beforeLocal: () => { gateCalls++; throw new Error("bellek: kritik"); } });
+    expect(r.data).toMatchObject({ state: "running", machine: "windows" });
+    expect(gateCalls).toBe(0);
+
+    card(undefined);
+    const local = mk();
+    const l = fakeLauncher();
+    await expect(launchTask(local.data.id, { launcher: l, cfg, remote: { transport: f.t }, beforeLocal: () => { gateCalls++; throw new Error("bellek: kritik"); } })).rejects.toThrow("bellek: kritik");
+    expect(gateCalls).toBe(1);
+    expect(l.reqs).toHaveLength(0);
+    expect(getTask(local.data.id).data).toMatchObject({ state: "queued", worktree: null, error: null });
+    expect(getTask(local.data.id).data.machine ?? null).toBeNull();
+  });
+
   it("kart brain'e düşerse yerel yol: launcher çağrılır, machine=brain yazılır, ağ yok", async () => {
     card(undefined);
     const task = mk();

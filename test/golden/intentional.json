@@ -204,6 +204,22 @@
         "history search --help",
         "history show --help"
       ]
+    },
+    {
+      "id": "T20261128-06",
+      "keys": [
+        "(root) --help",
+        "top --help",
+        "memwatch (bare)",
+        "memwatch --help",
+        "memwatch install --help",
+        "memwatch uninstall --help",
+        "memwatch status --help",
+        "task --help",
+        "task (bare)",
+        "task launch --help",
+        "task resume --help"
+      ]
     }
   ]
 }

@@ -110,12 +110,11 @@ export function registerTask(program: Command, k: Kit): void {
       return;
     }
     const warnings: string[] = [];
-    // T20261128-06 bellek kapısı: yerel çalışan açmadan önce (dry-run pencere açmaz; başka makineye sabitlenen görev o makinenin belleğini kullanır)
-    const remotePinned = !!(o.machine && cfg.machines && o.machine !== cfg.brain);
-    const memDeps = o.dryRun || remotePinned ? null : launchMemoryDeps(ctx.env, ctx.cliPath);
-    if (memDeps) {
-      memoryGate(readMemory(memDeps), { force: !!o.force, warn: (l) => { warnings.push(l); ctx.stderr.write(`uyarı: ${l}\n`); } });
-    }
+    // T20261128-06 bellek kapısı: yerleşimden sonra, yalnız bu makinede çalışan açılacaksa (dry-run pencere açmaz; uzak makineye yerleşen görev o makinenin belleğini kullanır)
+    const memDeps = o.dryRun ? null : launchMemoryDeps(ctx.env, ctx.cliPath);
+    const beforeLocal = memDeps
+      ? () => memoryGate(readMemory(memDeps), { force: !!o.force, warn: (l) => { warnings.push(l); ctx.stderr.write(`uyarı: ${l}\n`); } })
+      : undefined;
     let last: LaunchResult | undefined;
     // --external (vlad-desktop): only writes the script; the caller opens it, so no terminal and no noop guard
     // VLAD_DESKTOP_QUEUE (vlad-desktop main tab): same preparation as --external plus a queue file the app picks up; explicit --external keeps the old behavior
@@ -144,7 +143,7 @@ export function registerTask(program: Command, k: Kit): void {
     } };
     // --- machines:C1 --- yerleştirme; C2: uzak taşıma (AgentClient) + launch öncesi kb-sync
     if (o.external && cfg.machines && o.machine && o.machine !== cfg.brain) throw new Error("--external uzak makinede desteklenmez");
-    const t = await launchTask(id, { launcher, cfg, closeWorker: closeWorkerWindow, ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
+    const t = await launchTask(id, { launcher, cfg, closeWorker: closeWorkerWindow, ...(beforeLocal ? { beforeLocal } : {}), ...(o.external ? { external: true } : {}), ...(o.dryRun ? { dryRun: true } : {}), ...(o.machine ? { machine: o.machine as string } : {}), ...(cfg.machines ? { remote: makeRemote(cfg, selfName()) } : {}) });
     // --- /machines:C1 ---
     out(
       o,

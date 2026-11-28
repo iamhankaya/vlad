@@ -694,6 +694,48 @@
   },
   {
    "path": [
+    "top"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "canlı terminal tablosu yerel makinenin belleğini gösterir; konsol kataloğunda yok"
+   }
+  },
+  {
+   "path": [
+    "memwatch",
+    "status"
+   ],
+   "json": true,
+   "console": {
+    "kind": "read"
+   }
+  },
+  {
+   "path": [
+    "memwatch",
+    "install"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
+    "memwatch",
+    "uninstall"
+   ],
+   "json": true,
+   "console": {
+    "kind": "none",
+    "reason": "servis kurulumu yalnız kullanıcının terminalinde (TTY + mod yetkisi); uzaktan konsola verilmez"
+   }
+  },
+  {
+   "path": [
     "audit",
     "skills"
    ],

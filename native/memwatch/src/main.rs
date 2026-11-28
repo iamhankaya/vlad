@@ -28,22 +28,48 @@ fn now() -> u64 {
         .unwrap_or(0)
 }
 
+/// tmux sunucusu takılırsa daemon döngüsü durmasın: bu süreden sonra süreç öldürülür, görev satırları o örnekte boş kalır.
+const TMUX_TIMEOUT: Duration = Duration::from_secs(2);
+
 fn tmux_panes() -> Vec<(String, i32)> {
     for bin in ["tmux", "/opt/homebrew/bin/tmux", "/usr/local/bin/tmux"] {
-        let out = Command::new(bin)
+        let child = Command::new(bin)
             .args(["list-panes", "-a", "-F", "#{session_name} #{pane_pid}"])
             .stdin(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null())
-            .output();
-        match out {
-            Ok(o) if o.status.success() => {
-                return tree::parse_tmux_panes(&String::from_utf8_lossy(&o.stdout))
+            .spawn();
+        match child {
+            Ok(c) => {
+                return run_with_deadline(c, TMUX_TIMEOUT)
+                    .map(|s| tree::parse_tmux_panes(&s))
+                    .unwrap_or_default()
             }
-            Ok(_) => return Vec::new(), // tmux var ama sunucu yok
-            Err(_) => continue,         // bu yolda tmux yok
+            Err(_) => continue, // bu yolda tmux yok
         }
     }
     Vec::new()
+}
+
+/// Başarılı çıkışta stdout; hata, başarısız çıkış (sunucu yok) ya da zaman aşımında (süreç öldürülür) None.
+fn run_with_deadline(mut c: std::process::Child, limit: Duration) -> Option<String> {
+    use std::io::Read;
+    let start = std::time::Instant::now();
+    loop {
+        match c.try_wait() {
+            Ok(Some(st)) => {
+                let mut out = String::new();
+                c.stdout.take()?.read_to_string(&mut out).ok()?;
+                return st.success().then_some(out);
+            }
+            Ok(None) if start.elapsed() < limit => std::thread::sleep(Duration::from_millis(20)),
+            _ => {
+                let _ = c.kill();
+                let _ = c.wait();
+                return None;
+            }
+        }
+    }
 }
 
 fn sample(history: &[HistPoint], th: &Thresholds) -> Result<Snapshot, String> {
@@ -154,6 +180,8 @@ fn cmd_daemon(a: Args) -> Result<(), String> {
     let chan = a.path("--channel", ntfy::default_channel_path());
     let interval = a.secs("--interval", 10)?;
     let mut d = daemon::Daemon::default();
+    // kanal kurulu değilken her yeniden denemede (60 sn) aynı satır günlüğü şişirmesin: değişene kadar bir kez yazılır
+    let mut last_failure: Option<String> = None;
     if let Some(prev) = state::load(&st) {
         // yeniden başlatmada bastırma ve (taze ise) geçmiş korunur
         d.alerts = prev.alerts;
@@ -183,13 +211,22 @@ fn cmd_daemon(a: Args) -> Result<(), String> {
         };
         let (snap, sent) = d.step(ts, system, groups, &mut notify);
         match &sent {
-            daemon::Outcome::Sent(l) => eprintln!(
-                "{ts} uyarı gönderildi: {} — {}",
-                l.as_str(),
-                report::summary(&snap)
-            ),
+            daemon::Outcome::Sent(l) => {
+                last_failure = None;
+                eprintln!(
+                    "{ts} uyarı gönderildi: {} — {}",
+                    l.as_str(),
+                    report::summary(&snap)
+                )
+            }
             daemon::Outcome::Failed(e) => {
-                eprintln!("{ts} uyarı gönderilemedi ({e}): {}", report::summary(&snap))
+                if last_failure.as_deref() != Some(e.as_str()) {
+                    eprintln!(
+                        "{ts} uyarı gönderilemedi ({e}; değişene kadar tekrar yazılmaz): {}",
+                        report::summary(&snap)
+                    );
+                    last_failure = Some(e.clone());
+                }
             }
             daemon::Outcome::Quiet => {}
         }
@@ -243,5 +280,42 @@ fn main() -> ExitCode {
             eprintln!("memwatch: {e}");
             ExitCode::from(1)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sh(script: &str) -> std::process::Child {
+        Command::new("/bin/sh")
+            .args(["-c", script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
+    #[test]
+    fn deadline_returns_output_of_a_quick_command() {
+        assert_eq!(
+            run_with_deadline(sh("echo 'vlad-T1 42'"), Duration::from_secs(2)).as_deref(),
+            Some("vlad-T1 42\n")
+        );
+        assert_eq!(
+            run_with_deadline(sh("exit 1"), Duration::from_secs(2)),
+            None
+        );
+    }
+
+    #[test]
+    fn deadline_kills_a_hung_command() {
+        let t = std::time::Instant::now();
+        assert_eq!(
+            run_with_deadline(sh("sleep 5"), Duration::from_millis(200)),
+            None
+        );
+        assert!(t.elapsed() < Duration::from_secs(2));
     }
 }

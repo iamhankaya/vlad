@@ -77,9 +77,14 @@ describe("vlad memwatch install / uninstall / status", () => {
     expect((await cli(["memwatch", "install"], { installer: inst, isTTY: () => false })).err).toContain("TTY");
     expect((await cli(["memwatch", "install"], { installer: inst, platform: "linux" })).err).toContain("macOS");
     initKey(); // anahtar etkin, belirteç yok
-    process.env.VLAD_TASK_ID = "T20990101-01";
-    try { expect((await cli(["memwatch", "install"], { installer: inst })).code).toBe(1); } finally { delete process.env.VLAD_TASK_ID; }
     expect((await cli(["memwatch", "install"], { installer: inst })).err).toContain("VLAD_MODE_TOKEN");
+    process.env.VLAD_MODE_TOKEN = mintToken(60_000); // geçerli belirteç: ret yalnız çalışan kimliğinden gelmeli
+    process.env.VLAD_TASK_ID = "T20990101-01";
+    try {
+      const w = await cli(["memwatch", "install"], { installer: inst });
+      expect(w.code).toBe(1);
+      expect(w.err).toContain("çalışan oturumu");
+    } finally { delete process.env.VLAD_TASK_ID; delete process.env.VLAD_MODE_TOKEN; }
     expect(calls).toEqual([]);
     process.env.VLAD_MODE_TOKEN = mintToken(60_000);
     const r = await cli(["memwatch", "install", "--json"], { installer: inst });
